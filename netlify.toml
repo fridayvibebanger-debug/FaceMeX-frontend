@@ -8,6 +8,12 @@
 
 # API redirects (must be before SPA redirect)
 [[redirects]]
+  from = "/api/auth/*"
+  to = "https://facemex-backend.onrender.com/api/auth/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/pro-groups/*"
   to = "/.netlify/functions/pro-groups/:splat"
   status = 200
