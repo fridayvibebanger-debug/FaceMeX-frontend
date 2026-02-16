@@ -59,7 +59,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   loadMe: async () => {
     set({ loading: true });
     try {
-      const me = await api.get('/api/users/me');
+      const me = await api.get('/api/auth/me');
       set({
         id: me.id || '1',
         name: me.name || 'Demo User',
