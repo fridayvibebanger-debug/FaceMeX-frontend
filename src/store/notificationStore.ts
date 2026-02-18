@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { api } from '@/lib/api';
+import { api, API_URL } from '@/lib/api';
+import { io, Socket } from 'socket.io-client';
 
 export interface Notification {
   id: string;
@@ -19,9 +20,21 @@ interface NotificationState {
   markAsRead: (notificationId: string) => void;
   markAllAsRead: () => void;
   clearNotification: (notificationId: string) => void;
+  initRealtime: (userId: string) => void;
   load: () => Promise<void>;
   read: (id: string) => Promise<void>;
   readAll: () => Promise<void>;
+}
+
+let socket: Socket | null = null;
+let socketInitializedFor: string | null = null;
+
+function upsert(list: Notification[], item: Notification) {
+  const idx = list.findIndex((x) => x.id === item.id);
+  if (idx === -1) return [item, ...list];
+  const next = [...list];
+  next[idx] = item;
+  return next;
 }
 
 const mockNotifications: Notification[] = [
@@ -108,6 +121,46 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
           : state.unreadCount,
       };
     }),
+
+  initRealtime: (userId: string) => {
+    if (!import.meta.env.DEV) return;
+    if (!userId) return;
+    if (!API_URL) return;
+    if (socket && socketInitializedFor === userId) return;
+
+    if (socket) {
+      try {
+        socket.off('notify');
+        socket.close();
+      } catch {
+      }
+      socket = null;
+      socketInitializedFor = null;
+    }
+
+    socket = io(API_URL, { withCredentials: true });
+    socketInitializedFor = userId;
+    socket.emit('user:join', { userId });
+
+    socket.on('notify', (n: any) => {
+      if (!n) return;
+      const item: Notification = {
+        id: String(n.id || n._id || Date.now()),
+        type: (n.type || 'message') as Notification['type'],
+        title: String(n.title || 'Notification'),
+        message: String(n.message || ''),
+        avatar: typeof n.avatar === 'string' ? n.avatar : undefined,
+        timestamp: new Date(typeof n.timestamp === 'number' ? n.timestamp : Date.now()),
+        isRead: !!n.isRead,
+        actionUrl: typeof n.actionUrl === 'string' ? n.actionUrl : undefined,
+      };
+      set((state) => {
+        const next = upsert(state.notifications, item);
+        return { notifications: next, unreadCount: next.filter((x) => !x.isRead).length };
+      });
+    });
+  },
+
   load: async () => {
     const data = await api.get('/api/notifications');
     const list: Notification[] = (data.notifications || []).map((n: any) => ({
