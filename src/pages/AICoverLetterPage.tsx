@@ -72,7 +72,8 @@ export default function AICoverLetterPage() {
         padding: 0;
       }
       body {
-        margin: 20mm;
+        background: #f3f4f6;
+        padding: 16px;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         line-height: 1.4;
         white-space: pre-wrap;
@@ -80,11 +81,33 @@ export default function AICoverLetterPage() {
       }
       @page {
         size: A4;
-        margin: 20mm;
+        margin: 0;
+      }
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        padding: 20mm;
+        background: #ffffff;
+        color: #000000;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+        border: 1px solid rgba(0,0,0,0.12);
+        box-sizing: border-box;
+      }
+      @media print {
+        body {
+          background: #ffffff;
+          padding: 0;
+        }
+        .page {
+          box-shadow: none;
+          border: none;
+          margin: 0;
+        }
       }
     </style>
   </head>
-  <body><main>${safe(content)}</main></body>
+  <body><main class="page">${safe(content)}</main></body>
 </html>`);
     win.document.close();
     win.focus();
@@ -259,10 +282,22 @@ export default function AICoverLetterPage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <div
-                        className={`flex-1 p-4 rounded-md border bg-card whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
-                      >
-                        {freeOutput}
+                      <div className="flex-1 overflow-auto rounded-md border bg-muted/40 p-3">
+                        <div
+                          style={{
+                            width: '210mm',
+                            minHeight: '297mm',
+                            margin: '0 auto',
+                            padding: '20mm',
+                            background: 'white',
+                            color: 'black',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
+                            border: '1px solid rgba(0,0,0,0.12)',
+                          }}
+                          className={`whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
+                        >
+                          {freeOutput}
+                        </div>
                       </div>
                       <Button
                         variant="outline"
@@ -343,10 +378,22 @@ export default function AICoverLetterPage() {
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <div
-                      className={`flex-1 p-4 rounded-md border bg-card whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
-                    >
-                      {creatorOutput}
+                    <div className="flex-1 overflow-auto rounded-md border bg-muted/40 p-3">
+                      <div
+                        style={{
+                          width: '210mm',
+                          minHeight: '297mm',
+                          margin: '0 auto',
+                          padding: '20mm',
+                          background: 'white',
+                          color: 'black',
+                          boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
+                          border: '1px solid rgba(0,0,0,0.12)',
+                        }}
+                        className={`whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
+                      >
+                        {creatorOutput}
+                      </div>
                     </div>
                     <Button
                       variant="outline"

@@ -350,27 +350,39 @@ export default function AIResumePage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <div
-                        className={`flex-1 p-4 rounded-md border bg-card whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
-                      >
-                        {(fullName || email || phone || location || idNumber) && (
-                          <div className="mb-2 border-b pb-1">
-                            <div className="text-xs md:text-sm font-semibold tracking-wide uppercase">
-                              {fullName || '[Your Name]'}
+                      <div className="flex-1 overflow-auto rounded-md border bg-muted/40 p-3">
+                        <div
+                          style={{
+                            width: '210mm',
+                            minHeight: '297mm',
+                            margin: '0 auto',
+                            padding: '20mm',
+                            background: 'white',
+                            color: 'black',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
+                            border: '1px solid rgba(0,0,0,0.12)',
+                          }}
+                          className={`whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
+                        >
+                          {(fullName || email || phone || location || idNumber) && (
+                            <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                                {fullName || '[Your Name]'}
+                              </div>
+                              <div style={{ marginTop: 4, fontSize: 11, color: '#444', whiteSpace: 'pre-wrap' }}>
+                                {[
+                                  email && `Email: ${email}`,
+                                  phone && `Phone: ${phone}`,
+                                  location && `Location: ${location}`,
+                                  idNumber && `ID / Profile: ${idNumber}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </div>
                             </div>
-                            <div className="mt-1 text-[10px] md:text-xs text-muted-foreground whitespace-pre-wrap">
-                              {[
-                                email && `Email: ${email}`,
-                                phone && `Phone: ${phone}`,
-                                location && `Location: ${location}`,
-                                idNumber && `ID / Profile: ${idNumber}`,
-                              ]
-                                .filter(Boolean)
-                                .join(' \u00b7 ')}
-                            </div>
-                          </div>
-                        )}
-                        {output}
+                          )}
+                          {output}
+                        </div>
                       </div>
                       <Button
                         variant="outline"
@@ -486,27 +498,39 @@ export default function AIResumePage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <div
-                        className={`p-4 rounded-md border bg-card whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
-                      >
-                        {(fullName || email || phone || location || idNumber) && (
-                          <div className="mb-2 border-b pb-1">
-                            <div className="text-sm font-semibold tracking-wide uppercase">
-                              {fullName || '[Your Name]'}
+                      <div className="flex-1 overflow-auto rounded-md border bg-muted/40 p-3">
+                        <div
+                          style={{
+                            width: '210mm',
+                            minHeight: '297mm',
+                            margin: '0 auto',
+                            padding: '20mm',
+                            background: 'white',
+                            color: 'black',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
+                            border: '1px solid rgba(0,0,0,0.12)',
+                          }}
+                          className={`whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
+                        >
+                          {(fullName || email || phone || location || idNumber) && (
+                            <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                                {fullName || '[Your Name]'}
+                              </div>
+                              <div style={{ marginTop: 4, fontSize: 11, color: '#444', whiteSpace: 'pre-wrap' }}>
+                                {[
+                                  email && `Email: ${email}`,
+                                  phone && `Phone: ${phone}`,
+                                  location && `Location: ${location}`,
+                                  idNumber && `ID / Profile: ${idNumber}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </div>
                             </div>
-                            <div className="mt-1 text-[10px] md:text-xs text-muted-foreground whitespace-pre-wrap">
-                              {[
-                                email && `Email: ${email}`,
-                                phone && `Phone: ${phone}`,
-                                location && `Location: ${location}`,
-                                idNumber && `ID / Profile: ${idNumber}`,
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </div>
-                          </div>
-                        )}
-                        {proOutput}
+                          )}
+                          {proOutput}
+                        </div>
                       </div>
                       <Button
                         variant="outline"
