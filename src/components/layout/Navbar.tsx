@@ -22,12 +22,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotificationStore } from '@/store/notificationStore';
 import { formatDistanceToNow } from 'date-fns';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { API_URL } from '@/lib/api';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -35,8 +35,8 @@ import { useAuthStore } from '@/store/authStore';
 import { Link } from 'react-router-dom';
 import { useUserStore } from '@/store/userStore';
 import IdentityVerifiedBadge from '@/components/safety/IdentityVerifiedBadge';
-import { io } from 'socket.io-client';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
+
 import {
   Drawer,
   DrawerClose,
@@ -48,13 +48,12 @@ import {
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
-  const { notifications, unreadCount, markAsRead, markAllAsRead, load, read, readAll, addNotification } = useNotificationStore();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, load, read, readAll, initRealtime } = useNotificationStore();
   const location = useLocation();
   const navigate = useNavigate();
   const { tier, addons, loadMe, mode, setMode } = useUserStore();
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (typeof window !== 'undefined' && localStorage.getItem('theme') === 'dark') ? 'dark' : 'light');
-  const [holoPulse, setHoloPulse] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -72,49 +71,12 @@ export default function Navbar() {
     load().catch(() => {});
   }, [load]);
 
-  // Realtime notifications via Socket.IO
+  // Realtime notifications via Socket.IO (DEV only)
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    if (!API_URL) return;
-    const socket = io(API_URL, { withCredentials: true });
-    const handler = (n: any) => {
-      addNotification({
-        type: n.type || 'message',
-        title: n.title || 'Notification',
-        message: n.message || '',
-        avatar: n.avatar,
-        actionUrl: n.actionUrl,
-      });
-
-      // Holo-Reactions: basic haptics + visual pulse
-      try {
-        const pattern = (() => {
-          switch (n.type) {
-            case 'endorsement':
-              return [25, 30, 25];
-            case 'like':
-              return [15, 20, 15];
-            case 'comment':
-              return [10, 10];
-            default:
-              return [20];
-          }
-        })();
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-          // @ts-ignore
-          navigator.vibrate(pattern);
-        }
-      } catch {}
-
-      setHoloPulse(true);
-      setTimeout(() => setHoloPulse(false), 500);
-    };
-    socket.on('notify', handler);
-    return () => {
-      socket.off('notify', handler);
-      socket.close();
-    };
-  }, [addNotification]);
+    const userId = String((user as any)?.id || '');
+    if (!userId) return;
+    initRealtime(userId);
+  }, [user, initRealtime]);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -355,6 +317,7 @@ export default function Navbar() {
             <span className="text-lg md:text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
               FaceMeX
             </span>
+            <Badge className="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">BETA</Badge>
           </Link>
         </div>
 
