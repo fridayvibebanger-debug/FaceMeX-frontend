@@ -1,5 +1,8 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import { api } from '@/lib/api';
+
+let authListenerInitialized = false;
 
 interface User {
   id: string;
@@ -42,73 +45,159 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isInitialized: false,
   login: async (email: string, password: string) => {
-    const { token, user } = await api.post('/api/auth/login', { email, password });
-    if (!token || !user?.id) {
+    if (!isSupabaseConfigured) {
+      throw new Error('supabase_not_configured');
+    }
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      const msg = error.message || '';
+      if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
+        throw new Error('invalid_credentials');
+      }
+      if (msg.toLowerCase().includes('not found')) {
+        throw new Error('account_not_found');
+      }
+      throw new Error(`login_failed:${msg}`);
+    }
+
+    const supaUser = data.user;
+    if (!supaUser) {
       throw new Error('login_failed');
     }
 
-    try {
-      window.localStorage.setItem('faceme_token', String(token));
-      window.localStorage.setItem('faceme_user_id', String(user.id));
-      if (user.tier) window.localStorage.setItem('faceme_user_tier', String(user.tier));
-    } catch {}
+    const profile: User = {
+      id: supaUser.id,
+      email: supaUser.email || email,
+      name: (supaUser.user_metadata as any)?.full_name || email.split('@')[0] || 'FaceMe User',
+      phone: (supaUser.user_metadata as any)?.phone,
+      avatar: (supaUser.user_metadata as any)?.avatar_url,
+      followers: 0,
+      following: 0,
+      joinedDate: new Date(supaUser.created_at),
+    };
 
-    set({ user, isAuthenticated: true, isInitialized: true });
+    set({ user: profile, isAuthenticated: true });
   },
   register: async (name: string, email: string, password: string) => {
-    const { token, user } = await api.post('/api/auth/register', { name, email, password });
-    if (!token || !user?.id) {
+    if (!isSupabaseConfigured) {
+      throw new Error('supabase_not_configured');
+    }
+    const baseUrl = import.meta.env.BASE_URL || '/';
+    const emailRedirectTo = new URL(baseUrl, window.location.origin).toString();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name },
+        emailRedirectTo,
+      },
+    });
+
+    if (error) {
+      const msg = error.message || '';
+      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('exists')) {
+        throw new Error('email_in_use');
+      }
+      throw new Error(`register_failed:${msg}`);
+    }
+
+    const supaUser = data.user;
+    if (!supaUser) {
+      // In some configs, Supabase may require email confirmation and not return a session
       throw new Error('register_failed');
     }
 
-    try {
-      window.localStorage.setItem('faceme_token', String(token));
-      window.localStorage.setItem('faceme_user_id', String(user.id));
-      if (user.tier) window.localStorage.setItem('faceme_user_tier', String(user.tier));
-    } catch {}
+    const profile: User = {
+      id: supaUser.id,
+      email: supaUser.email || email,
+      name,
+      avatar: (supaUser.user_metadata as any)?.avatar_url,
+      followers: 0,
+      following: 0,
+      joinedDate: new Date(supaUser.created_at),
+    };
 
-    set({ user, isAuthenticated: true, isInitialized: true });
+    set({ user: profile, isAuthenticated: true });
   },
   logout: () => {
-    try {
-      window.localStorage.removeItem('faceme_token');
-    } catch {}
-    set({ user: null, isAuthenticated: false, isInitialized: true });
+    supabase.auth.signOut();
+    set({ user: null, isAuthenticated: false });
   },
   restoreSession: async () => {
     if (get().isInitialized) return;
-    let token = '';
-    try {
-      token = window.localStorage.getItem('faceme_token') || '';
-    } catch {}
-    if (!token) {
+
+    if (!isSupabaseConfigured) {
       set({ user: null, isAuthenticated: false, isInitialized: true });
       return;
     }
 
-    try {
-      const me = await api.get('/api/auth/me');
-      set({ user: me, isAuthenticated: true, isInitialized: true });
-    } catch {
-      try {
-        window.localStorage.removeItem('faceme_token');
-      } catch {}
-      set({ user: null, isAuthenticated: false, isInitialized: true });
+    if (!authListenerInitialized) {
+      authListenerInitialized = true;
+      supabase.auth.onAuthStateChange((_event, session) => {
+        const supaUser = session?.user;
+        if (!supaUser) {
+          set({ user: null, isAuthenticated: false, isInitialized: true });
+          return;
+        }
+        const profile: User = {
+          id: supaUser.id,
+          email: supaUser.email || '',
+          name: (supaUser.user_metadata as any)?.full_name || supaUser.email || 'FaceMe User',
+          phone: (supaUser.user_metadata as any)?.phone,
+          avatar: (supaUser.user_metadata as any)?.avatar_url,
+          followers: 0,
+          following: 0,
+          joinedDate: new Date(supaUser.created_at),
+        };
+        set({ user: profile, isAuthenticated: true, isInitialized: true });
+      });
     }
+
+    const { data, error } = await supabase.auth.getSession();
+    const session = data?.session;
+    const supaUser = session?.user;
+    if (error || !supaUser) {
+      set({ user: null, isAuthenticated: false, isInitialized: true });
+      return;
+    }
+
+    const profile: User = {
+      id: supaUser.id,
+      email: supaUser.email || '',
+      name: (supaUser.user_metadata as any)?.full_name || supaUser.email || 'FaceMe User',
+      phone: (supaUser.user_metadata as any)?.phone,
+      avatar: (supaUser.user_metadata as any)?.avatar_url,
+      followers: 0,
+      following: 0,
+      joinedDate: new Date(supaUser.created_at),
+    };
+
+    set({ user: profile, isAuthenticated: true, isInitialized: true });
   },
   updateProfile: (updates: Partial<User>) => {
     set((state) => ({
       user: state.user ? { ...state.user, ...updates } : null,
     }));
+
+    (async () => {
+      try {
+        const me = await api.patch('/api/users/me', updates);
+        set((state) => ({
+          user: state.user ? { ...state.user, ...me } : null,
+        }));
+      } catch {
+        // keep optimistic local updates
+      }
+    })();
   },
   followUser: (userId: string) => {
     set((state) => ({
-      user: state.user ? { ...state.user, following: (state.user.following || 0) + 1 } : null,
+      user: state.user ? { ...state.user, following: state.user.following + 1 } : null,
     }));
   },
   unfollowUser: (userId: string) => {
     set((state) => ({
-      user: state.user ? { ...state.user, following: Math.max(0, (state.user.following || 0) - 1) } : null,
+      user: state.user ? { ...state.user, following: state.user.following - 1 } : null,
     }));
   },
 }));
