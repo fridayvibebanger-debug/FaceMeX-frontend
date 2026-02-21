@@ -17,7 +17,7 @@ async function request(path: string, options: RequestInit = {}) {
       }
     }
 
-    let userId = window.localStorage.getItem('faceme_user_id');
+let userId = window.localStorage.getItem('faceme_user_id');
 const userTier = window.localStorage.getItem('faceme_user_tier');
 let userName = '';
 
@@ -70,4 +70,5 @@ export const api = {
   patch: (path: string, body?: any) => request(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: (path: string) => request(path, { method: 'DELETE' }),
 };
+
 
