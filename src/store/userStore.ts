@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
 export type Tier = 'free' | 'pro' | 'creator' | 'business' | 'exclusive';
 
@@ -59,15 +60,40 @@ export const useUserStore = create<UserState>((set, get) => ({
   loadMe: async () => {
     set({ loading: true });
     try {
-      const me = await api.get('/api/auth/me');
+      const me = await api.get('/api/users/me');
+      let profileTier: string | null = null;
+      let profileName: string | null = null;
+      let profileAvatar: string | null = null;
+      let profileProfessional: any | null = null;
+      if (isSupabaseConfigured && !import.meta.env.DEV) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          const u = data.session?.user;
+          if (u && String(me.id || '') === String(u.id || '')) {
+            try {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('tier,display_name,avatar_url,professional')
+                .eq('id', u.id)
+                .maybeSingle();
+              profileTier = (profile as any)?.tier ?? null;
+              profileName = (profile as any)?.display_name ?? null;
+              profileAvatar = (profile as any)?.avatar_url ?? null;
+              profileProfessional = (profile as any)?.professional ?? null;
+            } catch {
+            }
+          }
+        } catch {
+        }
+      }
       set({
         id: me.id || '1',
-        name: me.name || 'Demo User',
-        avatar: me.avatar || '',
-        tier: (me.tier || 'free') as Tier,
+        name: profileName || me.name || 'Demo User',
+        avatar: profileAvatar || me.avatar || '',
+        tier: ((profileTier || me.tier || 'free') as Tier),
         addons: me.addons || { verified: false },
         mode: me.mode === 'professional' ? 'professional' : 'social',
-        professional: me.professional || {
+        professional: profileProfessional || me.professional || {
           headline: '',
           bio: '',
           location: '',
@@ -90,10 +116,71 @@ export const useUserStore = create<UserState>((set, get) => ({
       try {
         localStorage.setItem('faceme_mode', me.mode === 'professional' ? 'professional' : 'social');
         if (me.id) localStorage.setItem('faceme_user_id', String(me.id));
-        localStorage.setItem('faceme_user_tier', String(me.tier || 'free'));
+        localStorage.setItem('faceme_user_name', String(profileName || me.name || ''));
+        localStorage.setItem('faceme_user_tier', String(profileTier || me.tier || 'free'));
       } catch {}
     } catch {
-      set({ loading: false });
+      // Production fallback: when Express backend isn't running (e.g. Netlify Functions deploy),
+      // derive id/name/tier from Supabase auth session + profiles table.
+      if (isSupabaseConfigured && !import.meta.env.DEV) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          const u = data.session?.user;
+          if (u) {
+            let profileTier: string | null = null;
+            let profileName: string | null = null;
+            let profileAvatar: string | null = null;
+            let profileProfessional: any | null = null;
+            try {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('tier,display_name,avatar_url,professional')
+                .eq('id', u.id)
+                .maybeSingle();
+              profileTier = (profile as any)?.tier ?? null;
+              profileName = (profile as any)?.display_name ?? null;
+              profileAvatar = (profile as any)?.avatar_url ?? null;
+              profileProfessional = (profile as any)?.professional ?? null;
+            } catch {
+            }
+
+            const metaTier = (u.user_metadata as any)?.tier || (u.app_metadata as any)?.tier || 'free';
+            const name =
+              profileName || (u.user_metadata as any)?.full_name || u.email?.split('@')[0] || 'FaceMe User';
+            const tierToUse = (profileTier || metaTier || 'free') as Tier;
+            set({
+              id: u.id,
+              name,
+              avatar: profileAvatar || (u.user_metadata as any)?.avatar_url || '',
+              tier: tierToUse,
+              professional: profileProfessional || {
+                headline: '',
+                bio: '',
+                location: '',
+                skills: [],
+                careerGoals: '',
+                industryInterests: [],
+                experienceLevel: '',
+                smartSummary: '',
+                smartPositioning: '',
+                smartSuggestedSkills: [],
+                experience: [],
+                education: [],
+                links: [],
+                endorsements: {},
+                openToCollab: false,
+                collabNote: '',
+                resumeSummary: '',
+              },
+            });
+            try {
+              localStorage.setItem('faceme_user_id', String(u.id));
+              localStorage.setItem('faceme_user_tier', String(tierToUse || 'free'));
+            } catch {}
+          }
+        } catch {
+        }
+      }
     } finally {
       set({ loading: false });
     }
@@ -136,6 +223,22 @@ export const useUserStore = create<UserState>((set, get) => ({
       await get().loadMe();
       return;
     } catch {
+      // Production/dist fallback: persist directly to Supabase profiles table
+      if (isSupabaseConfigured && !import.meta.env.DEV) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          const u = data.session?.user;
+          if (u) {
+            await supabase
+              .from('profiles')
+              .update({ professional: profile as any })
+              .eq('id', u.id);
+            await get().loadMe();
+            return;
+          }
+        } catch {
+        }
+      }
       throw new Error('save_professional_failed');
     }
   },
