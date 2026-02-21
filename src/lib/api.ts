@@ -19,8 +19,10 @@ async function request(path: string, options: RequestInit = {}) {
 
     const userId = window.localStorage.getItem('faceme_user_id');
     const userTier = window.localStorage.getItem('faceme_user_tier');
+    const userName = window.localStorage.getItem('faceme_user_name');
     if (userId) authHeader['x-user-id'] = userId;
     if (userTier) authHeader['x-user-tier'] = userTier;
+    if (userName) authHeader['x-user-name'] = userName;
 
     // DEV: force a demo user so backend sees requests as authenticated
     if (import.meta.env.DEV) {
