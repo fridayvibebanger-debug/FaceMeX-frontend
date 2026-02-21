@@ -77,6 +77,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
 
     set({ user: profile, isAuthenticated: true });
+
+    try {
+      localStorage.setItem('faceme_user_id', String(profile.id));
+      localStorage.setItem('faceme_user_name', String(profile.name || ''));
+    } catch {}
+
+    try {
+      const me = await api.get('/api/users/me');
+      set((state) => ({
+        user: state.user ? { ...state.user, ...me } : state.user,
+      }));
+    } catch {}
   },
   register: async (name: string, email: string, password: string) => {
     if (!isSupabaseConfigured) {
@@ -118,10 +130,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
 
     set({ user: profile, isAuthenticated: true });
+
+    try {
+      localStorage.setItem('faceme_user_id', String(profile.id));
+      localStorage.setItem('faceme_user_name', String(profile.name || ''));
+    } catch {}
+
+    try {
+      const me = await api.get('/api/users/me');
+      set((state) => ({
+        user: state.user ? { ...state.user, ...me } : state.user,
+      }));
+    } catch {}
   },
   logout: () => {
     supabase.auth.signOut();
     set({ user: null, isAuthenticated: false });
+    try {
+      localStorage.removeItem('faceme_user_id');
+      localStorage.removeItem('faceme_user_name');
+      localStorage.removeItem('faceme_token');
+    } catch {}
   },
   restoreSession: async () => {
     if (get().isInitialized) return;
@@ -149,7 +178,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           following: 0,
           joinedDate: new Date(supaUser.created_at),
         };
+
         set({ user: profile, isAuthenticated: true, isInitialized: true });
+        try {
+          localStorage.setItem('faceme_user_id', String(profile.id));
+          localStorage.setItem('faceme_user_name', String(profile.name || ''));
+        } catch {}
+        (async () => {
+          try {
+            const me = await api.get('/api/users/me');
+            set((state) => ({
+              user: state.user ? { ...state.user, ...me } : state.user,
+            }));
+          } catch {}
+        })();
       });
     }
 
@@ -173,6 +215,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
 
     set({ user: profile, isAuthenticated: true, isInitialized: true });
+
+    try {
+      localStorage.setItem('faceme_user_id', String(profile.id));
+      localStorage.setItem('faceme_user_name', String(profile.name || ''));
+    } catch {}
+
+    try {
+      const me = await api.get('/api/users/me');
+      set((state) => ({
+        user: state.user ? { ...state.user, ...me } : state.user,
+      }));
+    } catch {}
   },
   updateProfile: (updates: Partial<User>) => {
     set((state) => ({
