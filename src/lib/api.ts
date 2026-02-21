@@ -17,9 +17,25 @@ async function request(path: string, options: RequestInit = {}) {
       }
     }
 
-    const userId = window.localStorage.getItem('faceme_user_id');
+    let userId = window.localStorage.getItem('faceme_user_id');
     const userTier = window.localStorage.getItem('faceme_user_tier');
-    const userName = window.localStorage.getItem('faceme_user_name');
+    let userName = window.localStorage.getItem('faceme_user_name');
+
+    // If localStorage isn't ready yet (fresh login/restore), derive identity from Supabase session
+    if ((!userId || !userName) && isSupabaseConfigured) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const u = data.session?.user;
+        if (u) {
+          if (!userId) userId = u.id;
+          if (!userName) {
+            userName = String((u.user_metadata as any)?.full_name || u.email || '').trim();
+          }
+        }
+      } catch {
+      }
+    }
+
     if (userId) authHeader['x-user-id'] = userId;
     if (userTier) authHeader['x-user-tier'] = userTier;
     if (userName) authHeader['x-user-name'] = userName;
