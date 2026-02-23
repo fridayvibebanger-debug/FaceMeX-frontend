@@ -41,11 +41,30 @@ export default function PostCard({ post }: PostCardProps) {
   const audioChunksRef = useRef<BlobPart[]>([]);
   const recordIntervalRef = useRef<number | null>(null);
   const replyInputRef = useRef<HTMLInputElement | null>(null);
-  const { addons, id: currentUserId, tier } = useUserStore();
+  const { addons, id: currentUserId, tier, name: currentUserName, avatar: currentUserAvatar } = useUserStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
   const isOwner = String(post.userId || '') === String(currentUserId || user?.id || '');
+
+  const displayName = (() => {
+    const storeName = String(currentUserName || '').trim();
+    const authName = String(user?.name || '').trim();
+    const postName = String(post.userName || '').trim();
+    const fallbackName = storeName || authName || postName || 'FaceMe User';
+    if (isOwner) return storeName || authName || fallbackName;
+    if (!postName || postName === 'FaceMe User') return fallbackName;
+    return postName;
+  })();
+
+  const displayAvatar = (() => {
+    const storeAvatar = String(currentUserAvatar || '').trim();
+    const authAvatar = String(user?.avatar || '').trim();
+    const postAvatar = String((post as any).userAvatar || '').trim();
+    const fallbackAvatar = postAvatar || storeAvatar || authAvatar || '';
+    if (isOwner) return storeAvatar || authAvatar || fallbackAvatar;
+    return fallbackAvatar;
+  })();
 
   const getVoiceCommentDailyLimit = () => {
     const t = String((tier || user?.tier || '')).toLowerCase();
@@ -333,8 +352,8 @@ export default function PostCard({ post }: PostCardProps) {
             >
               <div className="relative">
                 <Avatar>
-                  <AvatarImage src={post.userAvatar} alt={post.userName} />
-                  <AvatarFallback>{post.userName.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={displayAvatar} alt={displayName} />
+                  <AvatarFallback>{displayName ? displayName.charAt(0) : 'U'}</AvatarFallback>
                 </Avatar>
                 {isAuthorVerified && (
                   <span className="absolute -bottom-1 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-background ring-1 ring-border">
@@ -344,7 +363,7 @@ export default function PostCard({ post }: PostCardProps) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-sm md:text-base hover:underline">{post.userName}</p>
+                  <p className="font-semibold text-sm md:text-base hover:underline">{displayName}</p>
                   {isAuthorVerified && (
                     <span className="text-[11px] text-muted-foreground">Verified</span>
                   )}
