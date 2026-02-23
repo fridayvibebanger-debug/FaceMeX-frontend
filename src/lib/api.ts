@@ -17,28 +17,28 @@ async function request(path: string, options: RequestInit = {}) {
       }
     }
 
-let userId = window.localStorage.getItem('faceme_user_id');
-const userTier = window.localStorage.getItem('faceme_user_tier');
-let userName = '';
+    let userId = window.localStorage.getItem('facemex_user_id');
+    const userTier = window.localStorage.getItem('facemex_user_tier');
+    let userName = window.localStorage.getItem('faceme_user_name');
 
-if (isSupabaseConfigured) {
-  try {
-    const { data } = await supabase.auth.getSession();
-    const u = data.session?.user;
-    if (u) {
-      userId = u.id;
-      userName = String(
-        (u.user_metadata as any)?.full_name ||
-        u.email ||
-        ''
-      ).trim();
+    // If localStorage isn't ready yet (fresh login/restore), derive identity from Supabase session
+    if ((!userId || !userName) && isSupabaseConfigured) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const u = data.session?.user;
+        if (u) {
+          if (!userId) userId = u.id;
+          if (!userName) {
+            userName = String((u.user_metadata as any)?.full_name || u.email || '').trim();
+          }
+        }
+      } catch {
+      }
     }
-  } catch {}
-}
 
-if (userId) authHeader['x-user-id'] = userId;
-if (userTier) authHeader['x-user-tier'] = userTier;
-if (userName) authHeader['x-user-name'] = userName;hHeader['x-user-tier'] = userTier;
+    if (userId) authHeader['x-user-id'] = userId;
+    if (userTier) authHeader['x-user-tier'] = userTier;
+    if (userName) authHeader['x-user-name'] = userName;
 
     // DEV: force a demo user so backend sees requests as authenticated
     if (import.meta.env.DEV) {
@@ -70,5 +70,3 @@ export const api = {
   patch: (path: string, body?: any) => request(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: (path: string) => request(path, { method: 'DELETE' }),
 };
-
-
