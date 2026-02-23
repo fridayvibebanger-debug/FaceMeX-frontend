@@ -6,11 +6,10 @@ async function request(path: string, options: RequestInit = {}) {
   let authHeader: Record<string, string> = {};
 
   if (typeof window !== 'undefined') {
-    // 1️⃣ Get token from localStorage or Supabase
+    // 1️⃣ Get token
     const token = window.localStorage.getItem('faceme_token');
-    if (token) {
-      authHeader.Authorization = `Bearer ${token}`;
-    } else if (isSupabaseConfigured) {
+    if (token) authHeader.Authorization = `Bearer ${token}`;
+    else if (isSupabaseConfigured) {
       try {
         const { data } = await supabase.auth.getSession();
         const accessToken = data.session?.access_token;
@@ -18,14 +17,14 @@ async function request(path: string, options: RequestInit = {}) {
       } catch {}
     }
 
-    // 2️⃣ Get user info from localStorage or Supabase
+    // 2️⃣ Get user info
     let userId = window.localStorage.getItem('facemex_user_id') || window.localStorage.getItem('faceme_user_id');
     let userTier =
       window.localStorage.getItem('facemex_user_tier') ||
       window.localStorage.getItem('faceme_user_tier');
     let userName = window.localStorage.getItem('faceme_user_name') || window.localStorage.getItem('facemex_user_name');
 
-    // Fallback to Supabase session if missing
+    // 3️⃣ Fallback to Supabase session
     if ((!userId || !userName) && isSupabaseConfigured) {
       try {
         const { data } = await supabase.auth.getSession();
@@ -39,30 +38,26 @@ async function request(path: string, options: RequestInit = {}) {
       } catch {}
     }
 
-    // 3️⃣ Fallback for DEV mode
-    if (import.meta.env.DEV) {
-      if (!userId) userId = 'dev-user-1';
-      if (!userName) userName = 'Dev User';
-      if (!userTier) userTier = 'dev';
-    }
+    // 4️⃣ Force defaults if still missing
+    if (!userId) userId = 'unknown-user';
+    if (!userName) userName = 'Unknown User';
+    if (!userTier) userTier = 'free';
 
-    // 4️⃣ Add headers if values exist
-    if (userId) authHeader['x-user-id'] = userId;
-    if (userTier) authHeader['x-user-tier'] = userTier;
-    if (userName) authHeader['x-user-name'] = userName;
+    // 5️⃣ Set headers
+    authHeader['x-user-id'] = userId;
+    authHeader['x-user-name'] = userName;
+    authHeader['x-user-tier'] = userTier;
 
-    // Optional: log headers for debugging
+    // Optional: log headers to confirm
     // console.log('Request headers:', authHeader);
   }
 
-  // 5️⃣ Make the request
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...authHeader, ...(options.headers || {}) },
     ...options,
   });
 
-  // 6️⃣ Handle errors
   if (!res.ok) {
     try {
       const data = await res.json();
@@ -78,7 +73,6 @@ async function request(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
-// 7️⃣ API helper
 export const api = {
   get: (path: string) => request(path),
   post: (path: string, body?: any) =>
