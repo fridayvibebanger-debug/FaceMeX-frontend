@@ -38,15 +38,33 @@ async function request(path: string, options: RequestInit = {}) {
       } catch {}
     }
 
+    // 3️⃣b Fallback: derive identity from Authorization JWT payload (works even if session fetch fails)
+    if (!userName) {
+      try {
+        const raw = String(authHeader.Authorization || '').trim();
+        const token = raw.toLowerCase().startsWith('bearer ') ? raw.slice(7).trim() : '';
+        const payloadB64 = token.split('.')[1];
+        if (payloadB64) {
+          const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+          const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+          const payloadJson = atob(padded);
+          const payload = JSON.parse(payloadJson);
+          const fullName = String(payload?.user_metadata?.full_name || '').trim();
+          const email = String(payload?.email || '').trim();
+          userName = fullName || email;
+          if (userName) {
+            try {
+              window.localStorage.setItem('faceme_user_name', userName);
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
     // 4️⃣ Set headers (only when available)
     if (userId) authHeader['x-user-id'] = userId;
     if (userName) authHeader['x-user-name'] = userName;
     if (userTier) authHeader['x-user-tier'] = userTier;
-
-    // DEV: force a demo user so backend sees requests as authenticated
-    if (import.meta.env.DEV) {
-      authHeader['x-user-id'] = 'dev-user-1';
-    }
   }
 
   const res = await fetch(`${API_URL}${path}`, {
