@@ -38,18 +38,15 @@ async function request(path: string, options: RequestInit = {}) {
       } catch {}
     }
 
-    // 4️⃣ Force defaults if still missing
-    if (!userId) userId = 'unknown-user';
-    if (!userName) userName = 'Unknown User';
-    if (!userTier) userTier = 'free';
+    // 4️⃣ Set headers (only when available)
+    if (userId) authHeader['x-user-id'] = userId;
+    if (userName) authHeader['x-user-name'] = userName;
+    if (userTier) authHeader['x-user-tier'] = userTier;
 
-    // 5️⃣ Set headers
-    authHeader['x-user-id'] = userId;
-    authHeader['x-user-name'] = userName;
-    authHeader['x-user-tier'] = userTier;
-
-    // Optional: log headers to confirm
-    // console.log('Request headers:', authHeader);
+    // DEV: force a demo user so backend sees requests as authenticated
+    if (import.meta.env.DEV) {
+      authHeader['x-user-id'] = 'dev-user-1';
+    }
   }
 
   const res = await fetch(`${API_URL}${path}`, {
