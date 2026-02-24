@@ -50,8 +50,8 @@ interface UserState {
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
-  id: '1',
-  name: 'Demo User',
+  id: '',
+  name: '',
   avatar: '',
   tier: 'free',
   addons: { verified: false },
@@ -65,7 +65,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       let profileName: string | null = null;
       let profileAvatar: string | null = null;
       let profileProfessional: any | null = null;
-      if (isSupabaseConfigured && !import.meta.env.DEV) {
+      if (isSupabaseConfigured) {
         try {
           const { data } = await supabase.auth.getSession();
           const u = data.session?.user;
@@ -87,8 +87,8 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       }
       set({
-        id: me.id || '1',
-        name: profileName || me.name || 'Demo User',
+        id: me.id || '',
+        name: profileName || me.name || '',
         avatar: profileAvatar || me.avatar || '',
         tier: ((profileTier || me.tier || 'free') as Tier),
         addons: me.addons || { verified: false },
@@ -122,7 +122,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch {
       // Production fallback: when Express backend isn't running (e.g. Netlify Functions deploy),
       // derive id/name/tier from Supabase auth session + profiles table.
-      if (isSupabaseConfigured && !import.meta.env.DEV) {
+      if (isSupabaseConfigured) {
         try {
           const { data } = await supabase.auth.getSession();
           const u = data.session?.user;
