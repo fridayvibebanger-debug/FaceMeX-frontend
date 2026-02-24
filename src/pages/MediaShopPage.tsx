@@ -32,19 +32,6 @@ const PROMO_DRAFT_KEY = 'faceme_business_promotion_draft_v1';
 
 const STORAGE_KEY_PROMOTIONS = 'faceme_business_promotions_v1';
 
-const MOCK_PROMOTIONS: BusinessPromotion[] = [
-  {
-    id: 'p1',
-    businessName: 'Nova Coffee',
-    headline: 'Fresh coffee, fast delivery',
-    description: 'Order beans, cold brew, and snacks. Delivered in 30 minutes in Cape Town.',
-    imageUrl: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=800&q=80',
-    ctaLabel: 'Order now',
-    ctaUrl: 'https://example.com',
-    tags: ['coffee', 'delivery'],
-  },
-];
-
 interface MediaItem {
   id: string;
   title: string;
@@ -57,51 +44,15 @@ interface MediaItem {
   frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly';
 }
 
-const MOCK_MEDIA: MediaItem[] = [
-  {
-    id: 'm1',
-    title: 'Cape Town Daily',
-    publisher: 'Cape Media Group',
-    description: 'Local and global headlines, sport, and business every morning.',
-    coverImage: 'https://images.unsplash.com/photo-1514996937319-344454492b37?w=600&q=80',
-    tags: ['media', 'news', 'daily'],
-    priceDigital: 39,
-    pricePrint: 59,
-    frequency: 'daily',
-  },
-  {
-    id: 'm2',
-    title: 'Creator Stories',
-    publisher: 'FaceMeX Media',
-    description: 'Deep dives with African creators, founders, and storytellers.',
-    coverImage: 'https://images.unsplash.com/photo-1512428232641-78a589fd95fd?w=600&q=80',
-    tags: ['media', 'creators', 'business'],
-    priceDigital: 49,
-    pricePrint: 89,
-    frequency: 'monthly',
-  },
-  {
-    id: 'm3',
-    title: 'Tech Futures Weekly',
-    publisher: 'Nova Tech Press',
-    description: 'AI, startups, and web3 in plain language.',
-    coverImage: 'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=600&q=80',
-    tags: ['media', 'tech', 'weekly'],
-    priceDigital: 29,
-    pricePrint: 69,
-    frequency: 'weekly',
-  },
-];
-
 export default function MediaShopPage() {
   const [query, setQuery] = useState('');
   const [formatChoice, setFormatChoice] = useState<Record<string, 'digital' | 'print'>>({});
-  const [items, setItems] = useState<MediaItem[]>(() => [...MOCK_MEDIA]);
+  const [items, setItems] = useState<MediaItem[]>(() => []);
   const { hasTier } = useUserStore();
 
   const [showBusinessForm, setShowBusinessForm] = useState(true);
 
-  const [promotions, setPromotions] = useState<BusinessPromotion[]>(() => [...MOCK_PROMOTIONS]);
+  const [promotions, setPromotions] = useState<BusinessPromotion[]>(() => []);
   const [promoBusinessName, setPromoBusinessName] = useState('');
   const [promoHeadline, setPromoHeadline] = useState('');
   const [promoDescription, setPromoDescription] = useState('');
@@ -152,7 +103,7 @@ export default function MediaShopPage() {
       const raw = localStorage.getItem(STORAGE_KEY_PROMOTIONS);
       if (raw) {
         const parsed = JSON.parse(raw) as BusinessPromotion[];
-        setPromotions(parsed.length ? parsed : MOCK_PROMOTIONS);
+        setPromotions(parsed.length ? parsed : []);
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps

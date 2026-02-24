@@ -33,12 +33,7 @@ export default function MarketplacePage() {
   const [campaignObjective, setCampaignObjective] = useState('Awareness');
   const [campaignBudget, setCampaignBudget] = useState('500');
 
-  const products: Product[] = useMemo(() => [
-    { id: 'p1', title: 'Neon Avatar Pack', price: 249, currency: 'ZAR', category: 'avatars', image: 'https://picsum.photos/seed/ava/400/300', description: 'Customizable neon avatar pack for your profile.', nft: true },
-    { id: 'p2', title: 'Synthwave Backgrounds', price: 99, currency: 'ZAR', category: 'themes', image: 'https://picsum.photos/seed/bg/400/300', description: '10 high-res synthwave wallpapers.' },
-    { id: 'p3', title: 'Streaming Overlay Kit', price: 189, currency: 'ZAR', category: 'overlays', image: 'https://picsum.photos/seed/ov/400/300', description: 'Overlay kit for live events and streams.' },
-    { id: 'p4', title: 'Virtual Event VIP Pass', price: 399, currency: 'ZAR', category: 'tickets', image: 'https://picsum.photos/seed/vip/400/300', description: 'VIP access to exclusive live experiences.', nft: true },
-  ], []);
+  const products: Product[] = useMemo(() => [], []);
 
   const filtered = useMemo(() => products.filter(p => p.title.toLowerCase().includes(query.toLowerCase()) || p.category.includes(query.toLowerCase())), [products, query]);
 
@@ -189,7 +184,7 @@ export default function MarketplacePage() {
     updated[index] = { ...d, lastRun: new Date().toISOString() };
     saveDrafts(updated);
     pushUsage({ type: 'run_campaign', name: d.name, budgetR: parseInt(d.budget||'0',10), spentImpressions: needed, balance: newBal });
-    toast({ title: 'Campaign running (mock)', description: `${d.name} launched · Spent ${needed.toLocaleString()} impressions · Remaining ${newBal.toLocaleString()}` });
+    toast({ title: 'Campaign running', description: `${d.name} launched · Spent ${needed.toLocaleString()} impressions · Remaining ${newBal.toLocaleString()}` });
   };
 
   return (
@@ -213,7 +208,9 @@ export default function MarketplacePage() {
         <div className="grid gap-4 md:grid-cols-3">
           <div className="md:col-span-2">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map(p => (
+              {filtered.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No products yet.</div>
+              ) : filtered.map(p => (
                 <Card key={p.id} className="overflow-hidden">
                   <div className="aspect-video bg-black/5">
                     {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
@@ -381,7 +378,7 @@ export default function MarketplacePage() {
           </Card>
           <Card className="md:col-span-1">
             <CardHeader>
-              <CardTitle>Escrow (Mock)</CardTitle>
+              <CardTitle>Escrow</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
@@ -513,7 +510,7 @@ export default function MarketplacePage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create Campaign</DialogTitle>
-            <DialogDescription>Set up a simple campaign to run Sponsored Posts. This is a UI-only stub.</DialogDescription>
+            <DialogDescription>Set up a simple campaign to run Sponsored Posts.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid gap-2">

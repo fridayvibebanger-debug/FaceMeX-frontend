@@ -163,27 +163,15 @@ export default function MessagesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
   const [callType, setCallType] = useState<'voice' | 'video'>('voice');
-  const [echoOn, setEchoOn] = useState(false);
-  const [echoSummary, setEchoSummary] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [translatorAutoByConv, setTranslatorAutoByConv] = useState<Record<string, boolean>>({});
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
 
-  const setEchoPersisted = (convId: string, value: boolean) => {
-    try {
-      const raw = localStorage.getItem('messages:echo');
-      const map = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-      map[convId] = value;
-      localStorage.setItem('messages:echo', JSON.stringify(map));
-    } catch {}
-  };
-
   const [aiTyping, setAiTyping] = useState<boolean>(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [aiSuggestionDismissed, setAiSuggestionDismissed] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
-  const [pendingVoiceUrl, setPendingVoiceUrl] = useState<string | null>(null);
   const canUseAI = hasTier('pro');
   const showAiSuggestion =
     canUseAI && !!messageText.trim() && !aiTyping && !aiDraftNotice && !aiSuggestionDismissed;
@@ -243,31 +231,6 @@ export default function MessagesPage() {
 
     return () => window.clearTimeout(t);
   }, [messageText]);
-
-  // Persist Echo toggle per conversation
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('messages:echo');
-      const map = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-      if (activeConversation && typeof map[activeConversation] === 'boolean') {
-        setEchoOn(map[activeConversation]);
-      } else {
-        setEchoOn(false);
-      }
-
-      const rawS = localStorage.getItem('messages:echo:summary');
-      const mapS = rawS ? (JSON.parse(rawS) as Record<string, string>) : {};
-      if (activeConversation && typeof mapS[activeConversation] === 'string') {
-        setEchoSummary(mapS[activeConversation]);
-      } else {
-        setEchoSummary('');
-      }
-    } catch {
-      setEchoOn(false);
-      setEchoSummary('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversation]);
 
   // Voice note recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -532,6 +495,33 @@ export default function MessagesPage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const endCallInternal = () => {
+    setIsCallModalOpen(false);
+    setIsCaller(false);
+    setIsRinging(false);
+    setIncomingCall(false);
+    setPendingOffer(null);
+    if (ringingTimeoutRef.current) {
+      clearTimeout(ringingTimeoutRef.current);
+      ringingTimeoutRef.current = null;
+    }
+    if (pcRef.current) {
+      pcRef.current.getSenders().forEach((sender) => {
+        try { sender.track?.stop(); } catch {}
+      });
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+      setLocalStream(null);
+    }
+    if (remoteStream) {
+      remoteStream.getTracks().forEach((t) => t.stop());
+      setRemoteStream(null);
+    }
+  };
 
   const handleToggleRecording = async () => {
     if (!activeConversation) return;
@@ -904,35 +894,6 @@ Last message you are replying to:
     });
   };
 
-  const computeSummary = () => {
-    if (!activeMessages || activeMessages.length === 0) {
-      setEchoSummary('No messages yet. Start chatting to see summaries.');
-      try {
-        if (activeConversation) {
-          const rawS = localStorage.getItem('messages:echo:summary');
-          const mapS = rawS ? JSON.parse(rawS) as Record<string, string> : {};
-          mapS[activeConversation] = 'No messages yet. Start chatting to see summaries.';
-          localStorage.setItem('messages:echo:summary', JSON.stringify(mapS));
-        }
-      } catch {}
-      return;
-    }
-    const last = activeMessages.slice(-10);
-    const total = last.length;
-    const yours = last.filter((m) => m.senderId === '1').length;
-    const words = last.reduce((acc, m) => acc + (m.content?.split(/\s+/).length || 0), 0);
-    const summary = `Last ${total} msgs · You: ${yours} · Others: ${total - yours} · ~${Math.round(words / total)} words/msg. Key themes: engagement, updates, follow-ups.`;
-    setEchoSummary(summary);
-    try {
-      if (activeConversation) {
-        const rawS = localStorage.getItem('messages:echo:summary');
-        const mapS = rawS ? JSON.parse(rawS) as Record<string, string> : {};
-        mapS[activeConversation] = summary;
-        localStorage.setItem('messages:echo:summary', JSON.stringify(mapS));
-      }
-    } catch {}
-  };
-
   const getConversationName = (conv: typeof conversations[0]) => {
     if (conv.type === 'group') return conv.name;
     return conv.participants[0]?.name || 'Unknown';
@@ -955,18 +916,6 @@ Last message you are replying to:
     if (msg.type === 'document') return msg.fileName ? `Document • ${msg.fileName}` : 'Document';
     if (msg.type === 'voice') return 'Voice note';
     return msg.content || '';
-  };
-
-  const getEchoRecapSnippet = (conversationId: string) => {
-    try {
-      const rawS = localStorage.getItem('messages:echo:summary');
-      const mapS = rawS ? JSON.parse(rawS) as Record<string, string> : {};
-      const summary = mapS?.[conversationId];
-      if (typeof summary !== 'string' || !summary.trim()) return '';
-      return summary.trim();
-    } catch {
-      return '';
-    }
   };
 
   const getLastTimeLabel = (conv: typeof conversations[0]) => {
@@ -1221,7 +1170,7 @@ Last message you are replying to:
                               {mutedConversations[conv.id] && (
                                 <BellOff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               )}
-                              <p className="font-semibold text-sm truncate">{getConversationName(conv)}</p>
+                              <p className="font-semibold text-sm md:text-base">{getConversationName(conv)}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -1266,16 +1215,6 @@ Last message you are replying to:
                             );
                           })()}
                         </div>
-
-                        {(() => {
-                          const recap = getEchoRecapSnippet(conv.id);
-                          if (!recap) return null;
-                          return (
-                            <div className="mt-1 text-[11px] text-muted-foreground truncate">
-                              Echo recap: {recap}
-                            </div>
-                          );
-                        })()}
 
                         {quickReplyFor === conv.id && (
                           <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -1424,16 +1363,6 @@ Last message you are replying to:
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => navigate('/jobs')}>Jobs</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate('/groups/pro')}>Pro Groups</DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            const next = !echoOn;
-                            setEchoOn(next);
-                            if (activeConversation) setEchoPersisted(activeConversation, next);
-                            if (next) computeSummary();
-                          }}
-                        >
-                          {echoOn ? 'Summary: On' : 'Summary: Off'}
-                        </DropdownMenuItem>
                         {(tier === 'exclusive' || tier === 'business') ? (
                           <DropdownMenuItem
                             onClick={() => {
@@ -1482,20 +1411,6 @@ Last message you are replying to:
                 {/* Messages */}
                 <ScrollArea className="flex-1 p-3 md:p-4">
                   <div className="w-full max-w-4xl space-y-4 md:ml-0 md:mr-auto">
-                    {echoOn && (
-                      <div className="p-3 rounded-lg border bg-card text-sm">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="font-semibold">Conversation summary</div>
-                          <div className="flex items-center gap-2">
-                            <Button size="sm" variant="secondary" onClick={computeSummary}>Summarize</Button>
-                            <Button size="sm" variant="ghost" onClick={()=> setEchoOn(false)}>Hide</Button>
-                          </div>
-                        </div>
-                        <div className="text-muted-foreground">
-                          {echoSummary || 'Quick insights about the latest conversation will appear here.'}
-                        </div>
-                      </div>
-                    )}
                     <AnimatePresence>
                       {activeMessages.map((message) => {
                         const isOwn = message.senderId === '1';

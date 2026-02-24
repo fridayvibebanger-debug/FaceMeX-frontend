@@ -21,46 +21,11 @@ import {
 
 const APPLICATIONS_STORAGE_KEY = 'faceme:jobs:applications_v1';
 
-const MOCK_JOBS = [
-  {
-    id: 'j1',
-    title: 'Frontend Engineer',
-    company: 'Aurora Labs',
-    location: 'Remote',
-    skills: ['React', 'TypeScript', 'UX'],
-    type: 'Full-time',
-  },
-  {
-    id: 'j2',
-    title: 'Product Designer',
-    company: 'Orbit Studio',
-    location: 'Cape Town, ZA',
-    skills: ['Figma', 'Design Systems', 'Prototyping'],
-    type: 'Hybrid',
-  },
-  {
-    id: 'j3',
-    title: 'Backend Engineer',
-    company: 'SignalWorks',
-    location: 'Remote',
-    skills: ['Node.js', 'PostgreSQL', 'APIs'],
-    type: 'Contract',
-  },
-  {
-    id: 'j4',
-    title: 'Growth Marketer',
-    company: 'Nova Collective',
-    location: 'Johannesburg, ZA',
-    skills: ['Performance Marketing', 'Analytics'],
-    type: 'Full-time',
-  },
-];
-
 export default function JobsPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<'browse' | 'post'>('browse');
   const [jobs, setJobs] = useState<any[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(MOCK_JOBS[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [question, setQuestion] = useState('How can I position my profile for this role?');
   const [answer, setAnswer] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -103,13 +68,12 @@ export default function JobsPage() {
         }
       } catch {
       }
-      setJobs(MOCK_JOBS);
-      if (!selectedId) setSelectedId(MOCK_JOBS[0]?.id ?? null);
+      setJobs([]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const jobList = useMemo(() => (jobs.length ? jobs : MOCK_JOBS), [jobs]);
+  const jobList = useMemo(() => jobs, [jobs]);
 
   const sortedJobs = useMemo(() => {
     return [...jobList].sort((a, b) => {

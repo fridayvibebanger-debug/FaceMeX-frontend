@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 
 export default function StagePage() {
   const { id } = useParams();
-  const { getStage, loadMock } = useWorldStore();
-  useEffect(()=> { loadMock(); }, [loadMock]);
+  const { getStage } = useWorldStore();
+  useEffect(()=> {}, []);
   const stage = getStage(id as string);
 
   if (!stage) return (

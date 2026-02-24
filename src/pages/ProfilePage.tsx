@@ -26,7 +26,7 @@ export default function ProfilePage() {
   const { currentTier } = useSubscriptionStore();
   const { professional, saveProfessional, endorseSkill, setMode, addons, mode, hasTier } = useUserStore();
   const params = useParams<{ id?: string }>();
-  const effectiveUserId = user?.id || '1';
+  const effectiveUserId = user?.id || '';
   const viewedUserId = params.id || effectiveUserId;
   const isOwnProfile = viewedUserId === effectiveUserId;
   const viewedUser = useMemo(() => {

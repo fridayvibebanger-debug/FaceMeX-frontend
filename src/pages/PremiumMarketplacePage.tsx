@@ -19,7 +19,6 @@ type BusinessListing = {
   websiteUrl: string;
   description: string;
   tier: 'exclusive';
-  isDemo?: boolean;
   assets: BusinessAsset[];
 };
 
@@ -37,22 +36,6 @@ type MarketplaceAd = {
   createdAt?: string;
   creatorTier?: string;
   status?: 'active' | 'paused' | 'deleted' | string;
-};
-
-const DEMO: BusinessListing = {
-  id: 'demo-novabuild',
-  name: 'NovaBuild Solutions',
-  websiteUrl: 'https://novabuild.example',
-  description:
-    'Premium modular construction for luxury residences and commercial spaces. Rapid delivery. Quiet elegance. Engineered durability.',
-  tier: 'exclusive',
-  isDemo: true,
-  assets: [
-    { type: 'video', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4' },
-    { type: 'image', url: 'https://images.unsplash.com/photo-1523413457903-3e5d6b2b31f0?auto=format&fit=crop&w=1600&q=80' },
-    { type: 'image', url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80' },
-    { type: 'image', url: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1600&q=80' },
-  ],
 };
 
 function normalizeListing(raw: any): BusinessListing | null {
@@ -77,7 +60,6 @@ function normalizeListing(raw: any): BusinessListing | null {
     websiteUrl,
     description,
     tier: 'exclusive',
-    isDemo: !!raw.isDemo,
     assets,
   };
 }
@@ -107,7 +89,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export default function PremiumMarketplacePage() {
   const { tier, hasTier } = useUserStore();
-  const [featured, setFeatured] = useState<BusinessListing[]>([DEMO]);
+  const [featured, setFeatured] = useState<BusinessListing[]>([]);
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [heroApi, setHeroApi] = useState<CarouselApi | null>(null);
 
@@ -165,8 +147,7 @@ export default function PremiumMarketplacePage() {
 
         if (hasFeaturedCache) {
           const normalized = (cachedFeatured.data as any[]).map(normalizeListing).filter(Boolean) as BusinessListing[];
-          const withDemoFirst = [DEMO, ...normalized.filter((x) => x.id !== DEMO.id)];
-          setFeatured(withDemoFirst);
+          setFeatured(normalized);
           setFeaturedLoading(false);
         }
 
@@ -216,8 +197,7 @@ export default function PremiumMarketplacePage() {
 
         const listF = Array.isArray(featuredData) ? featuredData : [];
         const normalizedF = listF.map(normalizeListing).filter(Boolean) as BusinessListing[];
-        const withDemoFirst = [DEMO, ...normalizedF.filter((x) => x.id !== DEMO.id)];
-        setFeatured(withDemoFirst);
+        setFeatured(normalizedF);
 
         const listA = Array.isArray(adsData) ? adsData : [];
         const normalizedA = listA
@@ -247,7 +227,7 @@ export default function PremiumMarketplacePage() {
           .filter(Boolean) as MarketplaceAd[];
         setAds(normalizedA);
       } catch {
-        setFeatured([DEMO]);
+        setFeatured([]);
         setAds([]);
       } finally {
         if (!cancelled) {
@@ -343,9 +323,9 @@ export default function PremiumMarketplacePage() {
     setAds((prev) => prev.filter((a) => a.id !== adId));
   };
 
-  const hero = featured[0] || DEMO;
+  const hero = featured[0] || null;
 
-  const heroSlides = useMemo(() => bestAssets(hero), [hero]);
+  const heroSlides = useMemo(() => (hero ? bestAssets(hero) : []), [hero]);
 
   return (
     <div className="min-h-screen bg-background pt-16">
@@ -371,73 +351,76 @@ export default function PremiumMarketplacePage() {
 
         <Card className="overflow-hidden border bg-gradient-to-b from-slate-950/5 via-background to-background dark:from-slate-950 dark:via-slate-950/70 dark:to-background">
           <CardContent className="p-0">
-            <Carousel setApi={(api) => setHeroApi(api)} opts={{ loop: true }}>
-              <CarouselContent>
-                {heroSlides.map((asset, idx) => (
-                  <CarouselItem key={`${hero.id}-${idx}`}>
-                    <div className="relative aspect-[4/3] sm:aspect-[21/9] bg-black">
-                      {asset.type === 'video' ? (
-                        <video
-                          className="h-full w-full object-cover"
-                          src={asset.url}
-                          muted
-                          playsInline
-                          autoPlay
-                          loop
-                        />
-                      ) : (
-                        <img
-                          className="h-full w-full object-cover"
-                          src={asset.url}
-                          alt={hero.name}
-                          loading={idx === 0 ? 'eager' : 'lazy'}
-                        />
-                      )}
+            {hero && heroSlides.length > 0 ? (
+              <Carousel setApi={(api) => setHeroApi(api)} opts={{ loop: true }}>
+                <CarouselContent>
+                  {heroSlides.map((asset, idx) => (
+                    <CarouselItem key={`${hero.id}-${idx}`}>
+                      <div className="relative aspect-[4/3] sm:aspect-[21/9] bg-black">
+                        {asset.type === 'video' ? (
+                          <video
+                            className="h-full w-full object-cover"
+                            src={asset.url}
+                            muted
+                            playsInline
+                            autoPlay
+                            loop
+                          />
+                        ) : (
+                          <img
+                            className="h-full w-full object-cover"
+                            src={asset.url}
+                            alt={hero.name}
+                            loading={idx === 0 ? 'eager' : 'lazy'}
+                          />
+                        )}
 
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/10" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/10" />
 
-                      <div className="absolute inset-x-0 bottom-0 p-3 sm:p-6">
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.45 }}
-                          className="max-w-2xl"
-                        >
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <Badge className="bg-white/10 text-white border-white/15">Exclusive</Badge>
-                            {hero.isDemo && (
-                              <Badge variant="secondary" className="bg-white/15 text-white border-white/15">Demo Showcase</Badge>
-                            )}
-                            <span className="text-xs text-white/80">{hostname(hero.websiteUrl)}</span>
-                          </div>
-                          <div className="text-white text-base sm:text-2xl font-semibold tracking-tight">
-                            {hero.name}
-                          </div>
-                          <p className="mt-1.5 text-[13px] sm:text-sm text-white/85 leading-relaxed">
-                            {hero.description}
-                          </p>
+                        <div className="absolute inset-x-0 bottom-0 p-3 sm:p-6">
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.45 }}
+                            className="max-w-2xl"
+                          >
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <Badge className="bg-white/10 text-white border-white/15">Exclusive</Badge>
+                              <span className="text-xs text-white/80">{hostname(hero.websiteUrl)}</span>
+                            </div>
+                            <div className="text-white text-base sm:text-2xl font-semibold tracking-tight">
+                              {hero.name}
+                            </div>
+                            <p className="mt-1.5 text-[13px] sm:text-sm text-white/85 leading-relaxed">
+                              {hero.description}
+                            </p>
 
-                          <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
-                            <Button asChild className="bg-white text-slate-950 hover:bg-white/90 w-full sm:w-auto">
-                              <a href={hero.websiteUrl} target="_blank" rel="noreferrer">
-                                <Globe className="h-4 w-4 mr-2" />
-                                Visit Website
-                              </a>
-                            </Button>
-                            <Button variant="outline" className="border-white/20 text-white hover:bg-white/10 w-full sm:w-auto" asChild>
-                              <a href={`mailto:info@${hostname(hero.websiteUrl)}`}>
-                                <Mail className="h-4 w-4 mr-2" />
-                                Contact Business
-                              </a>
-                            </Button>
-                          </div>
-                        </motion.div>
+                            <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                              <Button asChild className="bg-white text-slate-950 hover:bg-white/90 w-full sm:w-auto">
+                                <a href={hero.websiteUrl} target="_blank" rel="noreferrer">
+                                  <Globe className="h-4 w-4 mr-2" />
+                                  Visit Website
+                                </a>
+                              </Button>
+                              <Button variant="outline" className="border-white/20 text-white hover:bg-white/10 w-full sm:w-auto" asChild>
+                                <a href={`mailto:info@${hostname(hero.websiteUrl)}`}>
+                                  <Mail className="h-4 w-4 mr-2" />
+                                  Contact Business
+                                </a>
+                              </Button>
+                            </div>
+                          </motion.div>
+                        </div>
                       </div>
-                    </div>
-                  </CarouselItem>
-                ))}
-              </CarouselContent>
-            </Carousel>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+              </Carousel>
+            ) : featuredLoading ? (
+              <div className="relative aspect-[4/3] sm:aspect-[21/9] bg-muted animate-pulse" />
+            ) : (
+              <div className="p-4 text-sm text-muted-foreground">No featured businesses yet.</div>
+            )}
           </CardContent>
         </Card>
 
@@ -461,12 +444,16 @@ export default function PremiumMarketplacePage() {
                               {cover?.type === 'video' ? (
                                 <video className="h-full w-full object-cover" src={cover.url} muted playsInline autoPlay loop />
                               ) : (
-                                <img
-                                  className="h-full w-full object-cover"
-                                  src={cover?.url || DEMO.assets[1].url}
-                                  alt={a.title}
-                                  loading="lazy"
-                                />
+                                cover?.url ? (
+                                  <img
+                                    className="h-full w-full object-cover"
+                                    src={cover.url}
+                                    alt={a.title}
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="h-full w-full bg-muted" />
+                                )
                               )}
                               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                               <div className="absolute left-3 top-3 flex items-center gap-2">
@@ -581,14 +568,15 @@ export default function PremiumMarketplacePage() {
                   {cover?.type === 'video' ? (
                     <video className="h-full w-full object-cover" src={cover.url} muted playsInline autoPlay loop />
                   ) : (
-                    <img className="h-full w-full object-cover" src={cover?.url || DEMO.assets[1].url} alt={b.name} loading="lazy" />
+                    cover?.url ? (
+                      <img className="h-full w-full object-cover" src={cover.url} alt={b.name} loading="lazy" />
+                    ) : (
+                      <div className="h-full w-full bg-muted" />
+                    )
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
                   <div className="absolute left-3 top-3 flex items-center gap-2">
                     <Badge className="bg-white/10 text-white border-white/15">Exclusive</Badge>
-                    {b.isDemo && (
-                      <Badge variant="secondary" className="bg-white/15 text-white border-white/15">Example Business</Badge>
-                    )}
                   </div>
                   <div className="absolute inset-x-0 bottom-0 p-3">
                     <div className="text-white font-semibold truncate">{b.name}</div>
