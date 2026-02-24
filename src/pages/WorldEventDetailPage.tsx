@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 
 export default function WorldEventDetailPage() {
   const { id } = useParams();
-  const { events, getStage, getBooth, loadMock } = useWorldStore();
-  useEffect(()=> { loadMock(); }, [loadMock]);
+  const { events, getStage, getBooth } = useWorldStore();
+  useEffect(()=> {}, []);
   const e = events.find(ev => ev.id === (id as string));
   const stage = e?.stageId ? getStage(e.stageId) : undefined;
 
@@ -73,7 +73,6 @@ export default function WorldEventDetailPage() {
           <CardContent className="space-y-2 text-sm">
             <div>Date: {new Date(e.startAt).toLocaleString()}</div>
             {stage && <div>Stage: <Link to={`/world/stage/${stage.id}`} className="underline">{stage.name}</Link></div>}
-            <div className="text-xs text-muted-foreground">This is a mock event for the Metaverse MVP.</div>
           </CardContent>
         </Card>
         {e.boothIds && e.boothIds.length > 0 && (

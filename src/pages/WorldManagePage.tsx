@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
 export default function WorldManagePage() {
-  const { booths, stages, events, loadMock, addBooth, updateBooth, removeBooth, addEvent, updateEvent, removeEvent, quoteSponsorship } = useWorldStore();
-  useEffect(()=> { loadMock(); }, [loadMock]);
+  const { booths, stages, events, addBooth, updateBooth, removeBooth, addEvent, updateEvent, removeEvent, quoteSponsorship } = useWorldStore();
+  useEffect(()=> {}, []);
 
   // Booth form state
   const [bName, setBName] = useState('');
@@ -31,7 +31,7 @@ export default function WorldManagePage() {
     if (!bName) return;
     addBooth({
       name: bName,
-      brandAvatar: bAvatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=brand',
+      brandAvatar: bAvatar || '',
       description: bDesc,
       banner: undefined,
       location: { x: Math.max(1, bX), y: Math.max(1, bY), zone: bZone || 'A' },
@@ -237,7 +237,7 @@ export default function WorldManagePage() {
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Rent a Booth (Mock Checkout)</CardTitle>
+            <CardTitle>Rent a Booth</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm">
             <div className="grid md:grid-cols-4 gap-2 items-center">
@@ -277,7 +277,7 @@ export default function WorldManagePage() {
                 }
               }}>Checkout</Button>
             </div>
-            <div className="text-xs text-muted-foreground">This is a mock checkout that deducts from your Ad Credits (localStorage) if available.</div>
+            <div className="text-xs text-muted-foreground">Checkout uses your Ad Credits (localStorage) if available.</div>
           </CardContent>
         </Card>
       </div>

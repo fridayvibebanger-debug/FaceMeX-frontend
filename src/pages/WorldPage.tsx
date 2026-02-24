@@ -25,9 +25,9 @@ const tierIcon: Record<string, string> = {
 
 export default function WorldPage() {
   const nav = useNavigate();
-  const { booths, stages, events, loadMock } = useWorldStore();
+  const { booths, stages, events } = useWorldStore();
   const [mounted, setMounted] = useState(false);
-  useEffect(()=> { loadMock(); setTimeout(()=> setMounted(true), 0); }, [loadMock]);
+  useEffect(()=> { setTimeout(()=> setMounted(true), 0); }, []);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const isLoading = booths.length === 0 && stages.length === 0 && events.length === 0;
 

@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 export default function WorldEventsPage() {
-  const { events, stages, loadMock } = useWorldStore();
-  useEffect(()=> { loadMock(); }, [loadMock]);
+  const { events, stages } = useWorldStore();
+  useEffect(()=> {}, []);
 
   const sorted = [...events].sort((a,b)=> (b.featured ? 1:0) - (a.featured ? 1:0) || a.startAt.localeCompare(b.startAt));
 
