@@ -37,51 +37,9 @@ function upsert(list: Notification[], item: Notification) {
   return next;
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'like',
-    title: 'New Reaction',
-    message: 'Sarah Johnson reacted ❤️ to your post',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-    timestamp: new Date(Date.now() - 300000),
-    isRead: false,
-    actionUrl: '/feed',
-  },
-  {
-    id: '2',
-    type: 'comment',
-    title: 'New Comment',
-    message: 'Mike Chen commented on your post: "This is amazing!"',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mike',
-    timestamp: new Date(Date.now() - 600000),
-    isRead: false,
-    actionUrl: '/feed',
-  },
-  {
-    id: '3',
-    type: 'follow',
-    title: 'New Follower',
-    message: 'Emma Wilson started following you',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-    timestamp: new Date(Date.now() - 1800000),
-    isRead: true,
-    actionUrl: '/profile',
-  },
-  {
-    id: '4',
-    type: 'event',
-    title: 'Event Reminder',
-    message: 'Virtual Concert: Neon Dreams starts in 2 days',
-    timestamp: new Date(Date.now() - 3600000),
-    isRead: false,
-    actionUrl: '/communities',
-  },
-];
-
 export const useNotificationStore = create<NotificationState>((set, get) => ({
-  notifications: mockNotifications,
-  unreadCount: mockNotifications.filter((n) => !n.isRead).length,
+  notifications: [],
+  unreadCount: 0,
 
   addNotification: (notification) => {
     const newNotification: Notification = {

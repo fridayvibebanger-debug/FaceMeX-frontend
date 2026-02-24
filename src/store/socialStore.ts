@@ -77,186 +77,27 @@ interface SocialState {
   createEvent: (event: Omit<Event, 'id' | 'attendeeCount' | 'isAttending'>) => Promise<void>;
 }
 
-const mockCircles: Circle[] = [
-  {
-    id: '1',
-    name: 'Tech Innovators',
-    description: 'A community for tech enthusiasts and innovators',
-    coverImage: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&q=80',
-    creatorId: '2',
-    creatorName: 'Sarah Johnson',
-    memberCount: 1247,
-    isPrivate: false,
-    category: 'tech',
-    isMember: true,
-  },
-  {
-    id: '2',
-    name: 'Digital Artists Hub',
-    description: 'Share and discover amazing digital art',
-    coverImage: 'https://images.unsplash.com/photo-1561998338-13ad7883b20f?w=800&q=80',
-    creatorId: '3',
-    creatorName: 'Mike Chen',
-    memberCount: 892,
-    isPrivate: false,
-    category: 'art',
-    isMember: false,
-  },
-  {
-    id: '3',
-    name: 'Fitness Warriors',
-    description: 'Get fit together, stay motivated',
-    coverImage: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=80',
-    creatorId: '4',
-    creatorName: 'Emma Wilson',
-    memberCount: 2341,
-    isPrivate: false,
-    category: 'fitness',
-    isMember: true,
-  },
-];
-
-const mockCircleMembers: Record<string, CircleMember[]> = {
-  '1': [
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-      role: 'owner',
-      joinedAt: new Date(Date.now() - 86400000 * 120),
-    },
-    {
-      id: '10',
-      name: 'Alex Brown',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
-      role: 'admin',
-      joinedAt: new Date(Date.now() - 86400000 * 60),
-    },
-    {
-      id: '11',
-      name: 'Jamie Lee',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jamie',
-      role: 'member',
-      joinedAt: new Date(Date.now() - 86400000 * 20),
-    },
-    {
-      id: '12',
-      name: 'Taylor Smith',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Taylor',
-      role: 'member',
-      joinedAt: new Date(Date.now() - 86400000 * 5),
-    },
-  ],
-  '2': [
-    {
-      id: '3',
-      name: 'Mike Chen',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mike',
-      role: 'owner',
-      joinedAt: new Date(Date.now() - 86400000 * 90),
-    },
-    {
-      id: '13',
-      name: 'Lisa Ray',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa',
-      role: 'admin',
-      joinedAt: new Date(Date.now() - 86400000 * 40),
-    },
-    {
-      id: '14',
-      name: 'Dylan Cooper',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dylan',
-      role: 'member',
-      joinedAt: new Date(Date.now() - 86400000 * 10),
-    },
-  ],
-  '3': [
-    {
-      id: '4',
-      name: 'Emma Wilson',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-      role: 'owner',
-      joinedAt: new Date(Date.now() - 86400000 * 150),
-    },
-    {
-      id: '15',
-      name: 'Chris Walker',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Chris',
-      role: 'member',
-      joinedAt: new Date(Date.now() - 86400000 * 45),
-    },
-    {
-      id: '16',
-      name: 'Riley Park',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Riley',
-      role: 'member',
-      joinedAt: new Date(Date.now() - 86400000 * 7),
-    },
-  ],
-};
-
-const mockEvents: Event[] = [
-  {
-    id: '1',
-    title: 'Virtual Concert: Neon Dreams',
-    description: 'Experience an immersive virtual concert in our metaverse',
-    coverImage: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&q=80',
-    hostId: '2',
-    hostName: 'Sarah Johnson',
-    hostAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-    startTime: new Date(Date.now() + 86400000 * 2),
-    endTime: new Date(Date.now() + 86400000 * 2 + 7200000),
-    location: 'Virtual World: Neon City',
-    type: 'virtual',
-    attendeeCount: 342,
-    maxAttendees: 500,
-    isAttending: true,
-    isPaid: true,
-    price: 299,
-    tags: ['music', 'virtual', 'concert'],
-  },
-  {
-    id: '2',
-    title: 'Tech Meetup: AI & Future',
-    description: 'Discuss the latest in AI technology',
-    coverImage: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&q=80',
-    hostId: '3',
-    hostName: 'Mike Chen',
-    hostAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mike',
-    startTime: new Date(Date.now() + 86400000 * 5),
-    endTime: new Date(Date.now() + 86400000 * 5 + 10800000),
-    location: 'Cape Town Convention Center',
-    type: 'in-person',
-    attendeeCount: 87,
-    maxAttendees: 150,
-    isAttending: false,
-    isPaid: false,
-    tags: ['tech', 'ai', 'networking'],
-  },
-  {
-    id: '3',
-    title: 'Yoga & Meditation Session',
-    description: 'Join us for a relaxing yoga session',
-    coverImage: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&q=80',
-    hostId: '4',
-    hostName: 'Emma Wilson',
-    hostAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-    startTime: new Date(Date.now() + 86400000),
-    endTime: new Date(Date.now() + 86400000 + 3600000),
-    location: 'Virtual & In-Person',
-    type: 'hybrid',
-    attendeeCount: 45,
-    isAttending: true,
-    isPaid: false,
-    tags: ['fitness', 'wellness', 'yoga'],
-  },
-];
+function getCurrentUserIdentity() {
+  try {
+    const id =
+      localStorage.getItem('faceme_user_id') ||
+      localStorage.getItem('facemex_user_id') ||
+      '';
+    const name =
+      localStorage.getItem('faceme_user_name') ||
+      localStorage.getItem('facemex_user_name') ||
+      '';
+    return { id: String(id || '').trim(), name: String(name || '').trim() };
+  } catch {
+    return { id: '', name: '' };
+  }
+}
 
 export const useSocialStore = create<SocialState>((set) => ({
-  circles: mockCircles,
-  events: mockEvents,
+  circles: [],
+  events: [],
   circleMessages: {},
-  circleMembers: mockCircleMembers,
+  circleMembers: {},
   
   loadEvents: async () => {
     const data = await api.get('/api/events');
@@ -265,7 +106,7 @@ export const useSocialStore = create<SocialState>((set) => ({
       title: e.title,
       description: e.description,
       coverImage: e.coverImage,
-      hostId: e.hostId || '1',
+      hostId: e.hostId || '',
       hostName: e.hostName || 'User',
       hostAvatar: e.hostAvatar || '',
       startTime: new Date(e.startTime),
@@ -291,7 +132,8 @@ export const useSocialStore = create<SocialState>((set) => ({
       );
 
       const existingMembers = state.circleMembers[circleId] || [];
-      const alreadyMember = existingMembers.some((m) => m.id === '1');
+      const me = getCurrentUserIdentity();
+      const alreadyMember = !!me.id && existingMembers.some((m) => m.id === me.id);
       const circleMembers = {
         ...state.circleMembers,
         [circleId]: alreadyMember
@@ -299,8 +141,8 @@ export const useSocialStore = create<SocialState>((set) => ({
           : [
               ...existingMembers,
               {
-                id: '1',
-                name: 'Demo User',
+                id: me.id,
+                name: me.name || 'User',
                 avatar: '',
                 role: 'member' as CircleMemberRole,
                 joinedAt: new Date(),
@@ -320,9 +162,10 @@ export const useSocialStore = create<SocialState>((set) => ({
       );
 
       const existingMembers = state.circleMembers[circleId] || [];
+      const me = getCurrentUserIdentity();
       const circleMembers = {
         ...state.circleMembers,
-        [circleId]: existingMembers.filter((m) => m.id !== '1'),
+        [circleId]: me.id ? existingMembers.filter((m) => m.id !== me.id) : existingMembers,
       };
 
       return { circles, circleMembers };
@@ -466,7 +309,7 @@ export const useSocialStore = create<SocialState>((set) => ({
       title: created.title,
       description: created.description,
       coverImage: created.coverImage,
-      hostId: created.hostId || '1',
+      hostId: created.hostId || '',
       hostName: created.hostName || 'User',
       hostAvatar: created.hostAvatar || '',
       startTime: new Date(created.startTime),

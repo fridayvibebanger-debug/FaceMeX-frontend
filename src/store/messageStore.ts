@@ -51,88 +51,35 @@ interface MessageState {
   deleteConversation: (conversationId: string) => void;
 }
 
-const mockConversations: Conversation[] = [
-  {
-    id: '1',
-    type: 'dm',
-    participants: [
-      { id: '2', name: 'Sarah Johnson', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', isOnline: true },
-    ],
-    unreadCount: 2,
-  },
-  {
-    id: '2',
-    type: 'group',
-    name: 'Design Team',
-    participants: [
-      { id: '3', name: 'Mike Chen', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mike', isOnline: true },
-      { id: '4', name: 'Emma Wilson', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma', isOnline: false },
-      { id: '5', name: 'Alex Brown', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex', isOnline: true },
-    ],
-    unreadCount: 0,
-  },
-  {
-    id: '3',
-    type: 'dm',
-    participants: [
-      { id: '6', name: 'John Doe', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John', isOnline: false },
-    ],
-    unreadCount: 0,
-  },
-];
-
-const mockMessages: Record<string, Message[]> = {
-  '1': [
-    {
-      id: '1',
-      conversationId: '1',
-      senderId: '2',
-      senderName: 'Sarah Johnson',
-      senderAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-      content: 'Hey! Did you see the new virtual world I created?',
-      timestamp: new Date(Date.now() - 3600000),
-      isRead: false,
-      type: 'text',
-    },
-    {
-      id: '2',
-      conversationId: '1',
-      senderId: '2',
-      senderName: 'Sarah Johnson',
-      senderAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-      content: 'It has a beach theme! 🏖️',
-      timestamp: new Date(Date.now() - 3500000),
-      isRead: false,
-      type: 'text',
-    },
-  ],
-  '2': [
-    {
-      id: '3',
-      conversationId: '2',
-      senderId: '3',
-      senderName: 'Mike Chen',
-      senderAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mike',
-      content: 'Team meeting at 3 PM today!',
-      timestamp: new Date(Date.now() - 7200000),
-      isRead: true,
-      type: 'text',
-    },
-  ],
-};
+function getCurrentUserIdentity() {
+  try {
+    const id =
+      localStorage.getItem('faceme_user_id') ||
+      localStorage.getItem('facemex_user_id') ||
+      '';
+    const name =
+      localStorage.getItem('faceme_user_name') ||
+      localStorage.getItem('facemex_user_name') ||
+      '';
+    return { id: String(id || '').trim(), name: String(name || '').trim() };
+  } catch {
+    return { id: '', name: '' };
+  }
+}
 
 export const useMessageStore = create<MessageState>((set, get) => ({
-  conversations: mockConversations,
-  messages: mockMessages,
+  conversations: [],
+  messages: {},
   activeConversation: null,
 
   sendMessage: (conversationId, content, type = 'text', options) => {
+    const me = getCurrentUserIdentity();
     const newMessage: Message = {
       id: Date.now().toString(),
       conversationId,
-      senderId: '1',
-      senderName: 'You',
-      senderAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=You',
+      senderId: me.id,
+      senderName: me.name || 'You',
+      senderAvatar: '',
       content,
       timestamp: new Date(),
       // For outgoing messages, isRead represents whether the recipient has seen it.
@@ -188,6 +135,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   },
 
   markAsRead: (conversationId) => {
+    const me = getCurrentUserIdentity();
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv
@@ -197,7 +145,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         // Only mark incoming messages as read by the current user.
         // Outgoing messages keep isRead as the recipient-read receipt state.
         [conversationId]: state.messages[conversationId]?.map((msg) =>
-          msg.senderId === '1' ? msg : { ...msg, isRead: true }
+          me.id && msg.senderId === me.id ? msg : { ...msg, isRead: true }
         ),
       },
     }));

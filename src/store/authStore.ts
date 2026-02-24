@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import { api } from '@/lib/api';
+import { useUserStore } from '@/store/userStore';
 
 let authListenerInitialized = false;
 
@@ -89,6 +90,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: state.user ? { ...state.user, ...me } : state.user,
       }));
     } catch {}
+
+    try {
+      await useUserStore.getState().loadMe();
+    } catch {}
   },
   register: async (name: string, email: string, password: string) => {
     if (!isSupabaseConfigured) {
@@ -142,10 +147,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: state.user ? { ...state.user, ...me } : state.user,
       }));
     } catch {}
+
+    try {
+      await useUserStore.getState().loadMe();
+    } catch {}
   },
   logout: () => {
     supabase.auth.signOut();
     set({ user: null, isAuthenticated: false });
+    try {
+      const nextMode =
+        (typeof window !== 'undefined' && (localStorage.getItem('faceme_mode') as any)) === 'professional'
+          ? 'professional'
+          : 'social';
+      useUserStore.setState({
+        id: '',
+        name: '',
+        avatar: '',
+        tier: 'free',
+        addons: { verified: false },
+        mode: nextMode,
+        loading: false,
+        professional: undefined,
+      } as any);
+    } catch {}
     try {
       localStorage.removeItem('faceme_user_id');
       localStorage.removeItem('faceme_user_name');
@@ -168,6 +193,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           set({ user: null, isAuthenticated: false, isInitialized: true });
           return;
         }
+
         const profile: User = {
           id: supaUser.id,
           email: supaUser.email || '',
@@ -190,6 +216,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             set((state) => ({
               user: state.user ? { ...state.user, ...me } : state.user,
             }));
+          } catch {}
+
+          try {
+            await useUserStore.getState().loadMe();
           } catch {}
         })();
       });
@@ -219,6 +249,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       localStorage.setItem('faceme_user_id', String(profile.id));
       localStorage.setItem('faceme_user_name', String(profile.name || ''));
+    } catch {}
+
+    try {
+      await useUserStore.getState().loadMe();
     } catch {}
 
     try {

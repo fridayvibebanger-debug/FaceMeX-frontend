@@ -11,11 +11,14 @@ export interface Post {
   image?: string;
   images?: string[];
   audio?: string;
+  collabInvites?: string[];
+  collaborators?: string[];
   hashtags: string[];
   likes: number;
   comments: Comment[];
   shares: number;
   timestamp: Date;
+
   isLiked: boolean;
   reaction?: 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry';
   mood?: string;
@@ -40,76 +43,18 @@ interface PostState {
   addPost: (content: string, images?: string[], audio?: string, hashtags?: string[], mode?: 'social' | 'professional') => Promise<void>;
   likePost: (postId: string, reaction?: string) => Promise<void>;
   editPost: (postId: string, content: string) => Promise<void>;
+  inviteCollaborator: (postId: string, userId: string) => Promise<void>;
+  acceptCollabInvite: (postId: string) => Promise<void>;
+  rejectCollabInvite: (postId: string) => Promise<void>;
   addComment: (postId: string, content: string) => Promise<void>;
   editComment: (postId: string, commentId: string, content: string) => Promise<void>;
   deleteComment: (postId: string, commentId: string) => Promise<void>;
   deletePost: (postId: string) => Promise<void>;
   sharePost: (postId: string) => void;
+
   extractHashtags: (content: string) => string[];
   getAISuggestions: (content: string) => string[];
 }
-
-// Mock initial posts
-const mockPosts: Post[] = [
-  {
-    id: '1',
-    userId: '2',
-    userName: 'Sarah Johnson',
-    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=sarah',
-    content: 'Just launched my new project! So excited to share this with everyone. What do you think? 🚀 #coding #webdev #launch',
-    image: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&q=80',
-    images: ['https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&q=80'],
-    hashtags: ['coding', 'webdev', 'launch'],
-    likes: 42,
-    comments: [
-      {
-        id: 'c1',
-        userId: '3',
-        userName: 'Mike Chen',
-        userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=mike',
-        content: 'This looks amazing! Congrats! 🎉',
-        timestamp: new Date(Date.now() - 3600000),
-      },
-    ],
-    shares: 5,
-    timestamp: new Date(Date.now() - 7200000),
-    isLiked: false,
-    mood: 'excited',
-    aiScore: 0.92,
-  },
-  {
-    id: '2',
-    userId: '3',
-    userName: 'Mike Chen',
-    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=mike',
-    content: 'Beautiful sunset today! Nature never fails to amaze me. 🌅 #nature #sunset #photography',
-    image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80',
-    images: ['https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80'],
-    hashtags: ['nature', 'sunset', 'photography'],
-    likes: 128,
-    comments: [],
-    shares: 12,
-    timestamp: new Date(Date.now() - 14400000),
-    isLiked: false,
-    mood: 'peaceful',
-    aiScore: 0.88,
-  },
-  {
-    id: '3',
-    userId: '4',
-    userName: 'Emma Wilson',
-    userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=emma',
-    content: 'Coffee and code - the perfect combination for a productive morning! ☕💻 #developer #productivity #coffee',
-    hashtags: ['developer', 'productivity', 'coffee'],
-    likes: 89,
-    comments: [],
-    shares: 3,
-    timestamp: new Date(Date.now() - 21600000),
-    isLiked: false,
-    mood: 'focused',
-    aiScore: 0.85,
-  },
-];
 
 const trendingHashtags = [
   'coding', 'webdev', 'AI', 'design', 'productivity', 
@@ -117,7 +62,7 @@ const trendingHashtags = [
 ];
 
 export const usePostStore = create<PostState>((set, get) => ({
-  posts: mockPosts,
+  posts: [],
   trendingHashtags,
   aiSuggestions: [],
   
@@ -136,7 +81,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     const data = await api.get(`/api/posts${q}`);
     const mapped: Post[] = (data || []).map((p: any) => ({
       id: p.id,
-      userId: p.userId || currentUserId || '1',
+      userId: p.userId || currentUserId || '',
       userName: p.userName || authUser?.name || 'User',
       userAvatar: p.avatar || '',
       content: p.content || '',
@@ -145,11 +90,13 @@ export const usePostStore = create<PostState>((set, get) => ({
         ? p.images.filter(Boolean)
         : (p.image ? [p.image].filter(Boolean) : undefined),
       audio: p.audio || undefined,
+      collabInvites: Array.isArray(p.collabInvites) ? p.collabInvites.map(String) : [],
+      collaborators: Array.isArray(p.collaborators) ? p.collaborators.map(String) : [],
       hashtags: get().extractHashtags(p.content || ''),
       likes: p.likes || (Array.isArray(p.likedBy) ? p.likedBy.length : 0),
       comments: (p.comments || []).map((c: any) => ({
         id: c.id,
-        userId: c.userId || currentUserId || '1',
+        userId: c.userId || currentUserId || '',
         userName: c.userName || authUser?.name || 'User',
         userAvatar: '',
         content: c.text || c.content || '',
@@ -209,7 +156,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       const created = await api.post('/api/posts', { content, images: payloadImages, audio, mode: m });
       const newPost: Post = {
         id: created.id,
-        userId: created.userId || currentUserId || '1',
+        userId: created.userId || currentUserId || '',
         userName: created.userName || authUser?.name || 'User',
         userAvatar: created.avatar || authUser?.avatar || '',
         content: created.content || content,
@@ -218,6 +165,8 @@ export const usePostStore = create<PostState>((set, get) => ({
           ? created.images.filter(Boolean)
           : (created.image ? [created.image].filter(Boolean) : payloadImages),
         audio: created.audio || audio,
+        collabInvites: Array.isArray(created.collabInvites) ? created.collabInvites.map(String) : [],
+        collaborators: Array.isArray(created.collaborators) ? created.collaborators.map(String) : [],
         hashtags: [...new Set([...get().extractHashtags(created.content || content), ...(hashtags || [])])],
         likes: created.likes || 0,
         comments: [],
@@ -239,6 +188,8 @@ export const usePostStore = create<PostState>((set, get) => ({
         image: (images && images[0]) || undefined,
         images: Array.isArray(images) ? images.slice(0, 5) : undefined,
         audio,
+        collabInvites: [],
+        collaborators: [],
         hashtags: [...new Set([...get().extractHashtags(content), ...(hashtags || [])])],
         likes: 0,
         comments: [],
@@ -257,12 +208,76 @@ export const usePostStore = create<PostState>((set, get) => ({
       set({
         posts: get().posts.map((post) =>
           post.id === postId
-            ? { ...post, content: updated.content || content }
+            ? {
+                ...post,
+                content: updated.content || content,
+                collabInvites: Array.isArray(updated?.collabInvites) ? updated.collabInvites.map(String) : post.collabInvites,
+                collaborators: Array.isArray(updated?.collaborators) ? updated.collaborators.map(String) : post.collaborators,
+              }
             : post
         ),
       });
     } catch (e) {
       console.error('Failed to edit post', e);
+    }
+  },
+
+  inviteCollaborator: async (postId: string, userId: string) => {
+    const invitee = String(userId || '').trim();
+    if (!invitee) return;
+    try {
+      const resp = await api.post(`/api/posts/${postId}/collab/invite`, { userId: invitee });
+      set({
+        posts: get().posts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                collabInvites: Array.isArray(resp?.collabInvites) ? resp.collabInvites.map(String) : (post.collabInvites || []),
+                collaborators: Array.isArray(resp?.collaborators) ? resp.collaborators.map(String) : (post.collaborators || []),
+              }
+            : post
+        ),
+      });
+    } catch (e) {
+      console.error('Failed to invite collaborator', e);
+    }
+  },
+
+  acceptCollabInvite: async (postId: string) => {
+    try {
+      const resp = await api.post(`/api/posts/${postId}/collab/accept`);
+      set({
+        posts: get().posts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                collabInvites: Array.isArray(resp?.collabInvites) ? resp.collabInvites.map(String) : (post.collabInvites || []),
+                collaborators: Array.isArray(resp?.collaborators) ? resp.collaborators.map(String) : (post.collaborators || []),
+              }
+            : post
+        ),
+      });
+    } catch (e) {
+      console.error('Failed to accept collab invite', e);
+    }
+  },
+
+  rejectCollabInvite: async (postId: string) => {
+    try {
+      const resp = await api.post(`/api/posts/${postId}/collab/reject`);
+      set({
+        posts: get().posts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                collabInvites: Array.isArray(resp?.collabInvites) ? resp.collabInvites.map(String) : (post.collabInvites || []),
+                collaborators: Array.isArray(resp?.collaborators) ? resp.collaborators.map(String) : (post.collaborators || []),
+              }
+            : post
+        ),
+      });
+    } catch (e) {
+      console.error('Failed to reject collab invite', e);
     }
   },
   
@@ -318,12 +333,13 @@ export const usePostStore = create<PostState>((set, get) => ({
     const c = await api.post(`/api/posts/${postId}/comment`, { text: content });
     const newComment: Comment = {
       id: c.id,
-      userId: c.userId || '1',
+      userId: c.userId || '',
       userName: c.userName || 'User',
       userAvatar: '',
       content: c.text || content,
       timestamp: new Date(c.createdAt || Date.now()),
     };
+
     set({
       posts: get().posts.map((post) =>
         post.id === postId
