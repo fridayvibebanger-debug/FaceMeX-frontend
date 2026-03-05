@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { API_URL } from '@/lib/api';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,14 +16,28 @@ export default function RightSidebar() {
     loadRequests().catch(() => {});
   }, [initRealtime, loadRequests, userId]);
 
-  const suggestedUsers = useMemo(
-    () => [
-      { id: '2', name: 'Sarah Johnson', bio: 'Designer & Creator' },
-      { id: '3', name: 'Mike Chen', bio: 'Photographer' },
-      { id: '4', name: 'Emma Wilson', bio: 'Developer' },
-    ],
-    []
-  );
+  const [suggestedUsers, setSuggestedUsers] = useState<Array<any>>(() => [
+    { id: '2', name: 'Sarah Johnson', bio: 'Designer & Creator' },
+    { id: '3', name: 'Mike Chen', bio: 'Photographer' },
+    { id: '4', name: 'Emma Wilson', bio: 'Developer' },
+  ]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (!API_URL) return;
+        const res = await fetch(`${API_URL}/api/users/suggested`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!mounted) return;
+        if (Array.isArray(data.users) && data.users.length) setSuggestedUsers(data.users.slice(0, 6));
+      } catch (err) {
+        // ignore, keep defaults
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const getInitials = (name: string) => {
     const parts = String(name || '')
