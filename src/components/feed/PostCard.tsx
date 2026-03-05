@@ -25,7 +25,7 @@ interface PostCardProps {
 }
 
 export default function PostCard({ post }: PostCardProps) {
-  const { addComment, likePost, sharePost, editPost, deletePost } = usePostStore();
+  const { addComment, likePost, sharePost, editPost, deletePost, inviteCollaborator, acceptCollabInvite, rejectCollabInvite } = usePostStore();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [editingPost, setEditingPost] = useState(false);
@@ -47,13 +47,20 @@ export default function PostCard({ post }: PostCardProps) {
 
   const isOwner = String(post.userId || '') === String(currentUserId || user?.id || '');
 
+  const canonicalUserId = String(currentUserId || user?.id || '').trim();
+  const collaborators = Array.isArray((post as any).collaborators) ? ((post as any).collaborators as any[]).map(String) : [];
+  const collabInvites = Array.isArray((post as any).collabInvites) ? ((post as any).collabInvites as any[]).map(String) : [];
+  const isCollaborator = !!canonicalUserId && collaborators.includes(String(canonicalUserId));
+  const hasInvite = !!canonicalUserId && collabInvites.includes(String(canonicalUserId));
+  const canEdit = isOwner || isCollaborator;
+
   const displayName = (() => {
     const storeName = String(currentUserName || '').trim();
     const authName = String(user?.name || '').trim();
     const postName = String(post.userName || '').trim();
-    const fallbackName = storeName || authName || postName || 'FaceMe User';
+    const fallbackName = storeName || authName || postName || 'User';
     if (isOwner) return storeName || authName || fallbackName;
-    if (!postName || postName === 'FaceMe User') return fallbackName;
+    if (!postName || postName === 'User') return fallbackName;
     return postName;
   })();
 
@@ -136,7 +143,7 @@ export default function PostCard({ post }: PostCardProps) {
 
   const isAuthorVerified =
     (post as any)?.userVerified === true ||
-    (!!addons?.verified && (post.userId === currentUserId || (currentUserId === '1' && post.userId === '1')));
+    (!!addons?.verified && post.userId === currentUserId);
 
   const getAudioLimitSeconds = (tier?: string | null) => {
     const t = (tier || '').toLowerCase();
@@ -260,7 +267,7 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const startEditPost = () => {
-    if (!isOwner) return;
+    if (!canEdit) return;
     setPostDraft(post.content);
     setEditingPost(true);
   };
@@ -268,7 +275,7 @@ export default function PostCard({ post }: PostCardProps) {
   const saveEditPost = async () => {
     const next = postDraft.trim();
     if (!next) return;
-    if (!isOwner) return;
+    if (!canEdit) return;
     await editPost(post.id, next);
     setEditingPost(false);
   };
@@ -278,6 +285,14 @@ export default function PostCard({ post }: PostCardProps) {
     const ok = window.confirm('Delete this post?');
     if (!ok) return;
     await deletePost(post.id);
+  };
+
+  const handleInviteCollaborator = async () => {
+    if (!isOwner) return;
+    const inviteeId = window.prompt('Enter the user id to invite as collaborator');
+    const next = String(inviteeId || '').trim();
+    if (!next) return;
+    await inviteCollaborator(post.id, next);
   };
 
   const handleComment = async () => {
@@ -381,11 +396,41 @@ export default function PostCard({ post }: PostCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isOwner ? (
+              {canEdit ? (
                 <>
                   <DropdownMenuItem onClick={startEditPost}>
                     <PencilLine className="mr-2 h-4 w-4" />
                     Edit
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+
+              {hasInvite ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      await acceptCollabInvite(post.id);
+                    }}
+                  >
+                    Accept invite
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      await rejectCollabInvite(post.id);
+                    }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    Reject invite
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+
+              {isOwner ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleInviteCollaborator}>
+                    Invite collaborator
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleDeletePost} className="text-destructive focus:text-destructive">

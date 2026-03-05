@@ -37,31 +37,8 @@ type FeedFilter = 'ai-curated' | 'recent' | 'trending';
 
 const STORAGE_KEY_PROMOTIONS = 'faceme_business_promotions_v1';
 
-const MOCK_PROMOTIONS: BusinessPromotion[] = [
-  {
-    id: 'p1',
-    businessName: 'Nova Coffee',
-    headline: 'Fresh coffee, fast delivery',
-    description: 'Order beans, cold brew, and snacks. Delivered in 30 minutes in Cape Town.',
-    imageUrl: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=800&q=80',
-    ctaLabel: 'Order now',
-    ctaUrl: 'https://example.com',
-    tags: ['coffee', 'delivery'],
-  },
-  {
-    id: 'p2',
-    businessName: 'Skyline Studio',
-    headline: 'Brand design for startups',
-    description: 'Logos, social templates, and product mockups — ready in 72 hours.',
-    imageUrl: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=800&q=80',
-    ctaLabel: 'Get a quote',
-    ctaUrl: 'https://example.com',
-    tags: ['design', 'business'],
-  },
-];
-
 function BusinessPromotionsStrip() {
-  const [items, setItems] = useState<BusinessPromotion[]>(() => [...MOCK_PROMOTIONS]);
+  const [items, setItems] = useState<BusinessPromotion[]>(() => []);
 
   useEffect(() => {
     try {
@@ -76,7 +53,7 @@ function BusinessPromotionsStrip() {
   const displayItems = useMemo(() => {
     const now = Date.now();
     const raw = localStorage.getItem(STORAGE_KEY_PROMOTIONS);
-    if (!raw) return MOCK_PROMOTIONS;
+    if (!raw) return [];
 
     try {
       const parsed = JSON.parse(raw) as BusinessPromotion[];
@@ -86,11 +63,13 @@ function BusinessPromotionsStrip() {
         if (p.startAt && now < p.startAt) return false;
         return now <= until;
       });
-      return active.length ? active : MOCK_PROMOTIONS;
+      return active.length ? active : [];
     } catch {
-      return MOCK_PROMOTIONS;
+      return [];
     }
   }, [items]);
+
+  if (displayItems.length === 0) return null;
 
   return (
     <div className="mb-4">
