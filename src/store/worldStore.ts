@@ -42,7 +42,6 @@ interface WorldState {
   booths: Booth[];
   stages: Stage[];
   events: WorldEvent[];
-  loadMock: () => void;
   getBooth: (id: string) => Booth | undefined;
   getStage: (id: string) => Stage | undefined;
   addBooth: (b: Omit<Booth, 'id'>) => Booth;
@@ -58,26 +57,10 @@ interface WorldState {
   quoteSponsorship: (tier: SponsorTier, days?: number) => { tier: SponsorTier; days: number; priceZAR: number };
 }
 
-const mockBooths: Booth[] = [
-  { id: 'b1', name: 'Nova Wear', brandAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=nova', description: 'Streetwear & accessories', location: { x: 1, y: 1, zone: 'A' }, sponsorTier: 'gold', products: [ { id: 'p1', name: 'Hoodie', price: 49 }, { id: 'p2', name: 'Cap', price: 19 } ] },
-  { id: 'b2', name: 'Pixel Gadgets', brandAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=pixel', description: 'Smart home devices', location: { x: 2, y: 1, zone: 'A' }, sponsorTier: 'silver', products: [ { id: 'p3', name: 'Smart Plug', price: 29 } ] },
-  { id: 'b3', name: 'Eco Beauty', brandAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=eco', description: 'Natural skincare', location: { x: 3, y: 2, zone: 'B' }, sponsorTier: 'bronze', products: [ { id: 'p4', name: 'Serum', price: 35 } ] },
-];
-
-const mockStages: Stage[] = [
-  { id: 's1', name: 'Main Stage', isLive: false, sponsor: { name: 'Nova Wear', tier: 'gold' } },
-];
-
-const mockEvents: WorldEvent[] = [
-  { id: 'e1', title: 'Live Shopping: Nova Wear', type: 'live-shopping', startAt: new Date(Date.now()+3600_000).toISOString(), stageId: 's1', boothIds: ['b1'], sponsor: { name: 'Nova Wear', tier: 'gold' }, featured: true },
-  { id: 'e2', title: 'Creator Showcase', type: 'showcase', startAt: new Date(Date.now()+7200_000).toISOString(), stageId: 's1', featured: false },
-];
-
 export const useWorldStore = create<WorldState>((set, get) => ({
   booths: [],
   stages: [],
   events: [],
-  loadMock: () => set({ booths: mockBooths, stages: mockStages, events: mockEvents }),
   getBooth: (id) => get().booths.find(b => b.id === id),
   getStage: (id) => get().stages.find(s => s.id === id),
   addBooth: (b) => {

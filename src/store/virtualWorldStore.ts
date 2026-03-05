@@ -27,57 +27,6 @@ interface VirtualWorldState {
   updateWorld: (worldId: string, patch: Partial<VirtualWorld>) => void;
 }
 
-const mockWorlds: VirtualWorld[] = [
-  {
-    id: '1',
-    name: 'Sunset Beach Hangout',
-    description: 'Relax by the virtual beach with friends',
-    thumbnail: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80',
-    creatorId: '2',
-    creatorName: 'Sarah Johnson',
-    participants: 12,
-    maxParticipants: 50,
-    isPublic: true,
-    theme: 'beach',
-  },
-  {
-    id: '2',
-    name: 'Neon City Nights',
-    description: 'Explore a futuristic cyberpunk city',
-    thumbnail: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&q=80',
-    creatorId: '3',
-    creatorName: 'Mike Chen',
-    participants: 28,
-    maxParticipants: 100,
-    isPublic: true,
-    theme: 'city',
-  },
-  {
-    id: '3',
-    name: 'Space Station Alpha',
-    description: 'Float in zero gravity and explore the cosmos',
-    thumbnail: 'https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=800&q=80',
-    creatorId: '4',
-    creatorName: 'Emma Wilson',
-    participants: 8,
-    maxParticipants: 30,
-    isPublic: true,
-    theme: 'space',
-  },
-  {
-    id: '4',
-    name: 'Enchanted Forest',
-    description: 'Magical woodland with mystical creatures',
-    thumbnail: 'https://images.unsplash.com/photo-1511497584788-876760111969?w=800&q=80',
-    creatorId: '2',
-    creatorName: 'Sarah Johnson',
-    participants: 15,
-    maxParticipants: 40,
-    isPublic: true,
-    theme: 'forest',
-  },
-];
-
 export const useVirtualWorldStore = create<VirtualWorldState>((set, get) => ({
   worlds: [],
   currentWorld: null,
@@ -86,8 +35,7 @@ export const useVirtualWorldStore = create<VirtualWorldState>((set, get) => ({
       const data: any = await api.get('/api/worlds');
       set({ worlds: Array.isArray(data.items) ? data.items : [] });
     } catch {
-      // fallback to mock if API not ready
-      set({ worlds: mockWorlds });
+      set({ worlds: [] });
     }
   },
   joinWorld: (worldId: string) => {
