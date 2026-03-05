@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 
 export default function BoothPage() {
   const { id } = useParams();
-  const { getBooth, loadMock, events, getStage } = useWorldStore();
-  useEffect(()=> { loadMock(); }, [loadMock]);
+  const { getBooth, events, getStage } = useWorldStore();
+  useEffect(()=> {}, []);
   const booth = getBooth(id as string);
 
   if (!booth) return (
