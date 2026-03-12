@@ -56,14 +56,9 @@ interface PostState {
   getAISuggestions: (content: string) => string[];
 }
 
-const trendingHashtags = [
-  'coding', 'webdev', 'AI', 'design', 'productivity', 
-  'nature', 'photography', 'travel', 'fitness', 'food'
-];
-
 export const usePostStore = create<PostState>((set, get) => ({
   posts: [],
-  trendingHashtags,
+  trendingHashtags: [],
   aiSuggestions: [],
   
   loadPosts: async (skill?: string) => {
@@ -82,7 +77,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     const mapped: Post[] = (data || []).map((p: any) => ({
       id: p.id,
       userId: p.userId || currentUserId || '',
-      userName: p.userName || authUser?.name || 'User',
+      userName: p.userName || authUser?.name || '',
       userAvatar: p.avatar || '',
       content: p.content || '',
       image: p.image || undefined,
@@ -97,7 +92,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       comments: (p.comments || []).map((c: any) => ({
         id: c.id,
         userId: c.userId || currentUserId || '',
-        userName: c.userName || authUser?.name || 'User',
+        userName: c.userName || authUser?.name || '',
         userAvatar: '',
         content: c.text || c.content || '',
         timestamp: new Date(c.createdAt || Date.now()),
@@ -157,7 +152,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       const newPost: Post = {
         id: created.id,
         userId: created.userId || currentUserId || '',
-        userName: created.userName || authUser?.name || 'User',
+        userName: created.userName || authUser?.name || '',
         userAvatar: created.avatar || authUser?.avatar || '',
         content: created.content || content,
         image: created.image || (payloadImages && payloadImages[0]) || undefined,
@@ -177,28 +172,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       };
       set({ posts: [newPost, ...get().posts] });
     } catch (e) {
-      console.error('addPost fallback: API failed, creating local post only', e);
-      const now = new Date();
-      const localPost: Post = {
-        id: `local-${now.getTime()}`,
-        userId: currentUserId || 'local',
-        userName: authUser?.name || 'You',
-        userAvatar: authUser?.avatar || '',
-        content,
-        image: (images && images[0]) || undefined,
-        images: Array.isArray(images) ? images.slice(0, 5) : undefined,
-        audio,
-        collabInvites: [],
-        collaborators: [],
-        hashtags: [...new Set([...get().extractHashtags(content), ...(hashtags || [])])],
-        likes: 0,
-        comments: [],
-        shares: 0,
-        timestamp: now,
-        isLiked: false,
-        mode: m || 'social',
-      };
-      set({ posts: [localPost, ...get().posts] });
+      console.error('Failed to add post', e);
     }
   },
   
@@ -324,9 +298,6 @@ export const usePostStore = create<PostState>((set, get) => ({
       await api.post(`/api/posts/${postId}/like`, reaction ? { reaction } : undefined);
     } catch (e) {
       // rollback on error
-      set({ posts: prev });
-      console.error('Failed to react to post', e);
-    }
   },
   
   addComment: async (postId: string, content: string) => {
@@ -334,7 +305,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     const newComment: Comment = {
       id: c.id,
       userId: c.userId || '',
-      userName: c.userName || 'User',
+      userName: c.userName || '',
       userAvatar: '',
       content: c.text || content,
       timestamp: new Date(c.createdAt || Date.now()),
