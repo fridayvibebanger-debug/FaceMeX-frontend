@@ -347,13 +347,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentUser = get().user;
     if (!currentUser?.id) return;
 
-    supabase
-      .from('follows')
-      .upsert({
-        follower_id: currentUser.id,
-        following_id: userId,
-      })
-      .catch(() => {});
+    (async () => {
+      try {
+        await supabase.from('follows').upsert({
+          follower_id: currentUser.id,
+          following_id: userId,
+        });
+      } catch {}
+    })();
 
     set((state) => ({
       user: state.user
@@ -369,12 +370,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentUser = get().user;
     if (!currentUser?.id) return;
 
-    supabase
-      .from('follows')
-      .delete()
-      .eq('follower_id', currentUser.id)
-      .eq('following_id', userId)
-      .catch(() => {});
+    (async () => {
+      try {
+        await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', currentUser.id)
+          .eq('following_id', userId);
+      } catch {}
+    })();
 
     set((state) => ({
       user: state.user
