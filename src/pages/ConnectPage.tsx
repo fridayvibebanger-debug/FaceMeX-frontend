@@ -44,27 +44,32 @@ export default function ConnectPage() {
     fetchUsers();
   }, []);
 
-  async function fetchUsers() {
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
+ const suggestions: Suggestion[] = useMemo(() => {
+  return realUsers.map((u) => ({
+    type: 'person',
+    id: u.id,
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*');
+    // 👇 use full name first
+    name:
+      u.full_name ||
+      u.username ||
+      u.email?.split('@')[0] ||
+      'User',
 
-    if (error) {
-      console.log('Error fetching users:', error);
-      return;
-    }
+    // 👇 professional headline
+    headline:
+      u.bio ||
+      u.headline ||
+      'Member on FaceMeX',
 
-    // remove current user
-    const filtered = (data || []).filter(
-      (u) => u.id !== currentUser?.id
-    );
+    // 👇 skills/tags
+    tags: u.skills || [],
 
-    setRealUsers(filtered);
-  }
+    // 👇 extra fields
+    isPro: u.is_pro || false,
+    role: u.role || 'user',
+  }));
+}, [realUsers]);
 
   // 🧠 Convert real users → UI format
   const suggestions: Suggestion[] = useMemo(() => {
