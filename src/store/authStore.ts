@@ -328,17 +328,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           await supabase.from('profiles').upsert({
             id: currentUser.id,
             email: currentUser.email,
-            name: updates.name || currentUser.name,
-            avatar: updates.avatar || currentUser.avatar || '',
+            full_name: updates.name || currentUser.name,
+            username: currentUser.email?.split('@')[0] || 'user',
+            avatar_url: updates.avatar || currentUser.avatar || '',
+            bio: updates.bio || currentUser.bio || '',
             is_active: true,
           });
         }
 
-        const me = await api.patch('/api/users/me', updates);
-
-        set((state) => ({
-          user: state.user ? { ...state.user, ...me } : null,
-        }));
+        api.patch('/api/users/me', updates).catch(() => {});
       } catch {
         // keep optimistic local updates
       }
@@ -346,17 +344,44 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   followUser: (userId: string) => {
+    const currentUser = get().user;
+    if (!currentUser?.id) return;
+
+    supabase
+      .from('follows')
+      .upsert({
+        follower_id: currentUser.id,
+        following_id: userId,
+      })
+      .catch(() => {});
+
     set((state) => ({
       user: state.user
-        ? { ...state.user, following: (state.user.following || 0) + 1 }
+        ? {
+            ...state.user,
+            following: (state.user.following || 0) + 1,
+          }
         : null,
     }));
   },
 
   unfollowUser: (userId: string) => {
+    const currentUser = get().user;
+    if (!currentUser?.id) return;
+
+    supabase
+      .from('follows')
+      .delete()
+      .eq('follower_id', currentUser.id)
+      .eq('following_id', userId)
+      .catch(() => {});
+
     set((state) => ({
       user: state.user
-        ? { ...state.user, following: Math.max(0, (state.user.following || 0) - 1) }
+        ? {
+            ...state.user,
+            following: Math.max(0, (state.user.following || 0) - 1),
+          }
         : null,
     }));
   },
