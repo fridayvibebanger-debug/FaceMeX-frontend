@@ -89,15 +89,30 @@ const saveLocalUser = (profile: User) => {
 
 const loadBackendUser = async (set: any) => {
   try {
-    const me = await api.get('/api/users/me');
+    const me = await Promise.race([
+      api.get('/api/users/me'),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('backend_timeout')), 3000)
+      ),
+    ]);
+
     set((state: AuthState) => ({
-      user: state.user ? { ...state.user, ...me } : state.user,
+      user: state.user ? { ...state.user, ...(me as any) } : state.user,
     }));
-  } catch {}
+  } catch {
+    // backend failed or timeout — keep Supabase user logged in
+  }
 
   try {
-    await useUserStore.getState().loadMe();
-  } catch {}
+    await Promise.race([
+      useUserStore.getState().loadMe(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('userstore_timeout')), 3000)
+      ),
+    ]);
+  } catch {
+    // userStore failed or timeout — do not block login
+  }
 };
 
 export const useAuthStore = create<AuthState>((set, get) => ({
