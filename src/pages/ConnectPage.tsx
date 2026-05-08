@@ -1,3 +1,5 @@
+Replace your full src/pages/ConnectPage.tsx with this updated version:
+
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,11 +35,21 @@ type Suggestion = {
 export default function ConnectPage() {
   const navigate = useNavigate();
 
-  const { user, isAuthenticated, isInitialized } = useAuthStore();
+  const {
+    user,
+    isAuthenticated,
+    isInitialized,
+    restoreSession,
+  } = useAuthStore();
 
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
@@ -46,9 +58,13 @@ export default function ConnectPage() {
   }, [isInitialized, isAuthenticated, navigate]);
 
   async function fetchUsers() {
-    if (!isAuthenticated || !user?.id) return;
+    if (!isAuthenticated || !user?.id) {
+      setLoadingUsers(false);
+      return;
+    }
 
-    setLoading(true);
+    setLoadingUsers(true);
+    setErrorText(null);
 
     try {
       const { data, error } = await supabase
@@ -59,6 +75,7 @@ export default function ConnectPage() {
 
       if (error) {
         console.log('Supabase profiles error:', error.message);
+        setErrorText(error.message);
         setRealUsers([]);
         return;
       }
@@ -66,18 +83,48 @@ export default function ConnectPage() {
       const filtered = (data || []).filter((u) => u.id !== user.id);
 
       setRealUsers(filtered);
-    } catch (err) {
+    } catch (err: any) {
       console.log('Fetch users error:', err);
+      setErrorText(err?.message || 'Could not load users.');
       setRealUsers([]);
     } finally {
-      setLoading(false);
+      setLoadingUsers(false);
+    }
+  }
+
+  async function fetchFollowing() {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id);
+
+      if (error) {
+        console.log('Fetch following error:', error.message);
+        return;
+      }
+
+      const next: Record<string, boolean> = {};
+
+      (data || []).forEach((row: any) => {
+        if (row.following_id) {
+          next[row.following_id] = true;
+        }
+      });
+
+      setFollowed(next);
+    } catch (err) {
+      console.log('Fetch following crashed:', err);
     }
   }
 
   useEffect(() => {
-    if (!isAuthenticated || !user?.id) return;
+    if (!isInitialized || !isAuthenticated || !user?.id) return;
 
     fetchUsers();
+    fetchFollowing();
 
     const channel = supabase
       .channel('profiles-changes')
@@ -95,7 +142,7 @@ export default function ConnectPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated, user?.id]);
+  }, [isInitialized, isAuthenticated, user?.id]);
 
   const suggestions: Suggestion[] = useMemo(() => {
     return realUsers.map((u) => ({
@@ -116,30 +163,39 @@ export default function ConnectPage() {
 
     const isFollowing = !!followed[targetUserId];
 
-    if (isFollowing) {
-      await supabase
-        .from('follows')
-        .delete()
-        .eq('follower_id', user.id)
-        .eq('following_id', targetUserId);
+    try {
+      if (isFollowing) {
+        await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', targetUserId);
+
+        setFollowed((prev) => ({
+          ...prev,
+          [targetUserId]: false,
+        }));
+
+        return;
+      }
+
+      const { error } = await supabase.from('follows').upsert({
+        follower_id: user.id,
+        following_id: targetUserId,
+      });
+
+      if (error) {
+        console.log('Follow error:', error.message);
+        return;
+      }
 
       setFollowed((prev) => ({
         ...prev,
-        [targetUserId]: false,
+        [targetUserId]: true,
       }));
-
-      return;
+    } catch (err) {
+      console.log('Follow crashed:', err);
     }
-
-    await supabase.from('follows').upsert({
-      follower_id: user.id,
-      following_id: targetUserId,
-    });
-
-    setFollowed((prev) => ({
-      ...prev,
-      [targetUserId]: true,
-    }));
   };
 
   const startChat = async (targetUserId: string) => {
@@ -164,6 +220,7 @@ export default function ConnectPage() {
 
     if (error) {
       console.log('Start chat error:', error.message);
+      setErrorText(error.message);
       return;
     }
 
@@ -178,7 +235,7 @@ export default function ConnectPage() {
   if (!isInitialized) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Loading...
+        Checking session...
       </div>
     );
   }
@@ -201,7 +258,13 @@ export default function ConnectPage() {
           </p>
         </div>
 
-        {loading ? (
+        {errorText ? (
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
+            {errorText}
+          </div>
+        ) : null}
+
+        {loadingUsers ? (
           <div className="text-center py-10 text-muted-foreground">
             Loading users...
           </div>
