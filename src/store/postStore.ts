@@ -40,7 +40,13 @@ interface PostState {
   trendingHashtags: string[];
   aiSuggestions: string[];
   loadPosts: (skill?: string) => Promise<void>;
-  addPost: (content: string, images?: string[], audio?: string, hashtags?: string[], mode?: 'social' | 'professional') => Promise<void>;
+  addPost: (
+    content: string,
+    images?: string[],
+    audio?: string,
+    hashtags?: string[],
+    mode?: 'social' | 'professional'
+  ) => Promise<void>;
   likePost: (postId: string, reaction?: string) => Promise<void>;
   editPost: (postId: string, content: string) => Promise<void>;
   inviteCollaborator: (postId: string, userId: string) => Promise<void>;
@@ -60,20 +66,24 @@ export const usePostStore = create<PostState>((set, get) => ({
   posts: [],
   trendingHashtags: [],
   aiSuggestions: [],
-  
+
   loadPosts: async (skill?: string) => {
     const authUser = useAuthStore.getState().user;
     const currentUserId = authUser?.id;
+
     let m: 'social' | 'professional' | null = null;
     try {
       const v = localStorage.getItem('faceme_mode') as any;
       if (v === 'social' || v === 'professional') m = v;
     } catch {}
+
     const params: string[] = [];
     if (m) params.push(`mode=${encodeURIComponent(m)}`);
     if (skill) params.push(`skill=${encodeURIComponent(skill.toLowerCase())}`);
+
     const q = params.length ? `?${params.join('&')}` : '';
     const data = await api.get(`/api/posts${q}`);
+
     const mapped: Post[] = (data || []).map((p: any) => ({
       id: p.id,
       userId: p.userId || currentUserId || '',
@@ -99,23 +109,27 @@ export const usePostStore = create<PostState>((set, get) => ({
       })),
       shares: 0,
       timestamp: new Date(p.createdAt || Date.now()),
-      isLiked: Array.isArray(p.likedBy) && currentUserId ? p.likedBy.includes(currentUserId) : false,
+      isLiked:
+        Array.isArray(p.likedBy) && currentUserId
+          ? p.likedBy.includes(currentUserId)
+          : false,
       aiScore: p.aiScore,
       mode: p.mode === 'professional' ? 'professional' : 'social',
     }));
+
     set({ posts: mapped });
   },
-  
+
   extractHashtags: (content: string) => {
     const hashtagRegex = /#[\w]+/g;
     const matches = content.match(hashtagRegex);
     return matches ? matches.map(tag => tag.slice(1).toLowerCase()) : [];
   },
-  
+
   getAISuggestions: (content: string) => {
     const keywords = content.toLowerCase();
     const suggestions: string[] = [];
-    
+
     if (keywords.includes('code') || keywords.includes('dev')) {
       suggestions.push('#coding', '#webdev', '#programming');
     }
@@ -131,227 +145,137 @@ export const usePostStore = create<PostState>((set, get) => ({
     if (keywords.includes('fit') || keywords.includes('workout')) {
       suggestions.push('#fitness', '#health', '#wellness');
     }
-    
+
     return suggestions.slice(0, 5);
   },
-  
-  addPost: async (content: string, images?: string[], audio?: string, hashtags?: string[], mode?: 'social' | 'professional') => {
+
+  addPost: async (content, images, audio, hashtags, mode) => {
     const authUser = useAuthStore.getState().user;
     const currentUserId = authUser?.id;
+
     let m = mode;
-    if (!m) {
-      try {
-        const v = localStorage.getItem('faceme_mode') as any;
-        if (v === 'professional' || v === 'social') m = v;
-      } catch {}
-    }
+    try {
+      const v = localStorage.getItem('faceme_mode') as any;
+      if (v === 'professional' || v === 'social') m = v;
+    } catch {}
 
     try {
       const payloadImages = Array.isArray(images) ? images.slice(0, 5) : undefined;
-      const created = await api.post('/api/posts', { content, images: payloadImages, audio, mode: m });
+
+      const created = await api.post('/api/posts', {
+        content,
+        images: payloadImages,
+        audio,
+        mode: m,
+      });
+
       const newPost: Post = {
         id: created.id,
         userId: created.userId || currentUserId || '',
         userName: created.userName || authUser?.name || '',
         userAvatar: created.avatar || authUser?.avatar || '',
         content: created.content || content,
-        image: created.image || (payloadImages && payloadImages[0]) || undefined,
+        image:
+          created.image || (payloadImages && payloadImages[0]) || undefined,
         images: Array.isArray(created.images)
           ? created.images.filter(Boolean)
-          : (created.image ? [created.image].filter(Boolean) : payloadImages),
+          : payloadImages,
         audio: created.audio || audio,
-        collabInvites: Array.isArray(created.collabInvites) ? created.collabInvites.map(String) : [],
-        collaborators: Array.isArray(created.collaborators) ? created.collaborators.map(String) : [],
-        hashtags: [...new Set([...get().extractHashtags(created.content || content), ...(hashtags || [])])],
-        likes: created.likes || 0,
+        collabInvites: [],
+        collaborators: [],
+        hashtags: [
+          ...new Set([
+            ...get().extractHashtags(created.content || content),
+            ...(hashtags || []),
+          ]),
+        ],
+        likes: 0,
         comments: [],
         shares: 0,
         timestamp: new Date(created.createdAt || Date.now()),
         isLiked: false,
-        mode: created.mode === 'professional' ? 'professional' : (m || 'social'),
+        mode: created.mode || m || 'social',
       };
+
       set({ posts: [newPost, ...get().posts] });
     } catch (e) {
       console.error('Failed to add post', e);
     }
   },
-  
-  editPost: async (postId: string, content: string) => {
-    try {
-      const updated = await api.patch(`/api/posts/${postId}`, { content });
-      set({
-        posts: get().posts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                content: updated.content || content,
-                collabInvites: Array.isArray(updated?.collabInvites) ? updated.collabInvites.map(String) : post.collabInvites,
-                collaborators: Array.isArray(updated?.collaborators) ? updated.collaborators.map(String) : post.collaborators,
-              }
-            : post
-        ),
-      });
-    } catch (e) {
-      console.error('Failed to edit post', e);
-    }
-  },
 
-  inviteCollaborator: async (postId: string, userId: string) => {
-    const invitee = String(userId || '').trim();
-    if (!invitee) return;
-    try {
-      const resp = await api.post(`/api/posts/${postId}/collab/invite`, { userId: invitee });
-      set({
-        posts: get().posts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                collabInvites: Array.isArray(resp?.collabInvites) ? resp.collabInvites.map(String) : (post.collabInvites || []),
-                collaborators: Array.isArray(resp?.collaborators) ? resp.collaborators.map(String) : (post.collaborators || []),
-              }
-            : post
-        ),
-      });
-    } catch (e) {
-      console.error('Failed to invite collaborator', e);
-    }
-  },
-
-  acceptCollabInvite: async (postId: string) => {
-    try {
-      const resp = await api.post(`/api/posts/${postId}/collab/accept`);
-      set({
-        posts: get().posts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                collabInvites: Array.isArray(resp?.collabInvites) ? resp.collabInvites.map(String) : (post.collabInvites || []),
-                collaborators: Array.isArray(resp?.collaborators) ? resp.collaborators.map(String) : (post.collaborators || []),
-              }
-            : post
-        ),
-      });
-    } catch (e) {
-      console.error('Failed to accept collab invite', e);
-    }
-  },
-
-  rejectCollabInvite: async (postId: string) => {
-    try {
-      const resp = await api.post(`/api/posts/${postId}/collab/reject`);
-      set({
-        posts: get().posts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                collabInvites: Array.isArray(resp?.collabInvites) ? resp.collabInvites.map(String) : (post.collabInvites || []),
-                collaborators: Array.isArray(resp?.collaborators) ? resp.collaborators.map(String) : (post.collaborators || []),
-              }
-            : post
-        ),
-      });
-    } catch (e) {
-      console.error('Failed to reject collab invite', e);
-    }
-  },
-  
   likePost: async (postId: string, reaction?: string) => {
-    // optimistic update
     const prev = get().posts;
-    const prevPost = prev.find((p) => p.id === postId);
-    const optimistic = prev.map((post) =>
+    const prevPost = prev.find(p => p.id === postId);
+
+    const updated = prev.map(post =>
       post.id === postId
         ? {
             ...post,
-            likes: (() => {
-              if (!reaction) return post.isLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
-              if (!post.isLiked) return post.likes + 1;
-              if ((post.reaction || 'like') === reaction) return Math.max(0, post.likes - 1);
-              return post.likes;
-            })(),
-            isLiked: (() => {
-              if (!reaction) return !post.isLiked;
-              if (!post.isLiked) return true;
-              if ((post.reaction || 'like') === reaction) return false;
-              return true;
-            })(),
-            reaction: (() => {
-              if (!reaction) return post.isLiked ? undefined : ('like' as any);
-              if (!post.isLiked) return reaction as any;
-              if ((post.reaction || 'like') === reaction) return undefined;
-              return reaction as any;
-            })(),
+            likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+            isLiked: !post.isLiked,
+            reaction: reaction as any,
           }
         : post
     );
-    set({ posts: optimistic });
+
+    set({ posts: updated });
 
     const isReactionSwitch =
       !!reaction &&
       !!prevPost?.isLiked &&
       (prevPost.reaction || 'like') !== reaction;
 
-    // Backend currently toggles like/unlike only.
-    // If we're just switching reaction type, keep it client-side without calling the API.
     if (isReactionSwitch) return;
 
-try {
-  await api.post(
-    `/api/posts/${postId}/like`,
-    reaction ? { reaction } : undefined
-  );
-} catch (e) {
-  // rollback on error
-  console.log(e);
-}
+    try {
+      await api.post(
+        `/api/posts/${postId}/like`,
+        reaction ? { reaction } : undefined
+      );
+    } catch (e) {
+      console.log(e);
+    }
+  },
 
-},
+  addComment: async (postId: string, content: string) => {
+    const c = await api.post(
+      `/api/posts/${postId}/comment`,
+      { text: content }
+    );
 
-addComment: async (postId: string, content: string) => {
-
-  const c = await api.post(
-    `/api/posts/${postId}/comment`,
-    { text: content }
-  );
-
-  const newComment: Comment = {
-    id: c.id,
-    userId: c.userId || '',
-    userName: c.userName || '',
-  };
+    const newComment: Comment = {
+      id: c.id,
+      userId: c.userId || '',
+      userName: c.userName || '',
       userAvatar: '',
       content: c.text || content,
       timestamp: new Date(c.createdAt || Date.now()),
     };
 
     set({
-      posts: get().posts.map((post) =>
+      posts: get().posts.map(post =>
         post.id === postId
           ? { ...post, comments: [...post.comments, newComment] }
           : post
       ),
     });
   },
-  
-  deletePost: async (postId: string) => {
-    try {
-      await api.delete(`/api/posts/${postId}`);
-    } finally {
-      set({
-        posts: get().posts.filter((post) => post.id !== postId),
-      });
-    }
-  },
 
-  editComment: async (postId: string, commentId: string, content: string) => {
-    const c = await api.patch(`/api/posts/${postId}/comment/${commentId}`, { text: content });
+  editComment: async (postId, commentId, content) => {
+    const c = await api.patch(
+      `/api/posts/${postId}/comment/${commentId}`,
+      { text: content }
+    );
+
     set({
-      posts: get().posts.map((post) =>
+      posts: get().posts.map(post =>
         post.id === postId
           ? {
               ...post,
-              comments: post.comments.map((cm) =>
-                cm.id === commentId ? { ...cm, content: c.text || content } : cm
+              comments: post.comments.map(cm =>
+                cm.id === commentId
+                  ? { ...cm, content: c.text || content }
+                  : cm
               ),
             }
           : post
@@ -359,25 +283,104 @@ addComment: async (postId: string, content: string) => {
     });
   },
 
-  deleteComment: async (postId: string, commentId: string) => {
-    // Call backend delete and then update local state
+  deleteComment: async (postId, commentId) => {
     await api.delete(`/api/posts/${postId}/comment/${commentId}`);
+
     set({
-      posts: get().posts.map((post) =>
+      posts: get().posts.map(post =>
         post.id === postId
           ? {
               ...post,
-              comments: post.comments.filter((cm) => cm.id !== commentId),
+              comments: post.comments.filter(cm => cm.id !== commentId),
             }
           : post
       ),
     });
   },
-  
-  sharePost: (postId: string) => {
+
+  deletePost: async postId => {
+    try {
+      await api.delete(`/api/posts/${postId}`);
+    } finally {
+      set({
+        posts: get().posts.filter(p => p.id !== postId),
+      });
+    }
+  },
+
+  editPost: async (postId, content) => {
+    const updated = await api.patch(`/api/posts/${postId}`, { content });
+
     set({
-      posts: get().posts.map((post) =>
-        post.id === postId ? { ...post, shares: post.shares + 1 } : post
+      posts: get().posts.map(post =>
+        post.id === postId
+          ? { ...post, content: updated.content || content }
+          : post
+      ),
+    });
+  },
+
+  inviteCollaborator: async (postId, userId) => {
+    const resp = await api.post(
+      `/api/posts/${postId}/collab/invite`,
+      { userId }
+    );
+
+    set({
+      posts: get().posts.map(post =>
+        post.id === postId
+          ? {
+              ...post,
+              collabInvites: resp.collabInvites || [],
+              collaborators: resp.collaborators || [],
+            }
+          : post
+      ),
+    });
+  },
+
+  acceptCollabInvite: async postId => {
+    const resp = await api.post(
+      `/api/posts/${postId}/collab/accept`
+    );
+
+    set({
+      posts: get().posts.map(post =>
+        post.id === postId
+          ? {
+              ...post,
+              collabInvites: resp.collabInvites || [],
+              collaborators: resp.collaborators || [],
+            }
+          : post
+      ),
+    });
+  },
+
+  rejectCollabInvite: async postId => {
+    const resp = await api.post(
+      `/api/posts/${postId}/collab/reject`
+    );
+
+    set({
+      posts: get().posts.map(post =>
+        post.id === postId
+          ? {
+              ...post,
+              collabInvites: resp.collabInvites || [],
+              collaborators: resp.collaborators || [],
+            }
+          : post
+      ),
+    });
+  },
+
+  sharePost: postId => {
+    set({
+      posts: get().posts.map(post =>
+        post.id === postId
+          ? { ...post, shares: post.shares + 1 }
+          : post
       ),
     });
   },
