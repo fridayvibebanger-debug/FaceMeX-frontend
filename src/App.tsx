@@ -1,10 +1,23 @@
-import { useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuthStore } from "./store/authStore";
-import AuthPage from "./components/auth/AuthPage";
-import FeedPage from "./pages/FeedPage";
-import WatchPage from "./pages/WatchPage";
-import ProfilePage from "./pages/ProfilePage";
+Replace your full src/App.tsx with this updated version.
+
+Main fixes:
+
+/login, /signup, and /auth now show AuthPage
+
+protected pages redirect to /login
+
+logged-in users visiting /, /login, /signup, /auth go to /feed
+
+
+import { useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+
+import { useAuthStore } from './store/authStore';
+
+import AuthPage from './components/auth/AuthPage';
+import FeedPage from './pages/FeedPage';
+import WatchPage from './pages/WatchPage';
+import ProfilePage from './pages/ProfilePage';
 import MessagesPage from './pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
 import VirtualWorldsPage from './pages/VirtualWorldsPage';
@@ -49,249 +62,406 @@ import CareerAIPage from './pages/CareerAIPage';
 import NotificationsPage from './pages/NotificationsPage';
 import ConnectPage from './pages/ConnectPage';
 
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-sm text-muted-foreground">Loading…</div>
+    </div>
+  );
+}
+
+function PublicAuthRoute() {
+  const { isAuthenticated } = useAuthStore();
+
+  return isAuthenticated ? <Navigate to="/feed" replace /> : <AuthPage />;
+}
+
+function ProtectedRoute({ children }: { children: JSX.Element }) {
+  const { isAuthenticated } = useAuthStore();
+
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
+
 function App() {
-  const { isAuthenticated, isInitialized, restoreSession } = useAuthStore();
+  const { isInitialized, restoreSession } = useAuthStore();
 
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
 
   if (!isInitialized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <Routes>
-      <Route path="/" element={<AuthPage />} />
+      <Route path="/" element={<PublicAuthRoute />} />
+      <Route path="/login" element={<PublicAuthRoute />} />
+      <Route path="/signup" element={<PublicAuthRoute />} />
+      <Route path="/auth" element={<PublicAuthRoute />} />
+
       <Route path="/prd" element={<PRDPage />} />
       <Route path="/tos" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/ethics" element={<EthicsPolicy />} />
       <Route path="/screenshot-policy" element={<ScreenshotPolicy />} />
       <Route path="/community-rules" element={<CommunityRules />} />
+      <Route path="/pricing" element={<PricingPage />} />
+
       <Route
         path="/recruiter-portal"
-        element={isAuthenticated ? <RecruiterPortalPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <RecruiterPortalPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/ads/drafts"
-        element={isAuthenticated ? <AdsDraftsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <AdsDraftsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/feed"
-        element={isAuthenticated ? <FeedPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <FeedPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/watch/:id"
-        element={isAuthenticated ? <WatchPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <WatchPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/profile"
-        element={isAuthenticated ? <ProfilePage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/profile/:id"
-        element={isAuthenticated ? <ProfilePage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/messages"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <MessagesPage />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/notifications"
-        element={isAuthenticated ? <NotificationsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/communities"
-        element={isAuthenticated ? <CommunitiesPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <CommunitiesPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/communities/circle/:id"
-        element={isAuthenticated ? <CirclePage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <CirclePage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/connect"
-        element={isAuthenticated ? <ConnectPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <ConnectPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/settings"
-        element={isAuthenticated ? <SettingsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/saved"
-        element={isAuthenticated ? <SavedPostsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <SavedPostsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/worlds"
-        element={isAuthenticated ? <VirtualWorldsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <VirtualWorldsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/share"
-        element={isAuthenticated ? <ContentSharePage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <ContentSharePage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/events"
-        element={isAuthenticated ? <EventsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <EventsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/world"
-        element={isAuthenticated ? <WorldPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <WorldPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/world/booth/:id"
-        element={isAuthenticated ? <BoothPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <BoothPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/world/stage/:id"
-        element={isAuthenticated ? <StagePage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <StagePage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/world/manage"
-        element={isAuthenticated ? <WorldManagePage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <WorldManagePage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/world/events"
-        element={isAuthenticated ? <WorldEventsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <WorldEventsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/world/event/:id"
-        element={isAuthenticated ? <WorldEventDetailPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <WorldEventDetailPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/marketplace"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <TierGate minTier="free">
               <PremiumMarketplacePage />
             </TierGate>
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/media-shop"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <MediaShopPage />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/mental-health"
-        element={isAuthenticated ? <MentalHealthPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <MentalHealthPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/jobs"
-        element={isAuthenticated ? <JobsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <JobsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/groups/pro"
-        element={isAuthenticated ? <ProfessionalGroupsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <ProfessionalGroupsPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/groups/pro/:groupId"
-        element={isAuthenticated ? <ProGroupDetailPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <ProGroupDetailPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/ai/resume"
-        element={isAuthenticated ? <AIResumePage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <AIResumePage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/ai/cover-letter"
-        element={isAuthenticated ? <AICoverLetterPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <AICoverLetterPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/ai/job-assistant"
-        element={isAuthenticated ? <AIJobAssistantPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <AIJobAssistantPage />
+          </ProtectedRoute>
+        }
       />
+
       <Route
         path="/subscriptions"
-        element={isAuthenticated ? <SubscriptionsPage /> : <Navigate to="/" replace />}
+        element={
+          <ProtectedRoute>
+            <SubscriptionsPage />
+          </ProtectedRoute>
+        }
       />
-      <Route path="/pricing" element={<PricingPage />} />
+
       <Route
         path="/tools"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <EmpowermentToolsPage />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/stories"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <StoriesPage />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/safety"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <SafetyCenter />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/trust"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <TrustDashboard />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/test-ai"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <TestAI />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/ai-utils-test"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <AiUtilsTest />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
       <Route
         path="/career-ai"
         element={
-          isAuthenticated ? (
+          <ProtectedRoute>
             <CareerAIPage />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         }
       />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
