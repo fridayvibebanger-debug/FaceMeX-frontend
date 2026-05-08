@@ -32,19 +32,25 @@ type Suggestion = {
 
 export default function ConnectPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+
+  const { user, isAuthenticated, isInitialized } = useAuthStore();
 
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isInitialized && !isAuthenticated) {
+      navigate('/login', { replace: true });
+    }
+  }, [isInitialized, isAuthenticated, navigate]);
 
   async function fetchUsers() {
+    if (!isAuthenticated || !user?.id) return;
+
     setLoading(true);
 
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const currentUser = authData?.user;
-
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -57,7 +63,8 @@ export default function ConnectPage() {
         return;
       }
 
-      const filtered = (data || []).filter((u) => u.id !== currentUser?.id);
+      const filtered = (data || []).filter((u) => u.id !== user.id);
+
       setRealUsers(filtered);
     } catch (err) {
       console.log('Fetch users error:', err);
@@ -68,6 +75,8 @@ export default function ConnectPage() {
   }
 
   useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
     fetchUsers();
 
     const channel = supabase
@@ -86,7 +95,7 @@ export default function ConnectPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [isAuthenticated, user?.id]);
 
   const suggestions: Suggestion[] = useMemo(() => {
     return realUsers.map((u) => ({
@@ -166,6 +175,18 @@ export default function ConnectPage() {
     await startChat(targetUserId);
   };
 
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -173,6 +194,7 @@ export default function ConnectPage() {
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-24">
         <div className="mb-5">
           <h1 className="text-2xl font-bold">Connect</h1>
+
           <p className="text-sm text-muted-foreground">
             Discover real active users on FaceMeX
             {user?.name ? ` • Hi ${user.name}` : ''}
@@ -207,6 +229,7 @@ export default function ConnectPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate">{s.name}</div>
+
                       <div className="text-sm text-muted-foreground truncate">
                         {s.headline}
                       </div>
