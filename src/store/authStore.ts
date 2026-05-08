@@ -384,7 +384,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: state.user
         ? {
             ...state.user,
-            following: Math.max(0, (state.user.following || 0) - 1),
+            following: Math.max(
+              0,
+              (state.user.following || 0) - 1
+            ),
           }
         : null,
     }));
