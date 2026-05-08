@@ -60,13 +60,21 @@ function LoadingScreen() {
 }
 
 function PublicAuthRoute() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
+
+  if (!isInitialized) {
+    return <AuthPage />;
+  }
 
   return isAuthenticated ? <Navigate to="/feed" replace /> : <AuthPage />;
 }
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
+
+  if (!isInitialized) {
+    return <AuthPage />;
+  }
 
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
