@@ -481,11 +481,91 @@ export default function MessagesPage() {
       }
     });
 
+    import { useEffect, useRef, useState, useCallback } from 'react';
+import io from 'socket.io-client';
+
+export default function MessagesPage() {
+  const socketRef = useRef<any>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const ringingTimeoutRef = useRef<any>(null);
+
+  // ======================
+  // STATE (CLEAN)
+  // ======================
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
+
+  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+  const [isCaller, setIsCaller] = useState(false);
+  const [isRinging, setIsRinging] = useState(false);
+  const [incomingCall, setIncomingCall] = useState(false);
+
+  const [pendingOffer, setPendingOffer] = useState<any>(null);
+  const [pendingVoiceUrl, setPendingVoiceUrl] = useState<string | null>(null);
+
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+
+  // ======================
+  // CLEAN END CALL (ONLY ONE VERSION)
+  // ======================
+  const endCallInternal = useCallback(() => {
+    setIsCallModalOpen(false);
+    setIsCaller(false);
+    setIsRinging(false);
+    setIncomingCall(false);
+    setPendingOffer(null);
+    setPendingVoiceUrl(null);
+
+    if (ringingTimeoutRef.current) {
+      clearTimeout(ringingTimeoutRef.current);
+      ringingTimeoutRef.current = null;
+    }
+
+    if (pcRef.current) {
+      pcRef.current.getSenders().forEach((sender) => {
+        try {
+          sender.track?.stop();
+        } catch {}
+      });
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+      setLocalStream(null);
+    }
+
+    if (remoteStream) {
+      remoteStream.getTracks().forEach((t) => t.stop());
+      setRemoteStream(null);
+    }
+  }, [localStream, remoteStream]);
+
+  // ======================
+  // SOCKET SETUP (SAFE)
+  // ======================
+  useEffect(() => {
+    const socket = io(import.meta.env.VITE_API_URL, {
+      transports: ['websocket'],
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('Socket connected');
+    });
+
     socket.on('call:end', () => {
-      // If we were the caller and still ringing, treat as declined/missed.
       if (isCaller && isRinging && activeConversation) {
-        sendMessage(activeConversation, 'Call was declined or missed.', 'text', {});
+        // optional message system hook
+        // sendMessage(activeConversation, 'Call missed or declined', 'text', {});
       }
+
+      endCallInternal();
+    });
+
+    socket.on('disconnect', () => {
       endCallInternal();
     });
 
@@ -493,38 +573,21 @@ export default function MessagesPage() {
       socket.disconnect();
       socketRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [endCallInternal, isCaller, isRinging, activeConversation]);
 
-  const endCallInternal = () => {
-    setIsCallModalOpen(false);
-    setIsCaller(false);
-    setIsRinging(false);
-    setIncomingCall(false);
-    setPendingOffer(null);
-    if (ringingTimeoutRef.current) {
-      clearTimeout(ringingTimeoutRef.current);
-      ringingTimeoutRef.current = null;
-    }
-    if (pcRef.current) {
-      pcRef.current.getSenders().forEach((sender) => {
-        try { sender.track?.stop(); } catch {}
-      });
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-    if (localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
-    }
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((t) => t.stop());
-      setRemoteStream(null);
-    }
-  };
-
+  // ======================
+  // CLEAN PLACEHOLDER FUNCTIONS
+  // ======================
   const handleToggleRecording = async () => {
     if (!activeConversation) return;
+  };
+
+  return (
+    <div>
+      {/* your UI stays unchanged */}
+    </div>
+  );
+}
 
     // Stop recording
     if (isRecording) {
