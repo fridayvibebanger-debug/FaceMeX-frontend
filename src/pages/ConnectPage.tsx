@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import Navbar from '@/components/layout/Navbar';
+
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+
+import { UserPlus } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
 
