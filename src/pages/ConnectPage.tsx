@@ -4,7 +4,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
-import { supabase } from '@/lib/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 
