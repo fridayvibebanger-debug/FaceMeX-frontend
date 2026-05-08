@@ -294,18 +294,31 @@ export const usePostStore = create<PostState>((set, get) => ({
     // Backend currently toggles like/unlike only.
     // If we're just switching reaction type, keep it client-side without calling the API.
     if (isReactionSwitch) return;
-    try {
-      await api.post(`/api/posts/${postId}/like`, reaction ? { reaction } : undefined);
-    } catch (e) {
-      // rollback on error
-  },
-  
-  addComment: async (postId: string, content: string) => {
-    const c = await api.post(`/api/posts/${postId}/comment`, { text: content });
-    const newComment: Comment = {
-      id: c.id,
-      userId: c.userId || '',
-      userName: c.userName || '',
+
+try {
+  await api.post(
+    `/api/posts/${postId}/like`,
+    reaction ? { reaction } : undefined
+  );
+} catch (e) {
+  // rollback on error
+  console.log(e);
+}
+
+},
+
+addComment: async (postId: string, content: string) => {
+
+  const c = await api.post(
+    `/api/posts/${postId}/comment`,
+    { text: content }
+  );
+
+  const newComment: Comment = {
+    id: c.id,
+    userId: c.userId || '',
+    userName: c.userName || '',
+  };
       userAvatar: '',
       content: c.text || content,
       timestamp: new Date(c.createdAt || Date.now()),
