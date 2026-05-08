@@ -1,107 +1,142 @@
 import Navbar from '@/components/layout/Navbar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Building2, UserPlus } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
 import { supabase } from '@/lib/supabaseClient';
 
-type Suggestion =
-  | {
-      type: 'person';
-      id: string;
-      name: string;
-      headline: string;
-      tags: string[];
-    };
+type Profile = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  is_active: boolean;
+};
 
-function normalizeTag(s: string) {
-  return String(s || '').trim().toLowerCase();
-}
+type Suggestion = {
+  id: string;
+  name: string;
+  headline: string;
+  avatar: string | null;
+};
 
 export default function ConnectPage() {
   const { user, followUser, unfollowUser } = useAuthStore();
   const { professional } = useUserStore();
 
-  const [activeFilter, setActiveFilter] = useState<'people' | 'companies' | 'hiring'>('people');
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
-  const [realUsers, setRealUsers] = useState<any[]>([]);
+  const [realUsers, setRealUsers] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 🧠 Your profile tags (used for future smart matching)
-  const myTags = useMemo(() => {
-    const skills = (professional?.skills || []).map(normalizeTag);
-    const headline = normalizeTag(professional?.headline || '');
-    const location = normalizeTag(professional?.location || '');
-    const bio = normalizeTag(professional?.bio || '');
-
-    return Array.from(new Set([location, headline, bio, ...skills].filter(Boolean)));
-  }, [professional]);
-
-  // 🔥 FETCH REAL USERS FROM SUPABASE
+  // 🔥 FETCH USERS FROM SUPABASE
   useEffect(() => {
     fetchUsers();
+
+    // 🔄 REALTIME LISTENER
+    const channel = supabase
+      .channel('profiles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+        },
+        () => {
+          fetchUsers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
- const suggestions: Suggestion[] = useMemo(() => {
-  return realUsers.map((u) => ({
-    type: 'person',
-    id: u.id,
+  // 🔥 GET USERS
+  async function fetchUsers() {
+    setLoading(true);
 
-    // 👇 use full name first
-    name:
-      u.full_name ||
-      u.username ||
-      u.email?.split('@')[0] ||
-      'User',
+    try {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
 
-    // 👇 professional headline
-    headline:
-      u.bio ||
-      u.headline ||
-      'Member on FaceMeX',
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          email,
+          full_name,
+          username,
+          avatar_url,
+          bio,
+          is_active
+        `)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
-    // 👇 skills/tags
-    tags: u.skills || [],
+      if (error) {
+        console.log('Supabase Error:', error.message);
+        return;
+      }
 
-    // 👇 extra fields
-    isPro: u.is_pro || false,
-    role: u.role || 'user',
-  }));
-}, [realUsers]);
+      // 🚫 REMOVE CURRENT USER
+      const filtered =
+        data?.filter((u) => u.id !== currentUser?.id) || [];
 
-  // 🧠 Convert real users → UI format
+      setRealUsers(filtered);
+    } catch (err) {
+      console.log('Fetch Error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // 🔥 CONVERT USERS TO UI
   const suggestions: Suggestion[] = useMemo(() => {
     return realUsers.map((u) => ({
-      type: 'person',
       id: u.id,
-      name: u.email?.split('@')[0] || 'User',
-      headline: 'Member on platform',
-      tags: [],
+
+      // 👤 PRIORITY:
+      // full_name → username → email
+      name:
+        u.full_name ||
+        u.username ||
+        u.email?.split('@')[0] ||
+        'User',
+
+      headline:
+        u.bio ||
+        'FaceMeX Member',
+
+      avatar: u.avatar_url,
     }));
   }, [realUsers]);
 
-  // 🔘 Follow system (local UI state)
-  const toggleFollow = (s: Suggestion) => {
-    const isFollowing = !!followed[s.id];
+  // 🔥 FOLLOW SYSTEM
+  const toggleFollow = async (id: string) => {
+    const isFollowing = !!followed[id];
 
     setFollowed((prev) => ({
       ...prev,
-      [s.id]: !isFollowing,
+      [id]: !isFollowing,
     }));
 
     try {
-      if (isFollowing) unfollowUser(s.id);
-      else followUser(s.id);
+      if (isFollowing) {
+        await unfollowUser(id);
+      } else {
+        await followUser(id);
+      }
     } catch (err) {
       console.log(err);
     }
   };
-
-  const filtered = useMemo(() => {
-    return suggestions;
-  }, [suggestions]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -110,59 +145,103 @@ export default function ConnectPage() {
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-24">
 
         {/* HEADER */}
-        <div className="mb-4">
-          <h1 className="text-xl font-bold">Connect</h1>
-          <p className="text-xs text-muted-foreground">
-            Suggested real people from the platform
-            {user?.name ? ` (Hi ${user.name})` : ''}
+        <div className="mb-5">
+          <h1 className="text-2xl font-bold">
+            Connect
+          </h1>
+
+          <p className="text-sm text-muted-foreground">
+            Discover real active users on FaceMeX
+            {user?.name ? ` • Hi ${user.name}` : ''}
           </p>
         </div>
 
-        {/* USERS LIST */}
+        {/* LOADING */}
+        {loading && (
+          <div className="text-center py-10 text-muted-foreground">
+            Loading users...
+          </div>
+        )}
+
+        {/* EMPTY STATE */}
+        {!loading && suggestions.length === 0 && (
+          <div className="text-center py-10 text-muted-foreground">
+            No active users found yet.
+          </div>
+        )}
+
+        {/* USERS */}
         <div className="grid gap-3">
-          {filtered.map((s) => (
-            <Card key={s.id} className="rounded-2xl">
+
+          {suggestions.map((s) => (
+
+            <Card
+              key={s.id}
+              className="rounded-2xl border"
+            >
               <CardContent className="p-4">
 
                 <div className="flex items-start gap-3">
 
-                  {/* ICON */}
-                  <div className="mt-0.5">
-                    <UserPlus className="h-5 w-5 text-muted-foreground" />
+                  {/* AVATAR */}
+                  <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+
+                    {s.avatar ? (
+                      <img
+                        src={s.avatar}
+                        alt={s.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <UserPlus className="h-5 w-5 text-muted-foreground" />
+                    )}
+
                   </div>
 
-                  {/* INFO */}
-                  <div className="min-w-0 flex-1">
+                  {/* USER INFO */}
+                  <div className="flex-1 min-w-0">
 
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3">
 
                       <div className="min-w-0">
+
                         <div className="font-semibold truncate">
                           {s.name}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+
+                        <div className="text-sm text-muted-foreground truncate">
                           {s.headline}
                         </div>
+
                       </div>
 
                       {/* FOLLOW BUTTON */}
                       <Button
                         size="sm"
-                        variant={followed[s.id] ? 'default' : 'outline'}
+                        variant={
+                          followed[s.id]
+                            ? 'default'
+                            : 'outline'
+                        }
                         className="rounded-full"
-                        onClick={() => toggleFollow(s)}
+                        onClick={() => toggleFollow(s.id)}
                       >
-                        {followed[s.id] ? 'Following' : 'Follow'}
+                        {followed[s.id]
+                          ? 'Following'
+                          : 'Follow'}
                       </Button>
 
                     </div>
 
                   </div>
+
                 </div>
 
               </CardContent>
             </Card>
+
           ))}
+
         </div>
 
       </div>
