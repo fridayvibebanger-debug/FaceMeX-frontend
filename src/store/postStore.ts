@@ -318,11 +318,10 @@ addComment: async (postId: string, content: string) => {
     id: c.id,
     userId: c.userId || '',
     userName: c.userName || '',
+    userAvatar: '',
+    content: c.text || content,
+    timestamp: new Date(c.createdAt || Date.now()),
   };
-      userAvatar: '',
-      content: c.text || content,
-      timestamp: new Date(c.createdAt || Date.now()),
-    };
 
     set({
       posts: get().posts.map((post) =>
