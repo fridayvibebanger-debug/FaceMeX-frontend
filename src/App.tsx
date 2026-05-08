@@ -78,10 +78,8 @@ function App() {
     restoreSession();
   }, [restoreSession]);
 
-  if (!isInitialized) {
-    return <LoadingScreen />;
-  }
-
+  // Do not block the login/signup page forever.
+// Let routes render while auth restores.
   return (
     <Routes>
       <Route path="/" element={<PublicAuthRoute />} />
