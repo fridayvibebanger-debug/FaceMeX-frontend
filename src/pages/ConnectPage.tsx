@@ -6,6 +6,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
 import { supabase } from '@/lib/supabaseClient';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button'; 
 
 type Profile = {
   id: string;
@@ -96,7 +100,58 @@ export default function ConnectPage() {
       setLoading(false);
     }
   }
+const startChat = async (targetUserId: string) => {
+  if (!user?.id) return;
 
+  const user1 =
+    user.id < targetUserId ? user.id : targetUserId;
+
+  const user2 =
+    user.id < targetUserId ? targetUserId : user.id;
+
+  const { data, error } = await supabase
+    .from('conversations')
+    .upsert(
+      {
+        user1_id: user1,
+        user2_id: user2,
+      },
+      {
+        onConflict: 'user1_id,user2_id',
+      }
+    )
+    .select()
+    .single();
+
+  if (error) {
+    console.log(error);
+    return;
+  }
+
+  window.location.href = `/messages?conversation=${data.id}`;
+};
+
+const startCall = async (
+  targetUserId: string,
+  type: 'voice' | 'video'
+) => {
+  localStorage.setItem('pending_call_type', type);
+  await startChat(targetUserId);
+};
+
+const handleFollow = async (targetUserId: string) => {
+  if (!user?.id) return;
+
+  await supabase.from('follows').upsert({
+    follower_id: user.id,
+    following_id: targetUserId,
+  });
+
+  setFollowed((prev) => ({
+    ...prev,
+    [targetUserId]: true,
+  }));
+};
   // 🔥 CONVERT USERS TO UI
   const suggestions: Suggestion[] = useMemo(() => {
     return realUsers.map((u) => ({
