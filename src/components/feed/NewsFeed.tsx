@@ -176,11 +176,13 @@ export default function NewsFeed() {
 
   // Initial load from API and reload on mode / skill change
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      loadPosts(skillQuery || undefined).catch(() => {}),
-      new Promise((r) => setTimeout(r, 400)),
-    ]).finally(() => setLoading(false));
+  setLoading(true);
+
+  Promise.all([
+    loadPosts().catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 400)),
+  ]).finally(() => setLoading(false));
+}, [mode, skillQuery, loadPosts]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, skillQuery]);
 
