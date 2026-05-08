@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -261,42 +261,20 @@ export default function MessagesPage() {
   }, [isRecording]);
 
   // WebRTC / Call state
-  import { useRef, useState, useMemo } from 'react';
-
-// ======================
-// SOCKET + WEBRTC CORE
-// ======================
-const socketRef = useRef<any>(null);
+// WebRTC / Call state
+const socketRef = useRef<Socket | null>(null);
 const pcRef = useRef<RTCPeerConnection | null>(null);
+const ringingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const activeConversationRef = useRef<string | null>(null);
 
-// ======================
-// MEDIA STREAM STATE
-// ======================
 const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-
-// ======================
-// CALL STATE (UI ONLY)
-// ======================
 const [isCaller, setIsCaller] = useState(false);
 const [isRinging, setIsRinging] = useState(false);
 const [incomingCall, setIncomingCall] = useState(false);
-const [pendingOffer, setPendingOffer] =
-  useState<RTCSessionDescriptionInit | null>(null);
+const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
+const [pendingVoiceUrl, setPendingVoiceUrl] = useState<string | null>(null);
 
-// ======================
-// TIMEOUT REF (SAFE TYPE)
-// ======================
-const ringingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-// ======================
-// ACTIVE CHAT REFS
-// ======================
-const activeConversationRef = useRef<string | null>(null);
-
-// ======================
-// DERIVED STATE (OPTIMIZED)
-// ======================
 const activeConv = useMemo(
   () => conversations.find((c) => c.id === activeConversation),
   [conversations, activeConversation]
@@ -308,14 +286,10 @@ const activeMessages = useMemo(
 );
 
 const translatorAuto = useMemo(
-  () =>
-    activeConversation ? !!translatorAutoByConv[activeConversation] : false,
+  () => (activeConversation ? !!translatorAutoByConv[activeConversation] : false),
   [activeConversation, translatorAutoByConv]
 );
 
-// ======================
-// SEARCH FILTER (OPTIMIZED)
-// ======================
 const filteredConversations = useMemo(() => {
   return conversations.filter((conv) => {
     const name =
@@ -327,37 +301,61 @@ const filteredConversations = useMemo(() => {
   });
 }, [conversations, searchQuery]);
 
-  useEffect(() => {
-    if (activeConversation || conversations.length === 0) return;
-    // On mobile, start on the conversations list (don't auto-open the first chat).
-    // On desktop, auto-open the first conversation for convenience.
-    try {
-      const isDesktop = typeof window !== 'undefined'
-        ? window.matchMedia('(min-width: 768px)').matches
-        : true;
-      if (isDesktop) setActiveConversation(conversations[0].id);
-    } catch {
-      setActiveConversation(conversations[0].id);
-    }
-  }, [activeConversation, conversations, setActiveConversation]);
+const endCallInternal = useCallback(() => {
+  setIsCallModalOpen(false);
+  setIsCaller(false);
+  setIsRinging(false);
+  setIncomingCall(false);
+  setPendingOffer(null);
 
-  // Join the call signaling room for the active conversation
-import { useEffect } from 'react';
+  if (ringingTimeoutRef.current) {
+    clearTimeout(ringingTimeoutRef.current);
+    ringingTimeoutRef.current = null;
+  }
 
-// ======================
-// SOCKET JOIN EFFECT
-// ======================
+  if (pcRef.current) {
+    pcRef.current.getSenders().forEach((sender) => {
+      try {
+        sender.track?.stop();
+      } catch {}
+    });
+
+    pcRef.current.close();
+    pcRef.current = null;
+  }
+
+  if (localStream) {
+    localStream.getTracks().forEach((track) => track.stop());
+    setLocalStream(null);
+  }
+
+  if (remoteStream) {
+    remoteStream.getTracks().forEach((track) => track.stop());
+    setRemoteStream(null);
+  }
+}, [localStream, remoteStream]);
+
 useEffect(() => {
-  if (!socketRef.current || !activeConversation) return;
-
-  socketRef.current.emit('call:join', {
-    roomId: activeConversation,
-  });
+  activeConversationRef.current = activeConversation || null;
 }, [activeConversation]);
 
-// ======================
-// LOAD LOCAL STORAGE (CLEANED)
-// ======================
+useEffect(() => {
+  if (activeConversation || conversations.length === 0) return;
+
+  try {
+    const isDesktop =
+      typeof window !== 'undefined'
+        ? window.matchMedia('(min-width: 768px)').matches
+        : true;
+
+    if (isDesktop) {
+      setActiveConversation(conversations[0].id);
+    }
+  } catch {
+    setActiveConversation(conversations[0].id);
+  }
+}, [activeConversation, conversations, setActiveConversation]);
+
 useEffect(() => {
   const safeParse = <T,>(key: string, fallback: T): T => {
     try {
@@ -368,261 +366,166 @@ useEffect(() => {
     }
   };
 
-  // drafts
   setDraftByConversation(
     safeParse<Record<string, string>>('messages:drafts_v1', {})
   );
 
-  // pinned
   const pinnedList = safeParse<string[]>('messages:pinned_v1', []);
-  setPinnedConversations(
-    Object.fromEntries(pinnedList.map((id) => [id, true]))
-  );
+  const pinnedMap: Record<string, boolean> = {};
+  pinnedList.forEach((id) => {
+    if (typeof id === 'string' && id) pinnedMap[id] = true;
+  });
+  setPinnedConversations(pinnedMap);
 
-  // muted
   setMutedConversations(
     safeParse<Record<string, boolean>>('messages:muted_v1', {})
   );
 
-  // archived
   const archivedList = safeParse<string[]>('messages:archived_v1', []);
-  setArchivedConversations(
-    Object.fromEntries(archivedList.map((id) => [id, true]))
-  );
+  const archivedMap: Record<string, boolean> = {};
+  archivedList.forEach((id) => {
+    if (typeof id === 'string' && id) archivedMap[id] = true;
+  });
+  setArchivedConversations(archivedMap);
 
-  // interactions
   setInteractionByConversation(
     safeParse<Record<string, number>>('messages:interaction_v1', {})
   );
 }, []);
 
-// ======================
-// INTERACTION UPDATER
-// ======================
-const bumpInteraction = (conversationId: string, amount = 1) => {
-  setInteractionByConversation((prev) => {
-    const next = {
-      ...prev,
-      [conversationId]: Math.max(
-        0,
-        (prev[conversationId] || 0) + amount
-      ),
-    };
-
-    try {
-      localStorage.setItem(
-        'messages:interaction_v1',
-        JSON.stringify(next)
-      );
-    } catch {}
-
-    return next;
-  });
-};
-
-// ======================
-// DRAFT SAVER (FIXED DEPENDENCIES)
-// ======================
 useEffect(() => {
   if (!activeConversation) return;
 
   setDraftByConversation((prev) => {
     const next = { ...prev };
 
-    if (messageText?.trim()) {
+    if (messageText.trim()) {
       next[activeConversation] = messageText;
     } else {
       delete next[activeConversation];
     }
 
     try {
-      localStorage.setItem(
-        'messages:drafts_v1',
-        JSON.stringify(next)
-      );
+      localStorage.setItem('messages:drafts_v1', JSON.stringify(next));
     } catch {}
-
- useEffect(() => {
-  if (!activeConversation) return;
-
-  setDraftByConversation((prev) => {
-    const next = { ...prev };
 
     return next;
   });
 }, [messageText, activeConversation]);
-  const togglePinConversation = (conversationId: string) => {
-    setPinnedConversations((prev) => {
-      const next = { ...prev, [conversationId]: !prev[conversationId] };
-      if (!next[conversationId]) delete next[conversationId];
-      try {
-        const list = Object.keys(next).filter((k) => next[k]);
-        localStorage.setItem('messages:pinned_v1', JSON.stringify(list));
-      } catch {}
-      return next;
-    });
-  };
 
-  const toggleMuteConversation = (conversationId: string) => {
-    setMutedConversations((prev) => {
-      const next = { ...prev, [conversationId]: !prev[conversationId] };
-      if (!next[conversationId]) delete next[conversationId];
-      try {
-        localStorage.setItem('messages:muted_v1', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const toggleArchiveConversation = (conversationId: string) => {
-    setArchivedConversations((prev) => {
-      const next = { ...prev, [conversationId]: !prev[conversationId] };
-      if (!next[conversationId]) delete next[conversationId];
-      try {
-        const list = Object.keys(next).filter((k) => next[k]);
-        localStorage.setItem('messages:archived_v1', JSON.stringify(list));
-      } catch {}
-      return next;
-    });
-  };
-
-  const clearDraft = (conversationId: string) => {
-    setDraftByConversation((prev) => {
-      const next = { ...prev };
-      delete next[conversationId];
-      try {
-        localStorage.setItem('messages:drafts_v1', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-    if (activeConversation === conversationId) setMessageText('');
-  };
-
-  // Keep a ref of the current active conversation id for socket handlers.
-  useEffect(() => {
-    activeConversationRef.current = activeConversation || null;
-  }, [activeConversation]);
-
-  // Setup Socket.io for calls (separate from Navbar notifications)
-  useEffect(() => {
-    if (!API_URL) return;
-    const socket = io(API_URL, { withCredentials: true });
-    socketRef.current = socket;
-
-    socket.on('call:offer', async ({ offer, type }: { offer: any; type?: 'voice' | 'video' }) => {
-      if (!activeConversationRef.current) return;
-      try {
-        // Store incoming offer and show incoming call banner.
-       socket.on('call:offer', async ({ offer, type }) => {
-  try {
-    setIncomingCall(true);
-    setPendingOffer(offer);
-    setIsCaller(false);
-    setCallType(type || 'video');
-  } catch (e) {
-    console.error('Error handling call offer', e);
-  }
-});
-
-socket.on('call:answer', async ({ answer }) => {
-  const pc = pcRef.current;
-  if (!pc) return;
-
-  try {
-    await pc.setRemoteDescription(
-      new RTCSessionDescription(answer)
-    );
-
-    setIsRinging(false);
-
-    if (ringingTimeoutRef.current) {
-      clearTimeout(ringingTimeoutRef.current);
-      ringingTimeoutRef.current = null;
-    }
-  } catch (e) {
-    console.error('Error setting remote answer', e);
-  }
-});
-
-   useEffect(() => {
-  if (!socketRef.current) return;
-
-  const socket = socketRef.current;
-
-  const onCandidate = async ({ candidate }: any) => {
-    const pc = pcRef.current;
-    if (!pc || !candidate) return;
+const bumpInteraction = (conversationId: string, amount = 1) => {
+  setInteractionByConversation((prev) => {
+    const next = {
+      ...prev,
+      [conversationId]: Math.max(0, (prev[conversationId] || 0) + amount),
+    };
 
     try {
-      await pc.addIceCandidate(
-        new RTCIceCandidate(candidate)
-      );
-    } catch (e) {
-      console.error('Error adding ICE candidate', e);
+      localStorage.setItem('messages:interaction_v1', JSON.stringify(next));
+    } catch {}
+
+    return next;
+  });
+};
+
+const togglePinConversation = (conversationId: string) => {
+  setPinnedConversations((prev) => {
+    const next = { ...prev, [conversationId]: !prev[conversationId] };
+
+    if (!next[conversationId]) {
+      delete next[conversationId];
     }
-  };
 
-  socket.on('call:candidate', onCandidate);
+    try {
+      const list = Object.keys(next).filter((key) => next[key]);
+      localStorage.setItem('messages:pinned_v1', JSON.stringify(list));
+    } catch {}
 
-  return () => {
-    socket.off('call:candidate', onCandidate);
-  };
-}, []);
+    return next;
+  });
+};
+
+const toggleMuteConversation = (conversationId: string) => {
+  setMutedConversations((prev) => {
+    const next = { ...prev, [conversationId]: !prev[conversationId] };
+
+    if (!next[conversationId]) {
+      delete next[conversationId];
+    }
+
+    try {
+      localStorage.setItem('messages:muted_v1', JSON.stringify(next));
+    } catch {}
+
+    return next;
+  });
+};
+
+const toggleArchiveConversation = (conversationId: string) => {
+  setArchivedConversations((prev) => {
+    const next = { ...prev, [conversationId]: !prev[conversationId] };
+
+    if (!next[conversationId]) {
+      delete next[conversationId];
+    }
+
+    try {
+      const list = Object.keys(next).filter((key) => next[key]);
+      localStorage.setItem('messages:archived_v1', JSON.stringify(list));
+    } catch {}
+
+    return next;
+  });
+};
+
+const clearDraft = (conversationId: string) => {
+  setDraftByConversation((prev) => {
+    const next = { ...prev };
+    delete next[conversationId];
+
+    try {
+      localStorage.setItem('messages:drafts_v1', JSON.stringify(next));
+    } catch {}
+
+    return next;
+  });
+
+  if (activeConversation === conversationId) {
+    setMessageText('');
+  }
+};
 
 useEffect(() => {
-  if (!activeConversation) return;
+  if (!API_URL) return;
 
-  const socket = io(import.meta.env.VITE_API_URL, {
+  const socket = io(API_URL, {
+    withCredentials: true,
     transports: ['websocket'],
   });
 
   socketRef.current = socket;
 
-  // ======================
-  // CONNECTION
-  // ======================
   const onConnect = () => {
-    console.log('Socket connected');
-  };
-
-  // ======================
-  // CALL END
-  // ======================
-  const onCallEnd = () => {
-    if (isCaller && isRinging && activeConversation) {
-      // Optional: send system message
-      // sendMessage(activeConversation, 'Call ended', 'text', {});
-    }
-
-    endCallInternal();
-  };
-
-  // ======================
-  // CALL OFFER (INCOMING CALL)
-  // ======================
-  const onCallOffer = async ({ offer, type }: any) => {
-    try {
-      setIncomingCall(true);
-      setPendingOffer(offer);
-      setIsCaller(false);
-      setCallType(type || 'video');
-    } catch (e) {
-      console.error('Error handling call offer', e);
+    if (activeConversationRef.current) {
+      socket.emit('call:join', {
+        roomId: activeConversationRef.current,
+      });
     }
   };
 
-  // ======================
-  // CALL ANSWER (REMOTE ACCEPT)
-  // ======================
-  const onCallAnswer = async ({ answer }: any) => {
+  const onCallOffer = ({ offer, type }: { offer: RTCSessionDescriptionInit; type?: 'voice' | 'video' }) => {
+    setIncomingCall(true);
+    setPendingOffer(offer);
+    setIsCaller(false);
+    setCallType(type || 'video');
+  };
+
+  const onCallAnswer = async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
     const pc = pcRef.current;
     if (!pc) return;
 
     try {
-      await pc.setRemoteDescription(
-        new RTCSessionDescription(answer)
-      );
-
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
       setIsRinging(false);
 
       if (ringingTimeoutRef.current) {
@@ -634,645 +537,588 @@ useEffect(() => {
     }
   };
 
-  // ======================
-  // ICE CANDIDATES
-  // ======================
-  const onIceCandidate = async ({ candidate }: any) => {
+  const onCallCandidate = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
     const pc = pcRef.current;
     if (!pc || !candidate) return;
 
     try {
-      await pc.addIceCandidate(
-        new RTCIceCandidate(candidate)
-      );
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (e) {
       console.error('Error adding ICE candidate', e);
     }
   };
 
-  // ======================
-  // JOIN ROOM
-  // ======================
-  socket.emit('call:join', {
-    roomId: activeConversation,
-  });
+  const onCallEnd = () => {
+    endCallInternal();
+  };
 
-  // ======================
-  // LISTENERS
-  // ======================
   socket.on('connect', onConnect);
-  socket.on('call:end', onCallEnd);
   socket.on('call:offer', onCallOffer);
   socket.on('call:answer', onCallAnswer);
-  socket.on('call:candidate', onIceCandidate);
+  socket.on('call:candidate', onCallCandidate);
+  socket.on('call:end', onCallEnd);
 
-  // ======================
-  // CLEANUP (VERY IMPORTANT)
-  // ======================
   return () => {
     socket.off('connect', onConnect);
-    socket.off('call:end', onCallEnd);
     socket.off('call:offer', onCallOffer);
     socket.off('call:answer', onCallAnswer);
-    socket.off('call:candidate', onIceCandidate);
+    socket.off('call:candidate', onCallCandidate);
+    socket.off('call:end', onCallEnd);
 
     socket.disconnect();
     socketRef.current = null;
   };
-}, [
-  activeConversation,
-  isCaller,
-  isRinging,
-  endCallInternal
-]);
+}, [endCallInternal]);
 
-   import { useEffect, useRef, useState, useCallback } from 'react';
-import io from 'socket.io-client';
+useEffect(() => {
+  if (!socketRef.current || !activeConversation) return;
 
-export default function MessagesPage() {
-  // ======================
-  // REFS
-  // ======================
-  const socketRef = useRef<any>(null);
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-  const ringingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  socketRef.current.emit('call:join', {
+    roomId: activeConversation,
+  });
+}, [activeConversation]);
 
-  // ======================
-  // STATE
-  // ======================
-  const [activeConversation, setActiveConversation] = useState<string | null>(null);
+const handleToggleRecording = async () => {
+  if (!activeConversation) return;
 
-  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [isCaller, setIsCaller] = useState(false);
-  const [isRinging, setIsRinging] = useState(false);
-  const [incomingCall, setIncomingCall] = useState(false);
+  if (isRecording) {
+    const recorder = mediaRecorderRef.current;
 
-  const [pendingOffer, setPendingOffer] = useState<any>(null);
-  const [pendingVoiceUrl, setPendingVoiceUrl] = useState<string | null>(null);
-
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-
-  const [isRecording, setIsRecording] = useState(false);
-
-  // ======================
-  // END CALL (SAFE)
-  // ======================
-  const endCallInternal = useCallback(() => {
-    setIsCallModalOpen(false);
-    setIsCaller(false);
-    setIsRinging(false);
-    setIncomingCall(false);
-    setPendingOffer(null);
-    setPendingVoiceUrl(null);
-
-    if (ringingTimeoutRef.current) {
-      clearTimeout(ringingTimeoutRef.current);
-      ringingTimeoutRef.current = null;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
     }
 
-    if (pcRef.current) {
-      pcRef.current.getSenders().forEach((s) => {
-        try {
-          s.track?.stop();
-        } catch {}
-      });
+    return;
+  }
 
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-
-    if (localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
-    }
-
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((t) => t.stop());
-      setRemoteStream(null);
-    }
-  }, [localStream, remoteStream]);
-
-  // ======================
-  // SOCKET SETUP
-  // ======================
-  useEffect(() => {
-    const socket = io(import.meta.env.VITE_API_URL, {
-      transports: ['websocket'],
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
     });
 
-    socketRef.current = socket;
+    const recorder = new MediaRecorder(stream);
+    recordedChunksRef.current = [];
 
-    const onConnect = () => {
-      console.log('Socket connected');
-    };
-
-    const onCallEnd = () => {
-      endCallInternal();
-    };
-
-    const onCallOffer = ({ offer, type }: any) => {
-      setIncomingCall(true);
-      setPendingOffer(offer);
-      setIsCaller(false);
-    };
-
-    const onCallAnswer = async ({ answer }: any) => {
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      try {
-        await pc.setRemoteDescription(
-          new RTCSessionDescription(answer)
-        );
-
-        setIsRinging(false);
-      } catch (e) {
-        console.error(e);
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
       }
     };
 
-    const onIceCandidate = async ({ candidate }: any) => {
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      try {
-        await pc.addIceCandidate(
-          new RTCIceCandidate(candidate)
-        );
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    socket.on('connect', onConnect);
-    socket.on('call:end', onCallEnd);
-    socket.on('call:offer', onCallOffer);
-    socket.on('call:answer', onCallAnswer);
-    socket.on('call:candidate', onIceCandidate);
-
-    return () => {
-      socket.off('connect', onConnect);
-      socket.off('call:end', onCallEnd);
-      socket.off('call:offer', onCallOffer);
-      socket.off('call:answer', onCallAnswer);
-      socket.off('call:candidate', onIceCandidate);
-
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [endCallInternal]);
-
-  // ======================
-  // RECORDING (VOICE NOTES)
-  // ======================
-  const handleToggleRecording = async () => {
-    if (!activeConversation) return;
-
-    // STOP
-    if (isRecording) {
-      const recorder = mediaRecorderRef.current;
-      if (recorder && recorder.state !== 'inactive') {
-        recorder.stop();
-      }
-      return;
-    }
-
-    // START
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, {
+        type: 'audio/webm',
       });
 
-      const recorder = new MediaRecorder(stream);
       recordedChunksRef.current = [];
+      const url = URL.createObjectURL(blob);
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          recordedChunksRef.current.push(e.data);
+      setPendingVoiceUrl((prev) => {
+        if (prev) {
+          try {
+            URL.revokeObjectURL(prev);
+          } catch {}
         }
-      };
 
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, {
-          type: 'audio/webm',
-        });
+        return url;
+      });
 
-        recordedChunksRef.current = [];
-        const url = URL.createObjectURL(blob);
+      setIsRecording(false);
+      stream.getTracks().forEach((track) => track.stop());
+    };
 
-        setPendingVoiceUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return url;
-        });
-
-        setIsRecording(false);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setIsRecording(true);
-    } catch (e) {
-      console.error('Mic error', e);
-    }
-  };
-
-  // ======================
-  // PEER CONNECTION
-  // ======================
-  const ensurePeerConnection = async (type: 'voice' | 'video') => {
-    if (pcRef.current) return pcRef.current;
-
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-      ],
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setIsRecording(true);
+  } catch (e) {
+    console.error('Error starting audio recording', e);
+    toast({
+      title: 'Mic permission needed',
+      description: 'Allow microphone access to send voice notes.',
     });
+  }
+};
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate && activeConversation) {
-        socketRef.current?.emit('call:candidate', {
-          roomId: activeConversation,
-          candidate: event.candidate,
-        });
-      }
-    };
+const ensurePeerConnection = async (type: 'voice' | 'video') => {
+  if (pcRef.current) return pcRef.current;
 
-    pc.ontrack = (event) => {
-      const [stream] = event.streams;
-      setRemoteStream(stream);
-    };
+  const extraIceServers: RTCIceServer[] = [];
+  const turnUrl = import.meta.env.VITE_TURN_URL as string | undefined;
+  const turnUser = import.meta.env.VITE_TURN_USERNAME as string | undefined;
+  const turnCred = import.meta.env.VITE_TURN_CREDENTIAL as string | undefined;
 
-    const constraints =
-      type === 'voice'
-        ? { audio: true, video: false }
-        : { audio: true, video: true };
+  if (turnUrl && turnUser && turnCred) {
+    extraIceServers.push({
+      urls: turnUrl,
+      username: turnUser,
+      credential: turnCred,
+    });
+  }
 
-    const stream = await navigator.mediaDevices.getUserMedia(
-      constraints
-    );
-
-    stream.getTracks().forEach((t) =>
-      pc.addTrack(t, stream)
-    );
-
-    setLocalStream(stream);
-    pcRef.current = pc;
-
-    return pc;
-  };
-
-  // ======================
-  // CLEAN RETURN (IMPORTANT)
-  // ======================
-  return (
-    <div>
-      {/* your UI stays unchanged */}
-    </div>
-  );
-}
-  const endCallInternal = () => {
-    setIsCallModalOpen(false);
-    setIsCaller(false);
-    setIsRinging(false);
-    setIncomingCall(false);
-    setPendingOffer(null);
-    if (ringingTimeoutRef.current) {
-      clearTimeout(ringingTimeoutRef.current);
-      ringingTimeoutRef.current = null;
-    }
-    if (pcRef.current) {
-  pcRef.current.getSenders().forEach((sender) => {
-    try {
-      sender.track?.stop();
-    } catch {}
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      ...extraIceServers,
+    ],
   });
 
-  pcRef.current.close();
-  pcRef.current = null;
-}
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-    if (localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
-    }
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((t) => t.stop());
-      setRemoteStream(null);
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!activeConversation) {
-      toast({ title: 'Select a conversation', description: 'Choose a chat to send a message.' });
-      return;
-    }
-    if (!messageText.trim() && pendingVoiceUrl) {
-      sendMessage(activeConversation, pendingVoiceUrl, 'voice', {});
-      setPendingVoiceUrl(null);
-      return;
-    }
-    if (!messageText.trim()) return;
-
-    const scan = safetyScanText(messageText);
-    if (scan.level === 'medium' || scan.level === 'high') {
-      setPendingSendText(messageText);
-      setSafetyDialogScan(scan);
-      setSafetyDialogOpen(true);
-      reportSafetyEvent({
-        content: messageText,
-        scan,
-        context: {
-  location: 'messages',
-  conversationId: activeConversation,
-  direction: 'outgoing',
-},
-}).catch(() => {});
-return;
-}
-
-    await sendTextWithBackendScan(messageText);
-  };
-
-  useEffect(() => {
-    if (!activeConversation) return;
-    const incoming = [...activeMessages].reverse().find((m) => m.senderId !== '1' && m.type === 'text' && !!m.content);
-    if (!incoming) return;
-    if (lastIncomingWarnedRef.current === incoming.id) return;
-
-    const scan = safetyScanText(incoming.content);
-    if (scan.level === 'medium' || scan.level === 'high') {
-      lastIncomingWarnedRef.current = incoming.id;
-      setIncomingSafetyScan(scan);
-      setIncomingSafetyDialogOpen(true);
-      reportSafetyEvent({
-        content: incoming.content,
-        scan,
-        context: { location: 'messages', conversationId: activeConversation, direction: 'incoming' },
-      }).catch(() => {});
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversation, activeMessages.length]);
-
-  const handlePickImage = () => {
-    if (isSendingAttachment) return;
-    imageInputRef.current?.click();
-  };
-
-  const handlePickDocument = () => {
-    if (isSendingAttachment) return;
-    docInputRef.current?.click();
-  };
-
-  const handleSendImage = async (file: File) => {
-    if (!activeConversation) return;
-    setIsSendingAttachment(true);
-    try {
-      const url = await uploadMedia(file, 'messages/images');
-      sendMessage(activeConversation, '', 'image', { mediaUrl: url, fileName: file.name });
-    } catch (e: any) {
-      toast({ title: 'Upload failed', description: e?.message || 'Could not upload image', variant: 'destructive' });
-    } finally {
-      setIsSendingAttachment(false);
-    }
-  };
-
-  const handleSendDocument = async (file: File) => {
-    if (!activeConversation) return;
-    setIsSendingAttachment(true);
-    try {
-      const url = await uploadMedia(file, 'messages/documents');
-      sendMessage(activeConversation, '', 'document', { mediaUrl: url, fileName: file.name });
-    } catch (e: any) {
-      toast({ title: 'Upload failed', description: e?.message || 'Could not upload document', variant: 'destructive' });
-    } finally {
-      setIsSendingAttachment(false);
-    }
-  };
-
-  const translateMessage = async (id: string, text: string) => {
-    if (!text) return;
-    try {
-      let targetLang = 'en';
-      try {
-        const stored = localStorage.getItem('settings:lang:primary');
-        if (stored) targetLang = stored;
-      } catch {}
-      const res = await api.post('/api/ai/translate', {
-        text,
-        targetLang,
-      }) as any;
-      const translated = res?.translated || text;
-      setTranslatedMessages((prev) => ({
-        ...prev,
-        [id]: translated,
-      }));
-    } catch {
-      setTranslatedMessages((prev) => ({
-        ...prev,
-        [id]: 'Translation unavailable right now.',
-      }));
-    }
-  };
-
-  const aiSuggest = async () => {
-    // Pro+ gating
-    if (!hasTier('pro')) {
-      toast({
-        title: 'Upgrade needed',
-        description: 'AI Reply is available on Pro and above.',
+  pc.onicecandidate = (event) => {
+    if (event.candidate && activeConversation && socketRef.current) {
+      socketRef.current.emit('call:candidate', {
+        roomId: activeConversation,
+        candidate: event.candidate,
       });
-      return;
     }
+  };
 
-    const dailyLimit = 30;
-    const todayKey = new Date().toISOString().slice(0, 10);
-    let used = 0;
+  pc.ontrack = (event) => {
+    const [stream] = event.streams;
+    setRemoteStream(stream);
+  };
+
+  const constraints =
+    type === 'voice'
+      ? { audio: true, video: false }
+      : { audio: true, video: true };
+
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+  stream.getTracks().forEach((track) => {
+    pc.addTrack(track, stream);
+  });
+
+  setLocalStream(stream);
+  pcRef.current = pc;
+
+  return pc;
+};
+
+ const handleSendMessage = async () => {
+  if (!activeConversation) {
+    toast({
+      title: 'Select a conversation',
+      description: 'Choose a chat to send a message.',
+    });
+    return;
+  }
+
+  if (!messageText.trim() && pendingVoiceUrl) {
+    sendMessage(activeConversation, pendingVoiceUrl, 'voice', {});
+    setPendingVoiceUrl(null);
+    return;
+  }
+
+  if (!messageText.trim()) return;
+
+  const scan = safetyScanText(messageText);
+
+  if (scan.level === 'medium' || scan.level === 'high') {
+    setPendingSendText(messageText);
+    setSafetyDialogScan(scan);
+    setSafetyDialogOpen(true);
+
+    reportSafetyEvent({
+      content: messageText,
+      scan,
+      context: {
+        location: 'messages',
+        conversationId: activeConversation,
+        direction: 'outgoing',
+      },
+    }).catch(() => {});
+
+    return;
+  }
+
+  await sendTextWithBackendScan(messageText);
+};
+
+useEffect(() => {
+  if (!activeConversation) return;
+
+  const incoming = [...activeMessages]
+    .reverse()
+    .find((m) => m.senderId !== '1' && m.type === 'text' && !!m.content);
+
+  if (!incoming) return;
+  if (lastIncomingWarnedRef.current === incoming.id) return;
+
+  const scan = safetyScanText(incoming.content);
+
+  if (scan.level === 'medium' || scan.level === 'high') {
+    lastIncomingWarnedRef.current = incoming.id;
+    setIncomingSafetyScan(scan);
+    setIncomingSafetyDialogOpen(true);
+
+    reportSafetyEvent({
+      content: incoming.content,
+      scan,
+      context: {
+        location: 'messages',
+        conversationId: activeConversation,
+        direction: 'incoming',
+      },
+    }).catch(() => {});
+  }
+}, [activeConversation, activeMessages]);
+
+const handlePickImage = () => {
+  if (isSendingAttachment) return;
+  imageInputRef.current?.click();
+};
+
+const handlePickDocument = () => {
+  if (isSendingAttachment) return;
+  docInputRef.current?.click();
+};
+
+const handleSendImage = async (file: File) => {
+  if (!activeConversation) return;
+
+  setIsSendingAttachment(true);
+
+  try {
+    const url = await uploadMedia(file, 'messages/images');
+
+    sendMessage(activeConversation, '', 'image', {
+      mediaUrl: url,
+      fileName: file.name,
+    });
+  } catch (e: any) {
+    toast({
+      title: 'Upload failed',
+      description: e?.message || 'Could not upload image',
+      variant: 'destructive',
+    });
+  } finally {
+    setIsSendingAttachment(false);
+  }
+};
+
+const handleSendDocument = async (file: File) => {
+  if (!activeConversation) return;
+
+  setIsSendingAttachment(true);
+
+  try {
+    const url = await uploadMedia(file, 'messages/documents');
+
+    sendMessage(activeConversation, '', 'document', {
+      mediaUrl: url,
+      fileName: file.name,
+    });
+  } catch (e: any) {
+    toast({
+      title: 'Upload failed',
+      description: e?.message || 'Could not upload document',
+      variant: 'destructive',
+    });
+  } finally {
+    setIsSendingAttachment(false);
+  }
+};
+
+const translateMessage = async (id: string, text: string) => {
+  if (!text) return;
+
+  try {
+    let targetLang = 'en';
+
     try {
-      const raw = localStorage.getItem(`dm:ai:${todayKey}`);
-      if (raw) used = parseInt(raw, 10) || 0;
+      const stored = localStorage.getItem('settings:lang:primary');
+      if (stored) targetLang = stored;
     } catch {}
-    if (used >= dailyLimit) {
-      toast({
-        title: 'AI limit reached for today',
-        description: 'You can use AI Reply again tomorrow.',
-      });
-      return;
-    }
 
-    const lastIncoming = [...activeMessages].reverse().find(m => m.senderId !== '1');
-    const base = lastIncoming?.content || 'Draft a friendly, concise, positive reply.';
-    const input = `You are replying in a private chat. Write like a real human: warm, natural, and easy to read. Keep it short (ideally 1–4 sentences, never more than about 270 words). Avoid lists and headings.
+    const res = (await api.post('/api/ai/translate', {
+      text,
+      targetLang,
+    })) as any;
+
+    const translated = res?.translated || text;
+
+    setTranslatedMessages((prev) => ({
+      ...prev,
+      [id]: translated,
+    }));
+  } catch {
+    setTranslatedMessages((prev) => ({
+      ...prev,
+      [id]: 'Translation unavailable right now.',
+    }));
+  }
+};
+
+const aiSuggest = async () => {
+  if (!hasTier('pro')) {
+    toast({
+      title: 'Upgrade needed',
+      description: 'AI Reply is available on Pro and above.',
+    });
+    return;
+  }
+
+  const dailyLimit = 30;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  let used = 0;
+
+  try {
+    const raw = localStorage.getItem(`dm:ai:${todayKey}`);
+    if (raw) used = parseInt(raw, 10) || 0;
+  } catch {}
+
+  if (used >= dailyLimit) {
+    toast({
+      title: 'AI limit reached for today',
+      description: 'You can use AI Reply again tomorrow.',
+    });
+    return;
+  }
+
+  const lastIncoming = [...activeMessages]
+    .reverse()
+    .find((m) => m.senderId !== '1');
+
+  const base =
+    lastIncoming?.content || 'Draft a friendly, concise, positive reply.';
+
+  const input = `You are replying in a private chat. Write like a real human: warm, natural, and easy to read. Keep it short.
 
 Last message you are replying to:
 "${base}"`;
-    setAiTyping(true);
+
+  setAiTyping(true);
+
+  try {
+    const suggestion = await deepseekReply(input);
+    setMessageText(suggestion);
+    setAiDraftNotice('Draft ready. Review, edit, then send.');
+
+    window.setTimeout(() => {
+      messageInputRef.current?.focus();
+    }, 0);
+
     try {
-      const suggestion = await deepseekReply(input);
-      setMessageText(suggestion);
-      setAiDraftNotice('Draft ready. Review, edit, then send.');
-      window.setTimeout(() => messageInputRef.current?.focus(), 0);
-      try {
-        const nextUsed = used + 1;
-        localStorage.setItem(`dm:ai:${todayKey}`, String(nextUsed));
-      } catch {}
-    } catch (e) {
-      toast({ title: 'AI reply unavailable', description: 'Try again in a moment.' });
-    } finally {
-      setAiTyping(false);
+      localStorage.setItem(`dm:ai:${todayKey}`, String(used + 1));
+    } catch {}
+  } catch {
+    toast({
+      title: 'AI reply unavailable',
+      description: 'Try again in a moment.',
+    });
+  } finally {
+    setAiTyping(false);
+  }
+};
+
+const handleStartCall = async (type: 'voice' | 'video') => {
+  if (!activeConversation || !socketRef.current) return;
+
+  try {
+    setCallType(type);
+    setIsCaller(true);
+
+    const socket = socketRef.current;
+
+    socket.emit('call:join', {
+      roomId: activeConversation,
+    });
+
+    const pc = await ensurePeerConnection(type);
+    const offer = await pc.createOffer();
+
+    await pc.setLocalDescription(offer);
+
+    socket.emit('call:offer', {
+      roomId: activeConversation,
+      offer,
+      type,
+    });
+
+    setIsCallModalOpen(true);
+    setIsRinging(true);
+
+    if (ringingTimeoutRef.current) {
+      clearTimeout(ringingTimeoutRef.current);
     }
-  };
 
-  const handleStartCall = async (type: 'voice' | 'video') => {
-    if (!activeConversation || !socketRef.current) return;
-    try {
-      setCallType(type);
-      setIsCaller(true);
-      const socket = socketRef.current;
-      socket.emit('call:join', { roomId: activeConversation });
-      const pc = await ensurePeerConnection(type);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('call:offer', { roomId: activeConversation, offer, type });
-      setIsCallModalOpen(true);
-      setIsRinging(true);
+    ringingTimeoutRef.current = setTimeout(() => {
+      if (activeConversation) {
+        sendMessage(activeConversation, 'Missed call (no answer).', 'text');
 
-      // Auto-timeout for missed calls (e.g., 20 seconds).
-      if (ringingTimeoutRef.current) {
-        clearTimeout(ringingTimeoutRef.current);
+        socketRef.current?.emit('call:end', {
+          roomId: activeConversation,
+        });
       }
-      ringingTimeoutRef.current = window.setTimeout(() => {
-        if (isCaller && activeConversation) {
-          sendMessage(activeConversation, 'Missed call (no answer).', 'text');
-          if (socketRef.current) {
-            socketRef.current.emit('call:end', { roomId: activeConversation });
-          }
-        }
-        endCallInternal();
-      }, 20000);
-    } catch (e) {
-      console.error('Error starting call', e);
-      toast({ title: 'Call failed', description: 'Could not start the call. Check camera/mic permissions.' });
+
       endCallInternal();
-    }
-  };
+    }, 20000);
+  } catch (e) {
+    console.error('Error starting call', e);
 
-  const handleAcceptIncomingCall = async () => {
-    if (!activeConversation || !socketRef.current || !pendingOffer) return;
-    try {
-      const socket = socketRef.current;
-      await ensurePeerConnection(callType);
-      const pc = pcRef.current;
-      if (!pc) return;
+    toast({
+      title: 'Call failed',
+      description: 'Could not start the call. Check camera/mic permissions.',
+    });
 
-      await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+    endCallInternal();
+  }
+};
 
-      // Ensure we have local media attached.
-      if (!localStream) {
-        const constraints = callType === 'voice'
+const handleAcceptIncomingCall = async () => {
+  if (!activeConversation || !socketRef.current || !pendingOffer) return;
+
+  try {
+    const socket = socketRef.current;
+
+    await ensurePeerConnection(callType);
+
+    const pc = pcRef.current;
+    if (!pc) return;
+
+    await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+
+    if (!localStream) {
+      const constraints =
+        callType === 'voice'
           ? { audio: true, video: false }
           : { audio: true, video: true };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        setLocalStream(stream);
-      }
 
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('call:answer', { roomId: activeConversation, answer });
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-      setIsCallModalOpen(true);
-      setIncomingCall(false);
-      setPendingOffer(null);
-    } catch (e) {
-      console.error('Error accepting call', e);
-      setIncomingCall(false);
-      setPendingOffer(null);
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+      });
+
+      setLocalStream(stream);
     }
-  };
 
-  const handleDeclineIncomingCall = () => {
-    if (activeConversation && socketRef.current) {
-      socketRef.current.emit('call:end', { roomId: activeConversation });
-    }
+    const answer = await pc.createAnswer();
+
+    await pc.setLocalDescription(answer);
+
+    socket.emit('call:answer', {
+      roomId: activeConversation,
+      answer,
+    });
+
+    setIsCallModalOpen(true);
     setIncomingCall(false);
     setPendingOffer(null);
-  };
+  } catch (e) {
+    console.error('Error accepting call', e);
+    setIncomingCall(false);
+    setPendingOffer(null);
+  }
+};
 
-  const handleToggleMute = () => {
-    if (!localStream) return;
-    localStream.getAudioTracks().forEach((track) => {
-      track.enabled = !track.enabled;
+const handleDeclineIncomingCall = () => {
+  if (activeConversation && socketRef.current) {
+    socketRef.current.emit('call:end', {
+      roomId: activeConversation,
     });
-  };
+  }
 
-  const handleToggleVideo = () => {
-    if (!localStream) return;
-    localStream.getVideoTracks().forEach((track) => {
-      track.enabled = !track.enabled;
-    });
-  };
+  setIncomingCall(false);
+  setPendingOffer(null);
+};
 
-  const getConversationName = (conv: typeof conversations[0]) => {
-    if (conv.type === 'group') return conv.name;
-    return conv.participants[0]?.name || 'Unknown';
-  };
+const handleToggleMute = () => {
+  if (!localStream) return;
 
-  const getConversationAvatar = (conv: typeof conversations[0]) => {
-    if (conv.type === 'group') {
-      return conv.participants[0]?.avatar || '';
-    }
+  localStream.getAudioTracks().forEach((track) => {
+    track.enabled = !track.enabled;
+  });
+};
+
+const handleToggleVideo = () => {
+  if (!localStream) return;
+
+  localStream.getVideoTracks().forEach((track) => {
+    track.enabled = !track.enabled;
+  });
+};
+
+const getConversationName = (conv: typeof conversations[0]) => {
+  if (conv.type === 'group') return conv.name;
+  return conv.participants[0]?.name || 'Unknown';
+};
+
+const getConversationAvatar = (conv: typeof conversations[0]) => {
+  if (conv.type === 'group') {
     return conv.participants[0]?.avatar || '';
-  };
+  }
 
-  const getLastPreview = (conv: typeof conversations[0]) => {
-    const draft = draftByConversation[conv.id];
-    if (typeof draft === 'string' && draft.trim()) return `Draft: ${draft.trim()}`;
-    const msg = conv.lastMessage;
-    if (!msg) return '';
-    if (conv.isTyping && conv.isTyping.length > 0) return 'typing…';
-    if (msg.type === 'image') return 'Photo';
-    if (msg.type === 'document') return msg.fileName ? `Document • ${msg.fileName}` : 'Document';
-    if (msg.type === 'voice') return 'Voice note';
-    return msg.content || '';
-  };
+  return conv.participants[0]?.avatar || '';
+};
 
-  const getLastTimeLabel = (conv: typeof conversations[0]) => {
-    const msg = conv.lastMessage;
-    if (!msg?.timestamp) return '';
-    try {
-      return formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true });
-    } catch {
-      return '';
-    }
-  };
+const getLastPreview = (conv: typeof conversations[0]) => {
+  const draft = draftByConversation[conv.id];
 
-  const getReadReceipt = (conv: typeof conversations[0]) => {
-    const msg = conv.lastMessage;
-    if (!msg) return null;
-    if (msg.senderId !== '1') return null;
-    return msg.isRead ? { label: 'Seen', icon: CheckCheck } : { label: 'Delivered', icon: Check };
-  };
+  if (typeof draft === 'string' && draft.trim()) {
+    return `Draft: ${draft.trim()}`;
+  }
 
-  const getSmartSortKey = (conv: typeof conversations[0]) => {
-    const pinned = pinnedConversations[conv.id] ? 1 : 0;
-    const unread = (conv.unreadCount || 0) > 0 ? 1 : 0;
-    const interaction = interactionByConversation[conv.id] || 0;
-    const t = conv.lastMessage?.timestamp ? new Date(conv.lastMessage.timestamp).getTime() : 0;
-    return pinned * 1_000_000_000 + unread * 10_000_000 + interaction * 10_000 + Math.floor(t / 1000);
-  };
+  const msg = conv.lastMessage;
 
-  const openConversation = (conversationId: string) => {
-    setActiveConversation(conversationId);
-    bumpInteraction(conversationId, 3);
-    setQuickReplyFor(null);
-    setQuickReplyText('');
-  };
+  if (!msg) return '';
+  if (conv.isTyping && conv.isTyping.length > 0) return 'typing…';
+  if (msg.type === 'image') return 'Photo';
+  if (msg.type === 'document') {
+    return msg.fileName ? `Document • ${msg.fileName}` : 'Document';
+  }
+  if (msg.type === 'voice') return 'Voice note';
+
+  return msg.content || '';
+};
+
+const getLastTimeLabel = (conv: typeof conversations[0]) => {
+  const msg = conv.lastMessage;
+
+  if (!msg?.timestamp) return '';
+
+  try {
+    return formatDistanceToNow(new Date(msg.timestamp), {
+      addSuffix: true,
+    });
+  } catch {
+    return '';
+  }
+};
+
+const getReadReceipt = (conv: typeof conversations[0]) => {
+  const msg = conv.lastMessage;
+
+  if (!msg) return null;
+  if (msg.senderId !== '1') return null;
+
+  return msg.isRead
+    ? { label: 'Seen', icon: CheckCheck }
+    : { label: 'Delivered', icon: Check };
+};
+
+const getSmartSortKey = (conv: typeof conversations[0]) => {
+  const pinned = pinnedConversations[conv.id] ? 1 : 0;
+  const unread = (conv.unreadCount || 0) > 0 ? 1 : 0;
+  const interaction = interactionByConversation[conv.id] || 0;
+  const time = conv.lastMessage?.timestamp
+    ? new Date(conv.lastMessage.timestamp).getTime()
+    : 0;
+
+  return (
+    pinned * 1_000_000_000 +
+    unread * 10_000_000 +
+    interaction * 10_000 +
+    Math.floor(time / 1000)
+  );
+};
+
+const openConversation = (conversationId: string) => {
+  setActiveConversation(conversationId);
+  bumpInteraction(conversationId, 3);
+  setQuickReplyFor(null);
+  setQuickReplyText('');
+};
 
   const handleQuickReplySend = (conversationId: string) => {
     const text = quickReplyText.trim();
@@ -2082,7 +1928,7 @@ Last message you are replying to:
           </div>
         </div>
 
-        {/* Call Modal */}
+               {/* Call Modal */}
         {activeConv && (
           <CallModal
             open={isCallModalOpen}
@@ -2097,17 +1943,17 @@ Last message you are replying to:
             onToggleMute={handleToggleMute}
             onToggleVideo={handleToggleVideo}
             onEnd={() => {
-             if (activeConversation && socketRef.current) {
-  socketRef.current.emit('call:end', {
-    roomId: activeConversation
-  });
-}
+              if (activeConversation && socketRef.current) {
+                socketRef.current.emit('call:end', {
+                  roomId: activeConversation,
+                });
+              }
 
-endCallInternal();
-}}
-/>
-)}
-</div>
-</div>
-);
+              endCallInternal();
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
