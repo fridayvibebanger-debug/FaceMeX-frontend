@@ -184,7 +184,7 @@ export default function NewsFeed() {
   ]).finally(() => setLoading(false));
 }, [mode, skillQuery, loadPosts]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, skillQuery]);
+  }, [mode, skillQuery, loadPosts]);
 
   // Filter posts based on selected filter and current mode
   useEffect(() => {
@@ -571,9 +571,9 @@ export default function NewsFeed() {
 
     {/* Create Post Modal */}
     <CreatePostModal
-      open={isCreateModalOpen}
-      onOpenChange={setIsCreateModalOpen}
-    />
-  </div>
-);
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+      />
+    </div>
+  );
 }
