@@ -2097,14 +2097,17 @@ Last message you are replying to:
             onToggleMute={handleToggleMute}
             onToggleVideo={handleToggleVideo}
             onEnd={() => {
-              if (activeConversation && socketRef.current) {
-                socketRef.current.emit('call:end', { roomId: activeConversation });
-              }
-              endCallInternal();
-            }}
-          />
-        )}
-      </div>
-    </div>
-  );
+             if (activeConversation && socketRef.current) {
+  socketRef.current.emit('call:end', {
+    roomId: activeConversation
+  });
+}
+
+endCallInternal();
+}}
+/>
+)}
+</div>
+</div>
+);
 }
