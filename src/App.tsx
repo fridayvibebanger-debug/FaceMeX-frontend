@@ -1,14 +1,3 @@
-Replace your full src/App.tsx with this updated version.
-
-Main fixes:
-
-/login, /signup, and /auth now show AuthPage
-
-protected pages redirect to /login
-
-logged-in users visiting /, /login, /signup, /auth go to /feed
-
-
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
