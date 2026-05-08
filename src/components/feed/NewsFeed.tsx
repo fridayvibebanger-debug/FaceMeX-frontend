@@ -181,10 +181,10 @@ export default function NewsFeed() {
   Promise.all([
     loadPosts().catch(() => {}),
     new Promise((resolve) => setTimeout(resolve, 400)),
-  ]).finally(() => setLoading(false));
+  ]).finally(() => {
+    setLoading(false);
+  });
 }, [mode, skillQuery, loadPosts]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, skillQuery, loadPosts]);
 
   // Filter posts based on selected filter and current mode
   useEffect(() => {
