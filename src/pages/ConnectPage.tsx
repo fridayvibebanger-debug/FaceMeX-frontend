@@ -4,12 +4,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
-import { useUserStore } from '@/store/userStore';
 import { supabase } from '@/lib/supabaseClient';
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/button'; 
 
 type Profile = {
   id: string;
