@@ -230,14 +230,6 @@ export default function ConnectPage() {
     await startChat(targetUserId);
   };
 
-  if (!isInitialized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Checking session...
-      </div>
-    );
-  }
-
   if (!isAuthenticated) {
     return null;
   }
