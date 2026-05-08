@@ -1,5 +1,3 @@
-Replace your full src/pages/ConnectPage.tsx with this updated version:
-
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
