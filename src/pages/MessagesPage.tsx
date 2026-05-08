@@ -945,9 +945,15 @@ export default function MessagesPage() {
       ringingTimeoutRef.current = null;
     }
     if (pcRef.current) {
-      pcRef.current.getSenders().forEach((sender) => {
-        try { sender.track?.stop(); } catch {}
-      });
+  pcRef.current.getSenders().forEach((sender) => {
+    try {
+      sender.track?.stop();
+    } catch {}
+  });
+
+  pcRef.current.close();
+  pcRef.current = null;
+}
       pcRef.current.close();
       pcRef.current = null;
     }
@@ -981,10 +987,14 @@ export default function MessagesPage() {
       reportSafetyEvent({
         content: messageText,
         scan,
-        context: { location: 'messages', conversationId: activeConversation, direction: 'outgoing' },
-      }).catch(() => {});
-      return;
-    }
+        context: {
+  location: 'messages',
+  conversationId: activeConversation,
+  direction: 'outgoing',
+},
+}).catch(() => {});
+return;
+}
 
     await sendTextWithBackendScan(messageText);
   };
