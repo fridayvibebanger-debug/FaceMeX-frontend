@@ -2,25 +2,25 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import Navbar from '@/components/layout/Navbar';
-
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
-import { UserPlus } from 'lucide-react';
+import { MessageCircle, Phone, UserPlus, Video } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
-
 import { useAuthStore } from '@/store/authStore';
-import { useUserStore } from '@/store/userStore';
 
 type Profile = {
   id: string;
   email: string | null;
-  full_name: string | null;
-  username: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  is_active: boolean;
+  full_name?: string | null;
+  name?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+  avatar?: string | null;
+  bio?: string | null;
+  is_active?: boolean;
+  created_at?: string;
 };
 
 type Suggestion = {
@@ -31,18 +31,45 @@ type Suggestion = {
 };
 
 export default function ConnectPage() {
-  const { user, followUser, unfollowUser } = useAuthStore();
-  const { professional } = useUserStore();
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
 
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔥 FETCH USERS FROM SUPABASE
+  async function fetchUsers() {
+    setLoading(true);
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData?.user;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('Supabase profiles error:', error.message);
+        setRealUsers([]);
+        return;
+      }
+
+      const filtered = (data || []).filter((u) => u.id !== currentUser?.id);
+      setRealUsers(filtered);
+    } catch (err) {
+      console.log('Fetch users error:', err);
+      setRealUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     fetchUsers();
 
-    // 🔄 REALTIME LISTENER
     const channel = supabase
       .channel('profiles-changes')
       .on(
@@ -52,9 +79,7 @@ export default function ConnectPage() {
           schema: 'public',
           table: 'profiles',
         },
-        () => {
-          fetchUsers();
-        }
+        () => fetchUsers()
       )
       .subscribe();
 
@@ -63,136 +88,82 @@ export default function ConnectPage() {
     };
   }, []);
 
-  // 🔥 GET USERS
-  async function fetchUsers() {
-    setLoading(true);
-
-    try {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          email,
-          full_name,
-          username,
-          avatar_url,
-          bio,
-          is_active
-        `)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.log('Supabase Error:', error.message);
-        return;
-      }
-
-      // 🚫 REMOVE CURRENT USER
-      const filtered =
-        data?.filter((u) => u.id !== currentUser?.id) || [];
-
-      setRealUsers(filtered);
-    } catch (err) {
-      console.log('Fetch Error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }
-const startChat = async (targetUserId: string) => {
-  if (!user?.id) return;
-
-  const user1 =
-    user.id < targetUserId ? user.id : targetUserId;
-
-  const user2 =
-    user.id < targetUserId ? targetUserId : user.id;
-
-  const { data, error } = await supabase
-    .from('conversations')
-    .upsert(
-      {
-        user1_id: user1,
-        user2_id: user2,
-      },
-      {
-        onConflict: 'user1_id,user2_id',
-      }
-    )
-    .select()
-    .single();
-
-  if (error) {
-    console.log(error);
-    return;
-  }
-
-  window.location.href = `/messages?conversation=${data.id}`;
-};
-
-const startCall = async (
-  targetUserId: string,
-  type: 'voice' | 'video'
-) => {
-  localStorage.setItem('pending_call_type', type);
-  await startChat(targetUserId);
-};
-
-const handleFollow = async (targetUserId: string) => {
-  if (!user?.id) return;
-
-  await supabase.from('follows').upsert({
-    follower_id: user.id,
-    following_id: targetUserId,
-  });
-
-  setFollowed((prev) => ({
-    ...prev,
-    [targetUserId]: true,
-  }));
-};
-  // 🔥 CONVERT USERS TO UI
   const suggestions: Suggestion[] = useMemo(() => {
     return realUsers.map((u) => ({
       id: u.id,
-
-      // 👤 PRIORITY:
-      // full_name → username → email
       name:
         u.full_name ||
+        u.name ||
         u.username ||
         u.email?.split('@')[0] ||
         'User',
-
-      headline:
-        u.bio ||
-        'FaceMeX Member',
-
-      avatar: u.avatar_url,
+      headline: u.bio || 'FaceMeX Member',
+      avatar: u.avatar_url || u.avatar || null,
     }));
   }, [realUsers]);
 
-  // 🔥 FOLLOW SYSTEM
-  const toggleFollow = async (id: string) => {
-    const isFollowing = !!followed[id];
+  const handleFollow = async (targetUserId: string) => {
+    if (!user?.id) return;
+
+    const isFollowing = !!followed[targetUserId];
+
+    if (isFollowing) {
+      await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', targetUserId);
+
+      setFollowed((prev) => ({
+        ...prev,
+        [targetUserId]: false,
+      }));
+
+      return;
+    }
+
+    await supabase.from('follows').upsert({
+      follower_id: user.id,
+      following_id: targetUserId,
+    });
 
     setFollowed((prev) => ({
       ...prev,
-      [id]: !isFollowing,
+      [targetUserId]: true,
     }));
+  };
 
-    try {
-      if (isFollowing) {
-        await unfollowUser(id);
-      } else {
-        await followUser(id);
-      }
-    } catch (err) {
-      console.log(err);
+  const startChat = async (targetUserId: string) => {
+    if (!user?.id) return;
+
+    const user1 = user.id < targetUserId ? user.id : targetUserId;
+    const user2 = user.id < targetUserId ? targetUserId : user.id;
+
+    const { data, error } = await supabase
+      .from('conversations')
+      .upsert(
+        {
+          user1_id: user1,
+          user2_id: user2,
+        },
+        {
+          onConflict: 'user1_id,user2_id',
+        }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      console.log('Start chat error:', error.message);
+      return;
     }
+
+    navigate(`/messages?conversation=${data.id}`);
+  };
+
+  const startCall = async (targetUserId: string, type: 'voice' | 'video') => {
+    localStorage.setItem('pending_call_type', type);
+    await startChat(targetUserId);
   };
 
   return (
@@ -200,107 +171,97 @@ const handleFollow = async (targetUserId: string) => {
       <Navbar />
 
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-24">
-
-        {/* HEADER */}
         <div className="mb-5">
-          <h1 className="text-2xl font-bold">
-            Connect
-          </h1>
-
+          <h1 className="text-2xl font-bold">Connect</h1>
           <p className="text-sm text-muted-foreground">
             Discover real active users on FaceMeX
             {user?.name ? ` • Hi ${user.name}` : ''}
           </p>
         </div>
 
-        {/* LOADING */}
-        {loading && (
+        {loading ? (
           <div className="text-center py-10 text-muted-foreground">
             Loading users...
           </div>
-        )}
-
-        {/* EMPTY STATE */}
-        {!loading && suggestions.length === 0 && (
+        ) : suggestions.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             No active users found yet.
           </div>
-        )}
-
-        {/* USERS */}
-        <div className="grid gap-3">
-
-          {suggestions.map((s) => (
-
-            <Card
-              key={s.id}
-              className="rounded-2xl border"
-            >
-              <CardContent className="p-4">
-
-                <div className="flex items-start gap-3">
-
-                  {/* AVATAR */}
-                  <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
-
-                    {s.avatar ? (
-                      <img
-                        src={s.avatar}
-                        alt={s.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <UserPlus className="h-5 w-5 text-muted-foreground" />
-                    )}
-
-                  </div>
-
-                  {/* USER INFO */}
-                  <div className="flex-1 min-w-0">
-
-                    <div className="flex items-start justify-between gap-3">
-
-                      <div className="min-w-0">
-
-                        <div className="font-semibold truncate">
-                          {s.name}
-                        </div>
-
-                        <div className="text-sm text-muted-foreground truncate">
-                          {s.headline}
-                        </div>
-
-                      </div>
-
-                      {/* FOLLOW BUTTON */}
-                      <Button
-                        size="sm"
-                        variant={
-                          followed[s.id]
-                            ? 'default'
-                            : 'outline'
-                        }
-                        className="rounded-full"
-                        onClick={() => toggleFollow(s.id)}
-                      >
-                        {followed[s.id]
-                          ? 'Following'
-                          : 'Follow'}
-                      </Button>
-
+        ) : (
+          <div className="grid gap-3">
+            {suggestions.map((s) => (
+              <Card key={s.id} className="rounded-2xl border">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+                      {s.avatar ? (
+                        <img
+                          src={s.avatar}
+                          alt={s.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <UserPlus className="h-5 w-5 text-muted-foreground" />
+                      )}
                     </div>
 
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">{s.name}</div>
+                      <div className="text-sm text-muted-foreground truncate">
+                        {s.headline}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          variant={followed[s.id] ? 'default' : 'outline'}
+                          onClick={() => handleFollow(s.id)}
+                        >
+                          {followed[s.id] ? 'Following' : 'Follow'}
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/profile/${s.id}`)}
+                        >
+                          View Profile
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startChat(s.id)}
+                        >
+                          <MessageCircle className="h-4 w-4 mr-1" />
+                          Message
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startCall(s.id, 'voice')}
+                        >
+                          <Phone className="h-4 w-4 mr-1" />
+                          Call
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startCall(s.id, 'video')}
+                        >
+                          <Video className="h-4 w-4 mr-1" />
+                          Video
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-
-                </div>
-
-              </CardContent>
-            </Card>
-
-          ))}
-
-        </div>
-
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
