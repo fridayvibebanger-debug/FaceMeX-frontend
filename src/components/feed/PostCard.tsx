@@ -266,16 +266,16 @@ export default function PostCard({ post }: PostCardProps) {
       clearRecordTimer();
 
       recordIntervalRef.current = window.setInterval(() => {
-        setRecordSeconds((prev) => {
-          const next = prev + 1;
+  setRecordSeconds((prev) => {
+    const next = prev + 1;
 
-          if (next >= limitSeconds) {
-            stopVoiceRecording();
-          }
+    if (next >= limitSeconds) {
+      stopVoiceRecording();
+    }
 
-          return next;
-        });
-      }, 1000);
+    return next;
+  });
+}, 1000);
 
       recorder.ondataavailable = (event: BlobEvent) => {
         if (event.data && event.data.size > 0) {
@@ -844,3 +844,4 @@ export default function PostCard({ post }: PostCardProps) {
       </Card>
     </motion.div>
   );
+}
