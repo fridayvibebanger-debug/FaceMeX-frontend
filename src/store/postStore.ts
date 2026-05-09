@@ -245,9 +245,10 @@ if (!authUser?.id) return;
       .single();
 
     if (error) {
-      console.error('Add post error:', error.message);
-      return;
-    }
+  console.error('Add post error:', error.message);
+  alert(`Add post error: ${error.message}`);
+  return;
+}
 
     const newPost: Post = {
       id: data.id,
