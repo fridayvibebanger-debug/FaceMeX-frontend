@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -52,7 +53,21 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { tier, addons, loadMe, mode, setMode } = useUserStore();
+const handleLogout = async () => {
+  try {
+    await supabase.auth.signOut();
+  } catch {}
 
+  try {
+    logout();
+  } catch {}
+
+  localStorage.removeItem('faceme_user_id');
+  localStorage.removeItem('faceme_user_name');
+  localStorage.removeItem('faceme_token');
+
+  window.location.assign('/login');
+};
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (typeof window !== 'undefined' && localStorage.getItem('theme') === 'dark') ? 'dark' : 'light');
 
   useEffect(() => {
@@ -480,22 +495,12 @@ export default function Navbar() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => logout()}
+              onClick={handleLogout}
               className="text-xs"
-            >
-              Logout
+          >
+            Logout
             </Button>
-          </div>
-
-          <div className="flex items-center gap-2 md:hidden">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => logout()}
-              className="text-xs"
-            >
-              Logout
-            </Button>
+            </div>
           </div>
         </div>
       </div>
