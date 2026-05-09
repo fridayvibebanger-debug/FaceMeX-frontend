@@ -68,12 +68,13 @@ const upsertUserProfile = async (supaUser: any, fallbackName?: string) => {
     'FaceMe User';
 
   const { error } = await supabase.from('profiles').upsert({
-    id: supaUser.id,
-    email: supaUser.email || '',
-    name,
-    avatar: supaUser.user_metadata?.avatar_url || '',
-    is_active: true,
-  });
+  id: supaUser.id,
+  email: supaUser.email || '',
+  full_name: name,
+  username: supaUser.email?.split('@')[0] || 'user',
+  avatar_url: supaUser.user_metadata?.avatar_url || '',
+  is_active: true,
+});
 
   if (error) {
     console.error('Failed to save user profile:', error);
@@ -336,7 +337,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           });
         }
 
-        api.patch('/api/users/me', updates).catch(() => {});
+        try {
+          const me = await api.patch('/api/users/me', updates);
+
+          set((state) => ({
+            user: state.user ? { ...state.user, ...me } : null,
+          }));
+        } catch {}
       } catch {
         // keep optimistic local updates
       }
@@ -384,10 +391,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: state.user
         ? {
             ...state.user,
-            following: Math.max(
-              0,
-              (state.user.following || 0) - 1
-            ),
+            following: Math.max(0, (state.user.following || 0) - 1),
           }
         : null,
     }));
