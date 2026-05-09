@@ -76,10 +76,29 @@ interface PostState {
 }
 
 const ensureProfile = async () => {
-  const authUser = useAuthStore.getState().user;
-  if (!authUser?.id) return null;
+  let authUser = useAuthStore.getState().user;
 
-  await supabase.from('profiles').upsert({
+  if (!authUser?.id) {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error || !data.user) {
+      alert('No logged-in Supabase user found. Login again.');
+      return null;
+    }
+
+    authUser = {
+      id: data.user.id,
+      email: data.user.email || '',
+      name:
+        data.user.user_metadata?.full_name ||
+        data.user.user_metadata?.name ||
+        data.user.email?.split('@')[0] ||
+        'User',
+      avatar: data.user.user_metadata?.avatar_url || '',
+    } as any;
+  }
+
+  const { error } = await supabase.from('profiles').upsert({
     id: authUser.id,
     email: authUser.email || '',
     full_name: authUser.name || authUser.email?.split('@')[0] || 'User',
@@ -87,6 +106,11 @@ const ensureProfile = async () => {
     avatar_url: authUser.avatar || '',
     is_active: true,
   });
+
+  if (error) {
+    alert(`Profile error: ${error.message}`);
+    return null;
+  }
 
   return authUser;
 };
@@ -229,7 +253,14 @@ export const usePostStore = create<PostState>((set, get) => ({
 
   addPost: async (content, images, audio, hashtags, mode) => {
     const authUser = await ensureProfile();
-if (!authUser?.id) return;
+
+    if (!authUser?.id) {
+      alert('No user found. Please login again.');
+      return;
+    }
+
+    alert(`Posting as user: ${authUser.id}`);
+
     const mediaUrl = images?.[0] || audio || '';
     const mediaType = getMediaType(mediaUrl);
 
@@ -245,10 +276,10 @@ if (!authUser?.id) return;
       .single();
 
     if (error) {
-  console.error('Add post error:', error.message);
-  alert(`Add post error: ${error.message}`);
-  return;
-}
+      alert(`Add post error: ${error.message}`);
+      console.error('Add post error:', error);
+      return;
+    }
 
     const newPost: Post = {
       id: data.id,
@@ -261,7 +292,12 @@ if (!authUser?.id) return;
       audio: mediaType === 'audio' ? mediaUrl : undefined,
       images: mediaType === 'image' && mediaUrl ? [mediaUrl] : [],
       mediaType,
-      hashtags: [...new Set([...get().extractHashtags(content), ...(hashtags || [])])],
+      hashtags: [
+        ...new Set([
+          ...get().extractHashtags(content),
+          ...(hashtags || []),
+        ]),
+      ],
       likes: 0,
       comments: [],
       shares: 0,
@@ -276,7 +312,7 @@ if (!authUser?.id) return;
 
     await get().loadPosts();
   },
-
+  
   likePost: async (postId, reaction = 'like') => {
     const authUser = await ensureProfile();
 if (!authUser?.id) return;
