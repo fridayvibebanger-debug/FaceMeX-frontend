@@ -17,7 +17,6 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -53,21 +52,7 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { tier, addons, loadMe, mode, setMode } = useUserStore();
-const handleLogout = async () => {
-  try {
-    await supabase.auth.signOut();
-  } catch {}
 
-  try {
-    logout();
-  } catch {}
-
-  localStorage.removeItem('faceme_user_id');
-  localStorage.removeItem('faceme_user_name');
-  localStorage.removeItem('faceme_token');
-
-  window.location.assign('/login');
-};
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (typeof window !== 'undefined' && localStorage.getItem('theme') === 'dark') ? 'dark' : 'light');
 
   useEffect(() => {
@@ -477,33 +462,45 @@ const handleLogout = async () => {
             </Popover>
 
             <Link to="/profile" className="relative">
-            <Avatar className="cursor-pointer border border-slate-200">
-              <AvatarFallback className="bg-primary text-primary-foreground">
-                {(user?.name && user.name.charAt(0)) ||
-                  (user?.email && user.email.charAt(0).toUpperCase()) ||
-                  'U'}
-              </AvatarFallback>
-            </Avatar>
+              <Avatar className="cursor-pointer border border-slate-200/80 dark:border-slate-700/80 bg-primary/5 h-8 w-8">
+                {/* Only show letters, no image */}
+                <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xs">
+                  {(user?.name && user.name.charAt(0))
+                    || (user?.email && user.email.charAt(0).toUpperCase())
+                    || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              {addons?.verified && (
+                <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 shadow-md ring-2 ring-background">
+                  <CheckCircle className="h-2.5 w-2.5 text-white" />
+                </span>
+              )}
+            </Link>
 
-            {addons?.verified && (
-              <span className="absolute -bottom-1 -right-1 inline-flex">
-                <CheckCircle className="h-2.5 w-2.5 text-white" />
-              </span>
-            )}
-          </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logout()}
+              className="text-xs"
+            >
+              Logout
+            </Button>
+          </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="text-xs"
-          >
-            Logout
-          </Button>
+          <div className="flex items-center gap-2 md:hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logout()}
+              className="text-xs"
+            >
+              Logout
+            </Button>
+          </div>
         </div>
-      </nav>
-
-      {showBottomNav && <MobileBottomNav />}
+      </div>
+    </nav>
+    {showBottomNav && <MobileBottomNav />}
     </>
   );
 }
