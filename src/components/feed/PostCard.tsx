@@ -712,10 +712,19 @@ export default function PostCard({ post }: PostCardProps) {
               })()}
               className="rounded-full"
             >
-              <span className="mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20">
-                <AudioLines className={`h-3.5 w-3.5 text-purple-500 ${isRecording ? 'animate-pulse' : ''}`} />
-              </span>
-              {isRecording
+              <span className="relative mr-1 inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500/30 via-purple-500/20 to-cyan-400/30 shadow-[0_0_25px_rgba(168,85,247,0.55)]">
+              <span className="absolute inset-0 rounded-full animate-ping bg-fuchsia-400/20" />
+              <AudioLines
+               className={`relative h-4 w-4 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)] ${
+               isRecording ? 'animate-pulse' : ''
+                 
+                }`}
+               />
+                
+             </span>
+             </span>
+              
+            {isRecording
                 ? `${recordSeconds}s`
                 : (() => {
                     const l = getVoiceCommentDailyLimit();
@@ -733,8 +742,8 @@ export default function PostCard({ post }: PostCardProps) {
               placeholder="Reply…"
               value={commentText}
               onFocus={() => {
-                if (!showComments) openCommentsAndFocus();
-              }}
+                setShowComments(true);
+               }}
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleComment();
@@ -754,7 +763,7 @@ export default function PostCard({ post }: PostCardProps) {
           </div>
 
           <AnimatePresence>
-            {showComments && (
+            {showComments && post.comments.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -826,6 +835,15 @@ export default function PostCard({ post }: PostCardProps) {
                             <MessageCircle className="h-3 w-3" />
                             Reply
                           </button>
+                          <button
+                            
+                        type="button"
+                         onClick={toggleVoiceRecording}
+                         className="inline-flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
+                         >
+                         <Mic className="h-3 w-3" />
+                          Voice
+                         </button>
 
                           {canDeleteComment && (
                             <button
