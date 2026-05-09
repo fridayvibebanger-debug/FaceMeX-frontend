@@ -477,35 +477,33 @@ const handleLogout = async () => {
             </Popover>
 
             <Link to="/profile" className="relative">
-              <Avatar className="cursor-pointer border border-slate-200/80 dark:border-slate-700/80 bg-primary/5 h-8 w-8">
-                {/* Only show letters, no image */}
-                <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xs">
-                  {(user?.name && user.name.charAt(0))
-                    || (user?.email && user.email.charAt(0).toUpperCase())
-                    || 'U'}
-                </AvatarFallback>
-              </Avatar>
-              {addons?.verified && (
-                <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 shadow-md ring-2 ring-background">
-                  <CheckCircle className="h-2.5 w-2.5 text-white" />
-                </span>
-              )}
-            </Link>
+            <Avatar className="cursor-pointer border border-slate-200">
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {(user?.name && user.name.charAt(0)) ||
+                  (user?.email && user.email.charAt(0).toUpperCase()) ||
+                  'U'}
+              </AvatarFallback>
+            </Avatar>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="text-xs"
+            {addons?.verified && (
+              <span className="absolute -bottom-1 -right-1 inline-flex">
+                <CheckCircle className="h-2.5 w-2.5 text-white" />
+              </span>
+            )}
+          </Link>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-xs"
           >
             Logout
-            </Button>
-            </div>
-          </div>
+          </Button>
         </div>
-      </div>
-    </nav>
-    {showBottomNav && <MobileBottomNav />}
+      </nav>
+
+      {showBottomNav && <MobileBottomNav />}
     </>
   );
 }
