@@ -75,16 +75,41 @@ interface PostState {
   getAISuggestions: (content: string) => string[];
 }
 
+const ensureProfile = async () => {
+  const authUser = useAuthStore.getState().user;
+  if (!authUser?.id) return null;
+
+  await supabase.from('profiles').upsert({
+    id: authUser.id,
+    email: authUser.email || '',
+    full_name: authUser.name || authUser.email?.split('@')[0] || 'User',
+    username: authUser.email?.split('@')[0] || 'user',
+    avatar_url: authUser.avatar || '',
+    is_active: true,
+  });
+
+  return authUser;
+};
+
 const getMediaType = (url?: string): MediaType => {
   if (!url) return 'none';
 
   const lower = url.toLowerCase();
 
-  if (lower.includes('.mp4') || lower.includes('.mov') || lower.includes('.webm')) {
+  if (
+    lower.includes('.mp4') ||
+    lower.includes('.mov') ||
+    lower.includes('.webm')
+  ) {
     return 'video';
   }
 
-  if (lower.includes('.mp3') || lower.includes('.wav') || lower.includes('.ogg') || lower.includes('.m4a')) {
+  if (
+    lower.includes('.mp3') ||
+    lower.includes('.wav') ||
+    lower.includes('.ogg') ||
+    lower.includes('.m4a')
+  ) {
     return 'audio';
   }
 
@@ -203,9 +228,8 @@ export const usePostStore = create<PostState>((set, get) => ({
   },
 
   addPost: async (content, images, audio, hashtags, mode) => {
-    const authUser = useAuthStore.getState().user;
-    if (!authUser?.id) return;
-
+    const authUser = await ensureProfile();
+if (!authUser?.id) return;
     const mediaUrl = images?.[0] || audio || '';
     const mediaType = getMediaType(mediaUrl);
 
@@ -253,9 +277,8 @@ export const usePostStore = create<PostState>((set, get) => ({
   },
 
   likePost: async (postId, reaction = 'like') => {
-    const authUser = useAuthStore.getState().user;
-    if (!authUser?.id) return;
-
+    const authUser = await ensureProfile();
+if (!authUser?.id) return;
     const post = get().posts.find((p) => p.id === postId);
     if (!post) return;
 
@@ -308,8 +331,8 @@ export const usePostStore = create<PostState>((set, get) => ({
   },
 
   addComment: async (postId, content) => {
-    const authUser = useAuthStore.getState().user;
-    if (!authUser?.id || !content.trim()) return;
+    const authUser = await ensureProfile();
+if (!authUser?.id || !content.trim()) return;
 
     const { data, error } = await supabase
       .from('post_comments')
@@ -347,9 +370,8 @@ export const usePostStore = create<PostState>((set, get) => ({
   },
 
   addVoiceComment: async (postId, voiceUrl) => {
-    const authUser = useAuthStore.getState().user;
-    if (!authUser?.id || !voiceUrl) return;
-
+    const authUser = await ensureProfile();
+if (!authUser?.id || !voiceUrl) return;
     const { data, error } = await supabase
       .from('post_comments')
       .insert({
