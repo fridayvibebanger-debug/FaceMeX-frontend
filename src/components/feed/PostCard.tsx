@@ -703,14 +703,14 @@ export default function PostCard({ post }: PostCardProps) {
             <Button
               type="button"
               size="sm"
-              variant={isRecording ? 'default' : 'outline'}
+              variant="ghost"
               onClick={toggleVoiceRecording}
               disabled={(() => {
                 const l = getVoiceCommentDailyLimit();
                 if (!Number.isFinite(l)) return false;
                 return getVoiceCommentCountToday() >= l;
               })()}
-              className="rounded-full"
+              className="w-full rounded-full border border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 shadow-[0_0_35px_rgba(168,85,247,0.35)] hover:shadow-[0_0_45px_rgba(34,211,238,0.45)] transition-all"
             >
               <span className="mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20">
                 <AudioLines className={`h-3.5 w-3.5 text-purple-500 ${isRecording ? 'animate-pulse' : ''}`} />
