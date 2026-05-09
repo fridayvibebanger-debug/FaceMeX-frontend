@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,6 @@ export default function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login } = useAuthStore();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,8 +25,22 @@ export default function LoginForm() {
 
     setIsLoading(true);
     try {
-      await login(email, password);
-      navigate('/feed');
+      const cleanEmail = email.trim().toLowerCase();
+
+await login(cleanEmail, password);
+
+const { error: supabaseError } = await supabase.auth.signInWithPassword({
+  email: cleanEmail,
+  password,
+});
+
+if (supabaseError) {
+  setError(`Supabase login failed: ${supabaseError.message}`);
+  setIsLoading(false);
+  return;
+}
+
+window.location.assign('/feed');
     } catch (error) {
       const code = (error as Error).message;
       if (code === 'supabase_not_configured') {
