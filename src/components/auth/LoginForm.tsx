@@ -13,12 +13,26 @@ export default function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+
+    const cleanEmail = email.trim().toLowerCase();
+
     setError('');
+
+    if (!cleanEmail) {
+      setError('Please enter your email.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
+    setIsLoading(true);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         password,
       });
 
@@ -40,7 +54,9 @@ export default function LoginForm() {
         data.user.email?.split('@')[0] || 'User'
       );
 
-      window.location.href = '/feed';
+      setIsLoading(false);
+
+      window.location.assign('/feed');
     } catch (err: any) {
       setError(err?.message || 'Login failed.');
       setIsLoading(false);
@@ -50,36 +66,52 @@ export default function LoginForm() {
   return (
     <div className="w-full max-w-md rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl shadow-2xl p-5 sm:p-6">
       <div className="space-y-1">
-        <div className="text-xl sm:text-2xl font-semibold text-white">Welcome back</div>
-        <div className="text-sm text-white/80">Connect with friends &amp; family</div>
+        <div className="text-xl sm:text-2xl font-semibold text-white">
+          Welcome back
+        </div>
+        <div className="text-sm text-white/80">
+          Connect with friends &amp; family
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 mt-5">
         {error && <p className="text-sm text-red-200">{error}</p>}
 
         <div className="space-y-1.5">
-          <Label className="text-white/90">Email</Label>
+          <Label htmlFor="email" className="text-white/90">
+            Email
+          </Label>
           <Input
+            id="email"
             type="email"
+            placeholder="name@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={isLoading}
-            className="h-11 rounded-2xl bg-white/10 border-white/15 text-white"
+            className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
           />
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-white/90">Password</Label>
+          <Label htmlFor="password" className="text-white/90">
+            Password
+          </Label>
           <Input
+            id="password"
             type="password"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isLoading}
-            className="h-11 rounded-2xl bg-white/10 border-white/15 text-white"
+            className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
           />
         </div>
 
-        <Button type="submit" disabled={isLoading} className="w-full h-11 rounded-2xl bg-white text-slate-900">
+        <Button
+          type="submit"
+          disabled={isLoading}
+          className="w-full h-11 rounded-2xl bg-white text-slate-900 hover:bg-white/90"
+        >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isLoading ? 'Signing in…' : 'Login'}
         </Button>
