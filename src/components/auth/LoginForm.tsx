@@ -42,7 +42,7 @@ export default function LoginForm() {
 
       setIsLoading(false);
 
-      navigate('/feed', { replace: true });
+      window.location.replace('/feed');
     } catch (err) {
       const code = (err as Error).message;
 
