@@ -279,8 +279,6 @@ export const usePostStore = create<PostState>((set, get) => ({
       return;
     }
     
-alert('Post saved successfully');
-    
     const newPost: Post = {
       id: data.id,
       userId: authUser.id,
@@ -309,8 +307,6 @@ alert('Post saved successfully');
     };
 
     set({ posts: [newPost, ...get().posts] });
-
-    await get().loadPosts();
   },
   
   likePost: async (postId, reaction = 'like') => {
