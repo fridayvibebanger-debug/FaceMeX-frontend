@@ -146,111 +146,45 @@ export const usePostStore = create<PostState>((set, get) => ({
   aiSuggestions: [],
 
   loadPosts: async () => {
-    const authUser = useAuthStore.getState().user;
-    const currentUserId = authUser?.id;
+  const authUser = useAuthStore.getState().user;
+  const currentUserId = authUser?.id;
 
-    const { data, error } = await supabase
-      .from('posts')
-      .select(`
-        id,
-        user_id,
-        content,
-        media_url,
-        media_type,
-        created_at,
-        profiles (
-          id,
-          full_name,
-          name,
-          username,
-          avatar_url,
-          avatar
-        ),
-        post_reactions (
-          id,
-          user_id,
-          reaction
-        ),
-        post_comments (
-          id,
-          user_id,
-          content,
-          voice_url,
-          comment_type,
-          created_at,
-          profiles (
-            full_name,
-            name,
-            username,
-            avatar_url,
-            avatar
-          )
-        )
-      `)
-      .order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Load posts error:', error.message);
-      set({ posts: [] });
-      return;
-    }
+  if (error) {
+    alert(`Load posts error: ${error.message}`);
+    console.error('Load posts error:', error);
+    return;
+  }
 
-    const mapped: Post[] = (data || []).map((p: any) => {
-      const profile = p.profiles;
-      const reactions = p.post_reactions || [];
-      const comments = p.post_comments || [];
+  const mapped: Post[] = (data || []).map((p: any) => ({
+    id: p.id,
+    userId: p.user_id,
+    userName: authUser?.name || 'FaceMeX User',
+    userAvatar: authUser?.avatar || '',
+    content: p.content || '',
+    image: p.media_type === 'image' ? p.media_url : undefined,
+    video: p.media_type === 'video' ? p.media_url : undefined,
+    audio: p.media_type === 'audio' ? p.media_url : undefined,
+    images: p.media_type === 'image' && p.media_url ? [p.media_url] : [],
+    mediaType: p.media_type || 'none',
+    hashtags: get().extractHashtags(p.content || ''),
+    likes: 0,
+    comments: [],
+    shares: 0,
+    timestamp: new Date(p.created_at || Date.now()),
+    isLiked: false,
+    reaction: undefined,
+    mode: 'social',
+    collabInvites: [],
+    collaborators: [],
+  }));
 
-      const myReaction = currentUserId
-        ? reactions.find((r: any) => r.user_id === currentUserId)
-        : null;
-
-      const mediaUrl = p.media_url || '';
-      const mediaType = p.media_type || getMediaType(mediaUrl);
-
-      return {
-        id: p.id,
-        userId: p.user_id,
-        userName:
-          profile?.full_name ||
-          profile?.name ||
-          profile?.username ||
-          'FaceMeX User',
-        userAvatar: profile?.avatar_url || profile?.avatar || '',
-        content: p.content || '',
-        image: mediaType === 'image' ? mediaUrl : undefined,
-        video: mediaType === 'video' ? mediaUrl : undefined,
-        audio: mediaType === 'audio' ? mediaUrl : undefined,
-        images: mediaType === 'image' && mediaUrl ? [mediaUrl] : [],
-        mediaType,
-        hashtags: get().extractHashtags(p.content || ''),
-        likes: reactions.length,
-        comments: comments.map((c: any) => ({
-          id: c.id,
-          userId: c.user_id,
-          userName:
-            c.profiles?.full_name ||
-            c.profiles?.name ||
-            c.profiles?.username ||
-            'User',
-          userAvatar: c.profiles?.avatar_url || c.profiles?.avatar || '',
-          content: c.content || '',
-          voiceUrl: c.voice_url || undefined,
-          type: c.comment_type || 'text',
-          timestamp: new Date(c.created_at || Date.now()),
-        })),
-        shares: 0,
-        timestamp: new Date(p.created_at || Date.now()),
-        isLiked: !!myReaction,
-        reaction: myReaction?.reaction || undefined,
-        mode: 'social',
-        collabInvites: [],
-        collaborators: [],
-      };
-    });
-
-    set({ posts: mapped });
-  },
-
+  set({ posts: mapped });
+},
   addPost: async (content, images, audio, hashtags, mode) => {
     const authUser = await ensureProfile();
 
