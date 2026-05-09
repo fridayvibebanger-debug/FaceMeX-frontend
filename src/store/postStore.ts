@@ -248,7 +248,8 @@ export const usePostStore = create<PostState>((set, get) => ({
     };
 
     set({ posts: [newPost, ...get().posts] });
-  },
+
+await get().loadPosts();
 
   likePost: async (postId, reaction = 'like') => {
     const authUser = useAuthStore.getState().user;
