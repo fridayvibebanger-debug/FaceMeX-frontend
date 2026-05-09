@@ -51,14 +51,6 @@ import CareerAIPage from './pages/CareerAIPage';
 import NotificationsPage from './pages/NotificationsPage';
 import ConnectPage from './pages/ConnectPage';
 
-function LoadingScreen() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-sm text-muted-foreground">Loading…</div>
-    </div>
-  );
-}
-
 function PublicAuthRoute() {
   const { isAuthenticated, isInitialized } = useAuthStore();
 
@@ -80,7 +72,7 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
 }
 
 function App() {
-  const { isInitialized, restoreSession } = useAuthStore();
+  const { restoreSession } = useAuthStore();
 
   useEffect(() => {
     restoreSession();
@@ -121,14 +113,7 @@ function App() {
         }
       />
 
-      <Route
-        path="/feed"
-        element={
-          <ProtectedRoute>
-            <FeedPage />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/feed" element={<FeedPage />} />
 
       <Route
         path="/watch/:id"
