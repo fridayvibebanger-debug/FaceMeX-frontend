@@ -323,20 +323,25 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const handleShare = async () => {
-    try {
-      const url = `${window.location.origin}/post/${post.id}`;
-      const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
+  try {
+    const url = `${window.location.origin}/post/${post.id}`;
+    const navAny =
+      typeof navigator !== 'undefined' ? (navigator as any) : null;
 
-      if (navAny && typeof navAny.share === 'function') {
-        await navAny.share({ title: 'FaceMeX', url });
-      } else if (navAny?.clipboard?.writeText) {
-        await navAny.clipboard.writeText(url);
-      }
-    } catch {}
+    if (navAny && typeof navAny.share === 'function') {
+      await navAny.share({
+        title: 'FaceMeX',
+        url,
+      });
+    } else if (navAny?.clipboard?.writeText) {
+      await navAny.clipboard.writeText(url);
+    }
+  } catch (error) {
+    console.log(error);
+  }
 
-    sharePost(post.id);
-  };
-
+  sharePost(post.id);
+};
   const startEditPost = () => {
     if (!canEdit) return;
     setPostDraft(post.content);
