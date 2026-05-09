@@ -259,8 +259,6 @@ export const usePostStore = create<PostState>((set, get) => ({
       return;
     }
 
-    alert(`Posting as user: ${authUser.id}`);
-
     const mediaUrl = images?.[0] || audio || '';
     const mediaType = getMediaType(mediaUrl);
 
@@ -280,7 +278,9 @@ export const usePostStore = create<PostState>((set, get) => ({
       console.error('Add post error:', error);
       return;
     }
-
+    
+alert('Post saved successfully');
+    
     const newPost: Post = {
       id: data.id,
       userId: authUser.id,
