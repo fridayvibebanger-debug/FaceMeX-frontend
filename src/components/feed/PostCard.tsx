@@ -567,18 +567,18 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           {imgs.length === 1 && (
-            <div className="relative rounded-xl overflow-hidden">
+         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/20 shadow-2xl"></div>
               <img
                 src={imgs[0]}
                 alt="Post image"
-                className="w-full h-auto object-cover cursor-pointer"
+                className="w-full max-h-[650px] object-cover cursor-pointer rounded-3xl transition-all duration-300 hover:scale-[1.01]"
                 onClick={() => openLightbox(imgs[0])}
               />
             </div>
           )}
 
           {imgs.length > 1 && (
-            <div className="relative rounded-xl overflow-hidden border border-border/60">
+            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/20 shadow-2xl">
               <Carousel opts={{ loop: false }} setApi={(api) => setCarouselApi(api)}>
                 <CarouselContent>
                   {imgs.slice(0, 5).map((src, idx) => (
@@ -729,18 +729,16 @@ export default function PostCard({ post }: PostCardProps) {
 
           <div className="flex items-center gap-2 pt-3">
             <Input
-              ref={replyInputRef}
-              placeholder="Reply…"
-              value={commentText}
-              onFocus={() => {
-                if (!showComments) openCommentsAndFocus();
-              }}
-              onChange={(e) => setCommentText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleComment();
-              }}
-              className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
+            ref={replyInputRef}
+            placeholder="Reply…"
+            value={commentText}
+            onFocus={() => {}}
+            onChange={(e) => setCommentText(e.target.value)}
+            onKeyDown={(e) => {
+             if (e.key === 'Enter') handleComment();
+           }}
+           className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+         />
 
             <Button
               size="icon"
