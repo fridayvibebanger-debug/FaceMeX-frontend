@@ -288,50 +288,27 @@ export default function ConnectPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-3">
-                        <Button
-                        onClick={() => handleFollow(suggestion.id)}
-                        className="
-                           rounded-2xl
-                           bg-gradient-to-r
-                           from-blue-500
-                           to-purple-600
-                           text-white
-                           border-0
-                           hover:scale-[1.03]
-                           hover:shadow-[0_0_25px_rgba(139,92,246,0.45)]
-                           transition-all
-                           duration-300
-                           font-semibold
-                          "
-                        >
+                      <Button className={neonButton}>
                        Follow
                       </Button>
 
-                      <Button
-                        onClick={() => navigate(`/profile/${suggestion.id}`)}
-                        className="rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20"
-                       >
-                        
+                       <Button className={neonButton}>
+                         onClick={() => navigate(`/profile/${suggestion.id}`)}
                         View Profile
-                        </Button>
+                       </Button>
 
-                        <Button
-                          onClick={() => navigate(`/messages?user=${suggestion.id}`)}
-                          className="rounded-2xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 hover:shadow-[0_0_25px_rgba(59,130,246,0.35)]"
-                        >
+                        <Button className={neonButton}>
+                          onClick={() => navigate(`/messages/${suggestion.id}`)}
                          Message
                         </Button>
 
-                        <Button
+                        <Button className={neonButton}>
                            onClick={() => navigate(`/call/${suggestion.id}?type=audio`)}
-                           className="rounded-2xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-400/30 hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]"
-                        >
                          Call
                         </Button>
 
-                        <Button
+                        <Button className={neonButton}>
                             onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
-                            className="rounded-2xl bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 border border-fuchsia-400/30 hover:shadow-[0_0_25px_rgba(217,70,239,0.35)]"
                           >
                          Video
                         </Button>
