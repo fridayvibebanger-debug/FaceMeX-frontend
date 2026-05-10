@@ -147,7 +147,7 @@ function App() {
         path="/messages/:userId"
         element={
          <ProtectedRoute>
-           <ChatPage />
+           <MessagesPage />
         </ProtectedRoute>
       }
     />
