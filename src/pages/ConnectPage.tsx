@@ -289,7 +289,7 @@ export default function ConnectPage() {
 
                       <div className="flex flex-wrap gap-2 mt-3">
                         <Button
-                        onClick={() => handleFollow(u.id)}
+                        onClick={() => handleFollow(suggestion.id)}
                         className="
                            rounded-2xl
                            bg-gradient-to-r
@@ -308,7 +308,7 @@ export default function ConnectPage() {
                       </Button>
 
                       <Button
-                        onClick={() => navigate(`/profile/${u.id}`)}
+                        onClick={() => navigate(`/profile/${suggestion.id}`)}
                         className="rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20"
                        >
                         
@@ -316,21 +316,21 @@ export default function ConnectPage() {
                         </Button>
 
                         <Button
-                          onClick={() => navigate(`/messages?user=${u.id}`)}
+                          onClick={() => navigate(`/messages?user=${suggestion.id}`)}
                           className="rounded-2xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 hover:shadow-[0_0_25px_rgba(59,130,246,0.35)]"
                         >
                          Message
                         </Button>
 
                         <Button
-                           onClick={() => navigate(`/call/${u.id}?type=audio`)}
+                           onClick={() => navigate(`/call/${suggestion.id}?type=audio`)}
                            className="rounded-2xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-400/30 hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]"
                         >
                          Call
                         </Button>
 
                         <Button
-                            onClick={() => navigate(`/call/${u.id}?type=video`)}
+                            onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
                             className="rounded-2xl bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 border border-fuchsia-400/30 hover:shadow-[0_0_25px_rgba(217,70,239,0.35)]"
                           >
                          Video
