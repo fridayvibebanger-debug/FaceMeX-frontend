@@ -3,12 +3,11 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 import { useAuthStore } from './store/authStore';
 
-import ChatPage from '@/pages/ChatPage';
 import AuthPage from './components/auth/AuthPage';
 import FeedPage from './pages/FeedPage';
 import WatchPage from './pages/WatchPage';
 import ProfilePage from './pages/ProfilePage';
-import MessagesPage from './pages/MessagesPage';
+import MessagesPage from '.@/pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
 import VirtualWorldsPage from './pages/VirtualWorldsPage';
 import WorldPage from './pages/WorldPage';
