@@ -1,209 +1,56 @@
-import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import CallModal from "@/components/calls/CallModal";
+import React from 'react';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { PhoneOff, Mic, Video, Languages, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function CallPage() {
-  // UI state
-  const [open, setOpen] = useState(false);
+  const { userId } = useParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  // streams
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-
-  // WebRTC + call tracking
-  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
-  const [callId, setCallId] = useState<string | null>(null);
-  const [incomingCall, setIncomingCall] = useState<any>(null);
-
-  // TEMP USERS (replace with Supabase Auth later)
-  const myUserId = "user_1";
-  const receiverId = "user_2";
-
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-
-  // 🎥 GET CAMERA + MIC
-  useEffect(() => {
-    navigator.mediaDevices
-      .getUserMedia({ audio: true, video: true })
-      .then((stream) => setLocalStream(stream))
-      .catch((err) => console.error("Media error:", err));
-  }, []);
-
-  // ⚡ CREATE PEER CONNECTION
-  const createPeerConnection = (stream: MediaStream) => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
-
-    // send local tracks
-    stream.getTracks().forEach((track) => {
-      pc.addTrack(track, stream);
-    });
-
-    // receive remote stream
-    pc.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
-    };
-
-    pcRef.current = pc;
-    setPeerConnection(pc);
-
-    return pc;
-  };
-
-  // 📞 START CALL
-  const startCall = async () => {
-    if (!localStream) return;
-
-    const pc = createPeerConnection(localStream);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const { data, error } = await supabase
-      .from("calls")
-      .insert([
-        {
-          caller_id: myUserId,
-          receiver_id: receiverId,
-          offer,
-          status: "calling",
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Call error:", error);
-      return;
-    }
-
-    setCallId(data.id);
-    setOpen(true);
-  };
-
-  // 📡 LISTEN FOR INCOMING CALL
-  useEffect(() => {
-    const channel = supabase
-      .channel("incoming-calls")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "calls",
-        },
-        (payload) => {
-          if (payload.new.receiver_id === myUserId) {
-            setIncomingCall(payload.new);
-            setOpen(true);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // 🟢 ACCEPT CALL
-  const acceptCall = async () => {
-    if (!incomingCall || !localStream) return;
-
-    const pc = createPeerConnection(localStream);
-
-    await pc.setRemoteDescription(incomingCall.offer);
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    await supabase
-      .from("calls")
-      .update({
-        answer,
-        status: "connected",
-      })
-      .eq("id", incomingCall.id);
-
-    setPeerConnection(pc);
-    setOpen(true);
-  };
-
-  // 📡 LISTEN FOR ANSWER (CALLER SIDE)
-  useEffect(() => {
-    if (!callId || !peerConnection) return;
-
-    const channel = supabase
-      .channel("call-updates")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "calls",
-          filter: `id=eq.${callId}`,
-        },
-        async (payload) => {
-          if (payload.new.answer && peerConnection) {
-            await peerConnection.setRemoteDescription(payload.new.answer);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [callId, peerConnection]);
-
-  // ❌ END CALL
-  const endCall = () => {
-    peerConnection?.close();
-    pcRef.current = null;
-
-    setPeerConnection(null);
-    setRemoteStream(null);
-    setCallId(null);
-    setIncomingCall(null);
-    setOpen(false);
-  };
+  const type = searchParams.get('type') || 'audio';
 
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-xl font-bold">FaceMeX Call System</h1>
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl text-center">
+        <div className="mx-auto mb-4 h-24 w-24 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center text-3xl font-bold shadow-[0_0_40px_rgba(168,85,247,0.45)]">
+          F
+        </div>
 
-      {/* START CALL */}
-      <button
-        onClick={startCall}
-        className="bg-green-600 text-white px-4 py-2 rounded"
-      >
-        Start Call
-      </button>
+        <h1 className="text-2xl font-bold">Calling user</h1>
+        <p className="text-sm text-white/60 mt-1">User ID: {userId}</p>
+        <p className="text-sm text-white/60 mt-1">{type === 'video' ? 'Video call' : 'Voice call'}</p>
 
-      {/* ACCEPT CALL */}
-      {incomingCall && (
-        <button
-          onClick={acceptCall}
-          className="bg-blue-600 text-white px-4 py-2 rounded ml-2"
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button className="rounded-2xl bg-white/10 hover:bg-white/20">
+            <Mic className="h-4 w-4 mr-2" />
+            Mute
+          </Button>
+
+          <Button className="rounded-2xl bg-white/10 hover:bg-white/20">
+            <Video className="h-4 w-4 mr-2" />
+            Video
+          </Button>
+
+          <Button className="rounded-2xl bg-white/10 hover:bg-white/20">
+            <FileText className="h-4 w-4 mr-2" />
+            Summary
+          </Button>
+
+          <Button className="rounded-2xl bg-white/10 hover:bg-white/20">
+            <Languages className="h-4 w-4 mr-2" />
+            Translate
+          </Button>
+        </div>
+
+        <Button
+          onClick={() => navigate(-1)}
+          className="mt-6 w-full rounded-2xl bg-red-500 hover:bg-red-600"
         >
-          Accept Call
-        </button>
-      )}
-
-      {/* CALL UI */}
-      <CallModal
-        open={open}
-        onOpenChange={setOpen}
-        type="video"
-        participant={{
-          name: "User",
-          avatar: "",
-        }}
-        localStream={localStream}
-        remoteStream={remoteStream}
-        onEnd={endCall}
-      />
+          <PhoneOff className="h-4 w-4 mr-2" />
+          End Call
+        </Button>
+      </div>
     </div>
   );
 }
