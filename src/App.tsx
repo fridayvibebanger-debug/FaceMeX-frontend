@@ -153,6 +153,15 @@ function App() {
       />
 
       <Route
+        path="/call/:userId"
+        element={
+         <ProtectedRoute>
+           <CallPage />
+         </ProtectedRoute>
+       }
+     />
+      
+      <Route
         path="/notifications"
         element={
           <ProtectedRoute>
