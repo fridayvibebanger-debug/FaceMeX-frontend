@@ -309,7 +309,6 @@ export default function ConnectPage() {
 
                         <Button className={neonButton}>
                             onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
-                          >
                          Video
                         </Button>
                       </div>
