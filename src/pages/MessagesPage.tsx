@@ -23,11 +23,43 @@ export default function MessagesPage() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const { userId } = useParams();
+  const isChatOpen = !!userId;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [conversations, setConversations] = useState<any[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const myId = user?.id;
+  const loadConversations = async () => {
+     if (!myId) return;
 
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    alert(`Load conversations error: ${error.message}`);
+    return;
+  }
+
+  const unique = new Map();
+
+  (data || []).forEach((msg) => {
+    const otherUserId = msg.sender_id === myId ? msg.receiver_id : msg.sender_id;
+
+    if (!unique.has(otherUserId)) {
+      unique.set(otherUserId, {
+        userId: otherUserId,
+        lastMessage: msg.content,
+        createdAt: msg.created_at,
+      });
+    }
+  });
+
+  setConversations(Array.from(unique.values()));
+};
   const loadMessages = async () => {
     if (!myId || !userId) return;
 
@@ -85,7 +117,12 @@ export default function MessagesPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
+  
+useEffect(() => {
+  if (!userId) {
+    loadConversations();
+  }
+}, [myId, userId]);
   const sendMessage = async () => {
     const clean = text.trim();
     if (!clean || !myId || !userId) return;
@@ -102,7 +139,33 @@ export default function MessagesPage() {
       alert(`Message failed: ${error.message}`);
     }
   };
+if (!isChatOpen) {
+  return (
+    <div className="min-h-screen bg-slate-950 text-white p-4">
+      <h1 className="text-2xl font-bold">Messages</h1>
+      <p className="text-white/50 text-sm mt-1">Your conversations</p>
 
+      <div className="mt-6 space-y-3">
+        {conversations.length === 0 ? (
+          <div className="rounded-3xl border border-fuchsia-500/30 bg-white/5 p-6 text-center text-white/60">
+            No conversations yet.
+          </div>
+        ) : (
+          conversations.map((chat) => (
+            <button
+              key={chat.userId}
+              onClick={() => navigate(`/messages/${chat.userId}`)}
+              className="w-full rounded-3xl border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-cyan-950/70 p-4 text-left text-white shadow-[0_0_25px_rgba(168,85,247,0.35)]"
+            >
+              <p className="font-semibold">User {chat.userId.slice(0, 6)}</p>
+              <p className="text-sm text-white/50 truncate">{chat.lastMessage}</p>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
       <div className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/90 backdrop-blur px-4 py-3 flex items-center gap-3">
