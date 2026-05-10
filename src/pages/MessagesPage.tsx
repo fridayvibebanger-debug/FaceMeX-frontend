@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send } from 'lucide-react';
+import { Image, Video, FileText, Camera, Mic, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ export default function MessagesPage() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const myId = user?.id;
@@ -138,18 +140,27 @@ export default function MessagesPage() {
 
         <div ref={bottomRef} />
       </div>
-
-      <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-slate-950/95 p-3">
+     <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-slate-950/95 p-3">
+      {menuOpen && (
+       <div className="absolute bottom-20 left-3 right-3 z-50 grid grid-cols-3 gap-2 rounded-3xl border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/90 via-indigo-950/80 to-cyan-950/80 p-3 shadow-[0_0_25px_rgba(168,85,247,0.35)] backdrop-blur-xl">
+           <Button className="rounded-2xl bg-white/10 text-white"><Image className="h-4 w-4 mr-1" /> Image</Button>
+            <Button className="rounded-2xl bg-white/10 text-white"><Video className="h-4 w-4 mr-1" /> Video</Button>
+            <Button className="rounded-2xl bg-white/10 text-white"><Mic className="h-4 w-4 mr-1" /> Voice</Button>
+            <Button className="rounded-2xl bg-white/10 text-white"><FileText className="h-4 w-4 mr-1" /> File</Button>
+            <Button className="rounded-2xl bg-white/10 text-white"><Camera className="h-4 w-4 mr-1" /> Camera</Button>
+            <Button className="rounded-2xl bg-white/10 text-white"><Sparkles className="h-4 w-4 mr-1" /> AI</Button>
+        </div>
+       )}
         <div className="flex items-center gap-2 rounded-full border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-cyan-950/70 px-3 py-2 shadow-[0_0_25px_rgba(168,85,247,0.35)]">
           <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-9 w-9 rounded-full bg-white/10 text-white hover:bg-white/20"
-            onClick={() => alert('Add menu coming soon')}
-          >
-            +
-          </Button>
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 rounded-full bg-white/10 text-white hover:bg-white/20"
+              onClick={() => setMenuOpen((v) => !v)}
+           >
+             +
+           </Button>
 
           <Input
             value={text}
