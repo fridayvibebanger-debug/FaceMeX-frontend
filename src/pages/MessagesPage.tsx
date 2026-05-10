@@ -164,3 +164,6 @@ export default function MessagesPage() {
  useEffect(() => {
   loadMessages();
 }, [myId, userId]);
+</div>
+  );
+}
