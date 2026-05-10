@@ -264,7 +264,7 @@ export default function ConnectPage() {
           </div>
         ) : (
           <div className="grid gap-3">
-            {suggestions.map((s) => (
+            {suggestions.map((suggestion) => (
               <Card key={s.id} className="rounded-2xl border">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
