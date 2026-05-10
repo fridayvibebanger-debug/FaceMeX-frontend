@@ -310,9 +310,12 @@ export default function ConnectPage() {
                       <Button
                         onClick={() => navigate(`/profile/${person.id}`)}
                         className="rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20"
-                      >
+                       >
+                        
+                        View Profile
+                        </Button>
 
-                       <Button
+                        <Button
                           onClick={() => navigate(`/messages?user=${person.id}`)}
                           className="rounded-2xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 hover:shadow-[0_0_25px_rgba(59,130,246,0.35)]"
                         >
