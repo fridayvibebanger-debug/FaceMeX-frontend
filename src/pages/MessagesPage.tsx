@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Send } from 'lucide-react';
 import { neonButton } from '@/styles';
 
 type Message = {
@@ -142,20 +143,36 @@ export default function ChatPage() {
       </div>
 
       <div className="sticky bottom-0 border-t border-white/10 bg-slate-950/95 p-3 flex gap-2">
-        <Input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') sendMessage();
-          }}
-          placeholder="Write a message..."
-          className="rounded-2xl bg-white/10 border-white/10 text-white"
-        />
+      <div className="sticky bottom-0 border-t border-white/10 bg-slate-950/95 p-3">
+  <div className="flex items-center gap-2 rounded-full border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-cyan-950/70 px-3 py-2 shadow-[0_0_25px_rgba(168,85,247,0.35)]">
+    
+    <Button
+      type="button"
+      size="icon"
+      variant="ghost"
+      className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 text-white"
+      onClick={() => alert('Add menu coming soon')}
+    >
+      +
+    </Button>
 
-        <Button onClick={sendMessage} className={neonButton}>
-          <Send className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
+    <Input
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') sendMessage();
+      }}
+      placeholder="Write a message..."
+      className="flex-1 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+    />
+
+    <Button
+      type="button"
+      size="icon"
+      className="h-10 w-10 rounded-full bg-white text-slate-950 hover:bg-white/90 shadow-[0_0_25px_rgba(168,85,247,0.45)]"
+      onClick={sendMessage}
+    >
+      <Send className="h-4 w-4" />
+    </Button>
+  </div>
+</div>
