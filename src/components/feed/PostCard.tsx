@@ -728,33 +728,31 @@ export default function PostCard({ post }: PostCardProps) {
           </div>
 
           <div className="flex items-center gap-2 pt-3">
-            <Input
+           <Input
               ref={replyInputRef}
               placeholder="Reply…"
               value={commentText}
-              onFocus={() => {}}
-                if (!showComments) 
-                 openCommentsAndFocus();
-               }}
-               onChange={(e) => 
-            setCommentText(e.target.value)}
-               onKeyDown={(e) => {
-                 if (e.key === 'Enter') handleComment();
-                }}
-              className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+              onFocus={() => undefined}
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={(e) => {
+                 if (e.key === 'Enter') {
+                    handleComment();
+                   }
+                 }}
+             className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
            />
 
-            <Button
+          <Button
               size="icon"
               variant="ghost"
               onClick={handleComment}
               aria-label="Send reply"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-
+            className="text-muted-foreground hover:text-foreground"
+           >
+         <Send className="h-4 w-4" />
+       </Button>
+     </div>
+          
           <AnimatePresence>
             {showComments && (
               <motion.div
