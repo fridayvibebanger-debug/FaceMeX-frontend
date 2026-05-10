@@ -265,14 +265,14 @@ export default function ConnectPage() {
         ) : (
           <div className="grid gap-3">
             {suggestions.map((suggestion) => (
-              <Card key={s.id} className="rounded-2xl border">
+              <Card key={suggestion.id} className="rounded-2xl border">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
-                      {s.avatar ? (
+                      {suggestion.avatar ? (
                         <img
-                          src={s.avatar}
-                          alt={s.name}
+                          src={suggestion.avatar}
+                          alt={suggestion.name}
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -281,10 +281,10 @@ export default function ConnectPage() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{s.name}</div>
+                      <div className="font-semibold truncate">{suggestion.name}</div>
 
                       <div className="text-sm text-muted-foreground truncate">
-                        {s.headline}
+                        {suggestion.headline}
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-3">
