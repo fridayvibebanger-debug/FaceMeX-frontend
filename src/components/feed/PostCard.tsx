@@ -729,16 +729,21 @@ export default function PostCard({ post }: PostCardProps) {
 
           <div className="flex items-center gap-2 pt-3">
             <Input
-            ref={replyInputRef}
-            placeholder="Reply…"
-            value={commentText}
-            onFocus={() => {}}
-            onChange={(e) => setCommentText(e.target.value)}
-            onKeyDown={(e) => {
-             if (e.key === 'Enter') handleComment();
-           }}
-           className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
-         />
+              ref={replyInputRef}
+              placeholder="Reply…"
+              value={commentText}
+              onFocus={() => {
+                if (!showComments) 
+                 openCommentsAndFocus();
+                 }
+               }}
+               onChange={(e) => 
+            setCommentText(e.target.value)}
+               onKeyDown={(e) => {
+                 if (e.key === 'Enter') handleComment();
+                }}
+              className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+           />
 
             <Button
               size="icon"
