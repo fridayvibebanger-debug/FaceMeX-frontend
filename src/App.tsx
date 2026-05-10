@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 import { useAuthStore } from './store/authStore';
 
+import ChatPage from '@/pages/ChatPage';
 import AuthPage from './components/auth/AuthPage';
 import FeedPage from './pages/FeedPage';
 import WatchPage from './pages/WatchPage';
@@ -144,13 +145,13 @@ function App() {
       />
 
       <Route
-        path="/messages"
+        path="/messages/:userId"
         element={
-          <ProtectedRoute>
-            <MessagesPage />
-          </ProtectedRoute>
-        }
-      />
+         <ProtectedRoute>
+           <ChatPage />
+        </ProtectedRoute>
+      }
+    />
 
       <Route
         path="/call/:userId"
