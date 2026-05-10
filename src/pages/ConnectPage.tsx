@@ -44,7 +44,7 @@ export default function ConnectPage() {
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
-
+  
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
@@ -289,46 +289,48 @@ export default function ConnectPage() {
 
                       <div className="flex flex-wrap gap-2 mt-3">
                         <Button
-                          size="sm"
-                          variant={followed[s.id] ? 'default' : 'outline'}
-                          onClick={() => handleFollow(s.id)}
+                        onClick={() => handleFollow(person.id)}
+                        className="
+                           rounded-2xl
+                           bg-gradient-to-r
+                           from-blue-500
+                           to-purple-600
+                           text-white
+                           border-0
+                           hover:scale-[1.03]
+                           hover:shadow-[0_0_25px_rgba(139,92,246,0.45)]
+                           transition-all
+                           duration-300
+                           font-semibold
+                          "
                         >
-                          {followed[s.id] ? 'Following' : 'Follow'}
+                       Follow
+                      </Button>
+
+                      <Button
+                        onClick={() => navigate(`/profile/${person.id}`)}
+                        className="rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20"
+                      >
+
+                       <Button
+                          onClick={() => navigate(`/messages?user=${person.id}`)}
+                          className="rounded-2xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 hover:shadow-[0_0_25px_rgba(59,130,246,0.35)]"
+                        >
+                         Message
                         </Button>
 
                         <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/profile/${s.id}`)}
+                           onClick={() => navigate(`/call/${person.id}?type=audio`)}
+                           className="rounded-2xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-400/30 hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]"
                         >
-                          View Profile
+                         Call
                         </Button>
 
                         <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startChat(s.id)}
-                        >
-                          <MessageCircle className="h-4 w-4 mr-1" />
-                          Message
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startCall(s.id, 'voice')}
-                        >
-                          <Phone className="h-4 w-4 mr-1" />
-                          Call
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startCall(s.id, 'video')}
-                        >
-                          <Video className="h-4 w-4 mr-1" />
-                          Video
+                            onClick={() => navigate(`/call/${person.id}?type=video`)}
+                            className="rounded-2xl bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 border border-fuchsia-400/30 hover:shadow-[0_0_25px_rgba(217,70,239,0.35)]"
+                          >
+                         Video
                         </Button>
                       </div>
                     </div>
