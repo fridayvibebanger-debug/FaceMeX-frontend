@@ -105,9 +105,9 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-      <div className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/90 backdrop-blur px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+  <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/90 backdrop-blur px-4 py-3 flex items-center gap-3">
+      <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
 
