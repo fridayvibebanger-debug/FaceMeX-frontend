@@ -17,7 +17,6 @@ type Message = {
 };
 
 export default function MessagesPage() {
-  const { userId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
