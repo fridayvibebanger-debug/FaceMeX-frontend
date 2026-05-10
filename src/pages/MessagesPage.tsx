@@ -161,6 +161,6 @@ export default function MessagesPage() {
     setMessages(data || []);
   };
 
-  useEffect(() => {
-    loadMessages();
-  },
+ useEffect(() => {
+  loadMessages();
+}, [myId, userId]);
