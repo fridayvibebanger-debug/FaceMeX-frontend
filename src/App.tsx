@@ -50,6 +50,7 @@ import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
 import NotificationsPage from './pages/NotificationsPage';
 import ConnectPage from './pages/ConnectPage';
+import CallPage from './pages/CallPage';
 
 function PublicAuthRoute() {
   const { isAuthenticated, isInitialized } = useAuthStore();
