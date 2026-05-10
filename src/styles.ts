@@ -1,2 +1,2 @@
 export const neonButton =
-  "rounded-2xl border border-fuchsia-500/30 bg-gradient-to-r from-purple-900/40 via-indigo-900/30 to-cyan-900/30 text-white backdrop-blur-md shadow-[0_0_25px_rgba(168,85,247,0.25)] hover:shadow-[0_0_35px_rgba(168,85,247,0.45)] hover:scale-[1.03] transition-all duration-300";
+  "h-10 px-4 rounded-full border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-cyan-950/70 text-white text-sm font-semibold shadow-[0_0_25px_rgba(168,85,247,0.35)] hover:shadow-[0_0_35px_rgba(168,85,247,0.55)] hover:border-fuchsia-400/60 transition-all duration-300";
