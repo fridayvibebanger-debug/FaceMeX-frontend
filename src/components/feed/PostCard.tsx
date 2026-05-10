@@ -732,10 +732,9 @@ export default function PostCard({ post }: PostCardProps) {
               ref={replyInputRef}
               placeholder="Reply…"
               value={commentText}
-              onFocus={() => {
+              onFocus={() => {}}
                 if (!showComments) 
                  openCommentsAndFocus();
-                 }
                }}
                onChange={(e) => 
             setCommentText(e.target.value)}
