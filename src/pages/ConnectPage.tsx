@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { neonButton } from '@/styles';
 import Navbar from '@/components/layout/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -288,27 +289,38 @@ export default function ConnectPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-3">
-                      <Button className={neonButton}>
-                       Follow
-                      </Button>
+                        <Button 
+                          onClick={() => handleFollow(suggestion.id)}
+                           className={neonButton}
+                       >
+                         Follow
+                        </Button>
 
-                       <Button className={neonButton}>
-                         onClick={() => navigate(`/profile/${suggestion.id}`)}
+                        <Button 
+                          onClick={() => navigate(`/profile/${suggestion.id}`)}
+                         className={neonButton}
+                       >
                         View Profile
                        </Button>
 
-                        <Button className={neonButton}>
+                        <Button 
                           onClick={() => navigate(`/messages/${suggestion.id}`)}
+                          className={neonButton}
+                       >
                          Message
                         </Button>
 
-                        <Button className={neonButton}>
+                        <Button
                            onClick={() => navigate(`/call/${suggestion.id}?type=audio`)}
+                          className={neonButton}
+                      >
                          Call
                         </Button>
 
-                        <Button className={neonButton}>
-                            onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
+                        <Button
+                         onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
+                        className={neonButton}
+                       >
                          Video
                         </Button>
                       </div>
