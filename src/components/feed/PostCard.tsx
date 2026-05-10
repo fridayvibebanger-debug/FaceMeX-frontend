@@ -565,14 +565,14 @@ export default function PostCard({ post }: PostCardProps) {
               ))}
             </div>
           )}
-
+          
           {imgs.length === 1 && (
-         <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/20 shadow-2xl"></div>
-              <img
-                src={imgs[0]}
-                alt="Post image"
-                className="w-full max-h-[650px] object-cover cursor-pointer rounded-3xl transition-all duration-300 hover:scale-[1.01]"
-                onClick={() => openLightbox(imgs[0])}
+            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
+               <img
+                 src={imgs[0]}
+                 alt="Post image"
+                 className="w-full max-h-[650px] object-cover cursor-pointer rounded-3xl"
+                 onClick={() => openLightbox(imgs[0])}
               />
             </div>
           )}
