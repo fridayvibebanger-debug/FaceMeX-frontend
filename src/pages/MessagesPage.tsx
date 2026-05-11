@@ -194,8 +194,10 @@ const deleteMessage = async (messageId: string) => {
 if (!isChatOpen) {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4">
+     <div className="rounded-3xl border border-fuchsia-500/20 bg-gradient-to-r from-purple-950/70 via-indigo-950/60 to-cyan-950/60 p-5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
       <h1 className="text-2xl font-bold">Messages</h1>
       <p className="text-white/50 text-sm mt-1">Your conversations</p>
+    </div>
 
       <div className="mt-6 space-y-3">
         {conversations.length === 0 ? (
@@ -220,18 +222,35 @@ if (!isChatOpen) {
 }
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-      <div className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/90 backdrop-blur px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-
-        <div>
-          <h1 className="font-bold">Messages</h1>
-          <p className="text-xs text-white/50">User ID: {userId}</p>
+      <div className="sticky top-0 z-50 border-b border-fuchsia-500/20 bg-slate-950/95 px-4 py-3 backdrop-blur-xl shadow-[0_0_25px_rgba(168,85,247,0.25)]">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/messages')}
+            className="rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+      
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500/30 via-purple-500/25 to-cyan-400/30 shadow-[0_0_25px_rgba(168,85,247,0.45)]">
+            <span className="font-bold text-white">
+              {String(userId || 'U').slice(0, 1).toUpperCase()}
+            </span>
+          </div>
+      
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold text-white">
+              Chat
+            </h1>
+            <p className="truncate text-xs text-white/50">
+              User {String(userId || '').slice(0, 8)}
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
+      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-28 space-y-3">
         {messages.map((msg) => {
           const mine = msg.sender_id === myId;
         
