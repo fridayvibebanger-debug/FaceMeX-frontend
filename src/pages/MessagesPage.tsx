@@ -178,7 +178,7 @@ if (!isChatOpen) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-28">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
         {messages.map((msg) => {
           const mine = msg.sender_id === myId;
 
@@ -202,45 +202,48 @@ if (!isChatOpen) {
 
         <div ref={bottomRef} />
       </div>
-     <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-slate-950/95 p-3">
-      {menuOpen && (
-       <div className="absolute bottom-20 left-3 right-3 z-50 grid grid-cols-3 gap-2 rounded-3xl border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/90 via-indigo-950/80 to-cyan-950/80 p-3 shadow-[0_0_25px_rgba(168,85,247,0.35)] backdrop-blur-xl">
-           <Button className="rounded-2xl bg-white/10 text-white"><Image className="h-4 w-4 mr-1" /> Image</Button>
-            <Button className="rounded-2xl bg-white/10 text-white"><Video className="h-4 w-4 mr-1" /> Video</Button>
-            <Button className="rounded-2xl bg-white/10 text-white"><Mic className="h-4 w-4 mr-1" /> Voice</Button>
-            <Button className="rounded-2xl bg-white/10 text-white"><FileText className="h-4 w-4 mr-1" /> File</Button>
-            <Button className="rounded-2xl bg-white/10 text-white"><Camera className="h-4 w-4 mr-1" /> Camera</Button>
-            <Button className="rounded-2xl bg-white/10 text-white"><Sparkles className="h-4 w-4 mr-1" /> AI</Button>
-        </div>
-       )}
-        <div className="flex items-center gap-2 rounded-full border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-cyan-950/70 px-3 py-2 shadow-[0_0_25px_rgba(168,85,247,0.35)]">
-          <Button
+     <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 px-3 py-2 backdrop-blur-xl">
+        {menuOpen && (
+          <div className="absolute bottom-16 left-3 right-3 grid grid-cols-3 gap-2 rounded-3xl border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/90 via-indigo-950/80 to-cyan-950/80 p-3 shadow-[0_0_25px_rgba(168,85,247,0.35)] backdrop-blur-xl">
+            <Button className="rounded-2xl bg-white/10 text-white">Image</Button>
+            <Button className="rounded-2xl bg-white/10 text-white">Video</Button>
+            <Button className="rounded-2xl bg-white/10 text-white">Voice</Button>
+            <Button className="rounded-2xl bg-white/10 text-white">File</Button>
+            <Button className="rounded-2xl bg-white/10 text-white">Camera</Button>
+            <Button className="rounded-2xl bg-white/10 text-white">AI</Button>
+          </div>
+        )}
+      
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-2 rounded-full bg-slate-800/95 px-2 py-1">
+            <Button
               type="button"
               size="icon"
               variant="ghost"
-              className="h-9 w-9 rounded-full bg-white/10 text-white hover:bg-white/20"
+              className="h-9 w-9 rounded-full text-white"
               onClick={() => setMenuOpen((v) => !v)}
-           >
-             +
-           </Button>
-
-          <Input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') sendMessage();
-            }}
-            placeholder="Write a message..."
-            className="flex-1 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-
+            >
+              +
+            </Button>
+      
+            <Input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') sendMessage();
+              }}
+              placeholder="Message"
+              className="h-10 flex-1 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+          </div>
+      
           <Button
             type="button"
             size="icon"
-            className="h-10 w-10 rounded-full bg-white text-slate-950 hover:bg-white/90 shadow-[0_0_25px_rgba(168,85,247,0.45)]"
+            className="h-12 w-12 rounded-full bg-white text-slate-950 hover:bg-white/90 shadow-[0_0_20px_rgba(168,85,247,0.45)]"
             onClick={sendMessage}
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-5 w-5" />
           </Button>
         </div>
       </div>
