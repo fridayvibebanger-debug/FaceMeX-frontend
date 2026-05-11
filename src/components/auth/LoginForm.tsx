@@ -61,52 +61,56 @@ window.location.assign('/feed');
   };
 
   return (
-    <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.08] backdrop-blur-2xl shadow-[0_0_60px_rgba(88,28,135,0.25)] p-6 sm:p-7">
-      <div className="space-y-1">
-        <div className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-         Welcome back</div>
-        <div classNamde="text-sm sm:text-base text-white/60 leading-relaxed">
-         Private communication, intelligent tools, and meaningful digital identity.
-        </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4 mt-5">
-        {error && <p className="text-sm text-red-200">{error}</p>}
-        <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-white/90">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="name@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={isLoading}
-            className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="password" className="text-white/90">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={isLoading}
-            className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
-          />
-        </div>
-        <Button
-          type="submit"
-          className="w-full h-11 rounded-2xl bg-white text-slate-900 hover:bg-white/90"
-          disabled={isLoading}
-        >
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isLoading ? 'Signing in…' : 'Login'}
-        </Button>
-      </form>
+  <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.08] backdrop-blur-2xl shadow-[0_0_60px_rgba(88,28,135,0.25)] p-6 sm:p-7">
+    <div className="space-y-1">
+      <div className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+        Welcome back
+      </div>
+      <div className="text-sm sm:text-base text-white/60 leading-relaxed">
+        Private communication, intelligent tools, and meaningful digital identity.
+      </div>
     </div>
-  );
+
+    <form onSubmit={handleSubmit} className="space-y-4 mt-5">
+      {error && <p className="text-sm text-red-200">{error}</p>}
+
+      <div className="space-y-1.5">
+        <Label htmlFor="email" className="text-white/90">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="name@company.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={isLoading}
+          className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="password" className="text-white/90">Password</Label>
+        <Input
+          id="password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          disabled={isLoading}
+          className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
+        />
+      </div>
+
+      <Button
+        type="submit"
+        className="w-full h-11 rounded-2xl bg-white text-slate-900 hover:bg-white/90"
+        disabled={isLoading}
+      >
+        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {isLoading ? 'Signing in…' : 'Sign in'}
+      </Button>
+    </form>
+  </div>
+);
 }
-      
