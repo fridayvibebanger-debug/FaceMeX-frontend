@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
 import { Button } from '@/components/ui/button';
@@ -18,38 +18,51 @@ export default function AuthPage() {
   }, [isAuthenticated, navigate]);
 
   return (
-    <div className="relative min-h-[100svh] bg-slate-950 text-white flex items-start sm:items-center justify-center px-4 py-10 overflow-y-auto">
-      <div className="fixed inset-0 bg-slate-950" />
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-fuchsia-500/15 blur-3xl" />
-        <div className="absolute -bottom-24 left-1/3 h-80 w-80 -translate-x-1/2 rounded-full bg-sky-500/10 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.06),transparent_40%)]" />
-      </div>
+   <div className="min-h-screen bg-[#020617] relative overflow-hidden flex items-center justify-center px-4 py-8">
 
-      <div className="relative w-full max-w-md space-y-4">
-        <div className="text-center space-y-2 mb-6 sm:mb-8">
-          <div className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.3em] text-white/80">
-            FaceMeX
+   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.12),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.10),transparent_30%)]" />
+
+   <div className="absolute top-0 left-1/3 h-72 w-72 rounded-full bg-fuchsia-500/10 blur-3xl" />
+
+    <div className="absolute bottom-0 right-1/4 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+
+    <div className="relative z-10 grid w-full max-w-6xl gap-10 lg:grid-cols-2 items-center">
+
+      <div className="hidden lg:block">
+
+        <h1 className="text-5xl sm:text-6xl font-black tracking-tight text-white leading-none">
+          FaceMeX
+        </h1>
+
+        <p className="mt-5 max-w-xl text-base sm:text-lg text-white/65 leading-relaxed">
+          A smarter social experience for people, work, and real connection.
+        </p>
+
+        <div className="mt-8 flex flex-wrap gap-3 text-sm text-white/55">
+
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
+            Messaging
           </div>
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">Welcome</h1>
-          <p className="text-white/70 text-sm sm:text-base">
-            {isLogin ? 'Sign in to continue.' : 'Create your account to get started.'}
-          </p>
-        </div>
 
-        {isLogin ? <LoginForm /> : <RegisterForm />}
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
+            AI
+          </div>
 
-        <div className="text-center">
-          <Button
-            variant="link"
-            className="text-white/80 hover:text-white"
-            onClick={() => setIsLogin(!isLogin)}
-          >
-            {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Login'}
-          </Button>
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
+            Business
+          </div>
+
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
+            Careers
+          </div>
+
         </div>
       </div>
-    </div>
-  );
-}
 
+      <div className="flex justify-center">
+        {isLogin ? <LoginForm /> : <RegisterForm />}
+      </div>
+
+    </div>
+  </div>
+);
