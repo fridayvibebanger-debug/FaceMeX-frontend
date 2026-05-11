@@ -264,11 +264,11 @@ export default function MessagesPage() {
   const activeMessages = activeConversation ? messages[activeConversation] || [] : [];
   const translatorAuto = activeConversation ? !!translatorAutoByConv[activeConversation] : false;
 
-  const getProfileName = (profile?: ProfileRow | null, fallbackId?: string) =>
+  const getProfileName = (profile?: ProfileRow | null) =>
     profile?.full_name ||
     profile?.name ||
     profile?.username ||
-    `User ${String(fallbackId || '').slice(0, 6)}`;
+    'FaceMeX Member';
 
   const getProfileAvatar = (profile?: ProfileRow | null) =>
     profile?.avatar_url || profile?.avatar || '';
@@ -402,7 +402,7 @@ export default function MessagesPage() {
         {
           id: userId,
           type: 'dm',
-          name: `User ${userId.slice(0, 6)}`,
+          name: 'FaceMeX Member',
           participants: [
             {
               id: userId,
