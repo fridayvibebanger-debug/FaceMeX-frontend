@@ -61,11 +61,13 @@ window.location.assign('/feed');
   };
 
   return (
-    <div className="w-full max-w-md rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl shadow-2xl p-5 sm:p-6">
+    <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.08] backdrop-blur-2xl shadow-[0_0_60px_rgba(88,28,135,0.25)] p-6 sm:p-7">
       <div className="space-y-1">
-        <div className="text-xl sm:text-2xl font-semibold text-white">Welcome back</div>
-        <div className="text-sm text-white/80">Connect with friends &amp; family</div>
-      </div>
+        <div className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+         Welcome back</div>
+        <div classNamde="text-sm sm:text-base text-white/60 leading-relaxed">
+         Private communication, intelligent tools, and meaningful digital identity.
+        </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 mt-5">
         {error && <p className="text-sm text-red-200">{error}</p>}
