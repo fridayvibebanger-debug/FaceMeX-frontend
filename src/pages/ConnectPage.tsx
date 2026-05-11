@@ -297,28 +297,28 @@ export default function ConnectPage() {
                         </Button>
 
                         <Button 
-                          onClick={() => navigate(`/profile/${profile.id}`)}
+                          onClick={() => navigate(`/profile/${suggestion.id}`)}
                          className={neonButton}
                        >
                         View Profile
                        </Button>
 
                         <Button 
-                          onClick={() => navigate(`/messages/${profile.id}`)}
+                          onClick={() => navigate(`/messages/${suggestion.id}`)}
                           className={neonButton}
                        >
                          Message
                         </Button>
 
                         <Button
-                           onClick={() => navigate(`/call/${profile.id}?type=audio`)}
+                           onClick={() => navigate(`/call/${suggestion.id}?type=audio`)}
                           className={neonButton}
                       >
                          Call
                         </Button>
 
                         <Button
-                         onClick={() => navigate(`/call/${profile.id}?type=video`)}
+                         onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
                         className={neonButton}
                        >
                          Video
