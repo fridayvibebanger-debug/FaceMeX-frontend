@@ -181,7 +181,7 @@ if (!isChatOpen) {
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
         {messages.map((msg) => {
           const mine = msg.sender_id === myId;
-
+        
           return (
             <div
               key={msg.id}
@@ -194,15 +194,14 @@ if (!isChatOpen) {
                     : 'max-w-[75%] rounded-2xl rounded-bl-sm border border-white/10 bg-white/10 px-4 py-2 text-white'
                 }
               >
-               <div className="group relative">
                 <div className="whitespace-pre-wrap break-words">
                   {msg.deleted_at ? 'This message was deleted' : msg.content}
                 </div>
-              
+        
                 {msg.edited_at && !msg.deleted_at && (
                   <div className="mt-1 text-[10px] text-white/40">edited</div>
                 )}
-              
+        
                 <div className="mt-2 flex items-center gap-2 text-[11px] text-white/45">
                   <button
                     type="button"
@@ -211,20 +210,22 @@ if (!isChatOpen) {
                   >
                     Translate
                   </button>
-              
+        
                   {mine && !msg.deleted_at && (
                     <>
                       <button
                         type="button"
                         onClick={() => {
                           const next = prompt('Edit message', msg.content);
-                          if (next && next.trim()) editMessage(msg.id, next.trim());
+                          if (next && next.trim()) {
+                            editMessage(msg.id, next.trim());
+                          }
                         }}
                         className="hover:text-white"
                       >
                         Edit
                       </button>
-              
+        
                       <button
                         type="button"
                         onClick={() => deleteMessage(msg.id)}
@@ -236,9 +237,9 @@ if (!isChatOpen) {
                   )}
                 </div>
               </div>
-            );
-          })}
-
+            </div>
+          );
+        })}
         <div ref={bottomRef} />
       </div>
      <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 px-3 py-2 backdrop-blur-xl">
