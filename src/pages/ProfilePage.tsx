@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -29,11 +30,31 @@ export default function ProfilePage() {
   const effectiveUserId = user?.id || '';
   const viewedUserId = params.id || effectiveUserId;
   const isOwnProfile = viewedUserId === effectiveUserId;
+  useEffect(() => {
+  const loadProfile = async () => {
+    if (!viewedUserId) return;
+
+    setProfileLoading(true);
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', viewedUserId)
+      .maybeSingle();
+
+    if (!error) {
+      setViewedProfile(data);
+    }
+
+    setProfileLoading(false);
+  };
+
+  loadProfile();
+}, [viewedUserId]);
   const viewedUser = useMemo(() => {
     if (isOwnProfile) return user;
     return {
       id: viewedUserId,
-      name: `User ${String(viewedUserId).slice(0, 6)}`,
       email: '',
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(viewedUserId)}`,
       coverPhoto: '',
@@ -77,7 +98,9 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'posts' | 'about' | 'professional' | 'photos'>(mode === 'professional' ? 'professional' : 'posts');
   const collabSectionRef = useRef<HTMLDivElement | null>(null);
   const [jumpToCollab, setJumpToCollab] = useState(false);
-
+  const [viewedProfile, setViewedProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  
   useEffect(() => {
     if (isOwnProfile) return;
     try {
