@@ -290,35 +290,35 @@ export default function ConnectPage() {
 
                       <div className="flex flex-wrap gap-2 mt-3">
                         <Button 
-                          onClick={() => handleFollow(suggestion.id)}
+                          onClick={() => handleFollow(profile.id)}
                            className={neonButton}
                        >
                          Follow
                         </Button>
 
                         <Button 
-                          onClick={() => navigate(`/profile/${suggestion.id}`)}
+                          onClick={() => navigate(`/profile/${profile.id}`)}
                          className={neonButton}
                        >
                         View Profile
                        </Button>
 
                         <Button 
-                          onClick={() => navigate(`/messages/${suggestion.id}`)}
+                          onClick={() => navigate(`/messages/${profile.id}`)}
                           className={neonButton}
                        >
                          Message
                         </Button>
 
                         <Button
-                           onClick={() => navigate(`/call/${suggestion.id}?type=audio`)}
+                           onClick={() => navigate(`/call/${profile.id}?type=audio`)}
                           className={neonButton}
                       >
                          Call
                         </Button>
 
                         <Button
-                         onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
+                         onClick={() => navigate(`/call/${profile.id}?type=video`)}
                         className={neonButton}
                        >
                          Video
