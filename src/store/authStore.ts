@@ -96,62 +96,85 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {}
   },
   register: async (name: string, email: string, password: string) => {
-    if (!isSupabaseConfigured) {
-      throw new Error('supabase_not_configured');
-    }
-    const baseUrl = import.meta.env.BASE_URL || '/';
-    const emailRedirectTo = new URL(baseUrl, window.location.origin).toString();
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name },
-        emailRedirectTo,
+  if (!isSupabaseConfigured) {
+    throw new Error('supabase_not_configured');
+  }
+
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  const emailRedirectTo = new URL(baseUrl, window.location.origin).toString();
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        full_name: name,
+        name: name,
+        username: name,
       },
-    });
+      emailRedirectTo,
+    },
+  });
 
-    if (error) {
-      const msg = error.message || '';
-      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('exists')) {
-        throw new Error('email_in_use');
-      }
-      throw new Error(`register_failed:${msg}`);
+  if (error) {
+    const msg = error.message || '';
+
+    if (
+      msg.toLowerCase().includes('already registered') ||
+      msg.toLowerCase().includes('exists')
+    ) {
+      throw new Error('email_in_use');
     }
 
-    const supaUser = data.user;
-    if (!supaUser) {
-      // In some configs, Supabase may require email confirmation and not return a session
-      throw new Error('register_failed');
-    }
+    throw new Error(`register_failed:${msg}`);
+  }
 
-    const profile: User = {
-      id: supaUser.id,
-      email: supaUser.email || email,
-      name,
-      avatar: (supaUser.user_metadata as any)?.avatar_url,
-      followers: 0,
-      following: 0,
-      joinedDate: new Date(supaUser.created_at),
-    };
+  const supaUser = data.user;
 
-    set({ user: profile, isAuthenticated: true });
+  if (!supaUser) {
+    throw new Error('register_failed');
+  }
 
-    try {
-      localStorage.setItem('faceme_user_id', String(profile.id));
-      localStorage.setItem('faceme_user_name', String(profile.name || ''));
-    } catch {}
+  // REAL PROFILE INSERT
+  await supabase.from('profiles').upsert({
+    id: supaUser.id,
+    email: supaUser.email,
+    full_name: name,
+    name: name,
+    username: name,
+    avatar_url: null,
+    updated_at: new Date().toISOString(),
+  });
 
-    try {
-      const me = await api.get('/api/users/me');
-      set((state) => ({
-        user: state.user ? { ...state.user, ...me } : state.user,
-      }));
-    } catch {}
+  const profile: User = {
+    id: supaUser.id,
+    email: supaUser.email || email,
+    name,
+    avatar: (supaUser.user_metadata as any)?.avatar_url,
+    followers: 0,
+    following: 0,
+    joinedDate: new Date(supaUser.created_at),
+  };
 
-    try {
-      await useUserStore.getState().loadMe();
-    } catch {}
-  },
+  set({ user: profile, isAuthenticated: true });
+
+  try {
+    localStorage.setItem('faceme_user_id', String(profile.id));
+    localStorage.setItem('faceme_user_name', String(profile.name || ''));
+  } catch {}
+
+  try {
+    const me = await api.get('/api/users/me');
+
+    set((state) => ({
+      user: state.user ? { ...state.user, ...me } : state.user,
+    }));
+  } catch {}
+
+  try {
+    await useUserStore.getState().loadMe();
+  } catch {}
+},
   logout: () => {
     supabase.auth.signOut();
     set({ user: null, isAuthenticated: false });
