@@ -67,7 +67,7 @@ window.location.assign('/feed');
         Welcome back
       </div>
       <div className="text-sm sm:text-base text-white/60 leading-relaxed">
-        Private communication, intelligent tools, and meaningful digital identity.
+        Private access to your FaceMeX account.
       </div>
     </div>
 
