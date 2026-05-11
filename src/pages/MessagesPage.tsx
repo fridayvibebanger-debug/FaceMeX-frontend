@@ -265,10 +265,15 @@ export default function MessagesPage() {
   const translatorAuto = activeConversation ? !!translatorAutoByConv[activeConversation] : false;
 
   const getProfileName = (profile?: ProfileRow | null) =>
-    profile?.full_name ||
-    profile?.name ||
-    profile?.username ||
-    'FaceMeX Member';
+    if (!profile) return 'FaceMeX Member';
+  
+    return (
+      profile?.full_name ||
+      profile?.name ||
+      profile?.username ||
+      'FaceMeX Member'
+    );
+  };
 
   const getProfileAvatar = (profile?: ProfileRow | null) =>
     profile?.avatar_url || profile?.avatar || '';
