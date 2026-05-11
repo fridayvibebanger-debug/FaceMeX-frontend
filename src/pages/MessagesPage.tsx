@@ -193,15 +193,37 @@ const deleteMessage = async (messageId: string) => {
   
 if (!isChatOpen) {
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4">
-     <div className="rounded-3xl border border-fuchsia-500/20 bg-gradient-to-r from-purple-950/70 via-indigo-950/60 to-cyan-950/60 p-5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
-      <h1 className="text-2xl font-bold">Messages</h1>
-      <p className="text-white/50 text-sm mt-1">Your conversations</p>
-    </div>
+    <div className="min-h-screen bg-slate-950 text-white">
+      <div className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/95 px-4 py-4 backdrop-blur-xl">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Messages</h1>
 
-      <div className="mt-6 space-y-3">
+          <div className="flex items-center gap-2">
+            <Button className="rounded-2xl border border-white/10 bg-white/10 text-white hover:bg-white/20">
+              Archived
+            </Button>
+
+            <Button
+              size="icon"
+              className="rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              +
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+          <span className="text-white/50">⌕</span>
+          <input
+            placeholder="Search conversations..."
+            className="w-full bg-transparent text-white outline-none placeholder:text-white/40"
+          />
+        </div>
+      </div>
+
+      <div className="p-4 space-y-2">
         {conversations.length === 0 ? (
-          <div className="rounded-3xl border border-fuchsia-500/30 bg-white/5 p-6 text-center text-white/60">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white/60">
             No conversations yet.
           </div>
         ) : (
@@ -209,10 +231,26 @@ if (!isChatOpen) {
             <button
               key={chat.userId}
               onClick={() => navigate(`/messages/${chat.userId}`)}
-              className="w-full rounded-3xl border border-fuchsia-500/30 bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-cyan-950/70 p-4 text-left text-white shadow-[0_0_25px_rgba(168,85,247,0.35)]"
+              className="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left hover:bg-white/10"
             >
-              <p className="font-semibold">User {chat.userId.slice(0, 6)}</p>
-              <p className="text-sm text-white/50 truncate">{chat.lastMessage}</p>
+              <div className="flex items-center gap-3">
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-white/10 font-bold">
+                  {chat.userId.slice(0, 1).toUpperCase()}
+                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-950 bg-emerald-400" />
+                </div>
+
+                <div>
+                  <p className="font-bold">User {chat.userId.slice(0, 6)}</p>
+                  <p className="max-w-[220px] truncate text-sm text-white/50">
+                    {chat.lastMessage || 'No message yet'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <p className="text-xs text-white/40">Now</p>
+                <p className="text-xl text-white/40">⋮</p>
+              </div>
             </button>
           ))
         )}
@@ -250,7 +288,7 @@ if (!isChatOpen) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-28 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 pt-8 pb-28 space-y-3">
         {messages.map((msg) => {
           const mine = msg.sender_id === myId;
         
