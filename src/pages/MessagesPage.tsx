@@ -264,7 +264,7 @@ export default function MessagesPage() {
   const activeMessages = activeConversation ? messages[activeConversation] || [] : [];
   const translatorAuto = activeConversation ? !!translatorAutoByConv[activeConversation] : false;
 
-  const getProfileName = (profile?: ProfileRow | null) =>
+  const getProfileName = (profile?: ProfileRow | null) => {
     if (!profile) return 'FaceMeX Member';
   
     return (
