@@ -114,7 +114,14 @@ function App() {
         }
       />
 
-      <Route path="/feed" element={<FeedPage />} />
+      <Route
+        path="/feed"
+        element={
+          <ProtectedRoute>
+            <FeedPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/watch/:id"
