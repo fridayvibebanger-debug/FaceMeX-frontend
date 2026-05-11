@@ -63,6 +63,7 @@ export default function AuthPage() {
         {isLogin ? <LoginForm /> : <RegisterForm />}
       </div>
 
+ </div>
     </div>
-  </div>
-);
+   );
+ }
