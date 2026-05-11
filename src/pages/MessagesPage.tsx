@@ -14,6 +14,8 @@ type Message = {
   content: string;
   created_at: string;
   is_read?: boolean;
+  edited_at?: string | null;
+  deleted_at?: string | null;
 };
 
 export default function MessagesPage() {
@@ -138,6 +140,57 @@ useEffect(() => {
       alert(`Message failed: ${error.message}`);
     }
   };
+const editMessage = async (messageId: string, nextContent: string) => {
+  const { error } = await supabase
+    .from('messages')
+    .update({
+      content: nextContent,
+      edited_at: new Date().toISOString(),
+    })
+    .eq('id', messageId)
+    .eq('sender_id', myId);
+
+  if (error) {
+    alert(`Edit failed: ${error.message}`);
+    return;
+  }
+
+  setMessages((prev) =>
+    prev.map((m) =>
+      m.id === messageId
+        ? { ...m, content: nextContent, edited_at: new Date().toISOString() }
+        : m
+    )
+  );
+};
+
+const deleteMessage = async (messageId: string) => {
+  const ok = confirm('Delete this message?');
+  if (!ok) return;
+
+  const { error } = await supabase
+    .from('messages')
+    .update({
+      content: '',
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('id', messageId)
+    .eq('sender_id', myId);
+
+  if (error) {
+    alert(`Delete failed: ${error.message}`);
+    return;
+  }
+
+  setMessages((prev) =>
+    prev.map((m) =>
+      m.id === messageId
+        ? { ...m, content: '', deleted_at: new Date().toISOString() }
+        : m
+    )
+  );
+};
+  
 if (!isChatOpen) {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4">
