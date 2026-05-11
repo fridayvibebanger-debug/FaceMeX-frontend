@@ -17,52 +17,40 @@ export default function AuthPage() {
   }, [isAuthenticated, navigate]);
 
   return (
-   <div className="min-h-screen bg-[#020617] relative overflow-hidden flex items-center justify-center px-4 py-8">
-
-   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.12),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.10),transparent_30%)]" />
-
-   <div className="absolute top-0 left-1/3 h-72 w-72 rounded-full bg-fuchsia-500/10 blur-3xl" />
-
-    <div className="absolute bottom-0 right-1/4 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+  <div className="min-h-screen bg-[#020617] relative overflow-hidden flex items-center justify-center px-4 py-8">
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.14),transparent_30%)]" />
+    <div className="absolute top-10 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-violet-500/15 blur-3xl" />
 
     <div className="relative z-10 grid w-full max-w-6xl gap-10 lg:grid-cols-2 items-center">
+      <div className="text-center lg:text-left">
+        <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/55 backdrop-blur-xl">
+          Private Beta
+        </div>
 
-      <div className="hidden lg:block">
-
-        <h1 className="text-5xl sm:text-6xl font-black tracking-tight text-white leading-none">
+        <h1 className="mt-6 text-6xl sm:text-7xl font-black tracking-[-0.06em] text-white leading-none">
           FaceMeX
         </h1>
 
-        <p className="mt-5 max-w-xl text-base sm:text-lg text-white/65 leading-relaxed">
+        <p className="mt-5 max-w-xl text-lg sm:text-xl text-white/75 leading-relaxed">
           A smarter social experience for people, work, and real connection.
         </p>
 
-        <div className="mt-8 flex flex-wrap gap-3 text-sm text-white/55">
-
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
-            Messaging
-          </div>
-
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
-            AI
-          </div>
-
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
-            Business
-          </div>
-
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-xl">
-            Careers
-          </div>
-
-        </div>
+        <p className="mt-4 text-sm text-white/45">
+          Messaging • AI tools • Careers • Business identity
+        </p>
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center">
         {isLogin ? <LoginForm /> : <RegisterForm />}
-      </div>
 
- </div>
+        <button
+          type="button"
+          onClick={() => setIsLogin(!isLogin)}
+          className="mt-5 text-sm text-white/60 hover:text-white transition"
+        >
+          {isLogin ? "Don't have an account? Create one" : "Already have an account? Sign in"}
+        </button>
+      </div>
     </div>
-   );
- }
+  </div>
+);
