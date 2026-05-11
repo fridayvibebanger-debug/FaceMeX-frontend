@@ -351,7 +351,7 @@ export default function MessagesPage() {
 
     const nextConversations: UiConversation[] = ids.map((otherId) => {
       const profile = profileMap.get(otherId);
-      const name = getProfileName(profile, otherId);
+      const name = getProfileName(profile);
       const avatar = getProfileAvatar(profile);
       const last = unique.get(otherId);
 
