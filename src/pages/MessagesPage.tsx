@@ -194,11 +194,50 @@ if (!isChatOpen) {
                     : 'max-w-[75%] rounded-2xl rounded-bl-sm border border-white/10 bg-white/10 px-4 py-2 text-white'
                 }
               >
-                {msg.content}
+               <div className="group relative">
+                <div className="whitespace-pre-wrap break-words">
+                  {msg.deleted_at ? 'This message was deleted' : msg.content}
+                </div>
+              
+                {msg.edited_at && !msg.deleted_at && (
+                  <div className="mt-1 text-[10px] text-white/40">edited</div>
+                )}
+              
+                <div className="mt-2 flex items-center gap-2 text-[11px] text-white/45">
+                  <button
+                    type="button"
+                    onClick={() => alert('Translate coming soon')}
+                    className="hover:text-white"
+                  >
+                    Translate
+                  </button>
+              
+                  {mine && !msg.deleted_at && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = prompt('Edit message', msg.content);
+                          if (next && next.trim()) editMessage(msg.id, next.trim());
+                        }}
+                        className="hover:text-white"
+                      >
+                        Edit
+                      </button>
+              
+                      <button
+                        type="button"
+                        onClick={() => deleteMessage(msg.id)}
+                        className="text-red-300 hover:text-red-200"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
         <div ref={bottomRef} />
       </div>
