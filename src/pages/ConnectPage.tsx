@@ -290,7 +290,7 @@ export default function ConnectPage() {
 
                       <div className="flex flex-wrap gap-2 mt-3">
                         <Button 
-                          onClick={() => handleFollow(profile.id)}
+                          onClick={() => handleFollow(suggestion.id)}
                            className={neonButton}
                        >
                          Follow
