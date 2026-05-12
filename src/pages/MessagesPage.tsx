@@ -48,6 +48,7 @@ import { toast } from '@/components/ui/use-toast';
 import { io, Socket } from 'socket.io-client';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import SafetyWarningDialog from '@/components/safety/SafetyWarningDialog';
+import { getRealName, getRealAvatar } from '@/lib/profileName';
 import { reportSafetyEvent, safetyScanText, type SafetyScanResult } from '@/lib/safety';
 
 type MessageType = 'text' | 'image' | 'document' | 'voice';
