@@ -27,7 +27,7 @@ export default function AuthPage() {
           Private Beta
         </div>
 
-        <h1 className="mt-4 text-5xl sm:text-6xl font-semibold tracking-[-0.05em] text-white leading-none">
+        <h1 className="mt-4 text-4xl sm:text-5xl font-semibold tracking-[-0.05em] text-white leading-none">
           FaceMeX
         </h1>
 
