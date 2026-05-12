@@ -208,7 +208,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     };
   });
 
-  set({ posts: mapped });
+   set({ posts: [newPost, ...get().posts] });
 },
   
   likePost: async (postId, reaction = 'like') => {
