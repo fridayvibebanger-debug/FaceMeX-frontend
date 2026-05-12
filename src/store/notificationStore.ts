@@ -4,7 +4,15 @@ import { io, Socket } from 'socket.io-client';
 
 export interface Notification {
   id: string;
-  type: 'like' | 'comment' | 'follow' | 'message' | 'event' | 'circle' | 'endorsement';
+  type:
+  | 'like'
+  | 'comment'
+  | 'follow'
+  | 'message'
+  | 'event'
+  | 'circle'
+  | 'endorsement'
+  | 'connection_request';
   title: string;
   message: string;
   avatar?: string;
