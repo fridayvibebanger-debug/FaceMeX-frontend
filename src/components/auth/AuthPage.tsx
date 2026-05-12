@@ -17,11 +17,11 @@ export default function AuthPage() {
   }, [isAuthenticated, navigate]);
 
   return (
-  <div className="min-h-screen bg-[#020617] relative overflow-hidden flex items-center justify-center px-4">
+  <div className="h-screen w-screen overflow-x-hidden overflow-y-hidden bg-[#020617] relative flex items-center justify-center px-5">
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.14),transparent_30%)]" />
     <div className="absolute top-10 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-violet-500/15 blur-3xl" />
 
-    <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-4xl">
+    <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-md mx-auto">
       <div className="text-center mb-8">
         <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/55 backdrop-blur-xl">
           Private Beta
