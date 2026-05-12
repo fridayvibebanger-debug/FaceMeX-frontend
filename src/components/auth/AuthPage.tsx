@@ -27,13 +27,9 @@ export default function AuthPage() {
           Private Beta
         </div>
 
-        <h1 className="mt-6 text-6xl sm:text-7xl font-black tracking-[-0.06em] text-white leading-none">
+        <h1 className="mt-6 text-6xl sm:text-7xl font-black tracking-[-0.05em] text-white leading-none">
           FaceMeX
         </h1>
-
-        <p className="mt-5 max-w-xl text-lg sm:text-xl text-white/75 leading-relaxed">
-          A smarter social experience for people, work, and real connection.
-        </p>
 
         <p className="mt-4 text-sm text-white/45">
           Messaging • AI tools • Careers • Business identity
