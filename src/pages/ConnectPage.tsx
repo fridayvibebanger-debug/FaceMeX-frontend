@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { getRealName, getRealAvatar } from '@/lib/profileName';
 import { neonButton } from '@/styles';
 import Navbar from '@/components/layout/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-
-import { MessageCircle, Phone, UserPlus, Video } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
@@ -35,12 +33,8 @@ type Suggestion = {
 export default function ConnectPage() {
   const navigate = useNavigate();
 
-  const {
-    user,
-    isAuthenticated,
-    isInitialized,
-    restoreSession,
-  } = useAuthStore();
+  const { user, isAuthenticated, isInitialized, restoreSession } =
+    useAuthStore();
 
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
   const [connected, setConnected] = useState<Record<string, boolean>>({});
@@ -48,7 +42,7 @@ export default function ConnectPage() {
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
-  
+
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
@@ -71,22 +65,18 @@ export default function ConnectPage() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, email, full_name, name, username, avatar_url, avatar, bio, is_active, created_at')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.log('Supabase profiles error:', error.message);
         setErrorText(error.message);
         setRealUsers([]);
         return;
       }
 
-      const filtered = (data || []).filter((u) => u.id !== user.id);
-
-      setRealUsers(filtered);
+      setRealUsers((data || []).filter((u: Profile) => u.id !== user.id));
     } catch (err: any) {
-      console.log('Fetch users error:', err);
       setErrorText(err?.message || 'Could not load users.');
       setRealUsers([]);
     } finally {
@@ -94,45 +84,59 @@ export default function ConnectPage() {
     }
   }
 
+  async function fetchFollowing() {
+    if (!user?.id) return;
+
+    const { data, error } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id);
+
+    if (error) {
+      console.log('Fetch following error:', error.message);
+      return;
+    }
+
+    const next: Record<string, boolean> = {};
+
+    (data || []).forEach((row: any) => {
+      if (row.following_id) next[row.following_id] = true;
+    });
+
+    setFollowed(next);
+  }
+
   async function fetchConnections() {
     if (!user?.id) return;
-  
+
     const { data, error } = await supabase
       .from('connection_requests')
       .select('*')
       .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
-  
+
     if (error) {
-      console.log(error.message);
+      console.log('Fetch connections error:', error.message);
       return;
     }
-  
+
     const nextConnected: Record<string, boolean> = {};
     const nextPending: Record<string, boolean> = {};
-  
+
     (data || []).forEach((row: any) => {
       const otherId =
-        row.sender_id === user.id
-          ? row.receiver_id
-          : row.sender_id;
-  
+        row.sender_id === user.id ? row.receiver_id : row.sender_id;
+
       if (row.status === 'accepted') {
         nextConnected[otherId] = true;
       }
-  
+
       if (row.status === 'pending') {
         nextPending[otherId] = true;
       }
     });
-  
+
     setConnected(nextConnected);
     setPendingRequests(nextPending);
-  }
-    
-      setFollowed(next);
-    } catch (err) {
-      console.log('Fetch following crashed:', err);
-    }
   }
 
   useEffect(() => {
@@ -143,15 +147,21 @@ export default function ConnectPage() {
     fetchConnections();
 
     const channel = supabase
-      .channel('profiles-changes')
+      .channel('connect-page-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-        },
+        { event: '*', schema: 'public', table: 'profiles' },
         () => fetchUsers()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'follows' },
+        () => fetchFollowing()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'connection_requests' },
+        () => fetchConnections()
       )
       .subscribe();
 
@@ -168,111 +178,94 @@ export default function ConnectPage() {
         u.name ||
         u.username ||
         u.email?.split('@')[0] ||
-        'User',
-      headline: u.bio || 'FaceMeX Member',
+        `User ${u.id.slice(0, 6)}`,
+      headline: u.bio || 'FaceMeX member',
       avatar: u.avatar_url || u.avatar || null,
     }));
   }, [realUsers]);
 
   const handleFollow = async (targetUserId: string) => {
-    if (!user?.id) return;
+    if (!user?.id || targetUserId === user.id) return;
 
     const isFollowing = !!followed[targetUserId];
 
-    try {
-      if (isFollowing) {
-        await supabase
-          .from('follows')
-          .delete()
-          .eq('follower_id', user.id)
-          .eq('following_id', targetUserId);
-
-        setFollowed((prev) => ({
-          ...prev,
-          [targetUserId]: false,
-        }));
-
-        return;
-      }
-
-      const { error } = await supabase.from('follows').upsert({
-        follower_id: user.id,
-        following_id: targetUserId,
-      });
+    if (isFollowing) {
+      const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', targetUserId);
 
       if (error) {
-        console.log('Follow error:', error.message);
+        console.log('Unfollow error:', error.message);
         return;
       }
 
       setFollowed((prev) => ({
         ...prev,
-        [targetUserId]: true,
+        [targetUserId]: false,
       }));
-    } catch (err) {
-      console.log('Follow crashed:', err);
-    }
-  };
 
-  const sendConnectionRequest = async (targetUserId: string) => {
-    if (!user?.id || targetUserId === user.id) return;
-  
-    const { error } = await supabase
-      .from('connection_requests')
-      .upsert({
-        sender_id: user.id,
-        receiver_id: targetUserId,
-        status: 'pending',
-      });
-  
-    if (error) {
-      console.log(error.message);
       return;
     }
-  
-    setPendingRequests((prev) => ({
+
+    const { error } = await supabase.from('follows').upsert({
+      follower_id: user.id,
+      following_id: targetUserId,
+    });
+
+    if (error) {
+      console.log('Follow error:', error.message);
+      return;
+    }
+
+    setFollowed((prev) => ({
       ...prev,
       [targetUserId]: true,
     }));
   };
 
-  const startChat = async (targetUserId: string) => {
-    if (!user?.id) return;
-
-    const user1 = user.id < targetUserId ? user.id : targetUserId;
-    const user2 = user.id < targetUserId ? targetUserId : user.id;
+  const sendConnectionRequest = async (targetUserId: string) => {
+    if (!user?.id || targetUserId === user.id) return;
 
     const { data, error } = await supabase
-      .from('conversations')
+      .from('connection_requests')
       .upsert(
         {
-          user1_id: user1,
-          user2_id: user2,
+          sender_id: user.id,
+          receiver_id: targetUserId,
+          status: 'pending',
         },
         {
-          onConflict: 'user1_id,user2_id',
+          onConflict: 'sender_id,receiver_id',
         }
       )
       .select()
       .single();
 
     if (error) {
-      console.log('Start chat error:', error.message);
-      setErrorText(error.message);
+      console.log('Connection request error:', error.message);
       return;
     }
 
-    navigate(`/messages?conversation=${data.id}`);
+    setPendingRequests((prev) => ({
+      ...prev,
+      [targetUserId]: true,
+    }));
+
+    await supabase.from('notifications').upsert({
+      id: data.id,
+      user_id: targetUserId,
+      actor_id: user.id,
+      type: 'connection_request',
+      title: 'New connection request',
+      message: `${user.name || 'Someone'} wants to connect with you.`,
+      action_url: '/notifications',
+      is_read: false,
+    });
   };
 
-  const startCall = async (targetUserId: string, type: 'voice' | 'video') => {
-    localStorage.setItem('pending_call_type', type);
-    await startChat(targetUserId);
-  };
-
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -308,7 +301,11 @@ export default function ConnectPage() {
               <Card key={suggestion.id} className="rounded-2xl border">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
-                    <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/profile/${suggestion.id}`)}
+                      className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center shrink-0"
+                    >
                       {suggestion.avatar ? (
                         <img
                           src={suggestion.avatar}
@@ -318,9 +315,22 @@ export default function ConnectPage() {
                       ) : (
                         <UserPlus className="h-5 w-5 text-muted-foreground" />
                       )}
-                    </div>
+                    </button>
 
-                    <div className="flex flex-wrap gap-2 mt-3">
+                    <div className="flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/profile/${suggestion.id}`)}
+                        className="font-semibold truncate hover:underline block text-left"
+                      >
+                        {suggestion.name}
+                      </button>
+
+                      <div className="text-sm text-muted-foreground truncate">
+                        {suggestion.headline}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mt-3">
                         {connected[suggestion.id] ? (
                           <Button
                             onClick={() => navigate(`/messages/${suggestion.id}`)}
@@ -340,14 +350,13 @@ export default function ConnectPage() {
                             Connect
                           </Button>
                         )}
-                      
+
                         <Button
                           onClick={() => handleFollow(suggestion.id)}
                           className={neonButton}
                         >
                           {followed[suggestion.id] ? 'Following' : 'Follow'}
                         </Button>
-                      </div>
                       </div>
                     </div>
                   </div>
