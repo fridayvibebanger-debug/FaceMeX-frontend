@@ -27,20 +27,55 @@ export default function NotificationsPage() {
   }, [load]);
 
   const handleConnectionResponse = async (
-    requestId: string,
+    notificationId: string,
     status: 'accepted' | 'declined'
   ) => {
-    const { error } = await supabase
-      .from('connection_requests')
-      .update({ status })
-      .eq('id', requestId);
+    const { data: authData } = await supabase.auth.getUser();
+    const myId = authData.user?.id;
 
-    if (error) {
-      alert(error.message);
+    if (!myId) {
+      alert('Please login again.');
       return;
     }
 
-    await read(requestId).catch(() => {});
+    const { error: requestError } = await supabase
+      .from('connection_requests')
+      .update({ status })
+      .eq('id', notificationId)
+      .eq('receiver_id', myId);
+
+    if (requestError) {
+      alert(`Connection update failed: ${requestError.message}`);
+      return;
+    }
+
+    const nextTitle =
+      status === 'accepted'
+        ? 'Connection accepted'
+        : 'Connection declined';
+
+    const nextMessage =
+      status === 'accepted'
+        ? 'You accepted this connection request.'
+        : 'You declined this connection request.';
+
+    const { error: notificationError } = await supabase
+      .from('notifications')
+      .update({
+        type: 'event',
+        title: nextTitle,
+        message: nextMessage,
+        is_read: true,
+      })
+      .eq('id', notificationId)
+      .eq('user_id', myId);
+
+    if (notificationError) {
+      alert(`Notification update failed: ${notificationError.message}`);
+      return;
+    }
+
+    await read(notificationId).catch(() => {});
     await load().catch(() => {});
   };
 
@@ -112,6 +147,7 @@ export default function NotificationsPage() {
                             type="button"
                             size="sm"
                             onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               handleConnectionResponse(n.id, 'accepted');
                             }}
@@ -124,6 +160,7 @@ export default function NotificationsPage() {
                             size="sm"
                             variant="outline"
                             onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               handleConnectionResponse(n.id, 'declined');
                             }}
