@@ -227,7 +227,7 @@ export default function ConnectPage() {
 
   const sendConnectionRequest = async (targetUserId: string) => {
     if (!user?.id || targetUserId === user.id) return;
-
+  
     const { data, error } = await supabase
       .from('connection_requests')
       .upsert(
@@ -236,23 +236,32 @@ export default function ConnectPage() {
           receiver_id: targetUserId,
           status: 'pending',
         },
-        {
-          onConflict: 'sender_id,receiver_id',
-        }
+        { onConflict: 'sender_id,receiver_id' }
       )
       .select()
       .single();
-
+  
     if (error) {
-      console.log('Connection request error:', error.message);
+      alert(error.message);
       return;
     }
-
+  
+    await supabase.from('notifications').upsert({
+      id: data.id,
+      user_id: targetUserId,
+      actor_id: user.id,
+      type: 'connection_request',
+      title: 'New connection request',
+      message: `${user.name || 'Someone'} wants to connect with you.`,
+      action_url: '/notifications',
+      is_read: false,
+    });
+  
     setPendingRequests((prev) => ({
       ...prev,
       [targetUserId]: true,
     }));
-
+  };
     await supabase.from('notifications').upsert({
       id: data.id,
       user_id: targetUserId,
