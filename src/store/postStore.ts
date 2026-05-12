@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+import { getRealName, getRealAvatar } from '@/lib/profileName';
 
 type ReactionType = 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry';
 type PostMode = 'social' | 'professional';
