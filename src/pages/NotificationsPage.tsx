@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase';
 import { useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -15,6 +16,20 @@ export default function NotificationsPage() {
     load().catch(() => {});
   }, [load]);
 
+  const handleConnectionResponse = async (
+  requestId: string,
+  status: 'accepted' | 'declined'
+) => {
+  await supabase
+    .from('connection_requests')
+    .update({ status })
+    .eq('id', requestId);
+
+  await read(requestId).catch(() => {});
+
+  load().catch(() => {});
+};
+  
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-background">
       <Navbar />
@@ -59,6 +74,30 @@ export default function NotificationsPage() {
                     >
                       <div className="text-sm font-semibold">{n.title}</div>
                       <div className="text-sm text-muted-foreground">{n.message}</div>
+                      {n.type === 'connection_request' && (
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleConnectionResponse(n.id, 'accepted');
+                          }}
+                        >
+                          Accept
+                        </Button>
+                    
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleConnectionResponse(n.id, 'declined');
+                          }}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    )}
                     </button>
                   ))}
                 </div>
