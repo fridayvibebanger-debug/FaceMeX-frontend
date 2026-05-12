@@ -147,7 +147,70 @@ export const usePostStore = create<PostState>((set, get) => ({
   trendingHashtags: [],
   aiSuggestions: [],
 
-  addPost: async (content, images, audio, hashtags, mode) => {
+  loadPosts: async () => {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    alert(`Load posts error: ${error.message}`);
+    return;
+  }
+
+  const userIds = Array.from(
+    new Set((data || []).map((p: any) => p.user_id).filter(Boolean))
+  );
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name, name, username, email, avatar_url, avatar')
+    .in('id', userIds);
+
+  const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+  const mapped: Post[] = (data || []).map((p: any) => {
+    const profile = profileMap.get(p.user_id);
+
+    const authorName =
+      profile?.full_name ||
+      profile?.name ||
+      profile?.username ||
+      profile?.email?.split('@')[0] ||
+      `User ${String(p.user_id).slice(0, 6)}`;
+
+    const authorAvatar =
+      profile?.avatar_url ||
+      profile?.avatar ||
+      '';
+
+    return {
+      id: p.id,
+      userId: p.user_id,
+      userName: authorName,
+      userAvatar: authorAvatar,
+      content: p.content || '',
+      image: p.media_type === 'image' ? p.media_url : undefined,
+      video: p.media_type === 'video' ? p.media_url : undefined,
+      audio: p.media_type === 'audio' ? p.media_url : undefined,
+      images: p.media_type === 'image' && p.media_url ? [p.media_url] : [],
+      mediaType: p.media_type || 'none',
+      hashtags: get().extractHashtags(p.content || ''),
+      likes: 0,
+      comments: [],
+      shares: 0,
+      timestamp: new Date(p.created_at || Date.now()),
+      isLiked: false,
+      reaction: undefined,
+      mode: 'social',
+      collabInvites: [],
+      collaborators: [],
+    };
+  });
+
+  set({ posts: mapped });
+},
+ addPost: async (content, images, audio, hashtags, mode) => {
   const authUser = await ensureProfile();
 
   if (!authUser?.id) {
@@ -202,8 +265,7 @@ export const usePostStore = create<PostState>((set, get) => ({
   };
 
   set({ posts: [newPost, ...get().posts] });
-},
-  
+}, 
   likePost: async (postId, reaction = 'like') => {
     const authUser = await ensureProfile();
 if (!authUser?.id) return;
