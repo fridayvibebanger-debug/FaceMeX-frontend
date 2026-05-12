@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { getRealName, getRealAvatar } from '@/lib/profileName';
 import { neonButton } from '@/styles';
 import Navbar from '@/components/layout/Navbar';
 import { Button } from '@/components/ui/button';
