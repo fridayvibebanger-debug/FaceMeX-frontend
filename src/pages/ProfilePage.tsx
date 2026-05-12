@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { getRealName, getRealAvatar } from '@/lib/profileName';
 import { MapPin, Calendar, Link as LinkIcon, UserPlus, UserMinus, Settings, CheckCircle, Briefcase, FileText, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePostStore } from '@/store/postStore';
