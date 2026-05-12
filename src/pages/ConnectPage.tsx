@@ -205,7 +205,7 @@ export default function ConnectPage() {
         ...prev,
         [targetUserId]: false,
       }));
-
+     };
       return;
     }
 
