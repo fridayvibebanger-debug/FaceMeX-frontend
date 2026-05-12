@@ -163,8 +163,8 @@ export const usePostStore = create<PostState>((set, get) => ({
   const mapped: Post[] = (data || []).map((p: any) => ({
     id: p.id,
     userId: p.user_id,
-    userName: authUser?.name || 'FaceMeX User',
-    userAvatar: authUser?.avatar || '',
+    userName: p.user_name || 'FaceMeX User',
+    userAvatar: p.user_avatar || '',
     content: p.content || '',
     image: p.media_type === 'image' ? p.media_url : undefined,
     video: p.media_type === 'video' ? p.media_url : undefined,
