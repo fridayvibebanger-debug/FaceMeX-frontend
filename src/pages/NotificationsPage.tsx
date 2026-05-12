@@ -106,7 +106,7 @@ export default function NotificationsPage() {
                         {n.message}
                       </div>
 
-                      {n.type === 'connection_request' && (
+                      {String(n.type) === 'connection_request' && (
                         <div className="mt-3 flex gap-2">
                           <Button
                             type="button"
