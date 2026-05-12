@@ -231,21 +231,178 @@ export default function ConnectPage() {
     const { data, error } = await supabase
       .from('connection_requests')
       .upsert(
-        {
-          sender_id: user.id,
-          receiver_id: targetUserId,
-          status: 'pending',
-        },
-        { onConflict: 'sender_id,receiver_id' }
-      )
-      .select()
-      .single();
-  
-    if (error) {
-      alert(error.message);
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { neonButton } from '@/styles';
+import Navbar from '@/components/layout/Navbar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { UserPlus } from 'lucide-react';
+
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
+
+type Profile = {
+  id: string;
+  email: string | null;
+  full_name?: string | null;
+  name?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+  avatar?: string | null;
+  bio?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+};
+
+export default function ConnectPage() {
+  const navigate = useNavigate();
+  const { user, isAuthenticated, isInitialized, restoreSession } = useAuthStore();
+
+  const [followed, setFollowed] = useState<Record<string, boolean>>({});
+  const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [pendingRequests, setPendingRequests] = useState<Record<string, boolean>>({});
+  const [realUsers, setRealUsers] = useState<Profile[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
+
+  useEffect(() => {
+    if (isInitialized && !isAuthenticated) {
+      navigate('/login', { replace: true });
+    }
+  }, [isInitialized, isAuthenticated, navigate]);
+
+  async function fetchUsers() {
+    if (!isAuthenticated || !user?.id) {
+      setLoadingUsers(false);
       return;
     }
-  
+
+    setLoadingUsers(true);
+    setErrorText(null);
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, name, username, avatar_url, avatar, bio, is_active, created_at')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setErrorText(error.message);
+      setRealUsers([]);
+      setLoadingUsers(false);
+      return;
+    }
+
+    setRealUsers((data || []).filter((u: Profile) => u.id !== user.id));
+    setLoadingUsers(false);
+  }
+
+  async function fetchFollowing() {
+    if (!user?.id) return;
+
+    const { data, error } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id);
+
+    if (error) return;
+
+    const next: Record<string, boolean> = {};
+    (data || []).forEach((row: any) => {
+      if (row.following_id) next[row.following_id] = true;
+    });
+
+    setFollowed(next);
+  }
+
+  async function fetchConnections() {
+    if (!user?.id) return;
+
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('*')
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+
+    if (error) return;
+
+    const nextConnected: Record<string, boolean> = {};
+    const nextPending: Record<string, boolean> = {};
+
+    (data || []).forEach((row: any) => {
+      const otherId = row.sender_id === user.id ? row.receiver_id : row.sender_id;
+
+      if (row.status === 'accepted') nextConnected[otherId] = true;
+      if (row.status === 'pending') nextPending[otherId] = true;
+    });
+
+    setConnected(nextConnected);
+    setPendingRequests(nextPending);
+  }
+
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated || !user?.id) return;
+
+    fetchUsers();
+    fetchFollowing();
+    fetchConnections();
+
+    const channel = supabase
+      .channel('connect-page-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, fetchFollowing)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'connection_requests' }, fetchConnections)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isInitialized, isAuthenticated, user?.id]);
+
+  const suggestions = useMemo(() => {
+    return realUsers.map((u) => ({
+      id: u.id,
+      name:
+        u.full_name ||
+        u.name ||
+        u.username ||
+        u.email?.split('@')[0] ||
+        `User ${u.id.slice(0, 6)}`,
+      headline: u.bio || 'FaceMeX member',
+      avatar: u.avatar_url || u.avatar || null,
+    }));
+  }, [realUsers]);
+
+  const handleFollow = async (targetUserId: string) => {
+    if (!user?.id || targetUserId === user.id) return;
+
+    const isFollowing = !!followed[targetUserId];
+
+    if (isFollowing) {
+      const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', targetUserId);
+
+      if (error) return;
+
+      setFollowed((prev) => ({ ...prev, [targetUserId]: false }));
+      return;
+    }
+
+    const { error } = await supabase.from('follows').upsert({
+      follower_id: user.id,
+      following_id: targetUserId,
+    });
+
+    if (error) return;
+
     await supabase.from('notifications').insert({
       user_id: targetUserId,
       actor_id: user.id,
@@ -255,12 +412,31 @@ export default function ConnectPage() {
       action_url: `/profile/${user.id}`,
       is_read: false,
     });
-  
-    setPendingRequests((prev) => ({
-      ...prev,
-      [targetUserId]: true,
-    }));
+
+    setFollowed((prev) => ({ ...prev, [targetUserId]: true }));
   };
+
+  const sendConnectionRequest = async (targetUserId: string) => {
+    if (!user?.id || targetUserId === user.id) return;
+
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .upsert(
+        {
+          sender_id: user.id,
+          receiver_id: targetUserId,
+          status: 'pending',
+        },
+        { onConflict: 'sender_id,receiver_id' }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
     await supabase.from('notifications').upsert({
       id: data.id,
       user_id: targetUserId,
@@ -271,7 +447,10 @@ export default function ConnectPage() {
       action_url: '/notifications',
       is_read: false,
     });
-  
+
+    setPendingRequests((prev) => ({ ...prev, [targetUserId]: true }));
+  };
+
   if (!isAuthenticated) return null;
 
   return (
@@ -281,27 +460,22 @@ export default function ConnectPage() {
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-24">
         <div className="mb-5">
           <h1 className="text-2xl font-bold">Connect</h1>
-
           <p className="text-sm text-muted-foreground">
             Discover real active users on FaceMeX
             {user?.name ? ` • Hi ${user.name}` : ''}
           </p>
         </div>
 
-        {errorText ? (
+        {errorText && (
           <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
             {errorText}
           </div>
-        ) : null}
+        )}
 
         {loadingUsers ? (
-          <div className="text-center py-10 text-muted-foreground">
-            Loading users...
-          </div>
+          <div className="text-center py-10 text-muted-foreground">Loading users...</div>
         ) : suggestions.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground">
-            No active users found yet.
-          </div>
+          <div className="text-center py-10 text-muted-foreground">No active users found yet.</div>
         ) : (
           <div className="grid gap-3">
             {suggestions.map((suggestion) => (
@@ -375,4 +549,4 @@ export default function ConnectPage() {
       </div>
     </div>
   );
-
+}
