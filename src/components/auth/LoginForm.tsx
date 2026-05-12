@@ -61,7 +61,7 @@ window.location.assign('/feed');
   };
 
   return (
-  <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.08] backdrop-blur-2xl shadow-[0_0_60px_rgba(88,28,135,0.25)] p-6 sm:p-7">
+  <div className="w-full max-w-[380px] mx-auto rounded-[2rem] border border-white/10 bg-white/[0.08] backdrop-blur-2xl shadow-[0_0_60px_rgba(88,28,135,0.25)] p-6 sm:p-7 overflow-hidden">
     <div className="space-y-1">
       <div className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
         Welcome back
@@ -84,7 +84,7 @@ window.location.assign('/feed');
           onChange={(e) => setEmail(e.target.value)}
           required
           disabled={isLoading}
-          className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
+          className="w-full h-11 rounded-2xl bg-white/10 border border-white/15 text-white placeholder:text-white/50 px-4 overflow-hidden"
         />
       </div>
 
@@ -98,7 +98,7 @@ window.location.assign('/feed');
           onChange={(e) => setPassword(e.target.value)}
           required
           disabled={isLoading}
-          className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
+          className="w-full h-11 rounded-2xl bg-white/10 border border-white/15 text-white placeholder:text-white/50 px-4 overflow-hidden"
         />
       </div>
 
