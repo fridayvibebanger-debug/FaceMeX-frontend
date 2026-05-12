@@ -90,13 +90,15 @@ export default function PostCard({ post }: PostCardProps) {
   const hasInvite = !!myId && collabInvites.includes(myId);
   const canEdit = isOwner || isCollaborator;
 
-  const displayName = isOwner
-    ? currentUserName || user?.name || post.userName || 'User'
-    : post.userName || 'User';
+  const displayName =
+  post.userName ||
+  post.authorName ||
+  'FaceMeX Member';
 
-  const displayAvatar = isOwner
-    ? currentUserAvatar || user?.avatar || post.userAvatar || ''
-    : post.userAvatar || '';
+  const displayAvatar =
+  post.userAvatar ||
+  post.authorAvatar ||
+  '';
 
   const isAuthorVerified =
     (post as any)?.userVerified === true ||
