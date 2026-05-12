@@ -271,8 +271,7 @@ export default function ConnectPage() {
       action_url: '/notifications',
       is_read: false,
     });
-  };
-
+  
   if (!isAuthenticated) return null;
 
   return (
