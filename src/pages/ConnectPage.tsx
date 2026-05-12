@@ -246,14 +246,13 @@ export default function ConnectPage() {
       return;
     }
   
-    await supabase.from('notifications').upsert({
-      id: data.id,
+    await supabase.from('notifications').insert({
       user_id: targetUserId,
       actor_id: user.id,
-      type: 'connection_request',
-      title: 'New connection request',
-      message: `${user.name || 'Someone'} wants to connect with you.`,
-      action_url: '/notifications',
+      type: 'follow',
+      title: 'New follower',
+      message: `${user.name || 'Someone'} followed you.`,
+      action_url: `/profile/${user.id}`,
       is_read: false,
     });
   
