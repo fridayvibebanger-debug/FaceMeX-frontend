@@ -43,6 +43,8 @@ export default function ConnectPage() {
   } = useAuthStore();
 
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
+  const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [pendingRequests, setPendingRequests] = useState<Record<string, boolean>>({});
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -92,28 +94,41 @@ export default function ConnectPage() {
     }
   }
 
-  async function fetchFollowing() {
+  async function fetchConnections() {
     if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', user.id);
-
-      if (error) {
-        console.log('Fetch following error:', error.message);
-        return;
+  
+    const { data, error } = await supabase
+      .from('connection_requests')
+      .select('*')
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+  
+    if (error) {
+      console.log(error.message);
+      return;
+    }
+  
+    const nextConnected: Record<string, boolean> = {};
+    const nextPending: Record<string, boolean> = {};
+  
+    (data || []).forEach((row: any) => {
+      const otherId =
+        row.sender_id === user.id
+          ? row.receiver_id
+          : row.sender_id;
+  
+      if (row.status === 'accepted') {
+        nextConnected[otherId] = true;
       }
-
-      const next: Record<string, boolean> = {};
-
-      (data || []).forEach((row: any) => {
-        if (row.following_id) {
-          next[row.following_id] = true;
-        }
-      });
-
+  
+      if (row.status === 'pending') {
+        nextPending[otherId] = true;
+      }
+    });
+  
+    setConnected(nextConnected);
+    setPendingRequests(nextPending);
+  }
+    
       setFollowed(next);
     } catch (err) {
       console.log('Fetch following crashed:', err);
@@ -125,6 +140,7 @@ export default function ConnectPage() {
 
     fetchUsers();
     fetchFollowing();
+    fetchConnections();
 
     const channel = supabase
       .channel('profiles-changes')
@@ -196,6 +212,28 @@ export default function ConnectPage() {
     } catch (err) {
       console.log('Follow crashed:', err);
     }
+  };
+
+  const sendConnectionRequest = async (targetUserId: string) => {
+    if (!user?.id || targetUserId === user.id) return;
+  
+    const { error } = await supabase
+      .from('connection_requests')
+      .upsert({
+        sender_id: user.id,
+        receiver_id: targetUserId,
+        status: 'pending',
+      });
+  
+    if (error) {
+      console.log(error.message);
+      return;
+    }
+  
+    setPendingRequests((prev) => ({
+      ...prev,
+      [targetUserId]: true,
+    }));
   };
 
   const startChat = async (targetUserId: string) => {
@@ -282,48 +320,34 @@ export default function ConnectPage() {
                       )}
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{suggestion.name}</div>
-
-                      <div className="text-sm text-muted-foreground truncate">
-                        {suggestion.headline}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        <Button 
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {connected[suggestion.id] ? (
+                          <Button
+                            onClick={() => navigate(`/messages/${suggestion.id}`)}
+                            className={neonButton}
+                          >
+                            Message
+                          </Button>
+                        ) : pendingRequests[suggestion.id] ? (
+                          <Button disabled className={neonButton}>
+                            Pending
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => sendConnectionRequest(suggestion.id)}
+                            className={neonButton}
+                          >
+                            Connect
+                          </Button>
+                        )}
+                      
+                        <Button
                           onClick={() => handleFollow(suggestion.id)}
-                           className={neonButton}
-                       >
-                         Follow
-                        </Button>
-
-                        <Button 
-                          onClick={() => navigate(`/profile/${suggestion.id}`)}
-                         className={neonButton}
-                       >
-                        View Profile
-                       </Button>
-
-                        <Button 
-                          onClick={() => navigate(`/messages/${suggestion.id}`)}
                           className={neonButton}
-                       >
-                         Message
+                        >
+                          {followed[suggestion.id] ? 'Following' : 'Follow'}
                         </Button>
-
-                        <Button
-                           onClick={() => navigate(`/call/${suggestion.id}?type=audio`)}
-                          className={neonButton}
-                      >
-                         Call
-                        </Button>
-
-                        <Button
-                         onClick={() => navigate(`/call/${suggestion.id}?type=video`)}
-                        className={neonButton}
-                       >
-                         Video
-                        </Button>
+                      </div>
                       </div>
                     </div>
                   </div>
