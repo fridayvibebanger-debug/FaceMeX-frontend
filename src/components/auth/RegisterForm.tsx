@@ -83,7 +83,7 @@ export default function RegisterForm() {
           onChange={(e) => setName(e.target.value)}
           required
           disabled={isLoading}
-          className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
+          className="w-full h-11 rounded-2xl bg-white/10 border border-white/15 text-white placeholder:text-white/50 px-4 overflow-hidden"
         />
       </div>
 
@@ -97,7 +97,7 @@ export default function RegisterForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
           disabled={isLoading}
-          className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
+          className="w-full h-11 rounded-2xl bg-white/10 border border-white/15 text-white placeholder:text-white/50 px-4 overflow-hidden"
         />
       </div>
 
@@ -111,13 +111,13 @@ export default function RegisterForm() {
           onChange={(e) => setPassword(e.target.value)}
           required
           disabled={isLoading}
-          className="h-11 rounded-2xl bg-white/10 border-white/15 text-white placeholder:text-white/50"
+          className="w-full h-11 rounded-2xl bg-white/10 border border-white/15 text-white placeholder:text-white/50 px-4 overflow-hidden"
         />
       </div>
 
       <Button
         type="submit"
-        className="w-full h-11 rounded-2xl bg-white text-slate-900 hover:bg-white/90"
+        className="w-full h-11 rounded-2xl bg-white text-slate-900 hover:bg-white/90 overflow-hidden"
         disabled={isLoading}
       >
         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
