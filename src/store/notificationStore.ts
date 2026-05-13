@@ -11,7 +11,8 @@ export interface Notification {
     | 'event'
     | 'circle'
     | 'endorsement'
-    | 'connection_request';
+    | 'connection_request'
+    | 'post';
   title: string;
   message: string;
   avatar?: string;
