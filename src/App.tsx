@@ -83,7 +83,7 @@ function App() {
   // Do not block the login/signup page forever.
 // Let routes render while auth restores.
  return (
-  <>
+  <BrowserRouter>
     <LiveNotificationListener />
     
      <Routes>
