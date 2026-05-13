@@ -79,9 +79,15 @@ export default function NewsFeed() {
         },
         (payload) => {
           const newPostId = String(payload.new?.id || '');
+          const newPostUserId = String(payload.new?.user_id || '');
           const latestKnownPostId = latestKnownPostIdRef.current;
 
           if (!newPostId) return;
+
+          if (user?.id && newPostUserId === user.id) {
+            latestKnownPostIdRef.current = newPostId;
+            return;
+          }
 
           if (!latestKnownPostId) {
             latestKnownPostIdRef.current = newPostId;
@@ -100,7 +106,7 @@ export default function NewsFeed() {
     pollTimer = window.setInterval(async () => {
       const { data, error } = await supabase
         .from('posts')
-        .select('id')
+        .select('id, user_id')
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -110,9 +116,15 @@ export default function NewsFeed() {
       }
 
       const newestId = data?.[0]?.id;
+      const newestUserId = data?.[0]?.user_id;
       const latestKnownPostId = latestKnownPostIdRef.current;
 
       if (!newestId) return;
+
+      if (user?.id && newestUserId === user.id) {
+        latestKnownPostIdRef.current = newestId;
+        return;
+      }
 
       if (!latestKnownPostId) {
         latestKnownPostIdRef.current = newestId;
@@ -133,7 +145,7 @@ export default function NewsFeed() {
 
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user?.id]);
 
   const handleRefreshNewPosts = async () => {
     await loadPosts().catch((error) => {
@@ -172,6 +184,18 @@ export default function NewsFeed() {
       setShowMediaInput(false);
 
       await loadPosts().catch(() => {});
+
+      const { data } = await supabase
+        .from('posts')
+        .select('id')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (data?.[0]?.id) {
+        latestKnownPostIdRef.current = data[0].id;
+      }
+
+      setNewPostsAvailable(false);
     } catch (error) {
       console.log('Create post failed:', error);
     } finally {
@@ -316,6 +340,7 @@ export default function NewsFeed() {
                 ) : (
                   <Send className="mr-2 h-4 w-4" />
                 )}
+
                 {isPosting ? 'Posting...' : 'Post'}
               </Button>
             </div>
@@ -437,68 +462,6 @@ export default function NewsFeed() {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-export default function FeedPage() {
-  const { loadPosts } = usePostStore();
-
-  useEffect(() => {
-    loadPosts().catch((error) => {
-      console.log('Initial feed load failed:', error);
-    });
-  }, [loadPosts]);
-
-  useEffect(() => {
-    const refreshFeedActions = () => {
-      loadPosts().catch((error) => {
-        console.log('Live feed action refresh failed:', error);
-      });
-    };
-
-    const channel = supabase
-      .channel('facemex-feed-actions-refresh')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_comments' },
-        refreshFeedActions
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_reactions' },
-        refreshFeedActions
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_shares' },
-        refreshFeedActions
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_saves' },
-        refreshFeedActions
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [loadPosts]);
-
-  return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-
-      <div className="flex pt-14 md:pt-16 pb-16 md:pb-0">
-        <LeftSidebar />
-
-        <main className="flex-1 lg:ml-64 xl:mr-80">
-          <NewsFeed />
-        </main>
-
-        <RightSidebar />
-      </div>
     </div>
   );
 }
