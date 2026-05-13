@@ -10,8 +10,6 @@ import {
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/authStore';
-import { useNotificationStore } from '@/store/notificationStore';
 
 type LivePopup = {
   id: string;
@@ -42,49 +40,35 @@ function labelFor(type: string) {
 }
 
 export default function LiveNotificationListener() {
-  const { user } = useAuthStore();
-  const loadNotifications = useNotificationStore((s) => s.load);
-
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [popup, setPopup] = useState<LivePopup | null>(null);
   const [soundReady, setSoundReady] = useState(false);
 
   const audioRef = useRef<AudioContext | null>(null);
-  const hideTimerRef = useRef<number | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
+  const hideTimerRef = useRef<number | null>(null);
 
-  const enableSound = async () => {
-    try {
-      const AudioContextClass =
-        window.AudioContext || (window as any).webkitAudioContext;
+  useEffect(() => {
+    let mounted = true;
 
-      const ctx = new AudioContextClass();
-      audioRef.current = ctx;
+    async function loadUser() {
+      const { data } = await supabase.auth.getUser();
+      if (!mounted) return;
 
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-
-      setSoundReady(true);
-
-      if ('Notification' in window && Notification.permission === 'default') {
-        await Notification.requestPermission().catch(() => {});
-      }
-
-      playTone('event');
-
-      setPopup({
-        id: 'sound-test',
-        type: 'event',
-        title: 'FaceMeX alerts are on',
-        message: 'You will now hear tones and see popups for new activity.',
-      });
-
-      window.setTimeout(() => setPopup(null), 3500);
-    } catch (error) {
-      console.log('Could not enable notification sound:', error);
-      setSoundReady(true);
+      setAuthUserId(data.user?.id || null);
     }
-  };
+
+    loadUser();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUserId(session?.user?.id || null);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   const playTone = (type: string) => {
     if (!soundReady || !audioRef.current) return;
@@ -98,12 +82,7 @@ export default function LiveNotificationListener() {
 
       const now = ctx.currentTime;
 
-      const beep = (
-        frequency: number,
-        start: number,
-        duration: number,
-        volume: number
-      ) => {
+      const beep = (frequency: number, start: number, duration: number, volume: number) => {
         const oscillator = ctx.createOscillator();
         const gain = ctx.createGain();
 
@@ -122,49 +101,49 @@ export default function LiveNotificationListener() {
       };
 
       if (type === 'message') {
-        beep(900, 0, 0.2, 0.85);
-        beep(1250, 0.23, 0.24, 0.9);
+        beep(900, 0, 0.2, 0.95);
+        beep(1250, 0.24, 0.25, 1.0);
         return;
       }
 
       if (type === 'comment') {
-        beep(650, 0, 0.2, 0.75);
-        beep(900, 0.22, 0.25, 0.85);
+        beep(650, 0, 0.2, 0.85);
+        beep(900, 0.23, 0.26, 0.95);
         return;
       }
 
       if (type === 'like') {
-        beep(1100, 0, 0.14, 0.7);
-        beep(1450, 0.15, 0.16, 0.75);
+        beep(1100, 0, 0.14, 0.75);
+        beep(1450, 0.16, 0.16, 0.85);
         return;
       }
 
       if (type === 'follow') {
-        beep(520, 0, 0.2, 0.75);
-        beep(780, 0.22, 0.25, 0.85);
+        beep(520, 0, 0.2, 0.85);
+        beep(780, 0.23, 0.26, 0.95);
         return;
       }
 
       if (type === 'connection_request') {
-        beep(740, 0, 0.16, 0.8);
-        beep(980, 0.18, 0.2, 0.9);
-        beep(1180, 0.4, 0.22, 0.9);
+        beep(740, 0, 0.16, 0.9);
+        beep(980, 0.19, 0.2, 1.0);
+        beep(1180, 0.42, 0.22, 1.0);
         return;
       }
 
       if (type === 'post') {
-        beep(580, 0, 0.22, 0.75);
-        beep(760, 0.24, 0.28, 0.85);
+        beep(580, 0, 0.22, 0.85);
+        beep(760, 0.25, 0.28, 0.95);
         return;
       }
 
-      beep(880, 0, 0.25, 0.8);
+      beep(880, 0, 0.25, 0.9);
     } catch (error) {
-      console.log('Tone failed:', error);
+      console.log('FaceMeX tone failed:', error);
     }
   };
 
-  const showNotification = (n: any) => {
+  const showPopup = (n: any) => {
     const id = String(n.id || '');
     if (!id || seenIdsRef.current.has(id)) return;
 
@@ -182,17 +161,6 @@ export default function LiveNotificationListener() {
 
     setPopup(nextPopup);
     playTone(type);
-    loadNotifications().catch(() => {});
-
-    if (
-      'Notification' in window &&
-      Notification.permission === 'granted' &&
-      document.hidden
-    ) {
-      new Notification(nextPopup.title, {
-        body: nextPopup.message,
-      });
-    }
 
     if (hideTimerRef.current) {
       window.clearTimeout(hideTimerRef.current);
@@ -203,19 +171,48 @@ export default function LiveNotificationListener() {
     }, 7000);
   };
 
+  const enableSound = async () => {
+    try {
+      const AudioContextClass =
+        window.AudioContext || (window as any).webkitAudioContext;
+
+      const ctx = new AudioContextClass();
+      audioRef.current = ctx;
+
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      setSoundReady(true);
+
+      setPopup({
+        id: 'sound-enabled',
+        type: 'event',
+        title: 'FaceMeX alerts are on',
+        message: 'You will now see popups and hear tones for new activity.',
+      });
+
+      setTimeout(() => {
+        playTone('connection_request');
+      }, 250);
+
+      setTimeout(() => {
+        setPopup(null);
+      }, 4000);
+    } catch (error) {
+      console.log('Enable sound failed:', error);
+      setSoundReady(true);
+    }
+  };
+
   useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    let pollTimer: number | null = null;
+    if (!authUserId) return;
+
     let cancelled = false;
+    let pollTimer: number | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
     async function start() {
-      const authUserId =
-        user?.id || (await supabase.auth.getUser()).data.user?.id;
-
-      if (!authUserId || cancelled) return;
-
-      await loadNotifications().catch(() => {});
-
       const { data: latest } = await supabase
         .from('notifications')
         .select('id')
@@ -223,12 +220,14 @@ export default function LiveNotificationListener() {
         .order('created_at', { ascending: false })
         .limit(20);
 
+      if (cancelled) return;
+
       (latest || []).forEach((n: any) => {
         seenIdsRef.current.add(String(n.id));
       });
 
       channel = supabase
-        .channel(`facemex-live-notifications-${authUserId}`)
+        .channel(`facemex-alerts-${authUserId}`)
         .on(
           'postgres_changes',
           {
@@ -238,11 +237,11 @@ export default function LiveNotificationListener() {
             filter: `user_id=eq.${authUserId}`,
           },
           (payload) => {
-            showNotification(payload.new);
+            showPopup(payload.new);
           }
         )
         .subscribe((status) => {
-          console.log('FaceMeX notification channel:', status);
+          console.log('FaceMeX alerts realtime:', status);
         });
 
       pollTimer = window.setInterval(async () => {
@@ -254,7 +253,7 @@ export default function LiveNotificationListener() {
           .limit(5);
 
         if (error) {
-          console.log('Notification poll error:', error.message);
+          console.log('FaceMeX alert polling error:', error.message);
           return;
         }
 
@@ -264,9 +263,9 @@ export default function LiveNotificationListener() {
           .find((n: any) => !seenIdsRef.current.has(String(n.id)));
 
         if (unseen) {
-          showNotification(unseen);
+          showPopup(unseen);
         }
-      }, 4000);
+      }, 3000);
     }
 
     start();
@@ -274,34 +273,34 @@ export default function LiveNotificationListener() {
     return () => {
       cancelled = true;
 
-      if (hideTimerRef.current) {
-        window.clearTimeout(hideTimerRef.current);
-      }
-
       if (pollTimer) {
         window.clearInterval(pollTimer);
+      }
+
+      if (hideTimerRef.current) {
+        window.clearTimeout(hideTimerRef.current);
       }
 
       if (channel) {
         supabase.removeChannel(channel);
       }
     };
-  }, [user?.id, soundReady, loadNotifications]);
+  }, [authUserId, soundReady]);
 
   return (
     <>
-      {!soundReady && user?.id && (
+      {authUserId && !soundReady && (
         <button
           type="button"
           onClick={enableSound}
-          className="fixed right-4 top-20 z-[9999] rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white shadow-xl"
+          className="fixed right-4 top-20 z-[99999] rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white shadow-xl"
         >
           Turn on FaceMeX alerts
         </button>
       )}
 
       {popup && (
-        <div className="fixed left-3 right-3 top-20 z-[9999] mx-auto max-w-md overflow-hidden rounded-3xl border border-white/15 bg-slate-950 text-white shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
+        <div className="fixed left-3 right-3 top-20 z-[99999] mx-auto max-w-md overflow-hidden rounded-3xl border border-white/15 bg-slate-950 text-white shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
           <button
             type="button"
             onClick={() => {
