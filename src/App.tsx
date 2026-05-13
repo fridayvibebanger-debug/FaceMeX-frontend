@@ -46,7 +46,7 @@ import ScreenshotPolicy from './pages/policies/ScreenshotPolicy';
 import CommunityRules from './pages/policies/CommunityRules';
 import RecruiterPortalPage from './pages/RecruiterPortalPage';
 import TestAI from './pages/TestAI';
-import LiveNotificationListener from '@/components/notifications/LiveNotificationListener';
+import LiveNotificationListener from '@/components/LiveNotificationListener';
 import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
 import NotificationsPage from './pages/NotificationsPage';
