@@ -46,6 +46,7 @@ import ScreenshotPolicy from './pages/policies/ScreenshotPolicy';
 import CommunityRules from './pages/policies/CommunityRules';
 import RecruiterPortalPage from './pages/RecruiterPortalPage';
 import TestAI from './pages/TestAI';
+import LiveNotificationListener from '@/components/notifications/LiveNotificationListener';
 import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -81,8 +82,11 @@ function App() {
 
   // Do not block the login/signup page forever.
 // Let routes render while auth restores.
-  return (
-    <Routes>
+ return (
+  <>
+    <LiveNotificationListener />
+    
+     <Routes>
       <Route path="/" element={<PublicAuthRoute />} />
       <Route path="/login" element={<PublicAuthRoute />} />
       <Route path="/signup" element={<PublicAuthRoute />} />
