@@ -28,11 +28,15 @@ export default function NewsFeed() {
   const [mediaUrl, setMediaUrl] = useState('');
   const [showMediaInput, setShowMediaInput] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('ai');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [newPostsAvailable, setNewPostsAvailable] = useState(false);
 
+  const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
+
+  const visibleIdsReadyRef = useRef(false);
   const latestKnownPostIdRef = useRef<string | null>(null);
 
   const cleanContent = content.trim();
@@ -44,6 +48,14 @@ export default function NewsFeed() {
       latestKnownPostIdRef.current = posts[0].id;
     }
   }, [posts, newPostsAvailable]);
+
+  useEffect(() => {
+    if (visibleIdsReadyRef.current) return;
+    if (posts.length === 0) return;
+
+    setVisiblePostIds(new Set(posts.map((post) => post.id)));
+    visibleIdsReadyRef.current = true;
+  }, [posts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,15 +91,9 @@ export default function NewsFeed() {
         },
         (payload) => {
           const newPostId = String(payload.new?.id || '');
-          const newPostUserId = String(payload.new?.user_id || '');
           const latestKnownPostId = latestKnownPostIdRef.current;
 
           if (!newPostId) return;
-
-          if (user?.id && newPostUserId === user.id) {
-            latestKnownPostIdRef.current = newPostId;
-            return;
-          }
 
           if (!latestKnownPostId) {
             latestKnownPostIdRef.current = newPostId;
@@ -106,7 +112,7 @@ export default function NewsFeed() {
     pollTimer = window.setInterval(async () => {
       const { data, error } = await supabase
         .from('posts')
-        .select('id, user_id')
+        .select('id')
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -116,15 +122,9 @@ export default function NewsFeed() {
       }
 
       const newestId = data?.[0]?.id;
-      const newestUserId = data?.[0]?.user_id;
       const latestKnownPostId = latestKnownPostIdRef.current;
 
       if (!newestId) return;
-
-      if (user?.id && newestUserId === user.id) {
-        latestKnownPostIdRef.current = newestId;
-        return;
-      }
 
       if (!latestKnownPostId) {
         latestKnownPostIdRef.current = newestId;
@@ -145,12 +145,17 @@ export default function NewsFeed() {
 
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, []);
 
   const handleRefreshNewPosts = async () => {
     await loadPosts().catch((error) => {
       console.log('Refresh new posts failed:', error);
     });
+
+    const latestPosts = usePostStore.getState().posts;
+
+    setVisiblePostIds(new Set(latestPosts.map((post) => post.id)));
+    visibleIdsReadyRef.current = true;
 
     const { data } = await supabase
       .from('posts')
@@ -182,20 +187,10 @@ export default function NewsFeed() {
       setContent('');
       setMediaUrl('');
       setShowMediaInput(false);
+      setComposerOpen(false);
 
-      await loadPosts().catch(() => {});
-
-      const { data } = await supabase
-        .from('posts')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (data?.[0]?.id) {
-        latestKnownPostIdRef.current = data[0].id;
-      }
-
-      setNewPostsAvailable(false);
+      // New post must stay hidden until Refresh is pressed.
+      setNewPostsAvailable(true);
     } catch (error) {
       console.log('Create post failed:', error);
     } finally {
@@ -208,7 +203,7 @@ export default function NewsFeed() {
       ? 'AI Curated'
       : feedFilter === 'recent'
         ? 'Recent'
-        : 'Trending Now';
+        : 'Trending';
 
   const filteredPosts = useMemo(() => {
     const list = [...posts];
@@ -224,6 +219,7 @@ export default function NewsFeed() {
       return list.sort((a, b) => {
         const scoreB = b.likes + b.comments.length + b.shares;
         const scoreA = a.likes + a.comments.length + a.shares;
+
         return scoreB - scoreA;
       });
     }
@@ -245,10 +241,16 @@ export default function NewsFeed() {
     });
   }, [posts, feedFilter]);
 
+  const visibleFilteredPosts = useMemo(() => {
+    if (!visibleIdsReadyRef.current) return filteredPosts;
+
+    return filteredPosts.filter((post) => visiblePostIds.has(post.id));
+  }, [filteredPosts, visiblePostIds]);
+
   const sectionTags = useMemo(() => {
     const tagCount = new Map<string, number>();
 
-    filteredPosts.forEach((post) => {
+    visibleFilteredPosts.forEach((post) => {
       const tagsFromPost = post.hashtags || [];
 
       const tagsFromContent =
@@ -271,12 +273,7 @@ export default function NewsFeed() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
       .map(([tag, count]) => ({ tag, count }));
-  }, [filteredPosts]);
-
-  const userDisplayName =
-    user?.name?.trim() ||
-    user?.email?.split('@')[0] ||
-    'FaceMeX user';
+  }, [visibleFilteredPosts]);
 
   return (
     <div className="mx-auto max-w-2xl px-3 sm:px-4 py-4 space-y-4">
@@ -294,57 +291,59 @@ export default function NewsFeed() {
         <CardContent className="p-4">
           <textarea
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onFocus={() => setComposerOpen(true)}
+            onChange={(e) => {
+              setContent(e.target.value);
+              setComposerOpen(true);
+            }}
             placeholder="Write a post, ask for ideas, or plan your next move..."
             className="min-h-[72px] w-full resize-none rounded-2xl border-0 bg-transparent px-2 py-2 text-base outline-none placeholder:text-muted-foreground"
             disabled={isPosting}
           />
 
-          {showMediaInput && (
-            <div className="mt-3">
-              <Input
-                value={mediaUrl}
-                onChange={(e) => setMediaUrl(e.target.value)}
-                placeholder="Paste image, video, or audio URL"
-                className="rounded-2xl"
-                disabled={isPosting}
-              />
-            </div>
+          {(composerOpen || showMediaInput || cleanContent || cleanMediaUrl) && (
+            <>
+              {showMediaInput && (
+                <div className="mt-3">
+                  <Input
+                    value={mediaUrl}
+                    onChange={(e) => setMediaUrl(e.target.value)}
+                    placeholder="Paste image, video, or audio URL"
+                    className="rounded-2xl"
+                    disabled={isPosting}
+                  />
+                </div>
+              )}
+
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowMediaInput((current) => !current)}
+                  disabled={isPosting}
+                >
+                  <ImagePlus className="mr-2 h-4 w-4" />
+                  Media
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={handlePost}
+                  disabled={!canPost || isPosting}
+                  className="rounded-2xl"
+                >
+                  {isPosting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+
+                  {isPosting ? 'Posting...' : 'Post'}
+                </Button>
+              </div>
+            </>
           )}
-
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowMediaInput((current) => !current)}
-              disabled={isPosting}
-            >
-              <ImagePlus className="mr-2 h-4 w-4" />
-              Media
-            </Button>
-
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline text-xs text-muted-foreground">
-                Posting as {userDisplayName}
-              </span>
-
-              <Button
-                type="button"
-                onClick={handlePost}
-                disabled={!canPost || isPosting}
-                className="rounded-2xl"
-              >
-                {isPosting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="mr-2 h-4 w-4" />
-                )}
-
-                {isPosting ? 'Posting...' : 'Post'}
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -359,11 +358,7 @@ export default function NewsFeed() {
           {feedSectionTitle}
         </Button>
 
-        <Button
-          type="button"
-          variant="secondary"
-          className="rounded-xl"
-        >
+        <Button type="button" variant="secondary" className="rounded-xl">
           <Sparkles className="mr-2 h-4 w-4" />
           Personalized for you
         </Button>
@@ -412,15 +407,8 @@ export default function NewsFeed() {
       <Card className="rounded-3xl border">
         <CardContent className="p-4">
           <div className="mb-3 flex items-center gap-2 font-semibold">
-            {feedFilter === 'ai' ? (
-              <Sparkles className="h-4 w-4" />
-            ) : feedFilter === 'recent' ? (
-              <Clock className="h-4 w-4" />
-            ) : (
-              <TrendingUp className="h-4 w-4" />
-            )}
-
-            {feedSectionTitle}
+            <TrendingUp className="h-4 w-4" />
+            Trending Now
           </div>
 
           {sectionTags.length === 0 ? (
@@ -446,7 +434,7 @@ export default function NewsFeed() {
         </CardContent>
       </Card>
 
-      {filteredPosts.length === 0 ? (
+      {visibleFilteredPosts.length === 0 ? (
         <Card className="rounded-3xl border">
           <CardContent className="p-8 text-center">
             <div className="text-sm font-medium">No posts yet</div>
@@ -457,7 +445,7 @@ export default function NewsFeed() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {filteredPosts.map((post) => (
+          {visibleFilteredPosts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
         </div>
