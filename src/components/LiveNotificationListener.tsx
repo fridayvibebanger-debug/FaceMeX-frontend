@@ -19,7 +19,6 @@ type LivePopup = {
   title: string;
   message: string;
   actionUrl?: string;
-  createdAt?: string;
 };
 
 function iconFor(type: string) {
@@ -52,7 +51,6 @@ export default function LiveNotificationListener() {
   const audioRef = useRef<AudioContext | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
-  const startedAtRef = useRef<string>(new Date().toISOString());
 
   const enableSound = async () => {
     try {
@@ -73,6 +71,15 @@ export default function LiveNotificationListener() {
       }
 
       playTone('event');
+
+      setPopup({
+        id: 'sound-test',
+        type: 'event',
+        title: 'FaceMeX alerts are on',
+        message: 'You will now hear tones and see popups for new activity.',
+      });
+
+      window.setTimeout(() => setPopup(null), 3500);
     } catch (error) {
       console.log('Could not enable notification sound:', error);
       setSoundReady(true);
@@ -115,43 +122,43 @@ export default function LiveNotificationListener() {
       };
 
       if (type === 'message') {
-        beep(900, 0, 0.2, 0.65);
-        beep(1250, 0.23, 0.24, 0.7);
+        beep(900, 0, 0.2, 0.85);
+        beep(1250, 0.23, 0.24, 0.9);
         return;
       }
 
       if (type === 'comment') {
-        beep(650, 0, 0.2, 0.6);
-        beep(900, 0.22, 0.25, 0.68);
+        beep(650, 0, 0.2, 0.75);
+        beep(900, 0.22, 0.25, 0.85);
         return;
       }
 
       if (type === 'like') {
-        beep(1100, 0, 0.14, 0.55);
-        beep(1450, 0.15, 0.16, 0.6);
+        beep(1100, 0, 0.14, 0.7);
+        beep(1450, 0.15, 0.16, 0.75);
         return;
       }
 
       if (type === 'follow') {
-        beep(520, 0, 0.2, 0.6);
-        beep(780, 0.22, 0.25, 0.68);
+        beep(520, 0, 0.2, 0.75);
+        beep(780, 0.22, 0.25, 0.85);
         return;
       }
 
       if (type === 'connection_request') {
-        beep(740, 0, 0.16, 0.65);
-        beep(980, 0.18, 0.2, 0.7);
-        beep(1180, 0.4, 0.22, 0.72);
+        beep(740, 0, 0.16, 0.8);
+        beep(980, 0.18, 0.2, 0.9);
+        beep(1180, 0.4, 0.22, 0.9);
         return;
       }
 
       if (type === 'post') {
-        beep(580, 0, 0.22, 0.58);
-        beep(760, 0.24, 0.28, 0.65);
+        beep(580, 0, 0.22, 0.75);
+        beep(760, 0.24, 0.28, 0.85);
         return;
       }
 
-      beep(880, 0, 0.25, 0.65);
+      beep(880, 0, 0.25, 0.8);
     } catch (error) {
       console.log('Tone failed:', error);
     }
@@ -160,10 +167,6 @@ export default function LiveNotificationListener() {
   const showNotification = (n: any) => {
     const id = String(n.id || '');
     if (!id || seenIdsRef.current.has(id)) return;
-
-    const createdAt = String(n.created_at || new Date().toISOString());
-
-    if (createdAt < startedAtRef.current) return;
 
     seenIdsRef.current.add(id);
 
@@ -175,7 +178,6 @@ export default function LiveNotificationListener() {
       title: n.title || labelFor(type),
       message: n.message || '',
       actionUrl: n.action_url || undefined,
-      createdAt,
     };
 
     setPopup(nextPopup);
@@ -214,6 +216,17 @@ export default function LiveNotificationListener() {
 
       await loadNotifications().catch(() => {});
 
+      const { data: latest } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', authUserId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      (latest || []).forEach((n: any) => {
+        seenIdsRef.current.add(String(n.id));
+      });
+
       channel = supabase
         .channel(`facemex-live-notifications-${authUserId}`)
         .on(
@@ -237,20 +250,23 @@ export default function LiveNotificationListener() {
           .from('notifications')
           .select('*')
           .eq('user_id', authUserId)
-          .eq('is_read', false)
-          .gte('created_at', startedAtRef.current)
           .order('created_at', { ascending: false })
-          .limit(1);
+          .limit(5);
 
         if (error) {
           console.log('Notification poll error:', error.message);
           return;
         }
 
-        if (data && data.length > 0) {
-          showNotification(data[0]);
+        const unseen = (data || [])
+          .slice()
+          .reverse()
+          .find((n: any) => !seenIdsRef.current.has(String(n.id)));
+
+        if (unseen) {
+          showNotification(unseen);
         }
-      }, 5000);
+      }, 4000);
     }
 
     start();
@@ -270,7 +286,7 @@ export default function LiveNotificationListener() {
         supabase.removeChannel(channel);
       }
     };
-  }, [user?.id, loadNotifications, soundReady]);
+  }, [user?.id, soundReady, loadNotifications]);
 
   return (
     <>
