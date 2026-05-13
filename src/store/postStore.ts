@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { getRealName, getRealAvatar } from '@/lib/profileName';
 
 type ReactionType = 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry';
 type PostMode = 'social' | 'professional';
@@ -35,6 +34,7 @@ export interface Post {
   shares: number;
   timestamp: Date;
   isLiked: boolean;
+  isSaved?: boolean;
   reaction?: ReactionType;
   mood?: string;
   aiScore?: number;
@@ -49,6 +49,7 @@ interface PostState {
   aiSuggestions: string[];
 
   loadPosts: () => Promise<void>;
+
   addPost: (
     content: string,
     images?: string[],
@@ -58,22 +59,50 @@ interface PostState {
   ) => Promise<void>;
 
   likePost: (postId: string, reaction?: string) => Promise<void>;
+
   addComment: (postId: string, content: string) => Promise<void>;
+
   addVoiceComment: (postId: string, voiceUrl: string) => Promise<void>;
 
   editPost: (postId: string, content: string) => Promise<void>;
+
   deletePost: (postId: string) => Promise<void>;
-  editComment: (postId: string, commentId: string, content: string) => Promise<void>;
+
+  editComment: (
+    postId: string,
+    commentId: string,
+    content: string
+  ) => Promise<void>;
+
   deleteComment: (postId: string, commentId: string) => Promise<void>;
 
-  sharePost: (postId: string) => void;
+  sharePost: (postId: string) => Promise<void>;
+
+  savePost: (postId: string) => Promise<void>;
 
   inviteCollaborator: (postId: string, userId: string) => Promise<void>;
+
   acceptCollabInvite: (postId: string) => Promise<void>;
+
   rejectCollabInvite: (postId: string) => Promise<void>;
 
   extractHashtags: (content: string) => string[];
+
   getAISuggestions: (content: string) => string[];
+}
+
+function getProfileName(profile: any, fallbackId?: string) {
+  return (
+    profile?.full_name?.trim() ||
+    profile?.name?.trim() ||
+    profile?.username?.trim() ||
+    profile?.email?.split('@')[0] ||
+    `User ${String(fallbackId || '').slice(0, 6)}`
+  );
+}
+
+function getProfileAvatar(profile: any) {
+  return profile?.avatar_url || profile?.avatar || '';
 }
 
 const ensureProfile = async () => {
@@ -94,18 +123,21 @@ const ensureProfile = async () => {
         data.user.user_metadata?.full_name ||
         data.user.user_metadata?.name ||
         data.user.email?.split('@')[0] ||
-        'User',
+        `User ${String(data.user.id).slice(0, 6)}`,
       avatar: data.user.user_metadata?.avatar_url || '',
     } as any;
   }
 
+  const displayName =
+    authUser.name?.trim() ||
+    authUser.email?.split('@')[0] ||
+    `User ${String(authUser.id).slice(0, 6)}`;
+
   const { error } = await supabase.from('profiles').upsert({
     id: authUser.id,
     email: authUser.email || '',
-    full_name:
-  authUser.name?.trim() ||
-  authUser.email?.split('@')[0] ||
-  `User ${String(authUser.id).slice(0, 6)}`,
+    full_name: displayName,
+    name: displayName,
     avatar_url: authUser.avatar || '',
     is_active: true,
   });
@@ -149,136 +181,247 @@ export const usePostStore = create<PostState>((set, get) => ({
   aiSuggestions: [],
 
   loadPosts: async () => {
-  const { data, error } = await supabase
-    .from('posts')
-    .select('*')
-    .order('created_at', { ascending: false });
+    const authUser = useAuthStore.getState().user;
+    const currentUserId = authUser?.id;
 
-  if (error) {
-    alert(`Load posts error: ${error.message}`);
-    return;
-  }
+    const { data: postsData, error: postsError } = await supabase
+      .from('posts')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  const userIds = Array.from(
-    new Set((data || []).map((p: any) => p.user_id).filter(Boolean))
-  );
+    if (postsError) {
+      alert(`Load posts error: ${postsError.message}`);
+      return;
+    }
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, full_name, name, username, email, avatar_url, avatar')
-    .in('id', userIds);
+    const posts = postsData || [];
 
-  const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+    const postIds = posts.map((p: any) => p.id).filter(Boolean);
+    const postAuthorIds = posts.map((p: any) => p.user_id).filter(Boolean);
 
-  const mapped: Post[] = (data || []).map((p: any) => {
-    const profile = profileMap.get(p.user_id);
+    const [commentsResult, reactionsResult, sharesResult, savesResult] =
+      await Promise.all([
+        postIds.length
+          ? supabase
+              .from('post_comments')
+              .select('*')
+              .in('post_id', postIds)
+              .order('created_at', { ascending: true })
+          : Promise.resolve({ data: [], error: null } as any),
 
-    const authorName =
-      profile?.full_name ||
-      profile?.name ||
-      profile?.username ||
-      profile?.email?.split('@')[0] ||
-      `User ${String(p.user_id).slice(0, 6)}`;
+        postIds.length
+          ? supabase.from('post_reactions').select('*').in('post_id', postIds)
+          : Promise.resolve({ data: [], error: null } as any),
 
-    const authorAvatar =
-      profile?.avatar_url ||
-      profile?.avatar ||
-      '';
+        postIds.length
+          ? supabase.from('post_shares').select('*').in('post_id', postIds)
+          : Promise.resolve({ data: [], error: null } as any),
 
-    return {
-      id: p.id,
-      userId: p.user_id,
-      userName: authorName,
-      userAvatar: authorAvatar,
-      content: p.content || '',
-      image: p.media_type === 'image' ? p.media_url : undefined,
-      video: p.media_type === 'video' ? p.media_url : undefined,
-      audio: p.media_type === 'audio' ? p.media_url : undefined,
-      images: p.media_type === 'image' && p.media_url ? [p.media_url] : [],
-      mediaType: p.media_type || 'none',
-      hashtags: get().extractHashtags(p.content || ''),
+        postIds.length && currentUserId
+          ? supabase
+              .from('post_saves')
+              .select('*')
+              .in('post_id', postIds)
+              .eq('user_id', currentUserId)
+          : Promise.resolve({ data: [], error: null } as any),
+      ]);
+
+    if (commentsResult.error) {
+      console.log('Comments load error:', commentsResult.error.message);
+    }
+
+    if (reactionsResult.error) {
+      console.log('Reactions load error:', reactionsResult.error.message);
+    }
+
+    if (sharesResult.error) {
+      console.log('Shares load error:', sharesResult.error.message);
+    }
+
+    if (savesResult.error) {
+      console.log('Saves load error:', savesResult.error.message);
+    }
+
+    const comments = commentsResult.data || [];
+    const reactions = reactionsResult.data || [];
+    const shares = sharesResult.data || [];
+    const saves = savesResult.data || [];
+
+    const savedPostIds = new Set(saves.map((s: any) => s.post_id));
+
+    const commentUserIds = comments.map((c: any) => c.user_id).filter(Boolean);
+
+    const allUserIds = Array.from(
+      new Set([...postAuthorIds, ...commentUserIds])
+    );
+
+    const { data: profiles, error: profilesError } = allUserIds.length
+      ? await supabase
+          .from('profiles')
+          .select('id, full_name, name, username, email, avatar_url, avatar')
+          .in('id', allUserIds)
+      : ({ data: [], error: null } as any);
+
+    if (profilesError) {
+      console.log('Profiles load error:', profilesError.message);
+    }
+
+    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+    const reactionCountMap = new Map<string, number>();
+    const myReactionMap = new Map<string, string>();
+
+    reactions.forEach((r: any) => {
+      reactionCountMap.set(
+        r.post_id,
+        (reactionCountMap.get(r.post_id) || 0) + 1
+      );
+
+      if (currentUserId && r.user_id === currentUserId) {
+        myReactionMap.set(r.post_id, r.reaction || 'like');
+      }
+    });
+
+    const shareCountMap = new Map<string, number>();
+
+    shares.forEach((s: any) => {
+      shareCountMap.set(s.post_id, (shareCountMap.get(s.post_id) || 0) + 1);
+    });
+
+    const commentsByPost = new Map<string, Comment[]>();
+
+    comments.forEach((c: any) => {
+      const profile = profileMap.get(c.user_id);
+
+      const nextComment: Comment = {
+        id: c.id,
+        userId: c.user_id,
+        userName: getProfileName(profile, c.user_id),
+        userAvatar: getProfileAvatar(profile),
+        content: c.content || '',
+        voiceUrl: c.voice_url || undefined,
+        type: c.comment_type === 'voice' ? 'voice' : 'text',
+        timestamp: new Date(c.created_at || Date.now()),
+      };
+
+      const list = commentsByPost.get(c.post_id) || [];
+      list.push(nextComment);
+      commentsByPost.set(c.post_id, list);
+    });
+
+    const mapped: Post[] = posts.map((p: any) => {
+      const profile = profileMap.get(p.user_id);
+      const myReaction = myReactionMap.get(p.id);
+
+      return {
+        id: p.id,
+        userId: p.user_id,
+        userName: getProfileName(profile, p.user_id),
+        userAvatar: getProfileAvatar(profile),
+        content: p.content || '',
+        image: p.media_type === 'image' ? p.media_url : undefined,
+        video: p.media_type === 'video' ? p.media_url : undefined,
+        audio: p.media_type === 'audio' ? p.media_url : undefined,
+        images: p.media_type === 'image' && p.media_url ? [p.media_url] : [],
+        mediaType: p.media_type || 'none',
+        hashtags: get().extractHashtags(p.content || ''),
+        likes: reactionCountMap.get(p.id) || 0,
+        comments: commentsByPost.get(p.id) || [],
+        shares: shareCountMap.get(p.id) || 0,
+        timestamp: new Date(p.created_at || Date.now()),
+        isLiked: !!myReaction,
+        isSaved: savedPostIds.has(p.id),
+        reaction: myReaction as ReactionType | undefined,
+        mode: p.mode || 'social',
+        collabInvites: [],
+        collaborators: [],
+      };
+    });
+
+    set({ posts: mapped });
+  },
+
+  addPost: async (content, images, audio, hashtags, mode) => {
+    const authUser = await ensureProfile();
+
+    if (!authUser?.id) {
+      alert('No user found. Please login again.');
+      return;
+    }
+
+    const mediaUrl = images?.[0] || audio || '';
+    const mediaType = getMediaType(mediaUrl);
+
+    const { data, error } = await supabase
+      .from('posts')
+      .insert({
+        user_id: authUser.id,
+        content,
+        media_url: mediaUrl || null,
+        media_type: mediaType,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      alert(`Add post error: ${error.message}`);
+      return;
+    }
+
+    const profile = {
+      full_name: authUser.name,
+      name: authUser.name,
+      email: authUser.email,
+      avatar_url: authUser.avatar,
+    };
+
+    const newPost: Post = {
+      id: data.id,
+      userId: authUser.id,
+      userName: getProfileName(profile, authUser.id),
+      userAvatar: getProfileAvatar(profile),
+      content,
+      image: mediaType === 'image' ? mediaUrl : undefined,
+      video: mediaType === 'video' ? mediaUrl : undefined,
+      audio: mediaType === 'audio' ? mediaUrl : undefined,
+      images: mediaType === 'image' && mediaUrl ? [mediaUrl] : [],
+      mediaType,
+      hashtags: [
+        ...new Set([...get().extractHashtags(content), ...(hashtags || [])]),
+      ],
       likes: 0,
       comments: [],
       shares: 0,
-      timestamp: new Date(p.created_at || Date.now()),
+      timestamp: new Date(data.created_at || Date.now()),
       isLiked: false,
-      reaction: undefined,
-      mode: 'social',
+      isSaved: false,
+      mode: mode || 'social',
       collabInvites: [],
       collaborators: [],
     };
-  });
 
-  set({ posts: mapped });
-},
- addPost: async (content, images, audio, hashtags, mode) => {
-  const authUser = await ensureProfile();
+    set({ posts: [newPost, ...get().posts] });
+  },
 
-  if (!authUser?.id) {
-    alert('No user found. Please login again.');
-    return;
-  }
-
-  const mediaUrl = images?.[0] || audio || '';
-  const mediaType = getMediaType(mediaUrl);
-
-  const { data, error } = await supabase
-    .from('posts')
-    .insert({
-      user_id: authUser.id,
-      content,
-      media_url: mediaUrl || null,
-      media_type: mediaType,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    alert(`Add post error: ${error.message}`);
-    return;
-  }
-
-  const displayName =
-    authUser.name?.trim() ||
-    authUser.email?.split('@')[0] ||
-    `User ${String(authUser.id).slice(0, 6)}`;
-
-  const newPost: Post = {
-    id: data.id,
-    userId: authUser.id,
-    userName: displayName,
-    userAvatar: authUser.avatar || '',
-    content,
-    image: mediaType === 'image' ? mediaUrl : undefined,
-    video: mediaType === 'video' ? mediaUrl : undefined,
-    audio: mediaType === 'audio' ? mediaUrl : undefined,
-    images: mediaType === 'image' && mediaUrl ? [mediaUrl] : [],
-    mediaType,
-    hashtags: [...new Set([...get().extractHashtags(content), ...(hashtags || [])])],
-    likes: 0,
-    comments: [],
-    shares: 0,
-    timestamp: new Date(data.created_at || Date.now()),
-    isLiked: false,
-    mode: mode || 'social',
-    collabInvites: [],
-    collaborators: [],
-  };
-
-  set({ posts: [newPost, ...get().posts] });
-}, 
   likePost: async (postId, reaction = 'like') => {
     const authUser = await ensureProfile();
-if (!authUser?.id) return;
+
+    if (!authUser?.id) return;
+
     const post = get().posts.find((p) => p.id === postId);
     if (!post) return;
 
     if (post.isLiked && post.reaction === reaction) {
-      await supabase
+      const { error } = await supabase
         .from('post_reactions')
         .delete()
         .eq('post_id', postId)
         .eq('user_id', authUser.id);
+
+      if (error) {
+        console.log('Unlike error:', error.message);
+        return;
+      }
 
       set({
         posts: get().posts.map((p) =>
@@ -296,7 +439,7 @@ if (!authUser?.id) return;
       return;
     }
 
-    await supabase.from('post_reactions').upsert(
+    const { error } = await supabase.from('post_reactions').upsert(
       {
         post_id: postId,
         user_id: authUser.id,
@@ -306,6 +449,11 @@ if (!authUser?.id) return;
         onConflict: 'post_id,user_id',
       }
     );
+
+    if (error) {
+      console.log('Like error:', error.message);
+      return;
+    }
 
     set({
       posts: get().posts.map((p) =>
@@ -323,7 +471,8 @@ if (!authUser?.id) return;
 
   addComment: async (postId, content) => {
     const authUser = await ensureProfile();
-if (!authUser?.id || !content.trim()) return;
+
+    if (!authUser?.id || !content.trim()) return;
 
     const { data, error } = await supabase
       .from('post_comments')
@@ -337,15 +486,22 @@ if (!authUser?.id || !content.trim()) return;
       .single();
 
     if (error) {
-      console.error('Add comment error:', error.message);
+      console.error('Add reply error:', error.message);
       return;
     }
+
+    const profile = {
+      full_name: authUser.name,
+      name: authUser.name,
+      email: authUser.email,
+      avatar_url: authUser.avatar,
+    };
 
     const newComment: Comment = {
       id: data.id,
       userId: authUser.id,
-      userName: authUser.name || 'User',
-      userAvatar: authUser.avatar || '',
+      userName: getProfileName(profile, authUser.id),
+      userAvatar: getProfileAvatar(profile),
       content,
       type: 'text',
       timestamp: new Date(data.created_at || Date.now()),
@@ -353,16 +509,16 @@ if (!authUser?.id || !content.trim()) return;
 
     set({
       posts: get().posts.map((p) =>
-        p.id === postId
-          ? { ...p, comments: [...p.comments, newComment] }
-          : p
+        p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
       ),
     });
   },
 
   addVoiceComment: async (postId, voiceUrl) => {
     const authUser = await ensureProfile();
-if (!authUser?.id || !voiceUrl) return;
+
+    if (!authUser?.id || !voiceUrl) return;
+
     const { data, error } = await supabase
       .from('post_comments')
       .insert({
@@ -376,15 +532,22 @@ if (!authUser?.id || !voiceUrl) return;
       .single();
 
     if (error) {
-      console.error('Add voice comment error:', error.message);
+      console.error('Add voice reply error:', error.message);
       return;
     }
+
+    const profile = {
+      full_name: authUser.name,
+      name: authUser.name,
+      email: authUser.email,
+      avatar_url: authUser.avatar,
+    };
 
     const newComment: Comment = {
       id: data.id,
       userId: authUser.id,
-      userName: authUser.name || 'User',
-      userAvatar: authUser.avatar || '',
+      userName: getProfileName(profile, authUser.id),
+      userAvatar: getProfileAvatar(profile),
       content: '',
       voiceUrl,
       type: 'voice',
@@ -393,9 +556,7 @@ if (!authUser?.id || !voiceUrl) return;
 
     set({
       posts: get().posts.map((p) =>
-        p.id === postId
-          ? { ...p, comments: [...p.comments, newComment] }
-          : p
+        p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
       ),
     });
   },
@@ -419,7 +580,12 @@ if (!authUser?.id || !voiceUrl) return;
   },
 
   deletePost: async (postId) => {
-    await supabase.from('posts').delete().eq('id', postId);
+    const { error } = await supabase.from('posts').delete().eq('id', postId);
+
+    if (error) {
+      console.error('Delete post error:', error.message);
+      return;
+    }
 
     set({
       posts: get().posts.filter((p) => p.id !== postId),
@@ -433,7 +599,7 @@ if (!authUser?.id || !voiceUrl) return;
       .eq('id', commentId);
 
     if (error) {
-      console.error('Edit comment error:', error.message);
+      console.error('Edit reply error:', error.message);
       return;
     }
 
@@ -452,7 +618,15 @@ if (!authUser?.id || !voiceUrl) return;
   },
 
   deleteComment: async (postId, commentId) => {
-    await supabase.from('post_comments').delete().eq('id', commentId);
+    const { error } = await supabase
+      .from('post_comments')
+      .delete()
+      .eq('id', commentId);
+
+    if (error) {
+      console.error('Delete reply error:', error.message);
+      return;
+    }
 
     set({
       posts: get().posts.map((p) =>
@@ -466,10 +640,76 @@ if (!authUser?.id || !voiceUrl) return;
     });
   },
 
-  sharePost: (postId) => {
+  sharePost: async (postId) => {
+    const authUser = await ensureProfile();
+
+    if (!authUser?.id) {
+      alert('Please login again.');
+      return;
+    }
+
+    const { error } = await supabase.from('post_shares').insert({
+      post_id: postId,
+      user_id: authUser.id,
+    });
+
+    if (error) {
+      console.log('Share error:', error.message);
+      return;
+    }
+
     set({
       posts: get().posts.map((p) =>
         p.id === postId ? { ...p, shares: p.shares + 1 } : p
+      ),
+    });
+  },
+
+  savePost: async (postId) => {
+    const authUser = await ensureProfile();
+
+    if (!authUser?.id) {
+      alert('Please login again.');
+      return;
+    }
+
+    const post = get().posts.find((p) => p.id === postId);
+    if (!post) return;
+
+    if (post.isSaved) {
+      const { error } = await supabase
+        .from('post_saves')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', authUser.id);
+
+      if (error) {
+        console.log('Unsave error:', error.message);
+        return;
+      }
+
+      set({
+        posts: get().posts.map((p) =>
+          p.id === postId ? { ...p, isSaved: false } : p
+        ),
+      });
+
+      return;
+    }
+
+    const { error } = await supabase.from('post_saves').insert({
+      post_id: postId,
+      user_id: authUser.id,
+    });
+
+    if (error) {
+      console.log('Save error:', error.message);
+      return;
+    }
+
+    set({
+      posts: get().posts.map((p) =>
+        p.id === postId ? { ...p, isSaved: true } : p
       ),
     });
   },
