@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import { useAuthStore } from './store/authStore';
 
@@ -81,10 +81,10 @@ function App() {
   }, [restoreSession]);
 
   return (
-    <BrowserRouter>
-      <LiveNotificationListener />
+  <>
+    <LiveNotificationListener />
 
-      <Routes>
+    <Routes>
         <Route path="/" element={<PublicAuthRoute />} />
         <Route path="/login" element={<PublicAuthRoute />} />
         <Route path="/signup" element={<PublicAuthRoute />} />
@@ -470,8 +470,8 @@ function App() {
         />
 
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+       </Routes>
+     </>
   );
 }
 
