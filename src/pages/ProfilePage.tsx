@@ -6,8 +6,19 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { getRealName, getRealAvatar } from '@/lib/profileName';
-import { MapPin, Calendar, Link as LinkIcon, UserPlus, UserMinus, Settings, CheckCircle, Briefcase, FileText, Sparkles } from 'lucide-react';
+import {
+  MapPin,
+  Calendar,
+  Link as LinkIcon,
+  UserPlus,
+  UserMinus,
+  Settings,
+  CheckCircle,
+  Briefcase,
+  FileText,
+  Sparkles,
+  MessageCircle,
+} from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePostStore } from '@/store/postStore';
 import { useSubscriptionStore } from '@/store/subscriptionStore';
@@ -26,53 +37,56 @@ export default function ProfilePage() {
   const { user } = useAuthStore();
   const { posts } = usePostStore();
   const { currentTier } = useSubscriptionStore();
-  const { professional, saveProfessional, endorseSkill, setMode, addons, mode, hasTier } = useUserStore();
+  const {
+    professional,
+    saveProfessional,
+    endorseSkill,
+    setMode,
+    addons,
+    mode,
+    hasTier,
+  } = useUserStore();
+
   const params = useParams<{ id?: string }>();
+  const navigate = useNavigate();
+
   const effectiveUserId = user?.id || '';
   const viewedUserId = params.id || effectiveUserId;
   const isOwnProfile = viewedUserId === effectiveUserId;
-  useEffect(() => {
-  const loadProfile = async () => {
-    if (!viewedUserId) return;
 
-    setProfileLoading(true);
+  const [viewedProfile, setViewedProfile] = useState<any>(null);
+  const [, setProfileLoading] = useState(false);
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', viewedUserId)
-      .maybeSingle();
-
-    if (!error) {
-      setViewedProfile(data);
-    }
-
-    setProfileLoading(false);
-  };
-
-  loadProfile();
-}, [viewedUserId]);
-  const viewedUser = useMemo(() => {
-    if (isOwnProfile) return user;
-    return {
-      id: viewedUserId,
-      email: '',
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(viewedUserId)}`,
-      coverPhoto: '',
-      bio: 'Welcome to my profile.',
-      followers: 0,
-      joinedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60),
-      interests: [],
-    } as any;
-  }, [isOwnProfile, user, viewedUserId]);
-
-  const userPosts = posts.filter((post) => post.userId === viewedUserId);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [followerCount, setFollowerCount] = useState(user?.followers || 0);
   const [isConnected, setIsConnected] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isPendingConnection, setIsPendingConnection] = useState(false);
   const [connectionCount, setConnectionCount] = useState(0);
+  const [buttonBusy, setButtonBusy] = useState<
+    'connect' | 'follow' | 'message' | null
+  >(null);
+
   const [newSkill, setNewSkill] = useState('');
-  const pro = useMemo(() => professional || { headline: '', bio: '', location: '', skills: [], experience: [], education: [], links: [], endorsements: {}, openToCollab: false, collabNote: '', resumeSummary: '' }, [professional]);
+
+  const pro = useMemo(
+    () =>
+      professional || {
+        headline: '',
+        bio: '',
+        location: '',
+        skills: [],
+        experience: [],
+        education: [],
+        links: [],
+        endorsements: {},
+        openToCollab: false,
+        collabNote: '',
+        resumeSummary: '',
+      },
+    [professional]
+  );
+
   const [collabNoteDraft, setCollabNoteDraft] = useState(pro.collabNote || '');
   const [resumeDraft, setResumeDraft] = useState(pro.resumeSummary || '');
   const [headlineDraft, setHeadlineDraft] = useState(pro.headline || '');
@@ -86,60 +100,193 @@ export default function ProfilePage() {
   const [eduField, setEduField] = useState('');
   const [eduStart, setEduStart] = useState('');
   const [eduEnd, setEduEnd] = useState('');
-  const [careerGoalsDraft, setCareerGoalsDraft] = useState(pro.careerGoals || '');
+  const [careerGoalsDraft, setCareerGoalsDraft] = useState(
+    pro.careerGoals || ''
+  );
   const [industryInterestDraft, setIndustryInterestDraft] = useState('');
-  const [experienceLevelDraft, setExperienceLevelDraft] = useState(pro.experienceLevel || '');
-  const [smartSummaryDraft, setSmartSummaryDraft] = useState(pro.smartSummary || '');
-  const [smartPositioningDraft, setSmartPositioningDraft] = useState(pro.smartPositioning || '');
-  const [smartSuggestedSkillsDraft, setSmartSuggestedSkillsDraft] = useState<string[]>(pro.smartSuggestedSkills || []);
-  const [aiSmartBusy, setAiSmartBusy] = useState<null | 'rewrite' | 'skills' | 'positioning'>(null);
+  const [experienceLevelDraft, setExperienceLevelDraft] = useState(
+    pro.experienceLevel || ''
+  );
+  const [smartSummaryDraft, setSmartSummaryDraft] = useState(
+    pro.smartSummary || ''
+  );
+  const [smartPositioningDraft, setSmartPositioningDraft] = useState(
+    pro.smartPositioning || ''
+  );
+  const [smartSuggestedSkillsDraft, setSmartSuggestedSkillsDraft] = useState<
+    string[]
+  >(pro.smartSuggestedSkills || []);
+  const [aiSmartBusy, setAiSmartBusy] = useState<
+    null | 'rewrite' | 'skills' | 'positioning'
+  >(null);
+
   const canUseAI = hasTier('pro');
   const canSeeAnalytics = isOwnProfile && hasTier('pro');
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'posts' | 'about' | 'professional' | 'photos'>(mode === 'professional' ? 'professional' : 'posts');
+
+  const [activeTab, setActiveTab] = useState<
+    'posts' | 'about' | 'professional' | 'photos'
+  >(mode === 'professional' ? 'professional' : 'posts');
+
   const collabSectionRef = useRef<HTMLDivElement | null>(null);
   const [jumpToCollab, setJumpToCollab] = useState(false);
-  const [viewedProfile, setViewedProfile] = useState<any>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  
-  useEffect(() => {
-    if (isOwnProfile) return;
-    try {
-      const raw = localStorage.getItem(`faceme:connections:${effectiveUserId}`);
-      const ids = raw ? (JSON.parse(raw) as string[]) : [];
-      setIsConnected(Array.isArray(ids) ? ids.includes(viewedUserId) : false);
-    } catch {
-      setIsConnected(false);
-    }
-  }, [effectiveUserId, isOwnProfile, viewedUserId]);
 
   useEffect(() => {
-    if (isOwnProfile) {
-      setFollowerCount(user?.followers || 0);
+    const loadProfile = async () => {
+      if (!viewedUserId) return;
 
-      try {
-        const key = `faceme:connections:${effectiveUserId}`;
-        const raw = localStorage.getItem(key);
-        const ids = raw ? (JSON.parse(raw) as string[]) : [];
-        setConnectionCount(Array.isArray(ids) ? ids.length : 0);
-      } catch {
-        setConnectionCount(0);
+      setProfileLoading(true);
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', viewedUserId)
+        .maybeSingle();
+
+      if (!error) {
+        setViewedProfile(data);
       }
-      return;
+
+      setProfileLoading(false);
+    };
+
+    loadProfile();
+  }, [viewedUserId]);
+
+  const viewedUser = useMemo(() => {
+    if (isOwnProfile) return user;
+
+    if (viewedProfile) {
+      const realName =
+        viewedProfile.full_name ||
+        viewedProfile.name ||
+        viewedProfile.username ||
+        viewedProfile.email?.split('@')[0] ||
+        'FaceMeX user';
+
+      return {
+        id: viewedProfile.id || viewedUserId,
+        email: viewedProfile.email || '',
+        name: realName,
+        avatar:
+          viewedProfile.avatar_url ||
+          viewedProfile.avatar ||
+          `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+            viewedUserId
+          )}`,
+        coverPhoto: viewedProfile.cover_photo || viewedProfile.coverPhoto || '',
+        bio: viewedProfile.bio || 'Welcome to my profile.',
+        followers: followerCount,
+        joinedDate: viewedProfile.created_at
+          ? new Date(viewedProfile.created_at)
+          : new Date(Date.now() - 1000 * 60 * 60 * 24 * 60),
+        interests: viewedProfile.interests || [],
+        location: viewedProfile.location || '',
+        website: viewedProfile.website || '',
+      } as any;
     }
-    setFollowerCount(0);
-    setConnectionCount(0);
-  }, [isOwnProfile, user?.followers, user?.isFollowing, viewedUserId]);
+
+    return {
+      id: viewedUserId,
+      email: '',
+      name: 'FaceMeX user',
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+        viewedUserId
+      )}`,
+      coverPhoto: '',
+      bio: 'Welcome to my profile.',
+      followers: 0,
+      joinedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60),
+      interests: [],
+    } as any;
+  }, [isOwnProfile, user, viewedUserId, viewedProfile, followerCount]);
+
+  const userPosts = posts.filter((post) => post.userId === viewedUserId);
+
+  const loadProfileRelationships = async () => {
+    if (!viewedUserId) return;
+
+    const [followersResult, connectionsResult] = await Promise.all([
+      supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', viewedUserId),
+
+      supabase
+        .from('connection_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'accepted')
+        .or(`sender_id.eq.${viewedUserId},receiver_id.eq.${viewedUserId}`),
+    ]);
+
+    setFollowerCount(followersResult.count || 0);
+    setConnectionCount(connectionsResult.count || 0);
+
+    if (!effectiveUserId || isOwnProfile) return;
+
+    const { data: followData } = await supabase
+      .from('follows')
+      .select('id')
+      .eq('follower_id', effectiveUserId)
+      .eq('following_id', viewedUserId)
+      .maybeSingle();
+
+    setIsFollowing(!!followData);
+
+    const { data: connectionRows } = await supabase
+      .from('connection_requests')
+      .select('id, sender_id, receiver_id, status')
+      .or(`sender_id.eq.${effectiveUserId},receiver_id.eq.${effectiveUserId}`);
+
+    const connection = (connectionRows || []).find((row: any) => {
+      return (
+        (row.sender_id === effectiveUserId &&
+          row.receiver_id === viewedUserId) ||
+        (row.sender_id === viewedUserId &&
+          row.receiver_id === effectiveUserId)
+      );
+    });
+
+    setIsConnected(connection?.status === 'accepted');
+    setIsPendingConnection(connection?.status === 'pending');
+  };
+
+  useEffect(() => {
+    if (!viewedUserId) return;
+
+    loadProfileRelationships();
+
+    const channel = supabase
+      .channel(`profile-relationship-${viewedUserId}-${effectiveUserId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'follows' },
+        () => {
+          loadProfileRelationships();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'connection_requests' },
+        () => {
+          loadProfileRelationships();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [viewedUserId, effectiveUserId, isOwnProfile]);
 
   useEffect(() => {
     if (isOwnProfile) return;
+
     try {
       const key = `faceme:profile_views:${viewedUserId}`;
       const raw = localStorage.getItem(key);
       const n = raw ? parseInt(raw, 10) || 0 : 0;
       localStorage.setItem(key, String(n + 1));
-    } catch {
-    }
+    } catch {}
   }, [isOwnProfile, viewedUserId]);
 
   const profileViews = useMemo(() => {
@@ -156,20 +303,45 @@ export default function ProfilePage() {
     const mine = posts.filter((p) => p.userId === effectiveUserId);
     const totalPosts = mine.length;
     const totalLikes = mine.reduce((a, p) => a + (p.likes || 0), 0);
-    const totalComments = mine.reduce((a, p) => a + (Array.isArray(p.comments) ? p.comments.length : 0), 0);
+    const totalComments = mine.reduce(
+      (a, p) => a + (Array.isArray(p.comments) ? p.comments.length : 0),
+      0
+    );
     const totalShares = mine.reduce((a, p) => a + (p.shares || 0), 0);
     const engagement = totalLikes + totalComments + totalShares;
-    const avgEngagement = totalPosts > 0 ? Math.round((engagement / totalPosts) * 10) / 10 : 0;
+    const avgEngagement =
+      totalPosts > 0 ? Math.round((engagement / totalPosts) * 10) / 10 : 0;
     const topPost = mine
       .slice()
-      .sort((a, b) => ((b.likes || 0) + (b.comments?.length || 0) + (b.shares || 0)) - ((a.likes || 0) + (a.comments?.length || 0) + (a.shares || 0)))
-      [0];
-    return { totalPosts, totalLikes, totalComments, totalShares, engagement, avgEngagement, topPost };
+      .sort(
+        (a, b) =>
+          (b.likes || 0) +
+          (b.comments?.length || 0) +
+          (b.shares || 0) -
+          ((a.likes || 0) + (a.comments?.length || 0) + (a.shares || 0))
+      )[0];
+
+    return {
+      totalPosts,
+      totalLikes,
+      totalComments,
+      totalShares,
+      engagement,
+      avgEngagement,
+      topPost,
+    };
   }, [posts, effectiveUserId]);
 
   useEffect(() => {
-    if (activeTab === 'professional' && jumpToCollab && collabSectionRef.current) {
-      collabSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (
+      activeTab === 'professional' &&
+      jumpToCollab &&
+      collabSectionRef.current
+    ) {
+      collabSectionRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
       setJumpToCollab(false);
     }
   }, [activeTab, jumpToCollab]);
@@ -198,6 +370,147 @@ export default function ProfilePage() {
     setSmartSuggestedSkillsDraft(pro.smartSuggestedSkills || []);
   }, [pro.smartSuggestedSkills]);
 
+  const handleFollowProfile = async () => {
+    if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
+
+    setButtonBusy('follow');
+
+    try {
+      if (isFollowing) {
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', effectiveUserId)
+          .eq('following_id', viewedUserId);
+
+        if (error) throw error;
+
+        setIsFollowing(false);
+        setFollowerCount((count) => Math.max(0, count - 1));
+        return;
+      }
+
+      const { error } = await supabase.from('follows').upsert(
+        {
+          follower_id: effectiveUserId,
+          following_id: viewedUserId,
+        },
+        {
+          onConflict: 'follower_id,following_id',
+        }
+      );
+
+      if (error) throw error;
+
+      await supabase.from('notifications').insert({
+        user_id: viewedUserId,
+        actor_id: effectiveUserId,
+        type: 'follow',
+        title: 'New follower',
+        message: `${
+          user?.name || user?.email?.split('@')[0] || 'Someone'
+        } followed you.`,
+        action_url: `/profile/${effectiveUserId}`,
+        is_read: false,
+      });
+
+      setIsFollowing(true);
+      setFollowerCount((count) => count + 1);
+    } catch (error: any) {
+      toast({
+        title: 'Follow failed',
+        description: error?.message || 'Could not update follow right now.',
+      });
+    } finally {
+      setButtonBusy(null);
+    }
+  };
+
+  const handleConnectProfile = async () => {
+    if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
+
+    setButtonBusy('connect');
+
+    try {
+      const { data, error } = await supabase
+        .from('connection_requests')
+        .upsert(
+          {
+            sender_id: effectiveUserId,
+            receiver_id: viewedUserId,
+            status: 'pending',
+          },
+          {
+            onConflict: 'sender_id,receiver_id',
+          }
+        )
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await supabase.from('notifications').upsert({
+        id: data.id,
+        user_id: viewedUserId,
+        actor_id: effectiveUserId,
+        type: 'connection_request',
+        title: 'New connection request',
+        message: `${
+          user?.name || user?.email?.split('@')[0] || 'Someone'
+        } wants to connect with you.`,
+        action_url: '/notifications',
+        is_read: false,
+      });
+
+      setIsPendingConnection(true);
+    } catch (error: any) {
+      toast({
+        title: 'Connect failed',
+        description: error?.message || 'Could not send connection request.',
+      });
+    } finally {
+      setButtonBusy(null);
+    }
+  };
+
+  const startProfileChat = async () => {
+    if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
+
+    setButtonBusy('message');
+
+    try {
+      const user1 =
+        effectiveUserId < viewedUserId ? effectiveUserId : viewedUserId;
+      const user2 =
+        effectiveUserId < viewedUserId ? viewedUserId : effectiveUserId;
+
+      const { data, error } = await supabase
+        .from('conversations')
+        .upsert(
+          {
+            user1_id: user1,
+            user2_id: user2,
+          },
+          {
+            onConflict: 'user1_id,user2_id',
+          }
+        )
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      navigate(`/messages/${viewedUserId}?conversation=${data.id}&focus=1`);
+    } catch (error: any) {
+      toast({
+        title: 'Chat failed',
+        description: error?.message || 'Could not open chat.',
+      });
+    } finally {
+      setButtonBusy(null);
+    }
+  };
+
   const addIndustryInterest = async () => {
     const v = industryInterestDraft.trim();
     if (!v) return;
@@ -213,18 +526,42 @@ export default function ProfilePage() {
 
   const aiRewriteProfessionally = async () => {
     if (!isOwnProfile) return;
+
     if (!canUseAI) {
-      toast({ title: 'Upgrade needed', description: 'AI tools are available on Pro and above.' });
+      toast({
+        title: 'Upgrade needed',
+        description: 'AI tools are available on Pro and above.',
+      });
       return;
     }
+
     setAiSmartBusy('rewrite');
+
     try {
-      const input = `Rewrite this user's Smart Profile professionally (clear, concise, no hype).\n\nSkills: ${(pro.skills || []).join(', ')}\nCareer goals: ${careerGoalsDraft || '(none)'}\nIndustry interests: ${(pro.industryInterests || []).join(', ') || '(none)'}\nExperience level: ${experienceLevelDraft || '(unspecified)'}\n\nOutput 2 short paragraphs max (no headings, no bullets).`;
+      const input = `Rewrite this user's Smart Profile professionally (clear, concise, no hype).\n\nSkills: ${(pro.skills || []).join(
+        ', '
+      )}\nCareer goals: ${
+        careerGoalsDraft || '(none)'
+      }\nIndustry interests: ${
+        (pro.industryInterests || []).join(', ') || '(none)'
+      }\nExperience level: ${
+        experienceLevelDraft || '(unspecified)'
+      }\n\nOutput 2 short paragraphs max (no headings, no bullets).`;
+
       const rewritten = await deepseekReply(input);
       setSmartSummaryDraft(rewritten);
-      await saveProfessional({ ...pro, careerGoals: careerGoalsDraft, experienceLevel: experienceLevelDraft as any, smartSummary: rewritten });
+
+      await saveProfessional({
+        ...pro,
+        careerGoals: careerGoalsDraft,
+        experienceLevel: experienceLevelDraft as any,
+        smartSummary: rewritten,
+      });
     } catch {
-      toast({ title: 'AI unavailable', description: 'Could not rewrite right now. Try again in a moment.' });
+      toast({
+        title: 'AI unavailable',
+        description: 'Could not rewrite right now. Try again in a moment.',
+      });
     } finally {
       setAiSmartBusy(null);
     }
@@ -232,24 +569,50 @@ export default function ProfilePage() {
 
   const aiSuggestMissingSkills = async () => {
     if (!isOwnProfile) return;
+
     if (!canUseAI) {
-      toast({ title: 'Upgrade needed', description: 'AI tools are available on Pro and above.' });
+      toast({
+        title: 'Upgrade needed',
+        description: 'AI tools are available on Pro and above.',
+      });
       return;
     }
+
     setAiSmartBusy('skills');
+
     try {
-      const input = `Suggest 6 to 10 missing skills that would strengthen this profile for the stated career goals and industry interests.\n\nCurrent skills: ${(pro.skills || []).join(', ') || '(none)'}\nCareer goals: ${careerGoalsDraft || '(none)'}\nIndustry interests: ${(pro.industryInterests || []).join(', ') || '(none)'}\nExperience level: ${experienceLevelDraft || '(unspecified)'}\n\nReturn ONLY a comma-separated list of skills. No extra text.`;
+      const input = `Suggest 6 to 10 missing skills that would strengthen this profile for the stated career goals and industry interests.\n\nCurrent skills: ${
+        (pro.skills || []).join(', ') || '(none)'
+      }\nCareer goals: ${
+        careerGoalsDraft || '(none)'
+      }\nIndustry interests: ${
+        (pro.industryInterests || []).join(', ') || '(none)'
+      }\nExperience level: ${
+        experienceLevelDraft || '(unspecified)'
+      }\n\nReturn ONLY a comma-separated list of skills. No extra text.`;
+
       const raw = await deepseekReply(input);
+
       const list = raw
         .split(/,|\n/)
         .map((s) => s.trim())
         .filter(Boolean)
         .slice(0, 12);
+
       const unique = Array.from(new Set(list));
       setSmartSuggestedSkillsDraft(unique);
-      await saveProfessional({ ...pro, careerGoals: careerGoalsDraft, experienceLevel: experienceLevelDraft as any, smartSuggestedSkills: unique });
+
+      await saveProfessional({
+        ...pro,
+        careerGoals: careerGoalsDraft,
+        experienceLevel: experienceLevelDraft as any,
+        smartSuggestedSkills: unique,
+      });
     } catch {
-      toast({ title: 'AI unavailable', description: 'Could not suggest skills right now. Try again later.' });
+      toast({
+        title: 'AI unavailable',
+        description: 'Could not suggest skills right now. Try again later.',
+      });
     } finally {
       setAiSmartBusy(null);
     }
@@ -257,18 +620,42 @@ export default function ProfilePage() {
 
   const aiCareerPositioning = async () => {
     if (!isOwnProfile) return;
+
     if (!canUseAI) {
-      toast({ title: 'Upgrade needed', description: 'AI tools are available on Pro and above.' });
+      toast({
+        title: 'Upgrade needed',
+        description: 'AI tools are available on Pro and above.',
+      });
       return;
     }
+
     setAiSmartBusy('positioning');
+
     try {
-      const input = `Write one sentence that positions this user for specific roles (not generic jobs).\nFormat like: "You are well positioned for junior data analyst roles in fintech."\n\nUse this info:\nSkills: ${(pro.skills || []).join(', ') || '(none)'}\nCareer goals: ${careerGoalsDraft || '(none)'}\nIndustry interests: ${(pro.industryInterests || []).join(', ') || '(none)'}\nExperience level: ${experienceLevelDraft || '(unspecified)'}\n\nReturn ONLY the sentence.`;
+      const input = `Write one sentence that positions this user for specific roles (not generic jobs).\nFormat like: "You are well positioned for junior data analyst roles in fintech."\n\nUse this info:\nSkills: ${
+        (pro.skills || []).join(', ') || '(none)'
+      }\nCareer goals: ${
+        careerGoalsDraft || '(none)'
+      }\nIndustry interests: ${
+        (pro.industryInterests || []).join(', ') || '(none)'
+      }\nExperience level: ${
+        experienceLevelDraft || '(unspecified)'
+      }\n\nReturn ONLY the sentence.`;
+
       const line = (await deepseekReply(input)).trim();
       setSmartPositioningDraft(line);
-      await saveProfessional({ ...pro, careerGoals: careerGoalsDraft, experienceLevel: experienceLevelDraft as any, smartPositioning: line });
+
+      await saveProfessional({
+        ...pro,
+        careerGoals: careerGoalsDraft,
+        experienceLevel: experienceLevelDraft as any,
+        smartPositioning: line,
+      });
     } catch {
-      toast({ title: 'AI unavailable', description: 'Could not generate positioning right now. Try again later.' });
+      toast({
+        title: 'AI unavailable',
+        description: 'Could not generate positioning right now. Try again later.',
+      });
     } finally {
       setAiSmartBusy(null);
     }
@@ -286,9 +673,9 @@ export default function ProfilePage() {
           <Card className="mb-4 md:mb-6 overflow-hidden rounded-2xl border border-border/60 shadow-none">
             {/* Cover Photo */}
             <div className="relative h-24 sm:h-28 md:h-40 lg:h-44">
-              {user?.coverPhoto ? (
+              {viewedUser?.coverPhoto ? (
                 <img
-                  src={user.coverPhoto}
+                  src={viewedUser.coverPhoto}
                   alt="Cover"
                   className="w-full h-full object-cover"
                 />
@@ -296,16 +683,17 @@ export default function ProfilePage() {
                 <div className="w-full h-full bg-muted/40" />
               )}
             </div>
-            
+
             <CardContent className="relative pt-0 pb-4 md:pb-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 sm:gap-6">
                 <div className="relative z-10 -mt-10 sm:-mt-12 md:-mt-16">
                   <Avatar className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 ring-2 ring-border bg-muted">
                     <AvatarImage src={viewedUser?.avatar} alt={viewedUser?.name} />
                     <AvatarFallback className="bg-muted text-foreground text-2xl font-semibold flex items-center justify-center">
-                      {(viewedUser?.name && viewedUser.name.charAt(0))
-                        || (viewedUser?.email && viewedUser.email.charAt(0).toUpperCase())
-                        || 'U'}
+                      {(viewedUser?.name && viewedUser.name.charAt(0)) ||
+                        (viewedUser?.email &&
+                          viewedUser.email.charAt(0).toUpperCase()) ||
+                        'U'}
                     </AvatarFallback>
                   </Avatar>
 
@@ -315,10 +703,12 @@ export default function ProfilePage() {
                     </span>
                   )}
                 </div>
-                
+
                 <div className="flex-1 min-w-0 text-left pt-1 sm:pt-4">
                   <div className="flex flex-wrap items-center justify-start gap-2 mb-1">
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold truncate">{viewedUser?.name}</h1>
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold truncate">
+                      {viewedUser?.name}
+                    </h1>
                     <IdentityVerifiedBadge />
                     {currentTier !== 'free' && (
                       <Badge variant="secondary" className="ml-1">
@@ -333,19 +723,21 @@ export default function ProfilePage() {
                     </div>
                   ) : null}
 
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-3 break-words">{user?.bio}</p>
+                  <p className="text-muted-foreground text-sm leading-relaxed mb-3 break-words">
+                    {viewedUser?.bio}
+                  </p>
 
                   {/* Interests */}
-                  {user?.interests && user.interests.length > 0 && (
+                  {viewedUser?.interests && viewedUser.interests.length > 0 && (
                     <div className="hidden sm:flex flex-wrap gap-2 mb-3 justify-start">
-                      {user.interests.map((interest) => (
+                      {viewedUser.interests.map((interest: string) => (
                         <Badge key={interest} variant="outline">
                           {interest}
                         </Badge>
                       ))}
                     </div>
                   )}
-                  
+
                   <div className="flex flex-wrap items-center justify-start gap-3 text-xs sm:text-sm text-muted-foreground">
                     {viewedUser?.location && (
                       <div className="flex items-center">
@@ -356,26 +748,34 @@ export default function ProfilePage() {
                     {viewedUser?.joinedDate && (
                       <div className="flex items-center">
                         <Calendar className="h-4 w-4 mr-1" />
-                        Joined {formatDistanceToNow(viewedUser.joinedDate, { addSuffix: true })}
+                        Joined{' '}
+                        {formatDistanceToNow(viewedUser.joinedDate, {
+                          addSuffix: true,
+                        })}
                       </div>
                     )}
                     {viewedUser?.website && (
                       <div className="flex items-center">
                         <LinkIcon className="h-4 w-4 mr-1" />
-                        <a href={`https://${viewedUser.website}`} target="_blank" rel="noopener noreferrer" className="text-foreground/80 hover:text-foreground underline-offset-4 hover:underline">
+                        <a
+                          href={`https://${viewedUser.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-foreground/80 hover:text-foreground underline-offset-4 hover:underline"
+                        >
                           {viewedUser.website}
                         </a>
                       </div>
                     )}
                   </div>
                 </div>
-                
+
                 <div className="flex w-full sm:w-auto items-center gap-2 sm:ml-auto flex-shrink-0 mt-1 sm:mt-0">
                   {isOwnProfile ? (
                     <Button
                       onClick={() => setIsEditModalOpen(true)}
                       variant="outline"
-                      className="w-full sm:w-auto"
+                      className="w-full sm:w-auto rounded-full px-5"
                     >
                       <Settings className="h-4 w-4 mr-2" />
                       Edit Profile
@@ -383,7 +783,47 @@ export default function ProfilePage() {
                   ) : (
                     <div className="flex w-full sm:w-auto items-center gap-2">
                       <AnimatePresence mode="wait">
-                        {!isConnected ? (
+                        {isConnected ? (
+                          <motion.div
+                            key="message"
+                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                            transition={{ duration: 0.22 }}
+                            className="w-full sm:w-auto"
+                          >
+                            <Button
+                              type="button"
+                              className="w-full sm:w-auto rounded-full px-5"
+                              onClick={startProfileChat}
+                              disabled={buttonBusy === 'message'}
+                            >
+                              <MessageCircle className="h-4 w-4 mr-2" />
+                              {buttonBusy === 'message'
+                                ? 'Opening...'
+                                : 'Message'}
+                            </Button>
+                          </motion.div>
+                        ) : isPendingConnection ? (
+                          <motion.div
+                            key="pending"
+                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                            transition={{ duration: 0.22 }}
+                            className="w-full sm:w-auto"
+                          >
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full sm:w-auto rounded-full px-5"
+                              disabled
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Pending
+                            </Button>
+                          </motion.div>
+                        ) : (
                           <motion.div
                             key="connect"
                             initial={{ opacity: 0, y: 6, scale: 0.98 }}
@@ -395,25 +835,37 @@ export default function ProfilePage() {
                             <Button
                               type="button"
                               variant="outline"
-                              className="w-full sm:w-auto"
-                              onClick={() => {
-                                try {
-                                  const key = `faceme:connections:${effectiveUserId}`;
-                                  const raw = localStorage.getItem(key);
-                                  const ids = raw ? (JSON.parse(raw) as string[]) : [];
-                                  const next = Array.isArray(ids) ? Array.from(new Set([...ids, viewedUserId])) : [viewedUserId];
-                                  localStorage.setItem(key, JSON.stringify(next));
-                                  setConnectionCount(next.length);
-                                } catch {}
-                                setIsConnected(true);
-                              }}
+                              className="w-full sm:w-auto rounded-full px-5"
+                              onClick={handleConnectProfile}
+                              disabled={buttonBusy === 'connect'}
                             >
                               <UserPlus className="h-4 w-4 mr-2" />
-                              Connect
+                              {buttonBusy === 'connect'
+                                ? 'Sending...'
+                                : 'Connect'}
                             </Button>
                           </motion.div>
-                        ) : null}
+                        )}
                       </AnimatePresence>
+
+                      <Button
+                        type="button"
+                        variant={isFollowing ? 'secondary' : 'outline'}
+                        className="w-full sm:w-auto rounded-full px-5"
+                        onClick={handleFollowProfile}
+                        disabled={buttonBusy === 'follow'}
+                      >
+                        {isFollowing ? (
+                          <UserMinus className="h-4 w-4 mr-2" />
+                        ) : (
+                          <UserPlus className="h-4 w-4 mr-2" />
+                        )}
+                        {buttonBusy === 'follow'
+                          ? 'Please wait...'
+                          : isFollowing
+                            ? 'Following'
+                            : 'Follow'}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -427,18 +879,30 @@ export default function ProfilePage() {
                 className="grid grid-cols-3 gap-2 sm:flex sm:justify-start sm:space-x-8 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t"
               >
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">{userPosts.length}</p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">Posts</p>
+                  <p className="text-base sm:text-2xl font-bold">
+                    {userPosts.length}
+                  </p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">
+                    Posts
+                  </p>
                 </div>
 
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">{connectionCount}</p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">Connections</p>
+                  <p className="text-base sm:text-2xl font-bold">
+                    {connectionCount}
+                  </p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">
+                    Connections
+                  </p>
                 </div>
 
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">{followerCount}</p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">Followers</p>
+                  <p className="text-base sm:text-2xl font-bold">
+                    {followerCount}
+                  </p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">
+                    Followers
+                  </p>
                 </div>
               </motion.div>
             </CardContent>
@@ -450,42 +914,72 @@ export default function ProfilePage() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <h2 className="text-sm font-semibold">Analytics</h2>
-                <Badge variant="outline" className="text-[10px]">PRO+</Badge>
+                <Badge variant="outline" className="text-[10px]">
+                  PRO+
+                </Badge>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Profile views</div>
-                  <div className="mt-1 text-2xl font-semibold">{profileViews}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">From local activity (device-based)</div>
-                </div>
-                <div className="rounded-xl border bg-card p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Post engagement</div>
-                  <div className="mt-1 text-2xl font-semibold">{myPostAnalytics.engagement}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Profile views
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {profileViews}
+                  </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {myPostAnalytics.totalLikes} likes · {myPostAnalytics.totalComments} comments · {myPostAnalytics.totalShares} shares
+                    From local activity (device-based)
                   </div>
                 </div>
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Average per post</div>
-                  <div className="mt-1 text-2xl font-semibold">{myPostAnalytics.avgEngagement}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Across {myPostAnalytics.totalPosts} posts</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Post engagement
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {myPostAnalytics.engagement}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {myPostAnalytics.totalLikes} likes ·{' '}
+                    {myPostAnalytics.totalComments} comments ·{' '}
+                    {myPostAnalytics.totalShares} shares
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-card p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Average per post
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {myPostAnalytics.avgEngagement}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Across {myPostAnalytics.totalPosts} posts
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
         ) : null}
 
-        {(pro.headline || pro.bio || pro.location || (pro.skills && pro.skills.length) || (pro.experience && pro.experience.length) || (pro.education && pro.education.length) || (pro.links && pro.links.length)) && (
+        {(pro.headline ||
+          pro.bio ||
+          pro.location ||
+          (pro.skills && pro.skills.length) ||
+          (pro.experience && pro.experience.length) ||
+          (pro.education && pro.education.length) ||
+          (pro.links && pro.links.length)) && (
           <Card className="mb-4 md:mb-6 rounded-2xl border border-border/60 shadow-none">
             <CardContent className="py-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <h2 className="text-sm font-semibold">Professional</h2>
-                <Badge variant="outline" className="text-[10px]">LinkedIn style</Badge>
+                <Badge variant="outline" className="text-[10px]">
+                  LinkedIn style
+                </Badge>
               </div>
 
               <div className="space-y-3">
                 {pro.headline && (
-                  <div className="text-sm font-medium text-foreground">{pro.headline}</div>
+                  <div className="text-sm font-medium text-foreground">
+                    {pro.headline}
+                  </div>
                 )}
 
                 {pro.location && (
@@ -495,25 +989,33 @@ export default function ProfilePage() {
                   </div>
                 )}
 
-                {(pro.experience && pro.experience.length > 0) && (
+                {pro.experience && pro.experience.length > 0 && (
                   <div className="rounded-xl border bg-card p-3">
-                    <div className="text-xs font-semibold mb-1">Experience</div>
+                    <div className="text-xs font-semibold mb-1">
+                      Experience
+                    </div>
                     <div className="text-xs text-muted-foreground">
-                      {pro.experience[0]?.role}{pro.experience[0]?.company ? ` · ${pro.experience[0].company}` : ''}
+                      {pro.experience[0]?.role}
+                      {pro.experience[0]?.company
+                        ? ` · ${pro.experience[0].company}`
+                        : ''}
                     </div>
                   </div>
                 )}
 
-                {(pro.education && pro.education.length > 0) && (
+                {pro.education && pro.education.length > 0 && (
                   <div className="rounded-xl border bg-card p-3">
                     <div className="text-xs font-semibold mb-1">Education</div>
                     <div className="text-xs text-muted-foreground">
-                      {pro.education[0]?.institution}{pro.education[0]?.degree ? ` · ${pro.education[0].degree}` : ''}
+                      {pro.education[0]?.institution}
+                      {pro.education[0]?.degree
+                        ? ` · ${pro.education[0].degree}`
+                        : ''}
                     </div>
                   </div>
                 )}
 
-                {(pro.skills && pro.skills.length > 0) && (
+                {pro.skills && pro.skills.length > 0 && (
                   <div>
                     <div className="text-xs font-semibold mb-2">Skills</div>
                     <div className="flex flex-wrap gap-2">
@@ -534,7 +1036,7 @@ export default function ProfilePage() {
                   </div>
                 )}
 
-                {(pro.links && pro.links.length > 0) && (
+                {pro.links && pro.links.length > 0 && (
                   <div>
                     <div className="text-xs font-semibold mb-2">Links</div>
                     <div className="flex flex-col gap-1">
@@ -558,7 +1060,11 @@ export default function ProfilePage() {
         )}
 
         {/* Profile Content */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as any)}
+          className="w-full"
+        >
           <TabsList className="w-full justify-start overflow-x-auto flex-nowrap rounded-none bg-transparent p-0 border-b border-border/60">
             <TabsTrigger
               value="posts"
@@ -585,7 +1091,7 @@ export default function ProfilePage() {
               Media
             </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="posts" className="mt-6 space-y-4">
             {userPosts.length > 0 ? (
               userPosts.map((post, index) => (
@@ -606,7 +1112,7 @@ export default function ProfilePage() {
               </Card>
             )}
           </TabsContent>
-          
+
           <TabsContent value="professional" className="mt-6">
             <Card className="rounded-2xl border border-border/60 shadow-none">
               <CardContent className="py-6">
@@ -629,14 +1135,19 @@ export default function ProfilePage() {
                             size="sm"
                             variant="outline"
                             onClick={async () => {
-                              await saveProfessional({ ...pro, headline: headlineDraft });
+                              await saveProfessional({
+                                ...pro,
+                                headline: headlineDraft,
+                              });
                             }}
                           >
                             Save
                           </Button>
                         </div>
                       ) : (
-                        <p className="text-muted-foreground">{pro.headline || 'Add a headline to showcase your role'}</p>
+                        <p className="text-muted-foreground">
+                          {pro.headline || 'Add a headline to showcase your role'}
+                        </p>
                       )}
                     </div>
 
@@ -645,7 +1156,10 @@ export default function ProfilePage() {
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         <span>Bio</span>
                       </h3>
-                      <p className="text-muted-foreground">{pro.bio || 'Tell others about your professional background'}</p>
+                      <p className="text-muted-foreground">
+                        {pro.bio ||
+                          'Tell others about your professional background'}
+                      </p>
                     </div>
 
                     <div>
@@ -653,7 +1167,9 @@ export default function ProfilePage() {
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         <span>Location</span>
                       </h3>
-                      <p className="text-muted-foreground">{pro.location || 'Set your location'}</p>
+                      <p className="text-muted-foreground">
+                        {pro.location || 'Set your location'}
+                      </p>
                     </div>
 
                     <div>
@@ -664,10 +1180,20 @@ export default function ProfilePage() {
                       <div className="flex flex-wrap gap-2">
                         {(pro.links || []).length ? (
                           pro.links!.map((l, i) => (
-                            <a key={i} className="text-sm text-primary hover:underline" href={l.url} target="_blank" rel="noreferrer">{l.type}: {l.url}</a>
+                            <a
+                              key={i}
+                              className="text-sm text-primary hover:underline"
+                              href={l.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {l.type}: {l.url}
+                            </a>
                           ))
                         ) : (
-                          <p className="text-muted-foreground text-sm">No links yet</p>
+                          <p className="text-muted-foreground text-sm">
+                            No links yet
+                          </p>
                         )}
                       </div>
                     </div>
@@ -678,7 +1204,10 @@ export default function ProfilePage() {
                           <Briefcase className="h-4 w-4 text-muted-foreground" />
                           <span>Professional Groups</span>
                         </h3>
-                        <p className="text-xs text-muted-foreground">Join industry-focused groups for discussions and collaboration.</p>
+                        <p className="text-xs text-muted-foreground">
+                          Join industry-focused groups for discussions and
+                          collaboration.
+                        </p>
                       </div>
                       <Button
                         type="button"
@@ -700,16 +1229,36 @@ export default function ProfilePage() {
                         <div className="space-y-2">
                           {(pro.experience || []).length ? (
                             pro.experience!.map((e, idx) => (
-                              <div key={idx} className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                              <div
+                                key={idx}
+                                className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                              >
                                 <div>
-                                  <div className="font-medium text-sm">{e.role || 'Role'}</div>
-                                  <div className="text-xs text-muted-foreground">{e.company || 'Company'}{(e.start || e.end) && ` • ${e.start || ''}${e.start && e.end ? ' – ' : ''}${e.end || ''}`}</div>
+                                  <div className="font-medium text-sm">
+                                    {e.role || 'Role'}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {e.company || 'Company'}
+                                    {(e.start || e.end) &&
+                                      ` • ${e.start || ''}${
+                                        e.start && e.end ? ' – ' : ''
+                                      }${e.end || ''}`}
+                                  </div>
                                   {e.summary && (
-                                    <div className="text-xs text-muted-foreground mt-1">{e.summary}</div>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {e.summary}
+                                    </div>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  {e.verified && <Badge variant="outline" className="text-[10px]">Verified</Badge>}
+                                  {e.verified && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px]"
+                                    >
+                                      Verified
+                                    </Badge>
+                                  )}
                                   {isOwnProfile && (
                                     <Button
                                       type="button"
@@ -717,9 +1266,17 @@ export default function ProfilePage() {
                                       variant="outline"
                                       className="text-[10px]"
                                       onClick={async () => {
-                                        const list = [...(pro.experience || [])];
-                                        list[idx] = { ...list[idx], verified: !list[idx].verified };
-                                        await saveProfessional({ ...pro, experience: list });
+                                        const list = [
+                                          ...(pro.experience || []),
+                                        ];
+                                        list[idx] = {
+                                          ...list[idx],
+                                          verified: !list[idx].verified,
+                                        };
+                                        await saveProfessional({
+                                          ...pro,
+                                          experience: list,
+                                        });
                                       }}
                                     >
                                       {e.verified ? 'Unverify' : 'Verify (dev)'}
@@ -729,7 +1286,9 @@ export default function ProfilePage() {
                               </div>
                             ))
                           ) : (
-                            <p className="text-xs text-muted-foreground">Add roles you want to highlight.</p>
+                            <p className="text-xs text-muted-foreground">
+                              Add roles you want to highlight.
+                            </p>
                           )}
                         </div>
                       </div>
@@ -737,12 +1296,32 @@ export default function ProfilePage() {
                       {isOwnProfile && (
                         <div className="space-y-2">
                           <div className="grid grid-cols-2 gap-2">
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Role" value={expRole} onChange={(e) => setExpRole(e.target.value)} />
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Company" value={expCompany} onChange={(e) => setExpCompany(e.target.value)} />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="Role"
+                              value={expRole}
+                              onChange={(e) => setExpRole(e.target.value)}
+                            />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="Company"
+                              value={expCompany}
+                              onChange={(e) => setExpCompany(e.target.value)}
+                            />
                           </div>
                           <div className="grid grid-cols-2 gap-2">
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Start (e.g. 2022)" value={expStart} onChange={(e) => setExpStart(e.target.value)} />
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="End (or Present)" value={expEnd} onChange={(e) => setExpEnd(e.target.value)} />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="Start (e.g. 2022)"
+                              value={expStart}
+                              onChange={(e) => setExpStart(e.target.value)}
+                            />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="End (or Present)"
+                              value={expEnd}
+                              onChange={(e) => setExpEnd(e.target.value)}
+                            />
                           </div>
                           <textarea
                             className="w-full min-h-[50px] px-2 py-1 border rounded text-xs bg-transparent"
@@ -756,7 +1335,8 @@ export default function ProfilePage() {
                               size="sm"
                               variant="outline"
                               onClick={async () => {
-                                if (!expRole.trim() || !expCompany.trim()) return;
+                                if (!expRole.trim() || !expCompany.trim())
+                                  return;
                                 const next = {
                                   role: expRole.trim(),
                                   company: expCompany.trim(),
@@ -765,9 +1345,19 @@ export default function ProfilePage() {
                                   summary: expSummary.trim() || undefined,
                                   verified: false,
                                 };
-                                const list = [...(pro.experience || []), next];
-                                await saveProfessional({ ...pro, experience: list });
-                                setExpRole(''); setExpCompany(''); setExpStart(''); setExpEnd(''); setExpSummary('');
+                                const list = [
+                                  ...(pro.experience || []),
+                                  next,
+                                ];
+                                await saveProfessional({
+                                  ...pro,
+                                  experience: list,
+                                });
+                                setExpRole('');
+                                setExpCompany('');
+                                setExpStart('');
+                                setExpEnd('');
+                                setExpSummary('');
                               }}
                             >
                               Add experience
@@ -786,13 +1376,32 @@ export default function ProfilePage() {
                         <div className="space-y-2">
                           {(pro.education || []).length ? (
                             pro.education!.map((e, idx) => (
-                              <div key={idx} className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                              <div
+                                key={idx}
+                                className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                              >
                                 <div>
-                                  <div className="font-medium text-sm">{e.institution || 'Institution'}</div>
-                                  <div className="text-xs text-muted-foreground">{e.degree || 'Degree'}{e.field ? ` • ${e.field}` : ''}{(e.start || e.end) && ` • ${e.start || ''}${e.start && e.end ? ' – ' : ''}${e.end || ''}`}</div>
+                                  <div className="font-medium text-sm">
+                                    {e.institution || 'Institution'}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {e.degree || 'Degree'}
+                                    {e.field ? ` • ${e.field}` : ''}
+                                    {(e.start || e.end) &&
+                                      ` • ${e.start || ''}${
+                                        e.start && e.end ? ' – ' : ''
+                                      }${e.end || ''}`}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  {e.verified && <Badge variant="outline" className="text-[10px]">Verified</Badge>}
+                                  {e.verified && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px]"
+                                    >
+                                      Verified
+                                    </Badge>
+                                  )}
                                   {isOwnProfile && (
                                     <Button
                                       type="button"
@@ -800,9 +1409,17 @@ export default function ProfilePage() {
                                       variant="outline"
                                       className="text-[10px]"
                                       onClick={async () => {
-                                        const list = [...(pro.education || [])];
-                                        list[idx] = { ...list[idx], verified: !list[idx].verified };
-                                        await saveProfessional({ ...pro, education: list });
+                                        const list = [
+                                          ...(pro.education || []),
+                                        ];
+                                        list[idx] = {
+                                          ...list[idx],
+                                          verified: !list[idx].verified,
+                                        };
+                                        await saveProfessional({
+                                          ...pro,
+                                          education: list,
+                                        });
                                       }}
                                     >
                                       {e.verified ? 'Unverify' : 'Verify (dev)'}
@@ -812,21 +1429,48 @@ export default function ProfilePage() {
                               </div>
                             ))
                           ) : (
-                            <p className="text-xs text-muted-foreground">Add education you want to highlight.</p>
+                            <p className="text-xs text-muted-foreground">
+                              Add education you want to highlight.
+                            </p>
                           )}
                         </div>
                       </div>
 
                       {isOwnProfile && (
                         <div className="space-y-2">
-                          <input className="w-full px-2 py-1 border rounded text-xs bg-transparent" placeholder="Institution" value={eduInstitution} onChange={(e) => setEduInstitution(e.target.value)} />
+                          <input
+                            className="w-full px-2 py-1 border rounded text-xs bg-transparent"
+                            placeholder="Institution"
+                            value={eduInstitution}
+                            onChange={(e) => setEduInstitution(e.target.value)}
+                          />
                           <div className="grid grid-cols-2 gap-2">
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Degree" value={eduDegree} onChange={(e) => setEduDegree(e.target.value)} />
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Field of study" value={eduField} onChange={(e) => setEduField(e.target.value)} />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="Degree"
+                              value={eduDegree}
+                              onChange={(e) => setEduDegree(e.target.value)}
+                            />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="Field of study"
+                              value={eduField}
+                              onChange={(e) => setEduField(e.target.value)}
+                            />
                           </div>
                           <div className="grid grid-cols-2 gap-2">
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Start (e.g. 2019)" value={eduStart} onChange={(e) => setEduStart(e.target.value)} />
-                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="End (or Present)" value={eduEnd} onChange={(e) => setEduEnd(e.target.value)} />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="Start (e.g. 2019)"
+                              value={eduStart}
+                              onChange={(e) => setEduStart(e.target.value)}
+                            />
+                            <input
+                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                              placeholder="End (or Present)"
+                              value={eduEnd}
+                              onChange={(e) => setEduEnd(e.target.value)}
+                            />
                           </div>
                           <div className="flex justify-end">
                             <Button
@@ -844,8 +1488,15 @@ export default function ProfilePage() {
                                   verified: false,
                                 };
                                 const list = [...(pro.education || []), next];
-                                await saveProfessional({ ...pro, education: list });
-                                setEduInstitution(''); setEduDegree(''); setEduField(''); setEduStart(''); setEduEnd('');
+                                await saveProfessional({
+                                  ...pro,
+                                  education: list,
+                                });
+                                setEduInstitution('');
+                                setEduDegree('');
+                                setEduField('');
+                                setEduStart('');
+                                setEduEnd('');
                               }}
                             >
                               Add education
@@ -865,10 +1516,14 @@ export default function ProfilePage() {
                       <div className="flex flex-wrap gap-2">
                         {(pro.skills || []).length ? (
                           pro.skills!.map((s) => (
-                            <div key={s} className="flex items-center gap-2 border rounded-full px-3 py-1 cursor-pointer hover:bg-muted/60" onClick={() => {
-                              setMode('professional');
-                              navigate(`/feed?skill=${encodeURIComponent(s)}`);
-                            }}>
+                            <div
+                              key={s}
+                              className="flex items-center gap-2 border rounded-full px-3 py-1 cursor-pointer hover:bg-muted/60"
+                              onClick={() => {
+                                setMode('professional');
+                                navigate(`/feed?skill=${encodeURIComponent(s)}`);
+                              }}
+                            >
                               <span className="text-sm">{s}</span>
                               <button
                                 className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground"
@@ -879,26 +1534,42 @@ export default function ProfilePage() {
                               >
                                 Endorse
                               </button>
-                              <span className="text-xs text-muted-foreground">{pro.endorsements?.[s] || 0}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {pro.endorsements?.[s] || 0}
+                              </span>
                             </div>
                           ))
                         ) : (
-                          <p className="text-muted-foreground text-sm">Add skills to get endorsements</p>
+                          <p className="text-muted-foreground text-sm">
+                            Add skills to get endorsements
+                          </p>
                         )}
                       </div>
                       {isOwnProfile && (
                         <div className="mt-3 flex gap-2">
-                          <input className="px-3 py-2 border rounded w-48 bg-transparent" placeholder="Add a skill" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} />
+                          <input
+                            className="px-3 py-2 border rounded w-48 bg-transparent"
+                            placeholder="Add a skill"
+                            value={newSkill}
+                            onChange={(e) => setNewSkill(e.target.value)}
+                          />
                           <Button
                             onClick={async () => {
                               const skill = newSkill.trim();
                               if (!skill) return;
-                              const nextSkills = Array.from(new Set([...(pro.skills || []), skill]));
-                              await saveProfessional({ ...pro, skills: nextSkills });
+                              const nextSkills = Array.from(
+                                new Set([...(pro.skills || []), skill])
+                              );
+                              await saveProfessional({
+                                ...pro,
+                                skills: nextSkills,
+                              });
                               setNewSkill('');
                             }}
                             variant="outline"
-                          >Add</Button>
+                          >
+                            Add
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -910,10 +1581,15 @@ export default function ProfilePage() {
                             <Sparkles className="h-4 w-4 text-primary" />
                             <span>AI Resume &amp; Skill Builder</span>
                           </h3>
-                          <p className="text-xs text-muted-foreground">Create a short professional summary based on your headline, bio, and skills.</p>
+                          <p className="text-xs text-muted-foreground">
+                            Create a short professional summary based on your
+                            headline, bio, and skills.
+                          </p>
                         </div>
                         {pro.resumeSummary && (
-                          <Badge variant="outline" className="text-[10px]">Saved</Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            Saved
+                          </Badge>
                         )}
                       </div>
                       <div className="space-y-2">
@@ -933,7 +1609,9 @@ export default function ProfilePage() {
                               if (pro.headline) parts.push(pro.headline);
                               if (pro.bio) parts.push(pro.bio);
                               if (pro.skills && pro.skills.length) {
-                                parts.push(`Key skills: ${pro.skills.join(', ')}`);
+                                parts.push(
+                                  `Key skills: ${pro.skills.join(', ')}`
+                                );
                               }
                               const text = parts.length
                                 ? parts.join(' • ')
@@ -948,7 +1626,10 @@ export default function ProfilePage() {
                               type="button"
                               size="sm"
                               onClick={async () => {
-                                await saveProfessional({ ...pro, resumeSummary: resumeDraft });
+                                await saveProfessional({
+                                  ...pro,
+                                  resumeSummary: resumeDraft,
+                                });
                               }}
                             >
                               Save summary
@@ -958,23 +1639,40 @@ export default function ProfilePage() {
                       </div>
                     </div>
 
-                    <div ref={collabSectionRef} className="pt-2 border-t space-y-2">
+                    <div
+                      ref={collabSectionRef}
+                      className="pt-2 border-t space-y-2"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <h3 className="font-semibold mb-1">Open to creative collabs</h3>
-                          <p className="text-xs text-muted-foreground">Signal that you're interested in collaborating with creators and communities.</p>
+                          <h3 className="font-semibold mb-1">
+                            Open to creative collabs
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            Signal that you're interested in collaborating with
+                            creators and communities.
+                          </p>
                         </div>
                         <button
-                          className={`px-3 py-1 rounded-full text-xs font-medium border ${pro.openToCollab ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'}`}
+                          className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                            pro.openToCollab
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background text-muted-foreground'
+                          }`}
                           onClick={async () => {
-                            await saveProfessional({ ...pro, openToCollab: !pro.openToCollab });
+                            await saveProfessional({
+                              ...pro,
+                              openToCollab: !pro.openToCollab,
+                            });
                           }}
                         >
                           {pro.openToCollab ? 'Open' : 'Closed'}
                         </button>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground mb-1">Collab note (optional)</p>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Collab note (optional)
+                        </p>
                         <textarea
                           className="w-full min-h-[60px] px-3 py-2 border rounded text-sm bg-transparent"
                           placeholder="E.g. short-form video, brand design, storytelling collabs..."
@@ -992,7 +1690,9 @@ export default function ProfilePage() {
                           onClick={async () => {
                             await saveProfessional(pro);
                           }}
-                        >Save Professional Profile</Button>
+                        >
+                          Save Professional Profile
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -1000,7 +1700,7 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="about" className="mt-6">
             <Card className="rounded-2xl border border-border/60 shadow-none">
               <CardContent className="py-6 space-y-5">
@@ -1008,7 +1708,8 @@ export default function ProfilePage() {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold">Smart Profile</div>
                     <div className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                      A professional snapshot focused on skills, goals, and career direction.
+                      A professional snapshot focused on skills, goals, and
+                      career direction.
                     </div>
                   </div>
                   {isOwnProfile ? (
@@ -1021,7 +1722,9 @@ export default function ProfilePage() {
                         onClick={aiRewriteProfessionally}
                         className="w-full sm:w-auto"
                       >
-                        {aiSmartBusy === 'rewrite' ? 'Rewriting…' : 'Rewrite professionally'}
+                        {aiSmartBusy === 'rewrite'
+                          ? 'Rewriting…'
+                          : 'Rewrite professionally'}
                       </Button>
                       <Button
                         type="button"
@@ -1031,7 +1734,9 @@ export default function ProfilePage() {
                         onClick={aiCareerPositioning}
                         className="w-full sm:w-auto"
                       >
-                        {aiSmartBusy === 'positioning' ? 'Working…' : 'Career positioning'}
+                        {aiSmartBusy === 'positioning'
+                          ? 'Working…'
+                          : 'Career positioning'}
                       </Button>
                     </div>
                   ) : null}
@@ -1039,25 +1744,36 @@ export default function ProfilePage() {
 
                 {smartPositioningDraft ? (
                   <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
-                    <div className="text-muted-foreground">{smartPositioningDraft}</div>
+                    <div className="text-muted-foreground">
+                      {smartPositioningDraft}
+                    </div>
                   </div>
                 ) : null}
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Skills</div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Skills
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {(pro.skills || []).length ? (
                         pro.skills!.slice(0, 20).map((s) => (
-                          <Badge key={s} variant="secondary" className="cursor-pointer" onClick={() => {
-                            setMode('professional');
-                            navigate(`/feed?skill=${encodeURIComponent(s)}`);
-                          }}>
+                          <Badge
+                            key={s}
+                            variant="secondary"
+                            className="cursor-pointer"
+                            onClick={() => {
+                              setMode('professional');
+                              navigate(`/feed?skill=${encodeURIComponent(s)}`);
+                            }}
+                          >
                             {s}
                           </Badge>
                         ))
                       ) : (
-                        <div className="text-sm text-muted-foreground">No skills added yet.</div>
+                        <div className="text-sm text-muted-foreground">
+                          No skills added yet.
+                        </div>
                       )}
                     </div>
 
@@ -1071,7 +1787,9 @@ export default function ProfilePage() {
                           onClick={aiSuggestMissingSkills}
                           className="w-full sm:w-auto"
                         >
-                          {aiSmartBusy === 'skills' ? 'Suggesting…' : 'Suggest missing skills'}
+                          {aiSmartBusy === 'skills'
+                            ? 'Suggesting…'
+                            : 'Suggest missing skills'}
                         </Button>
                       </div>
                     ) : null}
@@ -1079,7 +1797,9 @@ export default function ProfilePage() {
 
                   <div className="space-y-4">
                     <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Career goals</div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Career goals
+                      </div>
                       {isOwnProfile ? (
                         <textarea
                           className="w-full min-h-[84px] px-3 py-2 border rounded-xl text-sm bg-transparent"
@@ -1087,16 +1807,23 @@ export default function ProfilePage() {
                           value={careerGoalsDraft}
                           onChange={(e) => setCareerGoalsDraft(e.target.value)}
                           onBlur={async () => {
-                            await saveProfessional({ ...pro, careerGoals: careerGoalsDraft });
+                            await saveProfessional({
+                              ...pro,
+                              careerGoals: careerGoalsDraft,
+                            });
                           }}
                         />
                       ) : (
-                        <div className="text-sm text-muted-foreground leading-relaxed">{pro.careerGoals || 'Not specified.'}</div>
+                        <div className="text-sm text-muted-foreground leading-relaxed">
+                          {pro.careerGoals || 'Not specified.'}
+                        </div>
                       )}
                     </div>
 
                     <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Industry interests</div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Industry interests
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {(pro.industryInterests || []).length ? (
                           (pro.industryInterests || []).map((x) => (
@@ -1109,18 +1836,23 @@ export default function ProfilePage() {
                                 await removeIndustryInterest(x);
                               }}
                             >
-                              {x}{isOwnProfile ? ' ×' : ''}
+                              {x}
+                              {isOwnProfile ? ' ×' : ''}
                             </Badge>
                           ))
                         ) : (
-                          <div className="text-sm text-muted-foreground">Not specified.</div>
+                          <div className="text-sm text-muted-foreground">
+                            Not specified.
+                          </div>
                         )}
                       </div>
                       {isOwnProfile ? (
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <Input
                             value={industryInterestDraft}
-                            onChange={(e) => setIndustryInterestDraft(e.target.value)}
+                            onChange={(e) =>
+                              setIndustryInterestDraft(e.target.value)
+                            }
                             placeholder="Add an industry (e.g. fintech)"
                             className="h-9"
                             onKeyDown={(e) => {
@@ -1130,7 +1862,13 @@ export default function ProfilePage() {
                               }
                             }}
                           />
-                          <Button type="button" size="sm" variant="outline" onClick={addIndustryInterest} className="w-full sm:w-auto">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={addIndustryInterest}
+                            className="w-full sm:w-auto"
+                          >
                             Add
                           </Button>
                         </div>
@@ -1138,7 +1876,9 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Experience level</div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Experience level
+                      </div>
                       {isOwnProfile ? (
                         <select
                           className="w-full h-10 px-3 border rounded-xl bg-transparent text-sm"
@@ -1146,7 +1886,10 @@ export default function ProfilePage() {
                           onChange={async (e) => {
                             const v = e.target.value;
                             setExperienceLevelDraft(v);
-                            await saveProfessional({ ...pro, experienceLevel: v as any });
+                            await saveProfessional({
+                              ...pro,
+                              experienceLevel: v as any,
+                            });
                           }}
                         >
                           <option value="">Select…</option>
@@ -1157,10 +1900,14 @@ export default function ProfilePage() {
                           <option value="senior">Senior</option>
                           <option value="lead">Lead</option>
                           <option value="executive">Executive</option>
-                          <option value="career_switcher">Career switcher</option>
+                          <option value="career_switcher">
+                            Career switcher
+                          </option>
                         </select>
                       ) : (
-                        <div className="text-sm text-muted-foreground">{pro.experienceLevel || 'Not specified.'}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {pro.experienceLevel || 'Not specified.'}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1168,7 +1915,9 @@ export default function ProfilePage() {
 
                 {isOwnProfile && smartSuggestedSkillsDraft.length ? (
                   <div className="rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Suggested skills</div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Suggested skills
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {smartSuggestedSkillsDraft.map((s) => (
                         <button
@@ -1176,8 +1925,13 @@ export default function ProfilePage() {
                           type="button"
                           className="text-xs rounded-full border border-border/60 bg-background px-3 py-1 hover:bg-muted/30"
                           onClick={async () => {
-                            const nextSkills = Array.from(new Set([...(pro.skills || []), s]));
-                            await saveProfessional({ ...pro, skills: nextSkills });
+                            const nextSkills = Array.from(
+                              new Set([...(pro.skills || []), s])
+                            );
+                            await saveProfessional({
+                              ...pro,
+                              skills: nextSkills,
+                            });
                           }}
                           title="Add to skills"
                         >
@@ -1190,33 +1944,43 @@ export default function ProfilePage() {
 
                 {smartSummaryDraft ? (
                   <div className="space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Professional summary</div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Professional summary
+                    </div>
                     {isOwnProfile ? (
                       <textarea
                         className="w-full min-h-[110px] px-3 py-2 border rounded-xl text-sm bg-transparent"
                         value={smartSummaryDraft}
                         onChange={(e) => setSmartSummaryDraft(e.target.value)}
                         onBlur={async () => {
-                          await saveProfessional({ ...pro, smartSummary: smartSummaryDraft });
+                          await saveProfessional({
+                            ...pro,
+                            smartSummary: smartSummaryDraft,
+                          });
                         }}
                       />
                     ) : (
-                      <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{smartSummaryDraft}</div>
+                      <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                        {smartSummaryDraft}
+                      </div>
                     )}
                   </div>
                 ) : null}
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="photos" className="mt-6">
             <Card>
               <CardContent className="py-6">
                 <div className="grid grid-cols-3 gap-2">
                   {userPosts
-                    .filter(post => post.image)
+                    .filter((post) => post.image)
                     .map((post) => (
-                      <div key={post.id} className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity">
+                      <div
+                        key={post.id}
+                        className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                      >
                         <img
                           src={post.image}
                           alt="Post"
@@ -1225,8 +1989,10 @@ export default function ProfilePage() {
                       </div>
                     ))}
                 </div>
-                {userPosts.filter(post => post.image).length === 0 && (
-                  <p className="text-center text-muted-foreground py-6">No photos yet</p>
+                {userPosts.filter((post) => post.image).length === 0 && (
+                  <p className="text-center text-muted-foreground py-6">
+                    No photos yet
+                  </p>
                 )}
               </CardContent>
             </Card>
