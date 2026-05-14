@@ -197,6 +197,7 @@ function VoiceMessageBubble({ src }: { src: string }) {
 export default function MessagesPage() {
   const navigate = useNavigate();
   const { userId } = useParams();
+  const [searchParams] = useSearchParams();
   const { tier, hasTier } = useUserStore();
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -396,33 +397,66 @@ export default function MessagesPage() {
   }, [currentUserId]);
 
   useEffect(() => {
-    if (!currentUserId || !userId) return;
+  if (!currentUserId || !userId) return;
 
+  let cancelled = false;
+
+  async function openMessageFromButton() {
     setActiveConversation(userId);
-    loadMessages(userId);
+    activeConversationRef.current = userId;
+
+    await loadMessages(userId);
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, full_name, name, username, avatar_url, avatar, is_active')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (cancelled) return;
+
+    const realName = getProfileName(profile as ProfileRow);
+    const realAvatar = getProfileAvatar(profile as ProfileRow);
 
     setConversations((prev) => {
-      if (prev.some((conversation) => conversation.id === userId)) return prev;
+      const old = prev.find((conversation) => conversation.id === userId);
+
+      const openedConversation: UiConversation = {
+        id: userId,
+        type: 'dm',
+        name: realName,
+        participants: [
+          {
+            id: userId,
+            name: realName,
+            avatar: realAvatar,
+            isOnline: !!profile?.is_active,
+          },
+        ],
+        lastMessage: old?.lastMessage,
+        unreadCount: old?.unreadCount || 0,
+        isTyping: old?.isTyping,
+      };
 
       return [
-        {
-          id: userId,
-          type: 'dm',
-          name: 'FaceMeX Member',
-          participants: [
-            {
-              id: userId,
-              name: `User ${userId.slice(0, 6)}`,
-              avatar: '',
-              isOnline: false,
-            },
-          ],
-          unreadCount: 0,
-        },
-        ...prev,
+        openedConversation,
+        ...prev.filter((conversation) => conversation.id !== userId),
       ];
     });
-  }, [currentUserId, userId]);
+
+    if (searchParams.get('focus') === '1') {
+      window.setTimeout(() => {
+        messageInputRef.current?.focus();
+      }, 300);
+    }
+  }
+
+  openMessageFromButton();
+
+  return () => {
+    cancelled = true;
+  };
+}, [currentUserId, userId, searchParams]);
 
   useEffect(() => {
     if (!currentUserId) return;
