@@ -40,17 +40,78 @@ const STORAGE_KEY_PROMOTIONS = 'faceme_business_promotions_v1';
 
 function BusinessPromotionsStrip() {
   const [items, setItems] = useState<BusinessPromotion[]>([]);
+  const [loadingPromos, setLoadingPromos] = useState(true);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_PROMOTIONS);
-      if (raw) {
-        const parsed = JSON.parse(raw) as BusinessPromotion[];
-        setItems(parsed);
+    let cancelled = false;
+
+    async function loadFeedPromotions() {
+      setLoadingPromos(true);
+
+      const { data, error } = await supabase
+        .from('business_promotions')
+        .select(
+          'id, business_name, headline, description, image_url, cta_label, cta_url, tags, start_at, end_at, paid_amount_zar, paid_days'
+        )
+        .eq('placement', 'feed')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(12);
+
+      if (!cancelled && !error && data) {
+        const mapped: BusinessPromotion[] = data.map((item: any) => ({
+          id: String(item.id),
+          businessName: item.business_name || 'Business',
+          headline: item.headline || 'Sponsored promotion',
+          description: item.description || '',
+          imageUrl: item.image_url || '',
+          ctaLabel: item.cta_label || '',
+          ctaUrl: item.cta_url || '',
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          startAt: item.start_at ? new Date(item.start_at).getTime() : undefined,
+          endAt: item.end_at ? new Date(item.end_at).getTime() : undefined,
+          paidAmountZar:
+            typeof item.paid_amount_zar === 'number'
+              ? item.paid_amount_zar
+              : item.paid_amount_zar
+                ? Number(item.paid_amount_zar)
+                : undefined,
+          paidDays:
+            typeof item.paid_days === 'number'
+              ? item.paid_days
+              : item.paid_days
+                ? Number(item.paid_days)
+                : undefined,
+        }));
+
+        setItems(mapped);
+        setLoadingPromos(false);
+        return;
       }
-    } catch {
-      setItems([]);
+
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_PROMOTIONS);
+
+        if (!cancelled && raw) {
+          const parsed = JSON.parse(raw) as BusinessPromotion[];
+          setItems(parsed);
+        }
+      } catch {
+        if (!cancelled) {
+          setItems([]);
+        }
+      }
+
+      if (!cancelled) {
+        setLoadingPromos(false);
+      }
     }
+
+    loadFeedPromotions();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const displayItems = useMemo(() => {
@@ -67,7 +128,7 @@ function BusinessPromotionsStrip() {
     });
   }, [items]);
 
-  if (displayItems.length === 0) return null;
+  if (loadingPromos || displayItems.length === 0) return null;
 
   return (
     <div className="mb-4">
@@ -84,7 +145,11 @@ function BusinessPromotionsStrip() {
             className="absolute inset-y-0 left-0 flex items-center gap-3 pr-8"
             initial={{ x: '0%' }}
             animate={{ x: ['0%', '-50%'] }}
-            transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
+            transition={{
+              duration: Math.max(30, displayItems.length * 8),
+              repeat: Infinity,
+              ease: 'linear',
+            }}
           >
             {[...displayItems, ...displayItems].map((item, index) => (
               <div
@@ -99,7 +164,9 @@ function BusinessPromotionsStrip() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800" />
+                    <div className="h-full w-full bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 flex items-center justify-center text-white text-xs font-bold">
+                      {item.businessName.charAt(0)}
+                    </div>
                   )}
                 </div>
 
