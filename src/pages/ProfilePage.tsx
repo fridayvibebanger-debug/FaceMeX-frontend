@@ -475,42 +475,16 @@ export default function ProfilePage() {
 
   const startProfileChat = async () => {
     if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
-
+  
     setButtonBusy('message');
-
+  
     try {
-      const user1 =
-        effectiveUserId < viewedUserId ? effectiveUserId : viewedUserId;
-      const user2 =
-        effectiveUserId < viewedUserId ? viewedUserId : effectiveUserId;
-
-      const { data, error } = await supabase
-        .from('conversations')
-        .upsert(
-          {
-            user1_id: user1,
-            user2_id: user2,
-          },
-          {
-            onConflict: 'user1_id,user2_id',
-          }
-        )
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      navigate(`/messages/${viewedUserId}?conversation=${data.id}&focus=1`);
-    } catch (error: any) {
-      toast({
-        title: 'Chat failed',
-        description: error?.message || 'Could not open chat.',
-      });
+      navigate(`/messages/${viewedUserId}?focus=1`);
     } finally {
       setButtonBusy(null);
     }
   };
-
+  
   const addIndustryInterest = async () => {
     const v = industryInterestDraft.trim();
     if (!v) return;
