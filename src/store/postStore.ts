@@ -116,7 +116,6 @@ interface PostState {
 
   getAISuggestions: (content: string) => string[];
 }
-
 function getProfileName(profile: any, fallbackId?: string) {
   return (
     profile?.full_name?.trim() ||
