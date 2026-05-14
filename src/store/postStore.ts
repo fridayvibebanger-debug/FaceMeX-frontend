@@ -56,32 +56,6 @@ interface PostState {
     audio?: string,
     hashtags?: string[],
     mode?: PostMode
-   comments: Comment[];
-  shares: number;
-  timestamp: Date;
-  isLiked: boolean;
-  isSaved?: boolean;
-  reaction?: ReactionType;
-  mood?: string;
-  aiScore?: number;
-  mode?: PostMode;
-  collabInvites?: string[];
-  collaborators?: string[];
-}
-
-interface PostState {
-  posts: Post[];
-  trendingHashtags: string[];
-  aiSuggestions: string[];
-
-  loadPosts: () => Promise<void>;
-
-  addPost: (
-    content: string,
-    images?: string[],
-    audio?: string,
-    hashtags?: string[],
-    mode?: PostMode
   ) => Promise<void>;
 
   likePost: (postId: string, reaction?: string) => Promise<void>;
@@ -116,6 +90,7 @@ interface PostState {
 
   getAISuggestions: (content: string) => string[];
 }
+
 function getProfileName(profile: any, fallbackId?: string) {
   return (
     profile?.full_name?.trim() ||
@@ -140,7 +115,7 @@ async function getProfileById(userId: string) {
   return data;
 }
 
-const ensureProfile = async () => {
+async function ensureProfile() {
   let authUser = useAuthStore.getState().user;
 
   if (!authUser?.id) {
@@ -201,9 +176,9 @@ const ensureProfile = async () => {
     name: displayName,
     avatar: avatarUrl,
   };
-};
+}
 
-const getMediaType = (url?: string): MediaType => {
+function getMediaType(url?: string): MediaType {
   if (!url) return 'none';
 
   const lower = url.toLowerCase();
@@ -226,7 +201,7 @@ const getMediaType = (url?: string): MediaType => {
   }
 
   return 'image';
-};
+}
 
 export const usePostStore = create<PostState>((set, get) => ({
   posts: [],
@@ -279,29 +254,12 @@ export const usePostStore = create<PostState>((set, get) => ({
           : Promise.resolve({ data: [], error: null } as any),
       ]);
 
-    if (commentsResult.error) {
-      console.log('Comments load error:', commentsResult.error.message);
-    }
-
-    if (reactionsResult.error) {
-      console.log('Reactions load error:', reactionsResult.error.message);
-    }
-
-    if (sharesResult.error) {
-      console.log('Shares load error:', sharesResult.error.message);
-    }
-
-    if (savesResult.error) {
-      console.log('Saves load error:', savesResult.error.message);
-    }
-
     const comments = commentsResult.data || [];
     const reactions = reactionsResult.data || [];
     const shares = sharesResult.data || [];
     const saves = savesResult.data || [];
 
     const savedPostIds = new Set(saves.map((s: any) => s.post_id));
-
     const commentUserIds = comments.map((c: any) => c.user_id).filter(Boolean);
 
     const allUserIds = Array.from(
@@ -489,10 +447,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         .eq('post_id', postId)
         .eq('user_id', authUser.id);
 
-      if (error) {
-        console.log('Unlike error:', error.message);
-        return;
-      }
+      if (error) return;
 
       set({
         posts: get().posts.map((p) =>
@@ -521,10 +476,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       }
     );
 
-    if (error) {
-      console.log('Like error:', error.message);
-      return;
-    }
+    if (error) return;
 
     set({
       posts: get().posts.map((p) =>
@@ -556,10 +508,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       .select()
       .single();
 
-    if (error) {
-      console.error('Add reply error:', error.message);
-      return;
-    }
+    if (error) return;
 
     const profile = {
       full_name: authUser.name,
@@ -603,10 +552,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       .select()
       .single();
 
-    if (error) {
-      console.error('Add voice reply error:', error.message);
-      return;
-    }
+    if (error) return;
 
     const profile = {
       full_name: authUser.name,
@@ -640,10 +586,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       .update({ content })
       .eq('id', postId);
 
-    if (error) {
-      console.error('Edit post error:', error.message);
-      return;
-    }
+    if (error) return;
 
     set({
       posts: get().posts.map((p) =>
@@ -655,10 +598,7 @@ export const usePostStore = create<PostState>((set, get) => ({
   deletePost: async (postId) => {
     const { error } = await supabase.from('posts').delete().eq('id', postId);
 
-    if (error) {
-      console.error('Delete post error:', error.message);
-      return;
-    }
+    if (error) return;
 
     set({
       posts: get().posts.filter((p) => p.id !== postId),
@@ -671,10 +611,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       .update({ content })
       .eq('id', commentId);
 
-    if (error) {
-      console.error('Edit reply error:', error.message);
-      return;
-    }
+    if (error) return;
 
     set({
       posts: get().posts.map((p) =>
@@ -696,10 +633,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       .delete()
       .eq('id', commentId);
 
-    if (error) {
-      console.error('Delete reply error:', error.message);
-      return;
-    }
+    if (error) return;
 
     set({
       posts: get().posts.map((p) =>
@@ -716,20 +650,14 @@ export const usePostStore = create<PostState>((set, get) => ({
   sharePost: async (postId) => {
     const authUser = await ensureProfile();
 
-    if (!authUser?.id) {
-      alert('Please login again.');
-      return;
-    }
+    if (!authUser?.id) return;
 
     const { error } = await supabase.from('post_shares').insert({
       post_id: postId,
       user_id: authUser.id,
     });
 
-    if (error) {
-      console.log('Share error:', error.message);
-      return;
-    }
+    if (error) return;
 
     set({
       posts: get().posts.map((p) =>
@@ -741,10 +669,7 @@ export const usePostStore = create<PostState>((set, get) => ({
   savePost: async (postId) => {
     const authUser = await ensureProfile();
 
-    if (!authUser?.id) {
-      alert('Please login again.');
-      return;
-    }
+    if (!authUser?.id) return;
 
     const post = get().posts.find((p) => p.id === postId);
     if (!post) return;
@@ -756,10 +681,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         .eq('post_id', postId)
         .eq('user_id', authUser.id);
 
-      if (error) {
-        console.log('Unsave error:', error.message);
-        return;
-      }
+      if (error) return;
 
       set({
         posts: get().posts.map((p) =>
@@ -775,10 +697,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       user_id: authUser.id,
     });
 
-    if (error) {
-      console.log('Save error:', error.message);
-      return;
-    }
+    if (error) return;
 
     set({
       posts: get().posts.map((p) =>
@@ -787,9 +706,9 @@ export const usePostStore = create<PostState>((set, get) => ({
     });
   },
 
-  inviteCollaborator: async () => {},
-  acceptCollabInvite: async () => {},
-  rejectCollabInvite: async () => {},
+  inviteCollaborator: async (_postId, _userId) => {},
+  acceptCollabInvite: async (_postId) => {},
+  rejectCollabInvite: async (_postId) => {},
 
   extractHashtags: (content) => {
     const matches = content.match(/#[\w]+/g);
