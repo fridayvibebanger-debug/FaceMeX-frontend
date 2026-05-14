@@ -56,6 +56,32 @@ interface PostState {
     audio?: string,
     hashtags?: string[],
     mode?: PostMode
+   comments: Comment[];
+  shares: number;
+  timestamp: Date;
+  isLiked: boolean;
+  isSaved?: boolean;
+  reaction?: ReactionType;
+  mood?: string;
+  aiScore?: number;
+  mode?: PostMode;
+  collabInvites?: string[];
+  collaborators?: string[];
+}
+
+interface PostState {
+  posts: Post[];
+  trendingHashtags: string[];
+  aiSuggestions: string[];
+
+  loadPosts: () => Promise<void>;
+
+  addPost: (
+    content: string,
+    images?: string[],
+    audio?: string,
+    hashtags?: string[],
+    mode?: PostMode
   ) => Promise<void>;
 
   likePost: (postId: string, reaction?: string) => Promise<void>;
@@ -105,6 +131,16 @@ function getProfileAvatar(profile: any) {
   return profile?.avatar_url || profile?.avatar || '';
 }
 
+async function getProfileById(userId: string) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, name, username, avatar_url, avatar')
+    .eq('id', userId)
+    .maybeSingle();
+
+  return data;
+}
+
 const ensureProfile = async () => {
   let authUser = useAuthStore.getState().user;
 
@@ -128,18 +164,32 @@ const ensureProfile = async () => {
     } as any;
   }
 
+  const existingProfile = await getProfileById(authUser.id);
+
   const displayName =
+    existingProfile?.full_name ||
+    existingProfile?.name ||
+    existingProfile?.username ||
     authUser.name?.trim() ||
     authUser.email?.split('@')[0] ||
     `User ${String(authUser.id).slice(0, 6)}`;
 
+  const avatarUrl =
+    existingProfile?.avatar_url ||
+    existingProfile?.avatar ||
+    authUser.avatar ||
+    '';
+
   const { error } = await supabase.from('profiles').upsert({
     id: authUser.id,
-    email: authUser.email || '',
+    email: authUser.email || existingProfile?.email || '',
     full_name: displayName,
     name: displayName,
-    avatar_url: authUser.avatar || '',
+    username: existingProfile?.username || displayName,
+    avatar_url: avatarUrl,
+    avatar: avatarUrl,
     is_active: true,
+    updated_at: new Date().toISOString(),
   });
 
   if (error) {
@@ -147,7 +197,11 @@ const ensureProfile = async () => {
     return null;
   }
 
-  return authUser;
+  return {
+    ...authUser,
+    name: displayName,
+    avatar: avatarUrl,
+  };
 };
 
 const getMediaType = (url?: string): MediaType => {
@@ -338,7 +392,23 @@ export const usePostStore = create<PostState>((set, get) => ({
       };
     });
 
-    set({ posts: mapped });
+    const tagCount = new Map<string, number>();
+
+    mapped.forEach((post) => {
+      post.hashtags.forEach((tag) => {
+        tagCount.set(tag, (tagCount.get(tag) || 0) + 1);
+      });
+    });
+
+    const trendingHashtags = Array.from(tagCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([tag]) => tag);
+
+    set({
+      posts: mapped,
+      trendingHashtags,
+    });
   },
 
   addPost: async (content, images, audio, hashtags, mode) => {
@@ -359,6 +429,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         content,
         media_url: mediaUrl || null,
         media_type: mediaType,
+        mode: mode || 'social',
       })
       .select()
       .single();
@@ -373,6 +444,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       name: authUser.name,
       email: authUser.email,
       avatar_url: authUser.avatar,
+      avatar: authUser.avatar,
     };
 
     const newPost: Post = {
@@ -495,6 +567,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       name: authUser.name,
       email: authUser.email,
       avatar_url: authUser.avatar,
+      avatar: authUser.avatar,
     };
 
     const newComment: Comment = {
@@ -541,6 +614,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       name: authUser.name,
       email: authUser.email,
       avatar_url: authUser.avatar,
+      avatar: authUser.avatar,
     };
 
     const newComment: Comment = {
