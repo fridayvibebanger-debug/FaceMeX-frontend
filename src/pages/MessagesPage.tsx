@@ -448,7 +448,7 @@ export default function MessagesPage() {
       ];
     });
 
-    if (focusOnOpen) { (searchParams.get('focus') === '1') {
+    if (focusOnOpen) {
       window.setTimeout(() => {
         messageInputRef.current?.focus();
       }, 300);
