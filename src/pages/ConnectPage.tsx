@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { UserPlus } from 'lucide-react';
 
-import { neonButton } from '@/styles';
 import Navbar from '@/components/layout/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { UserPlus } from 'lucide-react';
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/store/authStore';
 
 type Profile = {
@@ -25,14 +24,21 @@ type Profile = {
 
 export default function ConnectPage() {
   const navigate = useNavigate();
-  const { user, isAuthenticated, isInitialized, restoreSession } = useAuthStore();
+  const { user, isAuthenticated, isInitialized, restoreSession } =
+    useAuthStore();
 
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
   const [connected, setConnected] = useState<Record<string, boolean>>({});
-  const [pendingRequests, setPendingRequests] = useState<Record<string, boolean>>({});
+  const [pendingRequests, setPendingRequests] = useState<Record<string, boolean>>(
+    {}
+  );
+
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  const actionButton =
+    'rounded-xl bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200';
 
   useEffect(() => {
     restoreSession();
@@ -55,8 +61,9 @@ export default function ConnectPage() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, name, username, avatar_url, avatar, bio, is_active, created_at')
-      .eq('is_active', true)
+      .select(
+        'id, email, full_name, name, username, avatar_url, avatar, bio, is_active, created_at'
+      )
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -66,7 +73,13 @@ export default function ConnectPage() {
       return;
     }
 
-    setRealUsers((data || []).filter((u: Profile) => u.id !== user.id));
+    const users = (data || []).filter((item: Profile) => {
+      if (!item.id) return false;
+      if (item.id === user.id) return false;
+      return true;
+    });
+
+    setRealUsers(users);
     setLoadingUsers(false);
   }
 
@@ -136,7 +149,7 @@ export default function ConnectPage() {
     fetchConnections();
 
     const channel = supabase
-      .channel(`connect-page-changes-${user.id}`)
+      .channel(`connect-page-live-${user.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profiles' },
@@ -169,31 +182,30 @@ export default function ConnectPage() {
 
   const suggestions = useMemo(() => {
     return realUsers
-      .map((u) => ({
-        id: u.id,
+      .map((item) => ({
+        id: item.id,
         name:
-          u.full_name ||
-          u.name ||
-          u.username ||
-          u.email?.split('@')[0] ||
-          `User ${u.id.slice(0, 6)}`,
-        headline: u.bio || 'FaceMeX member',
-        avatar: u.avatar_url || u.avatar || null,
+          item.full_name ||
+          item.name ||
+          item.username ||
+          item.email?.split('@')[0] ||
+          `User ${item.id.slice(0, 6)}`,
+        headline: item.bio || 'FaceMeX member',
+        avatar: item.avatar_url || item.avatar || null,
       }))
       .filter((suggestion) => {
-        // If user followed someone, remove them from Discover.
         if (followed[suggestion.id]) return false;
 
-        // If connection request is pending, remove them from Discover.
         if (pendingRequests[suggestion.id]) return false;
 
-        // If accepted, keep them visible so Message button appears.
         return true;
       });
   }, [realUsers, followed, pendingRequests]);
 
   const handleFollow = async (targetUserId: string) => {
     if (!user?.id || targetUserId === user.id) return;
+
+    setErrorText(null);
 
     const isFollowing = !!followed[targetUserId];
 
@@ -209,7 +221,12 @@ export default function ConnectPage() {
         return;
       }
 
-      setFollowed((prev) => ({ ...prev, [targetUserId]: false }));
+      setFollowed((prev) => ({
+        ...prev,
+        [targetUserId]: false,
+      }));
+
+      await fetchFollowing();
       await fetchUsers();
       return;
     }
@@ -239,7 +256,11 @@ export default function ConnectPage() {
       is_read: false,
     });
 
-    setFollowed((prev) => ({ ...prev, [targetUserId]: true }));
+    setFollowed((prev) => ({
+      ...prev,
+      [targetUserId]: true,
+    }));
+
     await fetchFollowing();
     await fetchUsers();
   };
@@ -275,47 +296,26 @@ export default function ConnectPage() {
       actor_id: user.id,
       type: 'connection_request',
       title: 'New connection request',
-      message: `${user.name || user.email?.split('@')[0] || 'Someone'} wants to connect with you.`,
+      message: `${
+        user.name || user.email?.split('@')[0] || 'Someone'
+      } wants to connect with you.`,
       action_url: '/notifications',
       is_read: false,
     });
 
-    setPendingRequests((prev) => ({ ...prev, [targetUserId]: true }));
+    setPendingRequests((prev) => ({
+      ...prev,
+      [targetUserId]: true,
+    }));
+
     await fetchConnections();
     await fetchUsers();
   };
 
- const startChat = async (targetUserId: string) => {
-  if (!user?.id || targetUserId === user.id) return;
+  const startChat = async (targetUserId: string) => {
+    if (!user?.id || targetUserId === user.id) return;
 
-  navigate(`/messages/${targetUserId}?focus=1`);
-};
-
-    setErrorText(null);
-
-    const user1 = user.id < targetUserId ? user.id : targetUserId;
-    const user2 = user.id < targetUserId ? targetUserId : user.id;
-
-    const { data, error } = await supabase
-      .from('conversations')
-      .upsert(
-        {
-          user1_id: user1,
-          user2_id: user2,
-        },
-        {
-          onConflict: 'user1_id,user2_id',
-        }
-      )
-      .select()
-      .single();
-
-    if (error) {
-      setErrorText(`Could not open chat: ${error.message}`);
-      return;
-    }
-
-    navigate(`/messages/${targetUserId}?conversation=${data.id}&focus=1`);
+    navigate(`/messages/${targetUserId}?focus=1`);
   };
 
   if (!isAuthenticated) return null;
@@ -385,27 +385,31 @@ export default function ConnectPage() {
                       <div className="flex flex-wrap gap-2 mt-3">
                         {connected[suggestion.id] ? (
                           <Button
+                            type="button"
                             onClick={() => startChat(suggestion.id)}
-                            className={neonButton}
+                            className={actionButton}
                           >
                             Message
                           </Button>
                         ) : pendingRequests[suggestion.id] ? (
-                          <Button disabled className={neonButton}>
+                          <Button type="button" disabled className={actionButton}>
                             Pending
                           </Button>
                         ) : (
                           <Button
+                            type="button"
                             onClick={() => sendConnectionRequest(suggestion.id)}
-                            className={neonButton}
+                            className={actionButton}
                           >
                             Connect
                           </Button>
                         )}
 
                         <Button
+                          type="button"
                           onClick={() => handleFollow(suggestion.id)}
-                          className={neonButton}
+                          variant={followed[suggestion.id] ? 'secondary' : 'outline'}
+                          className="rounded-xl"
                         >
                           {followed[suggestion.id] ? 'Following' : 'Follow'}
                         </Button>
