@@ -78,11 +78,17 @@ export default function ConnectPage() {
       .select('following_id')
       .eq('follower_id', user.id);
 
-    if (error) return;
+    if (error) {
+      console.log('Fetch following error:', error.message);
+      return;
+    }
 
     const next: Record<string, boolean> = {};
+
     (data || []).forEach((row: any) => {
-      if (row.following_id) next[row.following_id] = true;
+      if (row.following_id) {
+        next[row.following_id] = true;
+      }
     });
 
     setFollowed(next);
@@ -93,10 +99,13 @@ export default function ConnectPage() {
 
     const { data, error } = await supabase
       .from('connection_requests')
-      .select('*')
+      .select('id, sender_id, receiver_id, status, created_at')
       .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
 
-    if (error) return;
+    if (error) {
+      console.log('Fetch connections error:', error.message);
+      return;
+    }
 
     const nextConnected: Record<string, boolean> = {};
     const nextPending: Record<string, boolean> = {};
@@ -104,8 +113,15 @@ export default function ConnectPage() {
     (data || []).forEach((row: any) => {
       const otherId = row.sender_id === user.id ? row.receiver_id : row.sender_id;
 
-      if (row.status === 'accepted') nextConnected[otherId] = true;
-      if (row.status === 'pending') nextPending[otherId] = true;
+      if (!otherId) return;
+
+      if (row.status === 'accepted') {
+        nextConnected[otherId] = true;
+      }
+
+      if (row.status === 'pending') {
+        nextPending[otherId] = true;
+      }
     });
 
     setConnected(nextConnected);
@@ -120,10 +136,30 @@ export default function ConnectPage() {
     fetchConnections();
 
     const channel = supabase
-      .channel('connect-page-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchUsers)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, fetchFollowing)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'connection_requests' }, fetchConnections)
+      .channel(`connect-page-changes-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => {
+          fetchUsers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'follows' },
+        () => {
+          fetchFollowing();
+          fetchUsers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'connection_requests' },
+        () => {
+          fetchConnections();
+          fetchUsers();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -132,18 +168,29 @@ export default function ConnectPage() {
   }, [isInitialized, isAuthenticated, user?.id]);
 
   const suggestions = useMemo(() => {
-    return realUsers.map((u) => ({
-      id: u.id,
-      name:
-        u.full_name ||
-        u.name ||
-        u.username ||
-        u.email?.split('@')[0] ||
-        `User ${u.id.slice(0, 6)}`,
-      headline: u.bio || 'FaceMeX member',
-      avatar: u.avatar_url || u.avatar || null,
-    }));
-  }, [realUsers]);
+    return realUsers
+      .map((u) => ({
+        id: u.id,
+        name:
+          u.full_name ||
+          u.name ||
+          u.username ||
+          u.email?.split('@')[0] ||
+          `User ${u.id.slice(0, 6)}`,
+        headline: u.bio || 'FaceMeX member',
+        avatar: u.avatar_url || u.avatar || null,
+      }))
+      .filter((suggestion) => {
+        // If user followed someone, remove them from Discover.
+        if (followed[suggestion.id]) return false;
+
+        // If connection request is pending, remove them from Discover.
+        if (pendingRequests[suggestion.id]) return false;
+
+        // If accepted, keep them visible so Message button appears.
+        return true;
+      });
+  }, [realUsers, followed, pendingRequests]);
 
   const handleFollow = async (targetUserId: string) => {
     if (!user?.id || targetUserId === user.id) return;
@@ -157,34 +204,50 @@ export default function ConnectPage() {
         .eq('follower_id', user.id)
         .eq('following_id', targetUserId);
 
-      if (error) return;
+      if (error) {
+        setErrorText(error.message);
+        return;
+      }
 
       setFollowed((prev) => ({ ...prev, [targetUserId]: false }));
+      await fetchUsers();
       return;
     }
 
-    const { error } = await supabase.from('follows').upsert({
-      follower_id: user.id,
-      following_id: targetUserId,
-    });
+    const { error } = await supabase.from('follows').upsert(
+      {
+        follower_id: user.id,
+        following_id: targetUserId,
+      },
+      {
+        onConflict: 'follower_id,following_id',
+      }
+    );
 
-    if (error) return;
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
 
     await supabase.from('notifications').insert({
       user_id: targetUserId,
       actor_id: user.id,
       type: 'follow',
       title: 'New follower',
-      message: `${user.name || 'Someone'} followed you.`,
+      message: `${user.name || user.email?.split('@')[0] || 'Someone'} followed you.`,
       action_url: `/profile/${user.id}`,
       is_read: false,
     });
 
     setFollowed((prev) => ({ ...prev, [targetUserId]: true }));
+    await fetchFollowing();
+    await fetchUsers();
   };
 
   const sendConnectionRequest = async (targetUserId: string) => {
     if (!user?.id || targetUserId === user.id) return;
+
+    setErrorText(null);
 
     const { data, error } = await supabase
       .from('connection_requests')
@@ -194,7 +257,9 @@ export default function ConnectPage() {
           receiver_id: targetUserId,
           status: 'pending',
         },
-        { onConflict: 'sender_id,receiver_id' }
+        {
+          onConflict: 'sender_id,receiver_id',
+        }
       )
       .select()
       .single();
@@ -210,12 +275,44 @@ export default function ConnectPage() {
       actor_id: user.id,
       type: 'connection_request',
       title: 'New connection request',
-      message: `${user.name || 'Someone'} wants to connect with you.`,
+      message: `${user.name || user.email?.split('@')[0] || 'Someone'} wants to connect with you.`,
       action_url: '/notifications',
       is_read: false,
     });
 
     setPendingRequests((prev) => ({ ...prev, [targetUserId]: true }));
+    await fetchConnections();
+    await fetchUsers();
+  };
+
+  const startChat = async (targetUserId: string) => {
+    if (!user?.id || targetUserId === user.id) return;
+
+    setErrorText(null);
+
+    const user1 = user.id < targetUserId ? user.id : targetUserId;
+    const user2 = user.id < targetUserId ? targetUserId : user.id;
+
+    const { data, error } = await supabase
+      .from('conversations')
+      .upsert(
+        {
+          user1_id: user1,
+          user2_id: user2,
+        },
+        {
+          onConflict: 'user1_id,user2_id',
+        }
+      )
+      .select()
+      .single();
+
+    if (error) {
+      setErrorText(`Could not open chat: ${error.message}`);
+      return;
+    }
+
+    navigate(`/messages/${targetUserId}?conversation=${data.id}&focus=1`);
   };
 
   if (!isAuthenticated) return null;
@@ -240,9 +337,13 @@ export default function ConnectPage() {
         )}
 
         {loadingUsers ? (
-          <div className="text-center py-10 text-muted-foreground">Loading users...</div>
+          <div className="text-center py-10 text-muted-foreground">
+            Loading users...
+          </div>
         ) : suggestions.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground">No active users found yet.</div>
+          <div className="text-center py-10 text-muted-foreground">
+            No active users found yet.
+          </div>
         ) : (
           <div className="grid gap-3">
             {suggestions.map((suggestion) => (
@@ -281,7 +382,7 @@ export default function ConnectPage() {
                       <div className="flex flex-wrap gap-2 mt-3">
                         {connected[suggestion.id] ? (
                           <Button
-                            onClick={() => navigate(`/messages/${suggestion.id}`)}
+                            onClick={() => startChat(suggestion.id)}
                             className={neonButton}
                           >
                             Message
