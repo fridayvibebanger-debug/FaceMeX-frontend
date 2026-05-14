@@ -23,7 +23,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/components/layout/Navbar';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useUserStore } from '@/store/userStore';
 import { api, API_URL } from '@/lib/api';
 import { deepseekReply } from '@/utils/ai';
