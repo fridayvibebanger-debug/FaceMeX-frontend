@@ -33,9 +33,6 @@ export default function NewsFeed() {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [newPostsAvailable, setNewPostsAvailable] = useState(false);
 
-  const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
-
-  const visibleIdsReadyRef = useRef(false);
   const latestKnownPostIdRef = useRef<string | null>(null);
 
   const cleanContent = content.trim();
@@ -47,14 +44,6 @@ export default function NewsFeed() {
       latestKnownPostIdRef.current = posts[0].id;
     }
   }, [posts, newPostsAvailable]);
-
-  useEffect(() => {
-    if (visibleIdsReadyRef.current) return;
-    if (posts.length === 0) return;
-
-    setVisiblePostIds(new Set(posts.map((post) => post.id)));
-    visibleIdsReadyRef.current = true;
-  }, [posts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,9 +79,15 @@ export default function NewsFeed() {
         },
         (payload) => {
           const newPostId = String(payload.new?.id || '');
+          const newPostUserId = String(payload.new?.user_id || '');
           const latestKnownPostId = latestKnownPostIdRef.current;
 
           if (!newPostId) return;
+
+          if (user?.id && newPostUserId === user.id) {
+            latestKnownPostIdRef.current = newPostId;
+            return;
+          }
 
           if (!latestKnownPostId) {
             latestKnownPostIdRef.current = newPostId;
@@ -111,7 +106,7 @@ export default function NewsFeed() {
     pollTimer = window.setInterval(async () => {
       const { data, error } = await supabase
         .from('posts')
-        .select('id')
+        .select('id, user_id')
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -121,9 +116,15 @@ export default function NewsFeed() {
       }
 
       const newestId = data?.[0]?.id;
+      const newestUserId = data?.[0]?.user_id;
       const latestKnownPostId = latestKnownPostIdRef.current;
 
       if (!newestId) return;
+
+      if (user?.id && newestUserId === user.id) {
+        latestKnownPostIdRef.current = newestId;
+        return;
+      }
 
       if (!latestKnownPostId) {
         latestKnownPostIdRef.current = newestId;
@@ -144,17 +145,12 @@ export default function NewsFeed() {
 
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user?.id]);
 
   const handleRefreshNewPosts = async () => {
     await loadPosts().catch((error) => {
       console.log('Refresh new posts failed:', error);
     });
-
-    const latestPosts = usePostStore.getState().posts;
-
-    setVisiblePostIds(new Set(latestPosts.map((post) => post.id)));
-    visibleIdsReadyRef.current = true;
 
     const { data } = await supabase
       .from('posts')
@@ -187,9 +183,19 @@ export default function NewsFeed() {
       setMediaUrl('');
       setShowMediaInput(false);
 
-      // Do not reveal the new post immediately.
-      // Keep it hidden until the user clicks the refresh banner.
-      setNewPostsAvailable(true);
+      await loadPosts().catch(() => {});
+
+      const { data } = await supabase
+        .from('posts')
+        .select('id')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (data?.[0]?.id) {
+        latestKnownPostIdRef.current = data[0].id;
+      }
+
+      setNewPostsAvailable(false);
     } catch (error) {
       console.log('Create post failed:', error);
     } finally {
@@ -218,7 +224,6 @@ export default function NewsFeed() {
       return list.sort((a, b) => {
         const scoreB = b.likes + b.comments.length + b.shares;
         const scoreA = a.likes + a.comments.length + a.shares;
-
         return scoreB - scoreA;
       });
     }
@@ -240,16 +245,10 @@ export default function NewsFeed() {
     });
   }, [posts, feedFilter]);
 
-  const visibleFilteredPosts = useMemo(() => {
-    if (!visibleIdsReadyRef.current) return filteredPosts;
-
-    return filteredPosts.filter((post) => visiblePostIds.has(post.id));
-  }, [filteredPosts, visiblePostIds]);
-
   const sectionTags = useMemo(() => {
     const tagCount = new Map<string, number>();
 
-    visibleFilteredPosts.forEach((post) => {
+    filteredPosts.forEach((post) => {
       const tagsFromPost = post.hashtags || [];
 
       const tagsFromContent =
@@ -272,7 +271,7 @@ export default function NewsFeed() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
       .map(([tag, count]) => ({ tag, count }));
-  }, [visibleFilteredPosts]);
+  }, [filteredPosts]);
 
   const userDisplayName =
     user?.name?.trim() ||
@@ -447,7 +446,7 @@ export default function NewsFeed() {
         </CardContent>
       </Card>
 
-      {visibleFilteredPosts.length === 0 ? (
+      {filteredPosts.length === 0 ? (
         <Card className="rounded-3xl border">
           <CardContent className="p-8 text-center">
             <div className="text-sm font-medium">No posts yet</div>
@@ -458,7 +457,7 @@ export default function NewsFeed() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {visibleFilteredPosts.map((post) => (
+          {filteredPosts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
         </div>
