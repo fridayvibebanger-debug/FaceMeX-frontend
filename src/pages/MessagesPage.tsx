@@ -197,8 +197,11 @@ function VoiceMessageBubble({ src }: { src: string }) {
 export default function MessagesPage() {
   const navigate = useNavigate();
   const { userId } = useParams();
-  const [searchParams] = useSearchParams();
-  const { tier, hasTier } = useUserStore();
+  
+  const focusOnOpen =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('focus') === '1'
+      : false;
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<UiConversation[]>([]);
@@ -444,7 +447,7 @@ export default function MessagesPage() {
       ];
     });
 
-    if (searchParams.get('focus') === '1') {
+    if (focusOnOpen) { (searchParams.get('focus') === '1') {
       window.setTimeout(() => {
         messageInputRef.current?.focus();
       }, 300);
@@ -456,7 +459,7 @@ export default function MessagesPage() {
   return () => {
     cancelled = true;
   };
-}, [currentUserId, userId, searchParams]);
+}, [currentUserId, userId, focusOnOpen]);
 
   useEffect(() => {
     if (!currentUserId) return;
