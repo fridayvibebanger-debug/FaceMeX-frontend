@@ -89,6 +89,8 @@ function App() {
         <Route path="/login" element={<PublicAuthRoute />} />
         <Route path="/signup" element={<PublicAuthRoute />} />
         <Route path="/auth" element={<PublicAuthRoute />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/:id" element={<ProfilePage />} />
 
         <Route path="/prd" element={<PRDPage />} />
         <Route path="/tos" element={<TermsOfService />} />
