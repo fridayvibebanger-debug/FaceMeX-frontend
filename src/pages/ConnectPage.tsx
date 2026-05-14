@@ -285,8 +285,11 @@ export default function ConnectPage() {
     await fetchUsers();
   };
 
-  const startChat = async (targetUserId: string) => {
-    if (!user?.id || targetUserId === user.id) return;
+ const startChat = async (targetUserId: string) => {
+  if (!user?.id || targetUserId === user.id) return;
+
+  navigate(`/messages/${targetUserId}?focus=1`);
+};
 
     setErrorText(null);
 
