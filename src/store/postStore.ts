@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
 import {
   validateProfessionalPost,
