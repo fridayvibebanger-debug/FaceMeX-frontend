@@ -663,7 +663,7 @@ export default function MarketplacePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-4 pt-4 md:pt-6 pb-10 space-y-4">
+      <div className="max-w-6xl mx-auto px-4 pt-20 md:pt-24 pb-10 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <Input
             placeholder="Search shops, products, services..."
