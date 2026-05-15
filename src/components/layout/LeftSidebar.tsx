@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   Home,
   User,
@@ -38,9 +39,16 @@ export default function LeftSidebar() {
   const navigate = useNavigate();
 
   const { user } = useAuthStore();
-  const { mode, setMode } = useUserStore();
+  const { mode, setMode, tier, hasTier } = useUserStore();
 
   const currentMode = mode === 'professional' ? 'professional' : 'social';
+
+  const userTier = String(tier || user?.tier || 'free').toLowerCase();
+
+  const canUseProfessionalMode =
+    typeof hasTier === 'function'
+      ? hasTier('creator')
+      : ['creator', 'business', 'exclusive'].includes(userTier);
 
   const displayName =
     user?.name?.trim() ||
@@ -49,7 +57,23 @@ export default function LeftSidebar() {
 
   const avatarUrl = user?.avatar || '';
 
+  useEffect(() => {
+    if (!canUseProfessionalMode && currentMode === 'professional') {
+      setMode('social');
+
+      try {
+        localStorage.setItem('faceme_mode', 'social');
+      } catch {
+        // ignore localStorage errors
+      }
+    }
+  }, [canUseProfessionalMode, currentMode, setMode]);
+
   const handleModeChange = (nextMode: 'social' | 'professional') => {
+    if (nextMode === 'professional' && !canUseProfessionalMode) {
+      return;
+    }
+
     setMode(nextMode);
 
     try {
@@ -106,18 +130,32 @@ export default function LeftSidebar() {
 
           <button
             type="button"
+            disabled={!canUseProfessionalMode}
+            title={
+              canUseProfessionalMode
+                ? 'Professional Mode'
+                : 'Professional Mode is for Creator tier and above'
+            }
             onClick={() => handleModeChange('professional')}
             className={cn(
               'flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-colors',
-              currentMode === 'professional'
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950'
-                : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+              !canUseProfessionalMode
+                ? 'cursor-not-allowed opacity-45 text-slate-400 dark:text-slate-600'
+                : currentMode === 'professional'
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950'
+                  : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
             )}
           >
             <Briefcase className="h-3.5 w-3.5" />
             Pro
           </button>
         </div>
+
+        {!canUseProfessionalMode && (
+          <div className="mt-2 px-1 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+            Professional Mode unlocks from Creator tier.
+          </div>
+        )}
       </div>
 
       <nav className="space-y-1.5 text-sm">
