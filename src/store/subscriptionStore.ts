@@ -1,15 +1,151 @@
-import { supabase } from '@/lib/supabaseClient';
+import { create } from 'zustand';
+import {
+  createYocoCheckoutSession,
+  refreshMyBillingTier,
+  type PaidTier,
+} from '@/lib/billing';
 
-export type PaidTier = 'pro' | 'creator' | 'business' | 'exclusive';
+export type Tier =
+  | 'free'
+  | 'pro'
+  | 'creator'
+  | 'business'
+  | 'exclusive'
+  | 'verified';
 
-export const tierPricesZar: Record<PaidTier, number> = {
+export interface TierInfo {
+  id: Tier;
+  name: string;
+  price: string;
+  benefits: string[];
+  buttonText?: string;
+  note?: string;
+  isAddon?: boolean;
+}
+
+interface SubscriptionState {
+  currentTier: Tier;
+  tiers: TierInfo[];
+  trialTier: Tier | null;
+  trialEndsAt: string | null;
+  isCheckingOut: boolean;
+  subscribe: (tier: Tier) => Promise<void>;
+  startTrial: (tier: Tier) => Promise<void>;
+  isTrialActive: () => boolean;
+  cancel: () => Promise<void>;
+  syncTier: () => Promise<void>;
+}
+
+const TIERS: TierInfo[] = [
+  {
+    id: 'free',
+    name: 'Free',
+    price: 'R0',
+    buttonText: 'Current free plan',
+    note: 'Social Mode only',
+    benefits: [
+      'Social feed access',
+      'Basic profile and posting',
+      'Follow and message friends',
+      'No Professional Mode access',
+    ],
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: 'R99/month',
+    buttonText: 'Upgrade to Pro',
+    note: 'Better tools, but no Professional Mode posting',
+    benefits: [
+      'HD uploads',
+      'Advanced engagement tools',
+      'Basic analytics',
+      '1 AI tool',
+      'Improved messaging features',
+      'Professional Mode still locked',
+    ],
+  },
+  {
+    id: 'creator',
+    name: 'Creator',
+    price: 'R299/month',
+    buttonText: 'Unlock Creator',
+    note: 'Professional Mode starts here',
+    benefits: [
+      'Professional Mode access',
+      'Post business, opportunities, jobs, education, inventions, achievements, partners and investor content',
+      'FaceMeX AI Assistant',
+      'Monetization dashboard',
+      'Insights and unlimited posts',
+      'Post Wizard & Caption Muse',
+    ],
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    price: 'R999/month',
+    buttonText: 'Upgrade to Business',
+    note: 'For companies, brands and hiring',
+    benefits: [
+      'Everything in Creator',
+      'Business profile tools',
+      'Ad tools & campaign management',
+      'Recruitment portal',
+      'Brand page & data insights',
+      'Access to all AI tools',
+    ],
+  },
+  {
+    id: 'exclusive',
+    name: 'Exclusive',
+    price: 'R1,999/month',
+    buttonText: 'Go Exclusive',
+    note: 'Full FaceMeX access',
+    benefits: [
+      'Everything in Business',
+      'All premium tools unlocked',
+      'Premium wellness access',
+      'Early access to new tools',
+      'Priority support',
+    ],
+  },
+  {
+    id: 'verified',
+    name: 'Verified badge',
+    price: 'R150/month',
+    buttonText: 'Get verified',
+    note: 'Add-on, not a main tier',
+    isAddon: true,
+    benefits: [
+      'Verified badge on profile',
+      'Higher trust in comments and DMs',
+      'Priority moderation & support',
+      'Does not unlock Professional Mode by itself',
+    ],
+  },
+];
+
+const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+const paidTierPrices: Record<PaidTier, number> = {
   pro: 99,
   creator: 299,
   business: 999,
   exclusive: 1999,
 };
 
-function isPaidTier(value: unknown): value is PaidTier {
+function isValidTier(value: unknown): value is Tier {
+  return (
+    value === 'free' ||
+    value === 'pro' ||
+    value === 'creator' ||
+    value === 'business' ||
+    value === 'exclusive' ||
+    value === 'verified'
+  );
+}
+
+function isPaidTier(value: Tier): value is PaidTier {
   return (
     value === 'pro' ||
     value === 'creator' ||
@@ -18,128 +154,164 @@ function isPaidTier(value: unknown): value is PaidTier {
   );
 }
 
-async function getAuthHeaders() {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+function getInitialTier(): Tier {
+  if (typeof window === 'undefined') return 'free';
+
+  try {
+    const stored = localStorage.getItem('facemex_current_tier');
+    return isValidTier(stored) ? stored : 'free';
+  } catch {
+    return 'free';
+  }
+}
+
+function saveTier(tier: Tier) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem('facemex_current_tier', tier);
+  } catch {
+    // ignore localStorage errors
+  }
+}
+
+function getBillingUrls(tier: Tier) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    successUrl: `${origin}/billing/success?tier=${tier}`,
+    cancelUrl: `${origin}/pricing?cancelled=1&tier=${tier}`,
+    failureUrl: `${origin}/pricing?failed=1&tier=${tier}`,
   };
 }
 
-export async function createCheckoutSession(params: {
-  priceId: string;
-  tier?: PaidTier;
-  mode?: 'subscription' | 'payment';
-  quantity?: number;
-  metadata?: Record<string, string>;
-  successUrl: string;
-  cancelUrl: string;
-}) {
-  const metadata: Record<string, string> = {
-    ...(params.metadata || {}),
-  };
+export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
+  currentTier: getInitialTier(),
+  tiers: TIERS,
+  trialTier: null,
+  trialEndsAt: null,
+  isCheckingOut: false,
 
-  if (params.tier) {
-    metadata.tier = params.tier;
-    metadata.billingPurpose = 'tier_upgrade';
-  }
+  subscribe: async (tier) => {
+    if (tier === 'free') {
+      saveTier('free');
 
-  const res = await fetch(
-    `${import.meta.env.VITE_API_URL}/api/billing/checkout`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: await getAuthHeaders(),
-      body: JSON.stringify({
-        priceId: params.priceId,
-        tier: params.tier,
-        mode: params.mode || 'subscription',
-        quantity: params.quantity || 1,
-        metadata,
-        successUrl: params.successUrl,
-        cancelUrl: params.cancelUrl,
-      }),
+      set({
+        currentTier: 'free',
+        trialTier: null,
+        trialEndsAt: null,
+        isCheckingOut: false,
+      });
+
+      return;
     }
-  );
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.message || err?.error || 'checkout_failed');
-  }
+    if (tier === 'verified') {
+      set({ isCheckingOut: true });
 
-  return (await res.json()) as { id: string; url: string };
-}
+      try {
+        const urls = getBillingUrls('verified');
 
-export async function createYocoCheckoutSession(params: {
-  tier?: PaidTier;
-  amountZar?: number;
-  amount?: number;
-  currency?: 'ZAR' | string;
-  successUrl: string;
-  cancelUrl: string;
-  failureUrl?: string;
-  metadata?: Record<string, string>;
-  externalId?: string;
-}) {
-  const metadata: Record<string, string> = {
-    ...(params.metadata || {}),
-  };
+        const checkout = await createYocoCheckoutSession({
+          amountZar: 150,
+          currency: 'ZAR',
+          successUrl: urls.successUrl,
+          cancelUrl: urls.cancelUrl,
+          failureUrl: urls.failureUrl,
+          metadata: {
+            billingPurpose: 'verified_badge',
+            addon: 'verified',
+            feature: 'verified_badge',
+          },
+          externalId: `verified-${Date.now()}`,
+        });
 
-  if (params.tier) {
-    metadata.tier = params.tier;
-    metadata.billingPurpose = 'tier_upgrade';
-  }
+        window.location.href = checkout.redirectUrl;
+      } finally {
+        set({ isCheckingOut: false });
+      }
 
-  const amountZar =
-    params.amountZar ||
-    (params.tier && isPaidTier(params.tier)
-      ? tierPricesZar[params.tier]
-      : undefined);
-
-  const res = await fetch(
-    `${import.meta.env.VITE_API_URL}/api/billing/yoco/checkout`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: await getAuthHeaders(),
-      body: JSON.stringify({
-        tier: params.tier,
-        amountZar,
-        amount: params.amount,
-        currency: params.currency || 'ZAR',
-        successUrl: params.successUrl,
-        cancelUrl: params.cancelUrl,
-        failureUrl: params.failureUrl,
-        metadata,
-        externalId: params.externalId,
-      }),
+      return;
     }
-  );
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.message || err?.error || 'yoco_checkout_failed');
-  }
+    if (!isPaidTier(tier)) return;
 
-  return (await res.json()) as { id: string; redirectUrl: string };
-}
+    set({ isCheckingOut: true });
 
-export async function refreshMyBillingTier() {
-  const res = await fetch(`${import.meta.env.VITE_API_URL}/api/billing/me`, {
-    method: 'GET',
-    credentials: 'include',
-    headers: await getAuthHeaders(),
-  });
+    try {
+      const urls = getBillingUrls(tier);
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.message || err?.error || 'billing_refresh_failed');
-  }
+      const checkout = await createYocoCheckoutSession({
+        tier,
+        amountZar: paidTierPrices[tier],
+        currency: 'ZAR',
+        successUrl: urls.successUrl,
+        cancelUrl: urls.cancelUrl,
+        failureUrl: urls.failureUrl,
+        metadata: {
+          billingPurpose: 'tier_upgrade',
+          tier,
+          feature: `${tier}_subscription`,
+        },
+        externalId: `${tier}-${Date.now()}`,
+      });
 
-  return (await res.json()) as {
-    tier: PaidTier | 'free';
-    subscriptionStatus: string;
-  };
-}
+      window.location.href = checkout.redirectUrl;
+    } finally {
+      set({ isCheckingOut: false });
+    }
+  },
+
+  startTrial: async (tier) => {
+    if (tier === 'free' || tier === 'verified') return;
+
+    const endsAt = new Date(Date.now() + TRIAL_DURATION_MS).toISOString();
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    saveTier(tier);
+
+    set({
+      currentTier: tier,
+      trialTier: tier,
+      trialEndsAt: endsAt,
+    });
+  },
+
+  isTrialActive: () => {
+    const { trialEndsAt } = get();
+
+    if (!trialEndsAt) return false;
+
+    return Date.now() < new Date(trialEndsAt).getTime();
+  },
+
+  cancel: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    saveTier('free');
+
+    set({
+      currentTier: 'free',
+      trialTier: null,
+      trialEndsAt: null,
+    });
+  },
+
+  syncTier: async () => {
+    try {
+      const result = await refreshMyBillingTier();
+      const tier = isValidTier(result.tier) ? result.tier : 'free';
+
+      saveTier(tier);
+
+      set({
+        currentTier: tier,
+        trialTier: null,
+        trialEndsAt: null,
+      });
+    } catch {
+      // keep local tier if backend fails
+    }
+  },
+}));
