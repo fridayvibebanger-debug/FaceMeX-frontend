@@ -9,6 +9,15 @@ export const tierPricesZar: Record<PaidTier, number> = {
   exclusive: 1999,
 };
 
+function isPaidTier(value: unknown): value is PaidTier {
+  return (
+    value === 'pro' ||
+    value === 'creator' ||
+    value === 'business' ||
+    value === 'exclusive'
+  );
+}
+
 async function getAuthHeaders() {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -21,13 +30,22 @@ async function getAuthHeaders() {
 
 export async function createCheckoutSession(params: {
   priceId: string;
-  tier: PaidTier;
+  tier?: PaidTier;
   mode?: 'subscription' | 'payment';
   quantity?: number;
   metadata?: Record<string, string>;
   successUrl: string;
   cancelUrl: string;
 }) {
+  const metadata: Record<string, string> = {
+    ...(params.metadata || {}),
+  };
+
+  if (params.tier) {
+    metadata.tier = params.tier;
+    metadata.billingPurpose = 'tier_upgrade';
+  }
+
   const res = await fetch(
     `${import.meta.env.VITE_API_URL}/api/billing/checkout`,
     {
@@ -39,10 +57,7 @@ export async function createCheckoutSession(params: {
         tier: params.tier,
         mode: params.mode || 'subscription',
         quantity: params.quantity || 1,
-        metadata: {
-          ...(params.metadata || {}),
-          tier: params.tier,
-        },
+        metadata,
         successUrl: params.successUrl,
         cancelUrl: params.cancelUrl,
       }),
@@ -58,7 +73,7 @@ export async function createCheckoutSession(params: {
 }
 
 export async function createYocoCheckoutSession(params: {
-  tier: PaidTier;
+  tier?: PaidTier;
   amountZar?: number;
   amount?: number;
   currency?: 'ZAR' | string;
@@ -68,7 +83,20 @@ export async function createYocoCheckoutSession(params: {
   metadata?: Record<string, string>;
   externalId?: string;
 }) {
-  const amountZar = params.amountZar || tierPricesZar[params.tier];
+  const metadata: Record<string, string> = {
+    ...(params.metadata || {}),
+  };
+
+  if (params.tier) {
+    metadata.tier = params.tier;
+    metadata.billingPurpose = 'tier_upgrade';
+  }
+
+  const amountZar =
+    params.amountZar ||
+    (params.tier && isPaidTier(params.tier)
+      ? tierPricesZar[params.tier]
+      : undefined);
 
   const res = await fetch(
     `${import.meta.env.VITE_API_URL}/api/billing/yoco/checkout`,
@@ -84,10 +112,7 @@ export async function createYocoCheckoutSession(params: {
         successUrl: params.successUrl,
         cancelUrl: params.cancelUrl,
         failureUrl: params.failureUrl,
-        metadata: {
-          ...(params.metadata || {}),
-          tier: params.tier,
-        },
+        metadata,
         externalId: params.externalId,
       }),
     }
