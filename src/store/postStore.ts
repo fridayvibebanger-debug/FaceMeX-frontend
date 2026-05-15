@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/authStore';
+import { useUserStore } from '@/store/userStore';
+import {
+  validateProfessionalPost,
+  type ProfessionalCategory,
+} from '@/lib/professionalModeration';
 
 type ReactionType = 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry';
 type PostMode = 'social' | 'professional';
@@ -55,7 +59,9 @@ interface PostState {
     images?: string[],
     audio?: string,
     hashtags?: string[],
-    mode?: PostMode
+    mode?: PostMode,
+    professionalCategory?: ProfessionalCategory,
+    professionalAgreed?: boolean
   ) => Promise<void>;
 
   likePost: (postId: string, reaction?: string) => Promise<void>;
@@ -368,69 +374,129 @@ export const usePostStore = create<PostState>((set, get) => ({
     });
   },
 
-  addPost: async (content, images, audio, hashtags, mode) => {
-    const authUser = await ensureProfile();
+  addPost: async (
+    content,
+    images,
+    audio,
+    hashtags,
+    mode,
+    professionalCategory,
+    professionalAgreed = false
+  ) => {
+  const authUser = await ensureProfile();
 
-    if (!authUser?.id) {
-      alert('No user found. Please login again.');
+  if (!authUser?.id) {
+    alert('No user found. Please login again.');
+    return;
+  }
+
+  if (mode === 'professional') {
+    const userStore = useUserStore.getState() as any;
+    const authStoreUser = useAuthStore.getState().user as any;
+
+    const tier = String(
+      userStore?.tier || authStoreUser?.tier || 'free'
+    ).toLowerCase();
+
+    const canPostProfessional =
+      userStore?.hasTier?.('creator') ||
+      tier === 'creator' ||
+      tier === 'business' ||
+      tier === 'exclusive';
+
+    if (!canPostProfessional) {
+      alert('Professional Mode posting is for Creator tier and above.');
       return;
     }
 
-    const mediaUrl = images?.[0] || audio || '';
-    const mediaType = getMediaType(mediaUrl);
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('professional_banned_until, professional_ban_reason')
+      .eq('id', authUser.id)
+      .maybeSingle();
 
-    const { data, error } = await supabase
-      .from('posts')
-      .insert({
-        user_id: authUser.id,
-        content,
-        media_url: mediaUrl || null,
-        media_type: mediaType,
-        mode: mode || 'social',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      alert(`Add post error: ${error.message}`);
+    if (
+      profile?.professional_banned_until &&
+      new Date(profile.professional_banned_until).getTime() > Date.now()
+    ) {
+      alert(
+        profile.professional_ban_reason ||
+          'You are temporarily restricted from posting in Professional Mode.'
+      );
       return;
     }
 
-    const profile = {
-      full_name: authUser.name,
-      name: authUser.name,
-      email: authUser.email,
-      avatar_url: authUser.avatar,
-      avatar: authUser.avatar,
-    };
-
-    const newPost: Post = {
-      id: data.id,
-      userId: authUser.id,
-      userName: getProfileName(profile, authUser.id),
-      userAvatar: getProfileAvatar(profile),
+    const check = validateProfessionalPost({
       content,
-      image: mediaType === 'image' ? mediaUrl : undefined,
-      video: mediaType === 'video' ? mediaUrl : undefined,
-      audio: mediaType === 'audio' ? mediaUrl : undefined,
-      images: mediaType === 'image' && mediaUrl ? [mediaUrl] : [],
-      mediaType,
-      hashtags: [
-        ...new Set([...get().extractHashtags(content), ...(hashtags || [])]),
-      ],
-      likes: 0,
-      comments: [],
-      shares: 0,
-      timestamp: new Date(data.created_at || Date.now()),
-      isLiked: false,
-      isSaved: false,
-      mode: mode || 'social',
-      collabInvites: [],
-      collaborators: [],
-    };
+      category: professionalCategory,
+      agreed: professionalAgreed,
+    });
 
-    set({ posts: [newPost, ...get().posts] });
-  },
+    if (!check.allowed) {
+      alert(check.reason);
+      return;
+    }
+  }
+
+  const mediaUrl = images?.[0] || audio || '';
+  const mediaType = getMediaType(mediaUrl);
+
+  const { data, error } = await supabase
+    .from('posts')
+    .insert({
+      user_id: authUser.id,
+      content,
+      media_url: mediaUrl || null,
+      media_type: mediaType,
+      mode: mode || 'social',
+      professional_category:
+        mode === 'professional' ? professionalCategory || null : null,
+      professional_agreed: mode === 'professional' ? professionalAgreed : false,
+      moderation_status: 'approved',
+    })
+    .select()
+    .single();
+
+  if (error) {
+    alert(`Add post error: ${error.message}`);
+    return;
+  }
+
+  const profile = {
+    full_name: authUser.name,
+    name: authUser.name,
+    email: authUser.email,
+    avatar_url: authUser.avatar,
+    avatar: authUser.avatar,
+  };
+
+  const newPost: Post = {
+    id: data.id,
+    userId: authUser.id,
+    userName: getProfileName(profile, authUser.id),
+    userAvatar: getProfileAvatar(profile),
+    content,
+    image: mediaType === 'image' ? mediaUrl : undefined,
+    video: mediaType === 'video' ? mediaUrl : undefined,
+    audio: mediaType === 'audio' ? mediaUrl : undefined,
+    images: mediaType === 'image' && mediaUrl ? [mediaUrl] : [],
+    mediaType,
+    hashtags: [
+      ...new Set([...get().extractHashtags(content), ...(hashtags || [])]),
+    ],
+    likes: 0,
+    comments: [],
+    shares: 0,
+    timestamp: new Date(data.created_at || Date.now()),
+    isLiked: false,
+    isSaved: false,
+    mode: mode || 'social',
+    collabInvites: [],
+    collaborators: [],
+  };
+
+  set({ posts: [newPost, ...get().posts] });
+},
 
   likePost: async (postId, reaction = 'like') => {
     const authUser = await ensureProfile();
