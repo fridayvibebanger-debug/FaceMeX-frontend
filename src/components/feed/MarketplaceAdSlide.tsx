@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import MarketplaceAdSlide from '@/components/feed/MarketplaceAdSlide';
 
 type FeedAd = {
   id: string;
