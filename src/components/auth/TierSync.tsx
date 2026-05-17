@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
 import { useSubscriptionStore } from '@/store/subscriptionStore';
 
 type Tier = 'free' | 'pro' | 'creator' | 'business' | 'exclusive' | 'verified';
 
 function normalizeTier(value: unknown): Tier {
-  const tier = String(value || '').toLowerCase();
+  const tier = String(value || '').toLowerCase().trim();
 
   if (
     tier === 'pro' ||
@@ -21,123 +22,148 @@ function normalizeTier(value: unknown): Tier {
   return 'free';
 }
 
+function getBestTier(profile: any): Tier {
+  return normalizeTier(
+    profile?.subscription_tier ||
+      profile?.tier ||
+      profile?.plan ||
+      profile?.account_tier ||
+      'free'
+  );
+}
+
+async function findProfile(authUser: any) {
+  if (!authUser?.id) return null;
+
+  const byId = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', authUser.id)
+    .maybeSingle();
+
+  if (byId.data) return byId.data;
+
+  const byUserId = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('user_id', authUser.id)
+    .maybeSingle();
+
+  if (byUserId.data) return byUserId.data;
+
+  if (authUser.email) {
+    const byEmail = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', authUser.email)
+      .maybeSingle();
+
+    if (byEmail.data) return byEmail.data;
+  }
+
+  return null;
+}
+
 export default function TierSync() {
   useEffect(() => {
     let cancelled = false;
 
     async function syncTier() {
-      const { data: authData } = await supabase.auth.getUser();
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+
+      if (authError) {
+        console.log('FaceMeX auth tier sync error:', authError.message);
+        return;
+      }
+
       const authUser = authData.user;
 
-      if (!authUser?.id) return;
-
-      let profile: any = null;
-
-      const byId = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle();
-
-      if (byId.data) {
-        profile = byId.data;
+      if (!authUser?.id) {
+        console.log('FaceMeX tier sync: no logged-in user');
+        return;
       }
+
+      const profile = await findProfile(authUser);
+
+      if (cancelled) return;
 
       if (!profile) {
-        const byUserId = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .maybeSingle();
-
-        if (byUserId.data) {
-          profile = byUserId.data;
-        }
+        console.log('FaceMeX tier sync: no profile found for', authUser.email);
+        return;
       }
 
-      if (!profile && authUser.email) {
-        const byEmail = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', authUser.email)
-          .maybeSingle();
+      const syncedTier = getBestTier(profile);
 
-        if (byEmail.data) {
-          profile = byEmail.data;
-        }
-      }
+      localStorage.setItem('facemex_current_tier', syncedTier);
+      localStorage.setItem('facemex_user_tier', syncedTier);
 
-      if (cancelled || !profile) return;
+      const syncedUser = {
+        id: authUser.id,
+        email: profile.email || authUser.email,
+        name:
+          profile.name ||
+          profile.full_name ||
+          authUser.user_metadata?.name ||
+          authUser.email?.split('@')[0] ||
+          'FaceMeX User',
+        full_name:
+          profile.full_name ||
+          profile.name ||
+          authUser.user_metadata?.name ||
+          authUser.email?.split('@')[0],
+        avatar:
+          profile.avatar ||
+          profile.avatar_url ||
+          profile.profile_picture ||
+          authUser.user_metadata?.avatar_url ||
+          '',
+        tier: syncedTier,
+        subscription_tier: syncedTier,
+        subscription_status: profile.subscription_status || 'active',
+      };
 
-      const tier = normalizeTier(
-        profile.subscription_tier || profile.tier || profile.plan || 'free'
-      );
+      useAuthStore.setState((state: any) => ({
+        ...state,
+        user: {
+          ...(state.user || {}),
+          ...syncedUser,
+        },
+        currentTier: syncedTier,
+        tier: syncedTier,
+      }));
 
-      localStorage.setItem('facemex_current_tier', tier);
-      localStorage.setItem('facemex_user_tier', tier);
+      useUserStore.setState((state: any) => ({
+        ...state,
+        tier: syncedTier,
+        currentTier: syncedTier,
+        profile: {
+          ...(state.profile || {}),
+          ...profile,
+          tier: syncedTier,
+          subscription_tier: syncedTier,
+        },
+        user: {
+          ...(state.user || {}),
+          ...syncedUser,
+        },
+      }));
 
-      const userStore: any = useUserStore as any;
-
-      if (userStore?.setState) {
-        userStore.setState((state: any) => ({
-          tier,
-          currentTier: tier,
-          profile: {
-            ...(state.profile || {}),
-            ...profile,
-            tier,
-            subscription_tier: tier,
-          },
-          user: state.user
-            ? {
-                ...state.user,
-                name:
-                  profile.name ||
-                  profile.full_name ||
-                  state.user.name ||
-                  authUser.email?.split('@')[0],
-                full_name: profile.full_name || profile.name || state.user.full_name,
-                email: profile.email || authUser.email || state.user.email,
-                avatar:
-                  profile.avatar ||
-                  profile.avatar_url ||
-                  profile.profile_picture ||
-                  state.user.avatar,
-                tier,
-                subscription_tier: tier,
-                subscription_status:
-                  profile.subscription_status || state.user.subscription_status,
-              }
-            : {
-                id: authUser.id,
-                email: authUser.email,
-                name: profile.name || profile.full_name || authUser.email?.split('@')[0],
-                full_name: profile.full_name || profile.name,
-                avatar: profile.avatar || profile.avatar_url || profile.profile_picture,
-                tier,
-                subscription_tier: tier,
-                subscription_status: profile.subscription_status,
-              },
-        }));
-      }
-
-      const subscriptionStore: any = useSubscriptionStore as any;
-
-      if (subscriptionStore?.setState) {
-        subscriptionStore.setState({
-          currentTier: tier,
-          trialTier: null,
-          trialEndsAt: null,
-        });
-      }
+      useSubscriptionStore.setState({
+        currentTier: syncedTier,
+        trialTier: null,
+        trialEndsAt: null,
+      });
 
       window.dispatchEvent(
         new CustomEvent('facemex-tier-synced', {
-          detail: { tier, profile },
+          detail: {
+            tier: syncedTier,
+            profile,
+          },
         })
       );
 
-      console.log('FaceMeX tier synced:', tier);
+      console.log('FaceMeX tier synced:', syncedTier);
     }
 
     syncTier();
@@ -146,8 +172,13 @@ export default function TierSync() {
       syncTier();
     });
 
+    const timer = window.setInterval(() => {
+      syncTier();
+    }, 30000);
+
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
       data.subscription.unsubscribe();
     };
   }, []);
