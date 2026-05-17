@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Card,
   CardContent,
@@ -182,7 +181,7 @@ export default function MarketplacePage() {
   const [campaignBudget, setCampaignBudget] = useState('500');
 
   const [shops, setShops] = useState<Shop[]>(exampleShops);
-  const [loadingShops, setLoadingShops] = useState(true);
+  const [loadingShops, setLoadingShops] = useState(false);
 
   const [shopOpen, setShopOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
@@ -224,12 +223,23 @@ export default function MarketplacePage() {
     }
   };
 
+  const readLocalShops = (): Shop[] => {
+    const local = readLS('mall:shops');
+    return Array.isArray(local) ? local : [];
+  };
+
   const [creditsBalance, setCreditsBalance] = useState<number>(
     () => readLS('ads:credits') || 0
   );
 
   const [drafts, setDrafts] = useState<
-    Array<{ name: string; objective: string; budget: string; ts: string; lastRun?: string }>
+    Array<{
+      name: string;
+      objective: string;
+      budget: string;
+      ts: string;
+      lastRun?: string;
+    }>
   >(() =>
     Array.isArray(readLS('ads:campaigns')) ? readLS('ads:campaigns') : []
   );
@@ -246,7 +256,10 @@ export default function MarketplacePage() {
     let mounted = true;
 
     async function loadMarketplaceShops() {
-      setLoadingShops(true);
+      const localShops = readLocalShops();
+
+      setShops([...localShops, ...exampleShops]);
+      setLoadingShops(false);
 
       const { data: dbShops, error: shopsError } = await supabase
         .from('marketplace_shops')
@@ -257,21 +270,10 @@ export default function MarketplacePage() {
 
       if (shopsError) {
         console.log('Marketplace shops load failed:', shopsError.message);
-
-        if (mounted) {
-          setShops(exampleShops);
-          setLoadingShops(false);
-        }
-
         return;
       }
 
       if (!dbShops || dbShops.length === 0) {
-        if (mounted) {
-          setShops(exampleShops);
-          setLoadingShops(false);
-        }
-
         return;
       }
 
@@ -330,7 +332,7 @@ export default function MarketplacePage() {
       }));
 
       if (mounted) {
-        setShops(mapped.length > 0 ? mapped : exampleShops);
+        setShops([...localShops, ...mapped, ...exampleShops]);
         setLoadingShops(false);
       }
     }
@@ -363,8 +365,9 @@ export default function MarketplacePage() {
   }, [shops, query]);
 
   const saveShopsToLocal = (next: Shop[]) => {
+    const onlyLocal = next.filter((shop) => shop.id.startsWith('local-shop-'));
+    saveLS('mall:shops', onlyLocal);
     setShops(next);
-    saveLS('mall:shops', next);
   };
 
   const openShopItems = (shop: Shop) => {
@@ -377,12 +380,7 @@ export default function MarketplacePage() {
       `Hi ${shop.sellerName}, I saw your shop "${shop.shopName}" on FaceMeX Marketplace. I am interested in your items.`
     );
 
-    if (shop.cta === 'website' && shop.website) {
-      window.open(shop.website, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    if ((shop.cta === 'whatsapp' || shop.cta === 'contact') && shop.whatsapp) {
+    if (shop.whatsapp) {
       const cleanPhone = shop.whatsapp.replace(/\D/g, '');
       window.open(
         `https://wa.me/${cleanPhone}?text=${text}`,
@@ -392,7 +390,7 @@ export default function MarketplacePage() {
       return;
     }
 
-    if (shop.cta === 'call' && shop.phone) {
+    if (shop.phone) {
       window.location.href = `tel:${shop.phone}`;
       return;
     }
@@ -405,12 +403,12 @@ export default function MarketplacePage() {
     toast({
       title: 'Seller contact',
       description:
-        shop.phone || shop.website || 'Seller has not added contact details yet.',
+        'This seller has not added WhatsApp or phone details yet. Try viewing their items or website.',
     });
   };
 
   const secondaryShopAction = (shop: Shop) => {
-    if (shop.cta === 'website' && shop.website) {
+    if (shop.website && shop.cta === 'website') {
       window.open(shop.website, '_blank', 'noopener,noreferrer');
       return;
     }
@@ -428,7 +426,7 @@ export default function MarketplacePage() {
     }
 
     return {
-      id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: `local-item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       title: itemTitle,
       description: itemDescription || 'Contact seller for more details.',
       image:
@@ -491,7 +489,7 @@ export default function MarketplacePage() {
     }
 
     const newShop: Shop = {
-      id: `shop-${Date.now()}`,
+      id: `local-shop-${Date.now()}`,
       shopName,
       category: shopCategory,
       tagline: shopTagline || 'Premium local shop on FaceMeX Marketplace.',
@@ -593,18 +591,31 @@ export default function MarketplacePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-4 pt-3 md:pt-4 pb-10 space-y-4">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-0 pb-10 md:pt-1">
+        <div className="rounded-2xl border bg-card px-4 py-3">
+          <div className="text-sm font-semibold">FaceMeX Marketplace Mall</div>
+          <div className="text-xs text-muted-foreground">
+            Example shops are shown below so users can see how sellers display
+            products, prices, contact buttons and item previews.
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Input
+            className="min-w-[240px] flex-1"
             placeholder="Search shops, products, services..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
 
           <div className="flex items-center gap-2 text-sm">
-            <span>Pay with Card (ZAR):</span>
-            <Button variant="default" onClick={() => setPaymentMethod('card')}>
-              Card
+            <span className="text-muted-foreground">Pay with Card:</span>
+            <Button
+              variant="default"
+              className="rounded-full"
+              onClick={() => setPaymentMethod('card')}
+            >
+              {paymentMethod === 'card' ? 'Card active' : 'Card'}
             </Button>
           </div>
 
@@ -615,15 +626,26 @@ export default function MarketplacePage() {
               </Badge>
             )}
 
-            <Button variant="secondary" onClick={() => setCreditsOpen(true)}>
+            <Button
+              variant="secondary"
+              className="rounded-full"
+              onClick={() => setCreditsOpen(true)}
+            >
               Buy Ad Credits
             </Button>
 
-            <Button variant="outline" onClick={() => setShopOpen(true)}>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setShopOpen(true)}
+            >
               Open Shop
             </Button>
 
-            <Button onClick={() => setCampaignOpen(true)}>
+            <Button
+              className="rounded-full"
+              onClick={() => setCampaignOpen(true)}
+            >
               Create Campaign
             </Button>
           </div>
@@ -653,7 +675,7 @@ export default function MarketplacePage() {
                         className="h-full w-full object-cover"
                       />
 
-                      <div className="absolute left-3 top-3 flex gap-2">
+                      <div className="absolute left-3 top-3 flex flex-wrap gap-2">
                         {shop.featured && (
                           <Badge className="bg-black/80 text-white hover:bg-black/80">
                             Premium display
@@ -722,12 +744,17 @@ export default function MarketplacePage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="rounded-full"
                         onClick={() => contactSeller(shop)}
                       >
                         Contact seller
                       </Button>
 
-                      <Button size="sm" onClick={() => secondaryShopAction(shop)}>
+                      <Button
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => secondaryShopAction(shop)}
+                      >
                         {shop.website && shop.cta === 'website'
                           ? 'Visit website'
                           : 'View items'}
@@ -740,7 +767,7 @@ export default function MarketplacePage() {
           </div>
 
           <div className="md:col-span-1">
-            <div className="md:sticky md:top-28 space-y-3">
+            <div className="space-y-3 md:sticky md:top-20">
               <div className="rounded-xl border bg-card p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-sm font-semibold">Draft Campaigns</div>
@@ -749,6 +776,7 @@ export default function MarketplacePage() {
                     <Button
                       size="sm"
                       variant="outline"
+                      className="rounded-full"
                       onClick={() => setCreditsOpen(true)}
                     >
                       Top up
@@ -766,40 +794,44 @@ export default function MarketplacePage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {drafts.slice(0, showAllDrafts ? 10 : 5).map((draft, index) => (
-                      <div
-                        key={`${draft.ts}-${index}`}
-                        className="flex items-center justify-between gap-2 rounded border p-2"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">
-                            {draft.name}
-                          </div>
-
-                          <div className="truncate text-xs text-muted-foreground">
-                            {draft.objective} · Budget R{draft.budget} · Est{' '}
-                            {impressionsFor(
-                              parseInt(draft.budget || '0', 10)
-                            ).toLocaleString()}{' '}
-                            impressions
-                          </div>
-
-                          {draft.lastRun && (
-                            <div className="text-[11px] text-muted-foreground">
-                              Last run: {new Date(draft.lastRun).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
-
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => runDraft(index)}
+                    {drafts
+                      .slice(0, showAllDrafts ? 10 : 5)
+                      .map((draft, index) => (
+                        <div
+                          key={`${draft.ts}-${index}`}
+                          className="flex items-center justify-between gap-2 rounded border p-2"
                         >
-                          Run
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium">
+                              {draft.name}
+                            </div>
+
+                            <div className="truncate text-xs text-muted-foreground">
+                              {draft.objective} · Budget R{draft.budget} · Est{' '}
+                              {impressionsFor(
+                                parseInt(draft.budget || '0', 10)
+                              ).toLocaleString()}{' '}
+                              impressions
+                            </div>
+
+                            {draft.lastRun && (
+                              <div className="text-[11px] text-muted-foreground">
+                                Last run:{' '}
+                                {new Date(draft.lastRun).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="rounded-full"
+                            onClick={() => runDraft(index)}
+                          >
+                            Run
+                          </Button>
+                        </div>
+                      ))}
 
                     {drafts.length > 5 && (
                       <div className="flex justify-center">
@@ -823,7 +855,9 @@ export default function MarketplacePage() {
                 </div>
 
                 {usage.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">No usage yet.</div>
+                  <div className="text-xs text-muted-foreground">
+                    No usage yet.
+                  </div>
                 ) : (
                   <div className="space-y-1">
                     {usage.slice(0, 5).map((event, index) => (
@@ -833,9 +867,15 @@ export default function MarketplacePage() {
                       >
                         <span>
                           {event.type === 'buy_credits' &&
-                            `Bought ${event.impressions?.toLocaleString?.() || event.impressions}`}
+                            `Bought ${
+                              event.impressions?.toLocaleString?.() ||
+                              event.impressions
+                            }`}
                           {event.type === 'run_campaign' &&
-                            `Ran ${event.name} · Spent ${event.spentImpressions?.toLocaleString?.() || event.spentImpressions}`}
+                            `Ran ${event.name} · Spent ${
+                              event.spentImpressions?.toLocaleString?.() ||
+                              event.spentImpressions
+                            }`}
                         </span>
 
                         <span>{new Date(event.ts).toLocaleTimeString()}</span>
@@ -857,11 +897,14 @@ export default function MarketplacePage() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <div className="text-muted-foreground">Offer services</div>
-                <Button size="sm">New Gig</Button>
+                <Button size="sm" className="rounded-full">
+                  New Gig
+                </Button>
               </div>
 
               <div className="text-xs text-muted-foreground">
-                Gigs can be connected to creator profiles next. For now, use Open Shop to display products or services.
+                Gigs can be connected to creator profiles next. For now, use
+                Open Shop to display products or services.
               </div>
             </CardContent>
           </Card>
@@ -874,7 +917,9 @@ export default function MarketplacePage() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <div className="text-muted-foreground">Hire creators</div>
-                <Button size="sm">New Project</Button>
+                <Button size="sm" className="rounded-full">
+                  New Project
+                </Button>
               </div>
 
               <div className="text-xs text-muted-foreground">
@@ -890,12 +935,17 @@ export default function MarketplacePage() {
 
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <div className="text-muted-foreground">Secure in-app payments</div>
-                <Button size="sm">New Escrow</Button>
+                <div className="text-muted-foreground">
+                  Secure in-app payments
+                </div>
+                <Button size="sm" className="rounded-full">
+                  New Escrow
+                </Button>
               </div>
 
               <div className="text-xs text-muted-foreground">
-                Secure payments can be connected after marketplace orders are live.
+                Secure payments can be connected after marketplace orders are
+                live.
               </div>
             </CardContent>
           </Card>
@@ -971,7 +1021,8 @@ export default function MarketplacePage() {
           <DialogHeader>
             <DialogTitle>Open your shop</DialogTitle>
             <DialogDescription>
-              Create a premium shop display with items, prices, seller contact and call-to-action.
+              Create a premium shop display with items, prices, seller contact
+              and call-to-action.
             </DialogDescription>
           </DialogHeader>
 
@@ -1101,7 +1152,12 @@ export default function MarketplacePage() {
                 </label>
               </div>
 
-              <Button type="button" variant="outline" size="sm" onClick={addDraftItem}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addDraftItem}
+              >
                 Add item to shop
               </Button>
 
@@ -1140,7 +1196,8 @@ export default function MarketplacePage() {
           <DialogHeader>
             <DialogTitle>Buy Ad Credits</DialogTitle>
             <DialogDescription>
-              Ad credits are used for Sponsored Posts, Story Ads, Search Ads, and Marketplace promotions.
+              Ad credits are used for Sponsored Posts, Story Ads, Search Ads,
+              and Marketplace promotions.
             </DialogDescription>
           </DialogHeader>
 
