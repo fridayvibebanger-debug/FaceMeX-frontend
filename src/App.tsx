@@ -82,10 +82,11 @@ function App() {
   }, [restoreSession]);
 
   return (
-  <>
-    <LiveNotificationListener />
+    <>
+      <TierSync />
+      <LiveNotificationListener />
 
-    <Routes>
+      <Routes>
         <Route path="/" element={<PublicAuthRoute />} />
         <Route path="/login" element={<PublicAuthRoute />} />
         <Route path="/signup" element={<PublicAuthRoute />} />
@@ -473,8 +474,8 @@ function App() {
         />
 
         <Route path="*" element={<Navigate to="/" replace />} />
-       </Routes>
-     </>
+      </Routes>
+    </>
   );
 }
 
