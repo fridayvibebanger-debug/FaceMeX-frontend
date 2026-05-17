@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+import { useUserStore } from '@/store/userStore';
+import { createYocoCheckoutSession } from '@/lib/billing';
 
 type SellerCta = 'contact' | 'website' | 'whatsapp' | 'call' | 'message';
 
@@ -49,6 +51,33 @@ interface Shop {
   items: ShopItem[];
   featured?: boolean;
 }
+
+interface CreatorGig {
+  id: string;
+  title: string;
+  price: number;
+  description: string;
+  createdAt: string;
+}
+
+interface BusinessProject {
+  id: string;
+  title: string;
+  budget: number;
+  description: string;
+  createdAt: string;
+}
+
+interface EscrowItem {
+  id: string;
+  title: string;
+  amount: number;
+  status: 'draft' | 'funded' | 'released';
+  createdAt: string;
+}
+
+const SHOP_ADDON_PRICE_ZAR = 370;
+const SHOP_ADDON_BONUS_IMPRESSIONS = 1000;
 
 const exampleShops: Shop[] = [
   {
@@ -170,41 +199,7 @@ const exampleShops: Shop[] = [
 ];
 
 export default function MarketplacePage() {
-  const [query, setQuery] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'card'>('card');
-
-  const [creditsOpen, setCreditsOpen] = useState(false);
-  const [campaignOpen, setCampaignOpen] = useState(false);
-  const [creditsRand, setCreditsRand] = useState<number>(200);
-  const [campaignName, setCampaignName] = useState('');
-  const [campaignObjective, setCampaignObjective] = useState('Awareness');
-  const [campaignBudget, setCampaignBudget] = useState('500');
-
-  const [shops, setShops] = useState<Shop[]>(exampleShops);
-  const [loadingShops, setLoadingShops] = useState(false);
-
-  const [shopOpen, setShopOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(false);
-  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
-
-  const [shopName, setShopName] = useState('');
-  const [sellerName, setSellerName] = useState('');
-  const [shopCategory, setShopCategory] = useState('Food');
-  const [shopTagline, setShopTagline] = useState('');
-  const [shopDescription, setShopDescription] = useState('');
-  const [shopCoverImage, setShopCoverImage] = useState('');
-  const [shopPhone, setShopPhone] = useState('');
-  const [shopWhatsapp, setShopWhatsapp] = useState('');
-  const [shopWebsite, setShopWebsite] = useState('');
-  const [shopLocation, setShopLocation] = useState('');
-  const [shopCta, setShopCta] = useState<SellerCta>('contact');
-
-  const [itemTitle, setItemTitle] = useState('');
-  const [itemDescription, setItemDescription] = useState('');
-  const [itemImage, setItemImage] = useState('');
-  const [itemPrice, setItemPrice] = useState('');
-  const [itemShowPrice, setItemShowPrice] = useState(true);
-  const [draftItems, setDraftItems] = useState<ShopItem[]>([]);
+  const { tier, hasTier } = useUserStore();
 
   const saveLS = (key: string, value: any) => {
     try {
@@ -228,6 +223,54 @@ export default function MarketplacePage() {
     return Array.isArray(local) ? local : [];
   };
 
+  const getShopAddonActive = () => {
+    try {
+      return localStorage.getItem('facemex_marketplace_shop_addon') === 'active';
+    } catch {
+      return false;
+    }
+  };
+
+  const [query, setQuery] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'card'>('card');
+
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [creditsRand, setCreditsRand] = useState<number>(200);
+  const [campaignName, setCampaignName] = useState('');
+  const [campaignObjective, setCampaignObjective] = useState('Awareness');
+  const [campaignBudget, setCampaignBudget] = useState('500');
+
+  const [shops, setShops] = useState<Shop[]>(exampleShops);
+  const [loadingShops, setLoadingShops] = useState(false);
+
+  const [shopOpen, setShopOpen] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
+  const [shopCheckoutBusy, setShopCheckoutBusy] = useState(false);
+  const [shopAddonActive, setShopAddonActive] = useState(() =>
+    getShopAddonActive()
+  );
+
+  const [shopName, setShopName] = useState('');
+  const [sellerName, setSellerName] = useState('');
+  const [shopCategory, setShopCategory] = useState('Food');
+  const [shopTagline, setShopTagline] = useState('');
+  const [shopDescription, setShopDescription] = useState('');
+  const [shopCoverImage, setShopCoverImage] = useState('');
+  const [shopPhone, setShopPhone] = useState('');
+  const [shopWhatsapp, setShopWhatsapp] = useState('');
+  const [shopWebsite, setShopWebsite] = useState('');
+  const [shopLocation, setShopLocation] = useState('');
+  const [shopCta, setShopCta] = useState<SellerCta>('contact');
+
+  const [itemTitle, setItemTitle] = useState('');
+  const [itemDescription, setItemDescription] = useState('');
+  const [itemImage, setItemImage] = useState('');
+  const [itemPrice, setItemPrice] = useState('');
+  const [itemShowPrice, setItemShowPrice] = useState(true);
+  const [draftItems, setDraftItems] = useState<ShopItem[]>([]);
+
   const [creditsBalance, setCreditsBalance] = useState<number>(
     () => readLS('ads:credits') || 0
   );
@@ -250,7 +293,96 @@ export default function MarketplacePage() {
 
   const [showAllDrafts, setShowAllDrafts] = useState(false);
 
+  const [gigOpen, setGigOpen] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [escrowOpen, setEscrowOpen] = useState(false);
+
+  const [gigTitle, setGigTitle] = useState('');
+  const [gigPrice, setGigPrice] = useState('');
+  const [gigDescription, setGigDescription] = useState('');
+
+  const [projectTitle, setProjectTitle] = useState('');
+  const [projectBudget, setProjectBudget] = useState('');
+  const [projectDescription, setProjectDescription] = useState('');
+
+  const [escrowTitle, setEscrowTitle] = useState('');
+  const [escrowAmount, setEscrowAmount] = useState('');
+
+  const [gigs, setGigs] = useState<CreatorGig[]>(() =>
+    Array.isArray(readLS('facemex_marketplace_gigs'))
+      ? readLS('facemex_marketplace_gigs')
+      : []
+  );
+
+  const [projects, setProjects] = useState<BusinessProject[]>(() =>
+    Array.isArray(readLS('facemex_business_projects'))
+      ? readLS('facemex_business_projects')
+      : []
+  );
+
+  const [escrows, setEscrows] = useState<EscrowItem[]>(() =>
+    Array.isArray(readLS('facemex_escrows')) ? readLS('facemex_escrows') : []
+  );
+
+  const currentTier = String(tier || 'free').toLowerCase();
+
+  const businessPlusCanOpenShopFree =
+    Boolean(hasTier?.('business')) ||
+    currentTier === 'business' ||
+    currentTier === 'exclusive';
+
+  const canOpenShop = businessPlusCanOpenShopFree || shopAddonActive;
+
   const impressionsFor = (rands: number) => Math.max(0, (rands || 0) * 10);
+
+  const pushUsage = (event: any) => {
+    const next = [{ ts: new Date().toISOString(), ...event }, ...usage].slice(
+      0,
+      50
+    );
+    setUsage(next);
+    saveLS('ads:usage', next);
+  };
+
+  const addImpressions = (amount: number, reason: string) => {
+    const next = creditsBalance + amount;
+
+    setCreditsBalance(next);
+    saveLS('ads:credits', next);
+
+    pushUsage({
+      type: reason,
+      impressions: amount,
+      balance: next,
+    });
+
+    return next;
+  };
+
+  const addMonthlyShopBonus = () => {
+    const monthKey = new Date().toISOString().slice(0, 7);
+    const bonusKey = 'facemex_marketplace_shop_addon_bonus_month';
+
+    try {
+      const lastBonusMonth = localStorage.getItem(bonusKey);
+
+      if (lastBonusMonth === monthKey) return;
+
+      localStorage.setItem(bonusKey, monthKey);
+
+      addImpressions(
+        SHOP_ADDON_BONUS_IMPRESSIONS,
+        'shop_addon_monthly_bonus'
+      );
+
+      toast({
+        title: 'Shop boost added',
+        description: `Your R${SHOP_ADDON_PRICE_ZAR}/month shop add-on added ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions.`,
+      });
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -344,6 +476,19 @@ export default function MarketplacePage() {
     };
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('shop_addon') === 'success') {
+      localStorage.setItem('facemex_marketplace_shop_addon', 'active');
+      setShopAddonActive(true);
+      addMonthlyShopBonus();
+      setShopOpen(true);
+
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
 
@@ -373,6 +518,59 @@ export default function MarketplacePage() {
   const openShopItems = (shop: Shop) => {
     setSelectedShop(shop);
     setItemsOpen(true);
+  };
+
+  const handleOpenShopClick = async () => {
+    if (canOpenShop) {
+      setShopOpen(true);
+      return;
+    }
+
+    if (currentTier === 'pro') {
+      try {
+        setShopCheckoutBusy(true);
+
+        toast({
+          title: 'Marketplace shop add-on',
+          description: `Pro users pay R${SHOP_ADDON_PRICE_ZAR}/month and receive ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions monthly.`,
+        });
+
+        const origin = window.location.origin;
+
+        const checkout = await createYocoCheckoutSession({
+          amountZar: SHOP_ADDON_PRICE_ZAR,
+          currency: 'ZAR',
+          successUrl: `${origin}/marketplace?shop_addon=success`,
+          cancelUrl: `${origin}/marketplace?shop_addon=cancelled`,
+          failureUrl: `${origin}/marketplace?shop_addon=failed`,
+          metadata: {
+            billingPurpose: 'marketplace_shop_addon',
+            addon: 'marketplace_shop',
+            monthlyBonusImpressions: String(SHOP_ADDON_BONUS_IMPRESSIONS),
+            tier: currentTier,
+          },
+          externalId: `marketplace-shop-${Date.now()}`,
+        });
+
+        window.location.href = checkout.redirectUrl;
+      } catch (error: any) {
+        toast({
+          title: 'Checkout failed',
+          description:
+            error?.message || 'Could not start marketplace shop payment.',
+        });
+      } finally {
+        setShopCheckoutBusy(false);
+      }
+
+      return;
+    }
+
+    toast({
+      title: 'Upgrade required',
+      description:
+        'Business and Exclusive users open shops for free. Pro users can unlock a shop for R370/month with 1,000 bonus impressions.',
+    });
   };
 
   const contactSeller = (shop: Shop) => {
@@ -457,6 +655,11 @@ export default function MarketplacePage() {
   };
 
   const addShop = () => {
+    if (!canOpenShop) {
+      handleOpenShopClick();
+      return;
+    }
+
     if (!shopName.trim()) {
       toast({
         title: 'Shop name required',
@@ -539,15 +742,6 @@ export default function MarketplacePage() {
     saveLS('ads:campaigns', next);
   };
 
-  const pushUsage = (event: any) => {
-    const next = [{ ts: new Date().toISOString(), ...event }, ...usage].slice(
-      0,
-      50
-    );
-    setUsage(next);
-    saveLS('ads:usage', next);
-  };
-
   const runDraft = (index: number) => {
     const draft = drafts[index];
     const needed = impressionsFor(parseInt(draft.budget || '0', 10));
@@ -563,7 +757,7 @@ export default function MarketplacePage() {
     if (creditsBalance < needed) {
       toast({
         title: 'Not enough credits',
-        description: `Need ${needed.toLocaleString()} impressions, you have ${creditsBalance.toLocaleString()}. Buy more credits.`,
+        description: `Need ${needed.toLocaleString()} impressions, you have ${creditsBalance.toLocaleString()}. Buy more credits or use your shop bonus impressions.`,
       });
       return;
     }
@@ -576,6 +770,36 @@ export default function MarketplacePage() {
     updated[index] = { ...draft, lastRun: new Date().toISOString() };
     saveDrafts(updated);
 
+    const promotedShop = shops[0];
+
+    const feedAds = Array.isArray(readLS('facemex_feed_slide_ads'))
+      ? readLS('facemex_feed_slide_ads')
+      : [];
+
+    const newFeedAd = {
+      id: `feed-ad-${Date.now()}`,
+      title: draft.name,
+      objective: draft.objective,
+      budget: draft.budget,
+      impressions: needed,
+      shopId: promotedShop?.id || '',
+      shopName: promotedShop?.shopName || 'Marketplace Promotion',
+      category: promotedShop?.category || 'Marketplace',
+      location: promotedShop?.location || 'Nearby',
+      image: promotedShop?.coverImage || '',
+      tagline: promotedShop?.tagline || 'Recommended near you',
+      createdAt: new Date().toISOString(),
+      active: true,
+    };
+
+    saveLS('facemex_feed_slide_ads', [newFeedAd, ...feedAds].slice(0, 20));
+
+    try {
+      window.dispatchEvent(new Event('facemex-feed-ads-updated'));
+    } catch {
+      // ignore
+    }
+
     pushUsage({
       type: 'run_campaign',
       name: draft.name,
@@ -585,7 +809,104 @@ export default function MarketplacePage() {
 
     toast({
       title: 'Campaign running',
-      description: `${draft.name} launched · Spent ${needed.toLocaleString()} impressions · Remaining ${newBalance.toLocaleString()}`,
+      description: `${draft.name} launched · ${needed.toLocaleString()} impressions added to feed slide recommendations nearby.`,
+    });
+  };
+
+  const saveGig = () => {
+    if (!gigTitle.trim()) {
+      toast({ title: 'Add gig title' });
+      return;
+    }
+
+    const next = [
+      {
+        id: `gig-${Date.now()}`,
+        title: gigTitle,
+        price: Number(gigPrice || 0),
+        description: gigDescription || 'Creator service available.',
+        createdAt: new Date().toISOString(),
+      },
+      ...gigs,
+    ];
+
+    setGigs(next);
+    saveLS('facemex_marketplace_gigs', next);
+    setGigTitle('');
+    setGigPrice('');
+    setGigDescription('');
+    setGigOpen(false);
+
+    toast({ title: 'Gig created', description: 'Your creator gig is saved.' });
+  };
+
+  const saveProject = () => {
+    if (!projectTitle.trim()) {
+      toast({ title: 'Add project title' });
+      return;
+    }
+
+    const next = [
+      {
+        id: `project-${Date.now()}`,
+        title: projectTitle,
+        budget: Number(projectBudget || 0),
+        description: projectDescription || 'Business project available.',
+        createdAt: new Date().toISOString(),
+      },
+      ...projects,
+    ];
+
+    setProjects(next);
+    saveLS('facemex_business_projects', next);
+    setProjectTitle('');
+    setProjectBudget('');
+    setProjectDescription('');
+    setProjectOpen(false);
+
+    toast({ title: 'Project created', description: 'Business project saved.' });
+  };
+
+  const saveEscrow = () => {
+    if (!escrowTitle.trim()) {
+      toast({ title: 'Add escrow title' });
+      return;
+    }
+
+    const next: EscrowItem[] = [
+      {
+        id: `escrow-${Date.now()}`,
+        title: escrowTitle,
+        amount: Number(escrowAmount || 0),
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+      },
+      ...escrows,
+    ];
+
+    setEscrows(next);
+    saveLS('facemex_escrows', next);
+    setEscrowTitle('');
+    setEscrowAmount('');
+    setEscrowOpen(false);
+
+    toast({ title: 'Escrow created', description: 'Escrow draft saved.' });
+  };
+
+  const updateEscrowStatus = (
+    escrowId: string,
+    status: EscrowItem['status']
+  ) => {
+    const next = escrows.map((escrow) =>
+      escrow.id === escrowId ? { ...escrow, status } : escrow
+    );
+
+    setEscrows(next);
+    saveLS('facemex_escrows', next);
+
+    toast({
+      title: 'Escrow updated',
+      description: `Escrow status changed to ${status}.`,
     });
   };
 
@@ -626,6 +947,12 @@ export default function MarketplacePage() {
               </Badge>
             )}
 
+            {shopAddonActive && (
+              <Badge variant="outline">
+                Shop add-on active · +1,000/mo
+              </Badge>
+            )}
+
             <Button
               variant="secondary"
               className="rounded-full"
@@ -637,9 +964,14 @@ export default function MarketplacePage() {
             <Button
               variant="outline"
               className="rounded-full"
-              onClick={() => setShopOpen(true)}
+              onClick={handleOpenShopClick}
+              disabled={shopCheckoutBusy}
             >
-              Open Shop
+              {canOpenShop
+                ? 'Open Shop'
+                : currentTier === 'pro'
+                  ? 'Open Shop · R370/mo'
+                  : 'Open Shop'}
             </Button>
 
             <Button
@@ -871,6 +1203,11 @@ export default function MarketplacePage() {
                               event.impressions?.toLocaleString?.() ||
                               event.impressions
                             }`}
+                          {event.type === 'shop_addon_monthly_bonus' &&
+                            `Shop bonus ${
+                              event.impressions?.toLocaleString?.() ||
+                              event.impressions
+                            }`}
                           {event.type === 'run_campaign' &&
                             `Ran ${event.name} · Spent ${
                               event.spentImpressions?.toLocaleString?.() ||
@@ -897,15 +1234,33 @@ export default function MarketplacePage() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <div className="text-muted-foreground">Offer services</div>
-                <Button size="sm" className="rounded-full">
+                <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setGigOpen(true)}
+                >
                   New Gig
                 </Button>
               </div>
 
-              <div className="text-xs text-muted-foreground">
-                Gigs can be connected to creator profiles next. For now, use
-                Open Shop to display products or services.
-              </div>
+              {gigs.length === 0 ? (
+                <div className="text-xs text-muted-foreground">
+                  Create a gig for design, editing, content, delivery promo or social media services.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {gigs.slice(0, 3).map((gig) => (
+                    <div key={gig.id} className="rounded-xl border p-2">
+                      <div className="truncate text-sm font-medium">
+                        {gig.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        From R{gig.price || 0}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -917,14 +1272,33 @@ export default function MarketplacePage() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <div className="text-muted-foreground">Hire creators</div>
-                <Button size="sm" className="rounded-full">
+                <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setProjectOpen(true)}
+                >
                   New Project
                 </Button>
               </div>
 
-              <div className="text-xs text-muted-foreground">
-                Businesses can post creator jobs and campaign projects here.
-              </div>
+              {projects.length === 0 ? (
+                <div className="text-xs text-muted-foreground">
+                  Businesses can post creator jobs and campaign projects here.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {projects.slice(0, 3).map((project) => (
+                    <div key={project.id} className="rounded-xl border p-2">
+                      <div className="truncate text-sm font-medium">
+                        {project.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Budget R{project.budget || 0}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -938,95 +1312,147 @@ export default function MarketplacePage() {
                 <div className="text-muted-foreground">
                   Secure in-app payments
                 </div>
-                <Button size="sm" className="rounded-full">
+                <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setEscrowOpen(true)}
+                >
                   New Escrow
                 </Button>
               </div>
 
-              <div className="text-xs text-muted-foreground">
-                Secure payments can be connected after marketplace orders are
-                live.
-              </div>
+              {escrows.length === 0 ? (
+                <div className="text-xs text-muted-foreground">
+                  Create payment records before work starts.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {escrows.slice(0, 3).map((escrow) => (
+                    <div key={escrow.id} className="rounded-xl border p-2">
+                      <div className="truncate text-sm font-medium">
+                        {escrow.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        R{escrow.amount || 0} · {escrow.status}
+                      </div>
+
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={escrow.status !== 'draft'}
+                          onClick={() => updateEscrowStatus(escrow.id, 'funded')}
+                        >
+                          Fund
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={escrow.status !== 'funded'}
+                          onClick={() =>
+                            updateEscrowStatus(escrow.id, 'released')
+                          }
+                        >
+                          Release
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
 
       <Dialog open={itemsOpen} onOpenChange={setItemsOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{selectedShop?.shopName || 'Shop items'}</DialogTitle>
-            <DialogDescription>
-              {selectedShop?.tagline || 'View what this seller offers.'}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl max-h-[88vh] overflow-hidden rounded-3xl p-0">
+          <div className="sticky top-0 z-10 border-b bg-background px-4 py-3">
+            <DialogHeader>
+              <DialogTitle className="text-base">
+                {selectedShop?.shopName || 'Shop items'}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                {selectedShop?.tagline || 'View what this seller offers.'}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
 
-          {selectedShop && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                {selectedShop.description}
-              </div>
+          <div className="max-h-[68vh] overflow-y-auto px-4 py-4">
+            {selectedShop && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  {selectedShop.description}
+                </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                {selectedShop.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="overflow-hidden rounded-2xl border bg-card"
-                  >
-                    <div className="aspect-square bg-black/5">
-                      <img
-                        src={item.image}
-                        alt={item.title}
-                        className="h-full w-full object-cover"
-                      />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                  {selectedShop.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="overflow-hidden rounded-2xl border bg-card"
+                    >
+                      <div className="aspect-square bg-black/5">
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 p-2.5">
+                        <div className="truncate text-xs font-semibold">
+                          {item.title}
+                        </div>
+
+                        <div className="h-10 overflow-hidden text-[11px] leading-snug text-muted-foreground">
+                          {item.description}
+                        </div>
+
+                        <div className="text-xs font-bold">
+                          {item.showPrice && item.price
+                            ? `R${Number(item.price).toFixed(2)}`
+                            : 'Price on request'}
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="space-y-2 p-3">
-                      <div className="truncate text-sm font-semibold">
-                        {item.title}
-                      </div>
-
-                      <div className="h-12 overflow-hidden text-xs text-muted-foreground">
-                        {item.description}
-                      </div>
-
-                      <div className="text-sm font-bold">
-                        {item.showPrice && item.price
-                          ? `R${Number(item.price).toFixed(2)}`
-                          : 'Price on request'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setItemsOpen(false)}>
+          <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t bg-background px-4 py-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setItemsOpen(false)}
+            >
               Close
             </Button>
 
             {selectedShop && (
-              <Button onClick={() => contactSeller(selectedShop)}>
+              <Button size="sm" onClick={() => contactSeller(selectedShop)}>
                 Contact seller
               </Button>
             )}
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={shopOpen} onOpenChange={setShopOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl max-h-[88vh] overflow-y-auto rounded-3xl">
           <DialogHeader>
             <DialogTitle>Open your shop</DialogTitle>
             <DialogDescription>
-              Create a premium shop display with items, prices, seller contact
-              and call-to-action.
+              {businessPlusCanOpenShopFree
+                ? 'Business+ opens shops for free.'
+                : shopAddonActive
+                  ? 'Your marketplace shop add-on is active.'
+                  : `Pro users pay R${SHOP_ADDON_PRICE_ZAR}/month and receive ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions monthly.`}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="space-y-4 pb-2">
             <div className="grid gap-2 md:grid-cols-2">
               <Input
                 placeholder="Shop name"
@@ -1160,24 +1586,6 @@ export default function MarketplacePage() {
               >
                 Add item to shop
               </Button>
-
-              {draftItems.length > 0 && (
-                <div className="grid gap-2">
-                  {draftItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between rounded-lg border bg-background p-2 text-xs"
-                    >
-                      <span className="truncate">{item.title}</span>
-                      <span className="text-muted-foreground">
-                        {item.showPrice && item.price
-                          ? `R${item.price}`
-                          : 'Price hidden'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 
@@ -1192,12 +1600,11 @@ export default function MarketplacePage() {
       </Dialog>
 
       <Dialog open={creditsOpen} onOpenChange={setCreditsOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg rounded-3xl">
           <DialogHeader>
             <DialogTitle>Buy Ad Credits</DialogTitle>
             <DialogDescription>
-              Ad credits are used for Sponsored Posts, Story Ads, Search Ads,
-              and Marketplace promotions.
+              Use credits to run feed slide promotions recommended to nearby users.
             </DialogDescription>
           </DialogHeader>
 
@@ -1242,19 +1649,22 @@ export default function MarketplacePage() {
 
             <Button
               onClick={() => {
-                const newBalance = creditsBalance + impressionsFor(creditsRand);
+                const added = impressionsFor(creditsRand);
+                const newBalance = creditsBalance + added;
+
                 setCreditsBalance(newBalance);
                 saveLS('ads:credits', newBalance);
                 pushUsage({
                   type: 'buy_credits',
                   rands: creditsRand,
-                  impressions: impressionsFor(creditsRand),
+                  impressions: added,
                   balance: newBalance,
                 });
                 setCreditsOpen(false);
+
                 toast({
                   title: 'Ad credits added',
-                  description: `Balance: ${newBalance.toLocaleString()} impressions.`,
+                  description: `Your balance is now ${newBalance.toLocaleString()} impressions.`,
                 });
               }}
             >
@@ -1265,11 +1675,11 @@ export default function MarketplacePage() {
       </Dialog>
 
       <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg rounded-3xl">
           <DialogHeader>
             <DialogTitle>Create Campaign</DialogTitle>
             <DialogDescription>
-              Set up a simple campaign to promote a shop, item, or post.
+              Save a draft, then run it from Draft Campaigns to show in feed slide recommendations.
             </DialogDescription>
           </DialogHeader>
 
@@ -1321,6 +1731,112 @@ export default function MarketplacePage() {
             >
               Save Draft
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={gigOpen} onOpenChange={setGigOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Create Creator Gig</DialogTitle>
+            <DialogDescription>
+              Offer a service like design, video editing, delivery promo, or social media content.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              placeholder="Gig title"
+              value={gigTitle}
+              onChange={(event) => setGigTitle(event.target.value)}
+            />
+            <Input
+              type="number"
+              placeholder="Starting price in Rands"
+              value={gigPrice}
+              onChange={(event) => setGigPrice(event.target.value)}
+            />
+            <Textarea
+              placeholder="Describe your service"
+              value={gigDescription}
+              onChange={(event) => setGigDescription(event.target.value)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGigOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveGig}>Save Gig</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={projectOpen} onOpenChange={setProjectOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Create Business Project</DialogTitle>
+            <DialogDescription>
+              Post a business project to hire creators or service providers.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              placeholder="Project title"
+              value={projectTitle}
+              onChange={(event) => setProjectTitle(event.target.value)}
+            />
+            <Input
+              type="number"
+              placeholder="Budget in Rands"
+              value={projectBudget}
+              onChange={(event) => setProjectBudget(event.target.value)}
+            />
+            <Textarea
+              placeholder="Describe what you need"
+              value={projectDescription}
+              onChange={(event) => setProjectDescription(event.target.value)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProjectOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveProject}>Save Project</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={escrowOpen} onOpenChange={setEscrowOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Create Escrow</DialogTitle>
+            <DialogDescription>
+              Create a secure payment record before work starts.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              placeholder="Escrow title"
+              value={escrowTitle}
+              onChange={(event) => setEscrowTitle(event.target.value)}
+            />
+            <Input
+              type="number"
+              placeholder="Amount in Rands"
+              value={escrowAmount}
+              onChange={(event) => setEscrowAmount(event.target.value)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEscrowOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveEscrow}>Save Escrow</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
