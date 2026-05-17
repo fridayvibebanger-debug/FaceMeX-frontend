@@ -1,618 +1,1329 @@
 import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Badge } from '@/components/ui/badge';
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
-import { api } from '@/lib/api';
-import { useUserStore } from '@/store/userStore';
-import { Globe, Mail, Sparkles } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabaseClient';
 
-type BusinessAsset = {
-  type: 'image' | 'video';
-  url: string;
-};
+type SellerCta = 'contact' | 'website' | 'whatsapp' | 'call' | 'message';
 
-type BusinessListing = {
-  id: string;
-  name: string;
-  websiteUrl: string;
-  description: string;
-  tier: 'exclusive';
-  assets: BusinessAsset[];
-};
-
-type AdMedia = {
-  type: 'image' | 'video';
-  url: string;
-};
-
-type MarketplaceAd = {
+interface ShopItem {
   id: string;
   title: string;
   description: string;
-  websiteUrl: string | null;
-  media: AdMedia[];
-  createdAt?: string;
-  creatorTier?: string;
-  status?: 'active' | 'paused' | 'deleted' | string;
-};
+  image: string;
+  showPrice: boolean;
+  price?: number;
+  currency: 'ZAR';
+}
 
-function normalizeListing(raw: any): BusinessListing | null {
-  if (!raw) return null;
-  const id = String(raw.id || '').trim();
-  const name = String(raw.name || '').trim();
-  const websiteUrl = String(raw.websiteUrl || raw.website_url || '').trim();
-  const description = String(raw.description || '').trim();
-  if (!id || !name || !websiteUrl || !description) return null;
-  const assets: BusinessAsset[] = Array.isArray(raw.assets)
-    ? raw.assets
-        .map((a: any) => ({
-          type: a?.type === 'video' ? 'video' : 'image',
-          url: String(a?.url || ''),
-        }))
-        .filter((a: any) => a.url)
-    : [];
+interface Shop {
+  id: string;
+  shopName: string;
+  category: string;
+  tagline: string;
+  description: string;
+  coverImage: string;
+  sellerName: string;
+  phone?: string;
+  whatsapp?: string;
+  website?: string;
+  location?: string;
+  cta: SellerCta;
+  items: ShopItem[];
+  featured?: boolean;
+}
 
-  return {
-    id,
-    name,
-    websiteUrl,
-    description,
-    tier: 'exclusive',
-    assets,
+const exampleShops: Shop[] = [
+  {
+    id: 'shop-food-001',
+    shopName: 'Nkowankowa Kota House',
+    category: 'Food',
+    tagline: 'Fresh kota, chips, burgers and lunch combos.',
+    description:
+      'Local fast-food shop serving kota, chips, burgers and daily lunch specials. Perfect for students, workers and family orders.',
+    coverImage:
+      'https://images.unsplash.com/photo-1561758033-d89a9ad46330?auto=format&fit=crop&w=1200&q=80',
+    sellerName: 'Kota House Team',
+    whatsapp: '+27760000000',
+    phone: '+27760000000',
+    website: '',
+    location: 'Nkowankowa / Tzaneen',
+    cta: 'whatsapp',
+    featured: true,
+    items: [
+      {
+        id: 'item-kota-1',
+        title: 'Classic Kota',
+        description: 'Bread, chips, cheese, polony and sauce.',
+        image:
+          'https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&w=900&q=80',
+        showPrice: true,
+        price: 35,
+        currency: 'ZAR',
+      },
+      {
+        id: 'item-kota-2',
+        title: 'Family Chips Combo',
+        description: 'Large chips with sauces for sharing.',
+        image:
+          'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=900&q=80',
+        showPrice: true,
+        price: 65,
+        currency: 'ZAR',
+      },
+    ],
+  },
+  {
+    id: 'shop-fashion-001',
+    shopName: 'Limpopo Streetwear Hub',
+    category: 'Fashion',
+    tagline: 'Premium sneakers, caps, T-shirts and weekend outfits.',
+    description:
+      'A youth fashion seller offering clean streetwear looks, casual wear and selected sneaker drops.',
+    coverImage:
+      'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=1200&q=80',
+    sellerName: 'Streetwear Seller',
+    whatsapp: '+27710000000',
+    phone: '+27710000000',
+    website: 'https://example.com',
+    location: 'Tzaneen',
+    cta: 'website',
+    featured: true,
+    items: [
+      {
+        id: 'item-fashion-1',
+        title: 'Premium T-Shirt',
+        description: 'Clean everyday T-shirt for casual wear.',
+        image:
+          'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80',
+        showPrice: true,
+        price: 180,
+        currency: 'ZAR',
+      },
+      {
+        id: 'item-fashion-2',
+        title: 'Sneaker Drop',
+        description: 'Limited sneaker stock. Contact seller for sizes.',
+        image:
+          'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80',
+        showPrice: false,
+        currency: 'ZAR',
+      },
+    ],
+  },
+  {
+    id: 'shop-services-001',
+    shopName: 'Creator Media Studio',
+    category: 'Services',
+    tagline: 'Posters, ads, videos, logo design and content packages.',
+    description:
+      'Creative shop for small businesses that need posters, ad creatives, product videos and social media content.',
+    coverImage:
+      'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80',
+    sellerName: 'Creative Team',
+    whatsapp: '+27690000000',
+    phone: '+27690000000',
+    website: '',
+    location: 'Remote / South Africa',
+    cta: 'contact',
+    featured: false,
+    items: [
+      {
+        id: 'item-service-1',
+        title: 'Business Poster Design',
+        description: 'Clean advert poster for WhatsApp, Facebook and Instagram.',
+        image:
+          'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+        showPrice: true,
+        price: 150,
+        currency: 'ZAR',
+      },
+      {
+        id: 'item-service-2',
+        title: 'Short Promo Video',
+        description: 'Short video advert for product or business launch.',
+        image:
+          'https://images.unsplash.com/photo-1492724441997-5dc865305da7?auto=format&fit=crop&w=900&q=80',
+        showPrice: true,
+        price: 350,
+        currency: 'ZAR',
+      },
+    ],
+  },
+];
+
+export default function MarketplacePage() {
+  const [query, setQuery] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'card'>('card');
+
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [creditsRand, setCreditsRand] = useState<number>(200);
+  const [campaignName, setCampaignName] = useState('');
+  const [campaignObjective, setCampaignObjective] = useState('Awareness');
+  const [campaignBudget, setCampaignBudget] = useState('500');
+
+  const [shops, setShops] = useState<Shop[]>(exampleShops);
+  const [loadingShops, setLoadingShops] = useState(false);
+
+  const [shopOpen, setShopOpen] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
+
+  const [shopName, setShopName] = useState('');
+  const [sellerName, setSellerName] = useState('');
+  const [shopCategory, setShopCategory] = useState('Food');
+  const [shopTagline, setShopTagline] = useState('');
+  const [shopDescription, setShopDescription] = useState('');
+  const [shopCoverImage, setShopCoverImage] = useState('');
+  const [shopPhone, setShopPhone] = useState('');
+  const [shopWhatsapp, setShopWhatsapp] = useState('');
+  const [shopWebsite, setShopWebsite] = useState('');
+  const [shopLocation, setShopLocation] = useState('');
+  const [shopCta, setShopCta] = useState<SellerCta>('contact');
+
+  const [itemTitle, setItemTitle] = useState('');
+  const [itemDescription, setItemDescription] = useState('');
+  const [itemImage, setItemImage] = useState('');
+  const [itemPrice, setItemPrice] = useState('');
+  const [itemShowPrice, setItemShowPrice] = useState(true);
+  const [draftItems, setDraftItems] = useState<ShopItem[]>([]);
+
+  const saveLS = (key: string, value: any) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // ignore
+    }
   };
-}
 
-function bestAssets(listing: BusinessListing) {
-  const videos = listing.assets.filter((a) => a.type === 'video');
-  const images = listing.assets.filter((a) => a.type === 'image');
-  return [...videos, ...images].slice(0, 6);
-}
+  const readLS = (key: string) => {
+    try {
+      const value = localStorage.getItem(key);
+      return value ? JSON.parse(value) : null;
+    } catch {
+      return null;
+    }
+  };
 
-function hostname(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-}
+  const readLocalShops = (): Shop[] => {
+    const local = readLS('mall:shops');
+    return Array.isArray(local) ? local : [];
+  };
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('file_read_failed'));
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.readAsDataURL(file);
-  });
-}
+  const [creditsBalance, setCreditsBalance] = useState<number>(
+    () => readLS('ads:credits') || 0
+  );
 
-export default function PremiumMarketplacePage() {
-  const { tier, hasTier } = useUserStore();
-  const [featured, setFeatured] = useState<BusinessListing[]>([]);
-  const [featuredLoading, setFeaturedLoading] = useState(true);
-  const [heroApi, setHeroApi] = useState<CarouselApi | null>(null);
+  const [drafts, setDrafts] = useState<
+    Array<{
+      name: string;
+      objective: string;
+      budget: string;
+      ts: string;
+      lastRun?: string;
+    }>
+  >(() =>
+    Array.isArray(readLS('ads:campaigns')) ? readLS('ads:campaigns') : []
+  );
 
-  const [ads, setAds] = useState<MarketplaceAd[]>([]);
-  const [adsLoading, setAdsLoading] = useState(true);
-  const [adsApi, setAdsApi] = useState<CarouselApi | null>(null);
+  const [usage, setUsage] = useState<Array<any>>(() =>
+    Array.isArray(readLS('ads:usage')) ? readLS('ads:usage') : []
+  );
 
-  const [myAds, setMyAds] = useState<MarketplaceAd[]>([]);
-  const [myAdsLoading, setMyAdsLoading] = useState(false);
+  const [showAllDrafts, setShowAllDrafts] = useState(false);
+
+  const impressionsFor = (rands: number) => Math.max(0, (rands || 0) * 10);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const TTL_MS = 30 * 60 * 1000;
-      const featuredKey = 'facemex:marketplace:featured:v1';
-      const adsKey = 'facemex:marketplace:ads:v1';
+    let mounted = true;
 
-      const readCache = (key: string) => {
-        if (typeof window === 'undefined') return null;
-        try {
-          const rawL = window.localStorage?.getItem(key);
-          if (rawL) return JSON.parse(rawL);
-        } catch {
-        }
-        try {
-          const rawS = window.sessionStorage?.getItem(key);
-          if (rawS) return JSON.parse(rawS);
-        } catch {
-        }
-        return null;
-      };
+    async function loadMarketplaceShops() {
+      const localShops = readLocalShops();
 
-      const writeCache = (key: string, value: any) => {
-        if (typeof window === 'undefined') return;
-        const serialized = JSON.stringify(value);
-        try {
-          window.localStorage?.setItem(key, serialized);
-        } catch {
-        }
-        try {
-          window.sessionStorage?.setItem(key, serialized);
-        } catch {
-        }
-      };
+      setShops([...localShops, ...exampleShops]);
+      setLoadingShops(false);
 
-      try {
-        let cachedFeatured: any = null;
-        let cachedAds: any = null;
-        cachedFeatured = readCache(featuredKey);
-        cachedAds = readCache(adsKey);
+      const { data: dbShops, error: shopsError } = await supabase
+        .from('marketplace_shops')
+        .select('*')
+        .eq('is_active', true)
+        .order('featured', { ascending: false })
+        .order('created_at', { ascending: false });
 
-        const now = Date.now();
-        const hasFeaturedCache = Array.isArray(cachedFeatured?.data);
-        const hasAdsCache = Array.isArray(cachedAds?.data);
-
-        if (hasFeaturedCache) {
-          const normalized = (cachedFeatured.data as any[]).map(normalizeListing).filter(Boolean) as BusinessListing[];
-          setFeatured(normalized);
-          setFeaturedLoading(false);
-        }
-
-        if (hasAdsCache) {
-          const list = cachedAds.data as any[];
-          const normalized = list
-            .map((a: any) => {
-              const id = String(a?.id || '').trim();
-              const title = String(a?.title || '').trim();
-              const description = String(a?.description || '').trim();
-              if (!id || !title || !description) return null;
-              const media: AdMedia[] = Array.isArray(a?.media)
-                ? a.media
-                    .map((m: any) => ({
-                      type: m?.type === 'video' ? 'video' : 'image',
-                      url: String(m?.url || '').trim(),
-                    }))
-                    .filter((m: any) => m.url)
-                : [];
-              return {
-                id,
-                title,
-                description,
-                websiteUrl: a?.websiteUrl ? String(a.websiteUrl) : null,
-                media,
-                createdAt: a?.createdAt,
-                creatorTier: a?.creatorTier,
-              } satisfies MarketplaceAd;
-            })
-            .filter(Boolean) as MarketplaceAd[];
-          setAds(normalized);
-          setAdsLoading(false);
-        }
-
-        const isFeaturedCacheFresh = cachedFeatured?.ts && now - cachedFeatured.ts < TTL_MS;
-        const isAdsCacheFresh = cachedAds?.ts && now - cachedAds.ts < TTL_MS;
-        if (isFeaturedCacheFresh && isAdsCacheFresh) return;
-
-        const [featuredData, adsData] = await Promise.all([
-          api.get('/api/marketplace/featured'),
-          api.get('/api/marketplace/ads'),
-        ]);
-        if (cancelled) return;
-
-        writeCache(featuredKey, { ts: Date.now(), data: featuredData });
-        writeCache(adsKey, { ts: Date.now(), data: adsData });
-
-        const listF = Array.isArray(featuredData) ? featuredData : [];
-        const normalizedF = listF.map(normalizeListing).filter(Boolean) as BusinessListing[];
-        setFeatured(normalizedF);
-
-        const listA = Array.isArray(adsData) ? adsData : [];
-        const normalizedA = listA
-          .map((a: any) => {
-            const id = String(a?.id || '').trim();
-            const title = String(a?.title || '').trim();
-            const description = String(a?.description || '').trim();
-            if (!id || !title || !description) return null;
-            const media: AdMedia[] = Array.isArray(a?.media)
-              ? a.media
-                  .map((m: any) => ({
-                    type: m?.type === 'video' ? 'video' : 'image',
-                    url: String(m?.url || '').trim(),
-                  }))
-                  .filter((m: any) => m.url)
-              : [];
-            return {
-              id,
-              title,
-              description,
-              websiteUrl: a?.websiteUrl ? String(a.websiteUrl) : null,
-              media,
-              createdAt: a?.createdAt,
-              creatorTier: a?.creatorTier,
-            } satisfies MarketplaceAd;
-          })
-          .filter(Boolean) as MarketplaceAd[];
-        setAds(normalizedA);
-      } catch {
-        setFeatured([]);
-        setAds([]);
-      } finally {
-        if (!cancelled) {
-          setFeaturedLoading(false);
-          setAdsLoading(false);
-        }
+      if (shopsError) {
+        console.log('Marketplace shops load failed:', shopsError.message);
+        return;
       }
-    })();
+
+      if (!dbShops || dbShops.length === 0) {
+        return;
+      }
+
+      const shopIds = dbShops.map((shop: any) => shop.id);
+
+      const { data: dbItems, error: itemsError } = await supabase
+        .from('marketplace_items')
+        .select('*')
+        .in('shop_id', shopIds)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (itemsError) {
+        console.log('Marketplace items load failed:', itemsError.message);
+      }
+
+      const itemsByShop = new Map<string, ShopItem[]>();
+
+      (dbItems || []).forEach((item: any) => {
+        const list = itemsByShop.get(item.shop_id) || [];
+
+        list.push({
+          id: item.id,
+          title: item.title || 'Untitled item',
+          description: item.description || 'Contact seller for details.',
+          image:
+            item.image ||
+            'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80',
+          showPrice: item.show_price !== false,
+          price: item.price ? Number(item.price) : undefined,
+          currency: 'ZAR',
+        });
+
+        itemsByShop.set(item.shop_id, list);
+      });
+
+      const mapped: Shop[] = dbShops.map((shop: any) => ({
+        id: shop.id,
+        shopName: shop.shop_name || 'Untitled shop',
+        category: shop.category || 'General',
+        tagline: shop.tagline || 'Premium shop on FaceMeX Marketplace.',
+        description:
+          shop.description ||
+          'This seller has listed products or services on FaceMeX Marketplace.',
+        coverImage:
+          shop.cover_image ||
+          'https://images.unsplash.com/photo-1481437156560-3205f6a55735?auto=format&fit=crop&w=1200&q=80',
+        sellerName: shop.seller_name || 'Seller',
+        phone: shop.phone || '',
+        whatsapp: shop.whatsapp || '',
+        website: shop.website || '',
+        location: shop.location || '',
+        cta: (shop.cta || 'contact') as SellerCta,
+        featured: !!shop.featured,
+        items: itemsByShop.get(shop.id) || [],
+      }));
+
+      if (mounted) {
+        setShops([...localShops, ...mapped, ...exampleShops]);
+        setLoadingShops(false);
+      }
+    }
+
+    loadMarketplaceShops();
+
     return () => {
-      cancelled = true;
+      mounted = false;
     };
   }, []);
 
-  useEffect(() => {
-    if (!heroApi) return;
-    const id = window.setInterval(() => {
-      try {
-        if (heroApi.canScrollNext()) heroApi.scrollNext();
-        else heroApi.scrollTo(0);
-      } catch {
-      }
-    }, 5200);
-    return () => window.clearInterval(id);
-  }, [heroApi]);
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
 
-  const loadMyAds = async () => {
-    if (!hasTier('business')) return;
-    setMyAdsLoading(true);
-    try {
-      const data = await api.get('/api/marketplace/ads/mine');
-      const list = Array.isArray(data) ? data : [];
-      const normalized = list
-        .map((a: any) => {
-          const id = String(a?.id || '').trim();
-          const title = String(a?.title || '').trim();
-          const description = String(a?.description || '').trim();
-          if (!id || !title || !description) return null;
-          const media: AdMedia[] = Array.isArray(a?.media)
-            ? a.media
-                .map((m: any) => ({
-                  type: m?.type === 'video' ? 'video' : 'image',
-                  url: String(m?.url || '').trim(),
-                }))
-                .filter((m: any) => m.url)
-            : [];
-          return {
-            id,
-            title,
-            description,
-            websiteUrl: a?.websiteUrl ? String(a.websiteUrl) : null,
-            media,
-            status: a?.status,
-            createdAt: a?.createdAt,
-            creatorTier: a?.creatorTier,
-          } satisfies MarketplaceAd;
-        })
-        .filter(Boolean) as MarketplaceAd[];
-      setMyAds(normalized);
-    } catch {
-      setMyAds([]);
-    } finally {
-      setMyAdsLoading(false);
+    return shops.filter((shop) => {
+      if (!q) return true;
+
+      return (
+        shop.shopName.toLowerCase().includes(q) ||
+        shop.category.toLowerCase().includes(q) ||
+        shop.tagline.toLowerCase().includes(q) ||
+        shop.description.toLowerCase().includes(q) ||
+        shop.items.some(
+          (item) =>
+            item.title.toLowerCase().includes(q) ||
+            item.description.toLowerCase().includes(q)
+        )
+      );
+    });
+  }, [shops, query]);
+
+  const saveShopsToLocal = (next: Shop[]) => {
+    const onlyLocal = next.filter((shop) => shop.id.startsWith('local-shop-'));
+    saveLS('mall:shops', onlyLocal);
+    setShops(next);
+  };
+
+  const openShopItems = (shop: Shop) => {
+    setSelectedShop(shop);
+    setItemsOpen(true);
+  };
+
+  const contactSeller = (shop: Shop) => {
+    const text = encodeURIComponent(
+      `Hi ${shop.sellerName}, I saw your shop "${shop.shopName}" on FaceMeX Marketplace. I am interested in your items.`
+    );
+
+    if (shop.whatsapp) {
+      const cleanPhone = shop.whatsapp.replace(/\D/g, '');
+      window.open(
+        `https://wa.me/${cleanPhone}?text=${text}`,
+        '_blank',
+        'noopener,noreferrer'
+      );
+      return;
     }
-  };
 
-  useEffect(() => {
-    loadMyAds().catch(() => {});
-  }, [tier]);
-
-  useEffect(() => {
-    if (!adsApi) return;
-    const id = window.setInterval(() => {
-      try {
-        if (adsApi.canScrollNext()) adsApi.scrollNext();
-        else adsApi.scrollTo(0);
-      } catch {
-      }
-    }, 6500);
-    return () => window.clearInterval(id);
-  }, [adsApi]);
-
-  const handleToggleMyAd = async (adId: string, nextStatus: 'active' | 'paused') => {
-    await api.patch(`/api/marketplace/ads/${adId}`, { status: nextStatus });
-    setMyAds((prev) => prev.map((a) => (a.id === adId ? { ...a, status: nextStatus } : a)));
-    if (nextStatus === 'active') {
-      loadMyAds().catch(() => {});
+    if (shop.phone) {
+      window.location.href = `tel:${shop.phone}`;
+      return;
     }
+
+    if (shop.cta === 'message') {
+      window.location.href = '/messages';
+      return;
+    }
+
+    toast({
+      title: 'Seller contact',
+      description:
+        'This seller has not added WhatsApp or phone details yet. Try viewing their items or website.',
+    });
   };
 
-  const handleDeleteMyAd = async (adId: string) => {
-    await api.delete(`/api/marketplace/ads/${adId}`);
-    setMyAds((prev) => prev.filter((a) => a.id !== adId));
-    setAds((prev) => prev.filter((a) => a.id !== adId));
+  const secondaryShopAction = (shop: Shop) => {
+    if (shop.website && shop.cta === 'website') {
+      window.open(shop.website, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    openShopItems(shop);
   };
 
-  const hero = featured[0] || null;
+  const buildDraftItem = (): ShopItem | null => {
+    if (!itemTitle.trim()) {
+      toast({
+        title: 'Item name required',
+        description: 'Add the item or product name before adding it to your shop.',
+      });
+      return null;
+    }
 
-  const heroSlides = useMemo(() => (hero ? bestAssets(hero) : []), [hero]);
+    return {
+      id: `local-item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      title: itemTitle,
+      description: itemDescription || 'Contact seller for more details.',
+      image:
+        itemImage ||
+        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80',
+      showPrice: itemShowPrice,
+      price: itemShowPrice ? Number(itemPrice || 0) : undefined,
+      currency: 'ZAR',
+    };
+  };
+
+  const addDraftItem = () => {
+    const item = buildDraftItem();
+
+    if (!item) return;
+
+    setDraftItems((current) => [item, ...current]);
+    setItemTitle('');
+    setItemDescription('');
+    setItemImage('');
+    setItemPrice('');
+    setItemShowPrice(true);
+
+    toast({
+      title: 'Item added',
+      description: `${item.title} added to your shop display.`,
+    });
+  };
+
+  const addShop = () => {
+    if (!shopName.trim()) {
+      toast({
+        title: 'Shop name required',
+        description: 'Add your shop name before publishing.',
+      });
+      return;
+    }
+
+    if (!sellerName.trim()) {
+      toast({
+        title: 'Seller name required',
+        description: 'Add seller or business owner name.',
+      });
+      return;
+    }
+
+    let finalItems = [...draftItems];
+
+    if (itemTitle.trim()) {
+      const item = buildDraftItem();
+      if (item) finalItems = [item, ...finalItems];
+    }
+
+    if (finalItems.length === 0) {
+      toast({
+        title: 'Add at least one item',
+        description: 'Your shop must display what you sell before customers enter.',
+      });
+      return;
+    }
+
+    const newShop: Shop = {
+      id: `local-shop-${Date.now()}`,
+      shopName,
+      category: shopCategory,
+      tagline: shopTagline || 'Premium local shop on FaceMeX Marketplace.',
+      description:
+        shopDescription ||
+        'This shop sells products and services through FaceMeX Marketplace.',
+      coverImage:
+        shopCoverImage ||
+        'https://images.unsplash.com/photo-1481437156560-3205f6a55735?auto=format&fit=crop&w=1200&q=80',
+      sellerName,
+      phone: shopPhone,
+      whatsapp: shopWhatsapp,
+      website: shopWebsite,
+      location: shopLocation,
+      cta: shopCta,
+      featured: false,
+      items: finalItems,
+    };
+
+    saveShopsToLocal([newShop, ...shops]);
+
+    setShopOpen(false);
+    setShopName('');
+    setSellerName('');
+    setShopTagline('');
+    setShopDescription('');
+    setShopCoverImage('');
+    setShopPhone('');
+    setShopWhatsapp('');
+    setShopWebsite('');
+    setShopLocation('');
+    setItemTitle('');
+    setItemDescription('');
+    setItemImage('');
+    setItemPrice('');
+    setItemShowPrice(true);
+    setDraftItems([]);
+
+    toast({
+      title: 'Shop published',
+      description: `${newShop.shopName} is now displayed in the marketplace mall.`,
+    });
+  };
+
+  const saveDrafts = (next: typeof drafts) => {
+    setDrafts(next);
+    saveLS('ads:campaigns', next);
+  };
+
+  const pushUsage = (event: any) => {
+    const next = [{ ts: new Date().toISOString(), ...event }, ...usage].slice(
+      0,
+      50
+    );
+    setUsage(next);
+    saveLS('ads:usage', next);
+  };
+
+  const runDraft = (index: number) => {
+    const draft = drafts[index];
+    const needed = impressionsFor(parseInt(draft.budget || '0', 10));
+
+    if (!needed || needed <= 0) {
+      toast({
+        title: 'Invalid budget',
+        description: 'Set a positive budget to run this draft.',
+      });
+      return;
+    }
+
+    if (creditsBalance < needed) {
+      toast({
+        title: 'Not enough credits',
+        description: `Need ${needed.toLocaleString()} impressions, you have ${creditsBalance.toLocaleString()}. Buy more credits.`,
+      });
+      return;
+    }
+
+    const newBalance = creditsBalance - needed;
+    setCreditsBalance(newBalance);
+    saveLS('ads:credits', newBalance);
+
+    const updated = drafts.slice();
+    updated[index] = { ...draft, lastRun: new Date().toISOString() };
+    saveDrafts(updated);
+
+    pushUsage({
+      type: 'run_campaign',
+      name: draft.name,
+      spentImpressions: needed,
+      balance: newBalance,
+    });
+
+    toast({
+      title: 'Campaign running',
+      description: `${draft.name} launched · Spent ${needed.toLocaleString()} impressions · Remaining ${newBalance.toLocaleString()}`,
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-background pt-16">
-      <div className="mx-auto max-w-6xl p-3 sm:p-4 space-y-4 sm:space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 text-[11px] sm:text-xs text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Exclusive Business Tier Marketplace
-            </div>
-            <h1 className="text-lg sm:text-2xl font-semibold tracking-tight">
-              Facemex Marketplace
-            </h1>
-            <p className="text-[13px] sm:text-sm text-muted-foreground max-w-2xl">
-              A premium digital mall built for high-end businesses. Full-screen showcases, rich media, and conversion-first ad layouts.
-            </p>
-          </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <Badge variant="secondary" className="px-3 py-1">Luxury</Badge>
-            <Badge variant="outline" className="px-3 py-1">Autoplay Showcase</Badge>
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-0 pb-10 md:pt-1">
+        <div className="rounded-2xl border bg-card px-4 py-3">
+          <div className="text-sm font-semibold">FaceMeX Marketplace Mall</div>
+          <div className="text-xs text-muted-foreground">
+            Example shops are shown below so users can see how sellers display
+            products, prices, contact buttons and item previews.
           </div>
         </div>
 
-        <Card className="overflow-hidden border bg-gradient-to-b from-slate-950/5 via-background to-background dark:from-slate-950 dark:via-slate-950/70 dark:to-background">
-          <CardContent className="p-0">
-            {hero && heroSlides.length > 0 ? (
-              <Carousel setApi={(api) => setHeroApi(api)} opts={{ loop: true }}>
-                <CarouselContent>
-                  {heroSlides.map((asset, idx) => (
-                    <CarouselItem key={`${hero.id}-${idx}`}>
-                      <div className="relative aspect-[4/3] sm:aspect-[21/9] bg-black">
-                        {asset.type === 'video' ? (
-                          <video
-                            className="h-full w-full object-cover"
-                            src={asset.url}
-                            muted
-                            playsInline
-                            autoPlay
-                            loop
-                          />
-                        ) : (
-                          <img
-                            className="h-full w-full object-cover"
-                            src={asset.url}
-                            alt={hero.name}
-                            loading={idx === 0 ? 'eager' : 'lazy'}
-                          />
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            className="min-w-[240px] flex-1"
+            placeholder="Search shops, products, services..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Pay with Card:</span>
+            <Button
+              variant="default"
+              className="rounded-full"
+              onClick={() => setPaymentMethod('card')}
+            >
+              {paymentMethod === 'card' ? 'Card active' : 'Card'}
+            </Button>
+          </div>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {creditsBalance > 0 && (
+              <Badge variant="secondary">
+                Ad Credits: {creditsBalance.toLocaleString()} impressions
+              </Badge>
+            )}
+
+            <Button
+              variant="secondary"
+              className="rounded-full"
+              onClick={() => setCreditsOpen(true)}
+            >
+              Buy Ad Credits
+            </Button>
+
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setShopOpen(true)}
+            >
+              Open Shop
+            </Button>
+
+            <Button
+              className="rounded-full"
+              onClick={() => setCampaignOpen(true)}
+            >
+              Create Campaign
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {loadingShops ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading marketplace shops...
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  No shops found. Try another search or open your own shop.
+                </div>
+              ) : (
+                filtered.map((shop) => (
+                  <Card
+                    key={shop.id}
+                    className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+                  >
+                    <div className="relative aspect-video bg-black/5">
+                      <img
+                        src={shop.coverImage}
+                        alt={shop.shopName}
+                        className="h-full w-full object-cover"
+                      />
+
+                      <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                        {shop.featured && (
+                          <Badge className="bg-black/80 text-white hover:bg-black/80">
+                            Premium display
+                          </Badge>
                         )}
 
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/10" />
-
-                        <div className="absolute inset-x-0 bottom-0 p-3 sm:p-6">
-                          <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.45 }}
-                            className="max-w-2xl"
-                          >
-                            <div className="flex flex-wrap items-center gap-2 mb-2">
-                              <Badge className="bg-white/10 text-white border-white/15">Exclusive</Badge>
-                              <span className="text-xs text-white/80">{hostname(hero.websiteUrl)}</span>
-                            </div>
-                            <div className="text-white text-base sm:text-2xl font-semibold tracking-tight">
-                              {hero.name}
-                            </div>
-                            <p className="mt-1.5 text-[13px] sm:text-sm text-white/85 leading-relaxed">
-                              {hero.description}
-                            </p>
-
-                            <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
-                              <Button asChild className="bg-white text-slate-950 hover:bg-white/90 w-full sm:w-auto">
-                                <a href={hero.websiteUrl} target="_blank" rel="noreferrer">
-                                  <Globe className="h-4 w-4 mr-2" />
-                                  Visit Website
-                                </a>
-                              </Button>
-                              <Button variant="outline" className="border-white/20 text-white hover:bg-white/10 w-full sm:w-auto" asChild>
-                                <a href={`mailto:info@${hostname(hero.websiteUrl)}`}>
-                                  <Mail className="h-4 w-4 mr-2" />
-                                  Contact Business
-                                </a>
-                              </Button>
-                            </div>
-                          </motion.div>
-                        </div>
+                        <Badge variant="secondary">{shop.category}</Badge>
                       </div>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-              </Carousel>
-            ) : featuredLoading ? (
-              <div className="relative aspect-[4/3] sm:aspect-[21/9] bg-muted animate-pulse" />
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground">No featured businesses yet.</div>
-            )}
-          </CardContent>
-        </Card>
+                    </div>
 
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold tracking-tight">Featured Businesses</h2>
-          <div className="text-xs text-muted-foreground">Rotating weekly · Exclusive tier</div>
+                    <CardHeader className="space-y-1">
+                      <CardTitle className="truncate text-base">
+                        {shop.shopName}
+                      </CardTitle>
+
+                      <div className="h-9 overflow-hidden text-xs text-muted-foreground">
+                        {shop.tagline}
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="space-y-3">
+                      <div className="h-16 overflow-hidden text-sm text-muted-foreground">
+                        {shop.description}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {shop.items.slice(0, 2).map((item) => (
+                          <div
+                            key={item.id}
+                            className="overflow-hidden rounded-xl border bg-muted/20"
+                          >
+                            <div className="aspect-square bg-black/5">
+                              <img
+                                src={item.image}
+                                alt={item.title}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+
+                            <div className="space-y-1 p-2">
+                              <div className="truncate text-xs font-semibold">
+                                {item.title}
+                              </div>
+
+                              <div className="h-8 overflow-hidden text-[11px] text-muted-foreground">
+                                {item.description}
+                              </div>
+
+                              <div className="text-xs font-semibold">
+                                {item.showPrice && item.price
+                                  ? `R${Number(item.price).toFixed(2)}`
+                                  : 'Ask seller'}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="truncate text-xs text-muted-foreground">
+                        Seller: {shop.sellerName}
+                        {shop.location ? ` · ${shop.location}` : ''}
+                      </div>
+                    </CardContent>
+
+                    <CardFooter className="flex items-center justify-between gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => contactSeller(shop)}
+                      >
+                        Contact seller
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => secondaryShopAction(shop)}
+                      >
+                        {shop.website && shop.cta === 'website'
+                          ? 'Visit website'
+                          : 'View items'}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="md:col-span-1">
+            <div className="space-y-3 md:sticky md:top-20">
+              <div className="rounded-xl border bg-card p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-semibold">Draft Campaigns</div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full"
+                      onClick={() => setCreditsOpen(true)}
+                    >
+                      Top up
+                    </Button>
+
+                    <div className="text-xs text-muted-foreground">
+                      Stored locally
+                    </div>
+                  </div>
+                </div>
+
+                {drafts.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    No drafts yet. Create a campaign to save a draft.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {drafts
+                      .slice(0, showAllDrafts ? 10 : 5)
+                      .map((draft, index) => (
+                        <div
+                          key={`${draft.ts}-${index}`}
+                          className="flex items-center justify-between gap-2 rounded border p-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium">
+                              {draft.name}
+                            </div>
+
+                            <div className="truncate text-xs text-muted-foreground">
+                              {draft.objective} · Budget R{draft.budget} · Est{' '}
+                              {impressionsFor(
+                                parseInt(draft.budget || '0', 10)
+                              ).toLocaleString()}{' '}
+                              impressions
+                            </div>
+
+                            {draft.lastRun && (
+                              <div className="text-[11px] text-muted-foreground">
+                                Last run:{' '}
+                                {new Date(draft.lastRun).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="rounded-full"
+                            onClick={() => runDraft(index)}
+                          >
+                            Run
+                          </Button>
+                        </div>
+                      ))}
+
+                    {drafts.length > 5 && (
+                      <div className="flex justify-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setShowAllDrafts(!showAllDrafts)}
+                        >
+                          {showAllDrafts ? 'Collapse' : 'View all'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border bg-card p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-semibold">Ad Usage</div>
+                  <div className="text-xs text-muted-foreground">Recent</div>
+                </div>
+
+                {usage.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    No usage yet.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {usage.slice(0, 5).map((event, index) => (
+                      <div
+                        key={`${event.ts}-${index}`}
+                        className="flex items-center justify-between text-xs text-muted-foreground"
+                      >
+                        <span>
+                          {event.type === 'buy_credits' &&
+                            `Bought ${
+                              event.impressions?.toLocaleString?.() ||
+                              event.impressions
+                            }`}
+                          {event.type === 'run_campaign' &&
+                            `Ran ${event.name} · Spent ${
+                              event.spentImpressions?.toLocaleString?.() ||
+                              event.spentImpressions
+                            }`}
+                        </span>
+
+                        <span>{new Date(event.ts).toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {ads.length > 0 ? (
-          <Card className="overflow-hidden border bg-card">
-            <CardContent className="p-0">
-              <Carousel setApi={(api) => setAdsApi(api)} opts={{ loop: true }}>
-                <CarouselContent>
-                  {ads.slice(0, 10).map((a) => {
-                    const cover = a.media?.[0];
-                    return (
-                      <CarouselItem key={a.id} className="basis-[90%] sm:basis-1/2 lg:basis-1/3">
-                        <div className="p-3">
-                          <Card className="overflow-hidden border bg-card">
-                            <div className="relative aspect-[16/10] bg-black">
-                              {cover?.type === 'video' ? (
-                                <video className="h-full w-full object-cover" src={cover.url} muted playsInline autoPlay loop />
-                              ) : (
-                                cover?.url ? (
-                                  <img
-                                    className="h-full w-full object-cover"
-                                    src={cover.url}
-                                    alt={a.title}
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <div className="h-full w-full bg-muted" />
-                                )
-                              )}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                              <div className="absolute left-3 top-3 flex items-center gap-2">
-                                <Badge className="bg-white/10 text-white border-white/15">Sponsored</Badge>
-                                <Badge variant="secondary" className="bg-white/15 text-white border-white/15 capitalize">
-                                  {a.creatorTier || tier}
-                                </Badge>
-                              </div>
-                              <div className="absolute inset-x-0 bottom-0 p-3">
-                                <div className="text-white font-semibold truncate">{a.title}</div>
-                                {a.websiteUrl && (
-                                  <div className="text-[11px] text-white/80 truncate">{hostname(a.websiteUrl)}</div>
-                                )}
-                              </div>
-                            </div>
-                            <CardContent className="p-3 space-y-2">
-                              <div className="text-sm text-muted-foreground line-clamp-3">{a.description}</div>
-                              <div className="flex items-center gap-2">
-                                {a.websiteUrl ? (
-                                  <Button size="sm" asChild>
-                                    <a href={a.websiteUrl} target="_blank" rel="noreferrer">Learn More</a>
-                                  </Button>
-                                ) : (
-                                  <Button size="sm" disabled>
-                                    Learn More
-                                  </Button>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-                      </CarouselItem>
-                    );
-                  })}
-                </CarouselContent>
-              </Carousel>
-            </CardContent>
-          </Card>
-        ) : adsLoading ? (
-          <Card className="border bg-card">
-            <CardContent className="p-4">
-              <div className="space-y-2">
-                <div className="h-4 w-44 rounded bg-muted animate-pulse" />
-                <div className="h-4 w-64 rounded bg-muted animate-pulse" />
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border bg-card">
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              No sponsored ads yet.
-            </CardContent>
-          </Card>
-        )}
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Creator Gigs</CardTitle>
+            </CardHeader>
 
-        {hasTier('business') && (
-          <Card className="border bg-card">
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold tracking-tight">My Ads</h3>
-                <Button size="sm" variant="outline" onClick={() => loadMyAds().catch(() => {})} disabled={myAdsLoading}>
-                  Refresh
+                <div className="text-muted-foreground">Offer services</div>
+                <Button size="sm" className="rounded-full">
+                  New Gig
                 </Button>
               </div>
 
-              {myAds.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No ads yet.</div>
-              ) : (
-                <div className="space-y-2">
-                  {myAds.map((a) => (
-                    <div key={a.id} className="rounded-lg border bg-background p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-semibold text-sm truncate">{a.title}</div>
-                          <div className="text-xs text-muted-foreground line-clamp-2">{a.description}</div>
-                          <div className="mt-2 flex items-center gap-2">
-                            <Badge variant="secondary" className="capitalize">{a.status || 'active'}</Badge>
-                            {a.websiteUrl && (
-                              <span className="text-[11px] text-muted-foreground truncate">{hostname(a.websiteUrl)}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {a.status === 'paused' ? (
-                            <Button size="sm" onClick={() => handleToggleMyAd(a.id, 'active').catch(() => {})}>
-                              Resume
-                            </Button>
-                          ) : (
-                            <Button size="sm" variant="outline" onClick={() => handleToggleMyAd(a.id, 'paused').catch(() => {})}>
-                              Pause
-                            </Button>
-                          )}
-                          <Button size="sm" variant="destructive" onClick={() => handleDeleteMyAd(a.id).catch(() => {})}>
-                            Delete
-                          </Button>
-                        </div>
+              <div className="text-xs text-muted-foreground">
+                Gigs can be connected to creator profiles next. For now, use
+                Open Shop to display products or services.
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Business Projects</CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-muted-foreground">Hire creators</div>
+                <Button size="sm" className="rounded-full">
+                  New Project
+                </Button>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                Businesses can post creator jobs and campaign projects here.
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Escrow</CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-muted-foreground">
+                  Secure in-app payments
+                </div>
+                <Button size="sm" className="rounded-full">
+                  New Escrow
+                </Button>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                Secure payments can be connected after marketplace orders are
+                live.
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Dialog open={itemsOpen} onOpenChange={setItemsOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedShop?.shopName || 'Shop items'}</DialogTitle>
+            <DialogDescription>
+              {selectedShop?.tagline || 'View what this seller offers.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedShop && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                {selectedShop.description}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                {selectedShop.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="overflow-hidden rounded-2xl border bg-card"
+                  >
+                    <div className="aspect-square bg-black/5">
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+
+                    <div className="space-y-2 p-3">
+                      <div className="truncate text-sm font-semibold">
+                        {item.title}
                       </div>
+
+                      <div className="h-12 overflow-hidden text-xs text-muted-foreground">
+                        {item.description}
+                      </div>
+
+                      <div className="text-sm font-bold">
+                        {item.showPrice && item.price
+                          ? `R${Number(item.price).toFixed(2)}`
+                          : 'Price on request'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setItemsOpen(false)}>
+              Close
+            </Button>
+
+            {selectedShop && (
+              <Button onClick={() => contactSeller(selectedShop)}>
+                Contact seller
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shopOpen} onOpenChange={setShopOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Open your shop</DialogTitle>
+            <DialogDescription>
+              Create a premium shop display with items, prices, seller contact
+              and call-to-action.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-2">
+              <Input
+                placeholder="Shop name"
+                value={shopName}
+                onChange={(event) => setShopName(event.target.value)}
+              />
+
+              <Input
+                placeholder="Seller / business owner"
+                value={sellerName}
+                onChange={(event) => setSellerName(event.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <Input
+                placeholder="Category"
+                value={shopCategory}
+                onChange={(event) => setShopCategory(event.target.value)}
+              />
+
+              <Input
+                placeholder="Location"
+                value={shopLocation}
+                onChange={(event) => setShopLocation(event.target.value)}
+              />
+
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={shopCta}
+                onChange={(event) => setShopCta(event.target.value as SellerCta)}
+              >
+                <option value="contact">Contact seller</option>
+                <option value="whatsapp">WhatsApp seller</option>
+                <option value="call">Call seller</option>
+                <option value="website">Visit website</option>
+                <option value="message">Message seller</option>
+              </select>
+            </div>
+
+            <Input
+              placeholder="Shop tagline"
+              value={shopTagline}
+              onChange={(event) => setShopTagline(event.target.value)}
+            />
+
+            <Textarea
+              placeholder="Shop description"
+              value={shopDescription}
+              onChange={(event) => setShopDescription(event.target.value)}
+            />
+
+            <Input
+              placeholder="Cover image URL"
+              value={shopCoverImage}
+              onChange={(event) => setShopCoverImage(event.target.value)}
+            />
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <Input
+                placeholder="Phone"
+                value={shopPhone}
+                onChange={(event) => setShopPhone(event.target.value)}
+              />
+
+              <Input
+                placeholder="WhatsApp number"
+                value={shopWhatsapp}
+                onChange={(event) => setShopWhatsapp(event.target.value)}
+              />
+
+              <Input
+                placeholder="Website URL"
+                value={shopWebsite}
+                onChange={(event) => setShopWebsite(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold">Item display</div>
+                <div className="text-xs text-muted-foreground">
+                  {draftItems.length} item(s) added
+                </div>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  placeholder="Item name"
+                  value={itemTitle}
+                  onChange={(event) => setItemTitle(event.target.value)}
+                />
+
+                <Input
+                  placeholder="Item image URL"
+                  value={itemImage}
+                  onChange={(event) => setItemImage(event.target.value)}
+                />
+              </div>
+
+              <Textarea
+                placeholder="Item description"
+                value={itemDescription}
+                onChange={(event) => setItemDescription(event.target.value)}
+              />
+
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  type="number"
+                  placeholder="Price in Rands"
+                  value={itemPrice}
+                  onChange={(event) => setItemPrice(event.target.value)}
+                  disabled={!itemShowPrice}
+                />
+
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={itemShowPrice}
+                    onChange={(event) => setItemShowPrice(event.target.checked)}
+                  />
+                  Show price to customers
+                </label>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addDraftItem}
+              >
+                Add item to shop
+              </Button>
+
+              {draftItems.length > 0 && (
+                <div className="grid gap-2">
+                  {draftItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between rounded-lg border bg-background p-2 text-xs"
+                    >
+                      <span className="truncate">{item.title}</span>
+                      <span className="text-muted-foreground">
+                        {item.showPrice && item.price
+                          ? `R${item.price}`
+                          : 'Price hidden'}
+                      </span>
                     </div>
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          {featured.slice(0, 6).map((b) => {
-            const cover = bestAssets(b)[0];
-            return (
-              <Card key={b.id} className="overflow-hidden border bg-card">
-                <div className="relative aspect-[16/10] bg-black">
-                  {cover?.type === 'video' ? (
-                    <video className="h-full w-full object-cover" src={cover.url} muted playsInline autoPlay loop />
-                  ) : (
-                    cover?.url ? (
-                      <img className="h-full w-full object-cover" src={cover.url} alt={b.name} loading="lazy" />
-                    ) : (
-                      <div className="h-full w-full bg-muted" />
-                    )
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
-                  <div className="absolute left-3 top-3 flex items-center gap-2">
-                    <Badge className="bg-white/10 text-white border-white/15">Exclusive</Badge>
-                  </div>
-                  <div className="absolute inset-x-0 bottom-0 p-3">
-                    <div className="text-white font-semibold truncate">{b.name}</div>
-                    <div className="text-[11px] text-white/80 truncate">{hostname(b.websiteUrl)}</div>
-                  </div>
-                </div>
-                <CardContent className="p-3 space-y-2">
-                  <div className="text-sm text-muted-foreground line-clamp-3">{b.description}</div>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" asChild>
-                      <a href={b.websiteUrl} target="_blank" rel="noreferrer">Visit Website</a>
-                    </Button>
-                    <Button size="sm" variant="outline" asChild>
-                      <a href={`mailto:info@${hostname(b.websiteUrl)}`}>Contact</a>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {featuredLoading && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {Array.from({ length: 2 }).map((_, idx) => (
-              <Card key={`featured-skel-${idx}`} className="overflow-hidden border bg-card">
-                <div className="relative aspect-[16/10] bg-muted animate-pulse" />
-                <CardContent className="p-3 space-y-2">
-                  <div className="h-4 w-40 rounded bg-muted animate-pulse" />
-                  <div className="h-4 w-56 rounded bg-muted animate-pulse" />
-                </CardContent>
-              </Card>
-            ))}
+            </div>
           </div>
-        )}
-      </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShopOpen(false)}>
+              Cancel
+            </Button>
+
+            <Button onClick={addShop}>Publish shop</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={creditsOpen} onOpenChange={setCreditsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Buy Ad Credits</DialogTitle>
+            <DialogDescription>
+              Ad credits are used for Sponsored Posts, Story Ads, Search Ads,
+              and Marketplace promotions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              Pricing: R200 = 2,000 impressions
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {[200, 500, 1000].map((amount) => (
+                <Button
+                  key={amount}
+                  variant={creditsRand === amount ? 'default' : 'outline'}
+                  onClick={() => setCreditsRand(amount)}
+                >
+                  R{amount}
+                </Button>
+              ))}
+            </div>
+
+            <Input
+              type="number"
+              value={creditsRand}
+              onChange={(event) =>
+                setCreditsRand(parseInt(event.target.value || '0', 10))
+              }
+            />
+
+            <div className="text-sm">
+              Estimated reach:{' '}
+              <span className="font-semibold">
+                {impressionsFor(creditsRand).toLocaleString()}
+              </span>{' '}
+              impressions
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreditsOpen(false)}>
+              Cancel
+            </Button>
+
+            <Button
+              onClick={() => {
+                const newBalance = creditsBalance + impressionsFor(creditsRand);
+                setCreditsBalance(newBalance);
+                saveLS('ads:credits', newBalance);
+                pushUsage({
+                  type: 'buy_credits',
+                  rands: creditsRand,
+                  impressions: impressionsFor(creditsRand),
+                  balance: newBalance,
+                });
+                setCreditsOpen(false);
+                toast({
+                  title: 'Ad credits added',
+                  description: `Balance: ${newBalance.toLocaleString()} impressions.`,
+                });
+              }}
+            >
+              Confirm Purchase
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create Campaign</DialogTitle>
+            <DialogDescription>
+              Set up a simple campaign to promote a shop, item, or post.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              placeholder="Campaign name"
+              value={campaignName}
+              onChange={(event) => setCampaignName(event.target.value)}
+            />
+
+            <Input
+              placeholder="Objective"
+              value={campaignObjective}
+              onChange={(event) => setCampaignObjective(event.target.value)}
+            />
+
+            <Input
+              placeholder="Budget (R)"
+              value={campaignBudget}
+              onChange={(event) => setCampaignBudget(event.target.value)}
+            />
+
+            <Textarea placeholder="Creative notes, audience, location, product..." />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCampaignOpen(false)}>
+              Cancel
+            </Button>
+
+            <Button
+              onClick={() => {
+                const draft = {
+                  name: campaignName || 'Untitled',
+                  objective: campaignObjective,
+                  budget: campaignBudget,
+                  ts: new Date().toISOString(),
+                };
+
+                const next = [draft, ...drafts].slice(0, 10);
+                saveDrafts(next);
+                setCampaignOpen(false);
+
+                toast({
+                  title: 'Draft saved',
+                  description: `${draft.name}, budget R${draft.budget}`,
+                });
+              }}
+            >
+              Save Draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
