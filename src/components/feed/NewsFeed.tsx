@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, TrendingUp, Clock, Filter } from 'lucide-react';
 import PostCard from './PostCard';
+import MarketplaceAdSlide from '@/components/feed/MarketplaceAdSlide';
 import CreatePostModal from './CreatePostModal';
 import { usePostStore } from '@/store/postStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -553,6 +554,7 @@ export default function NewsFeed() {
         </div>
       </button>
 
+      <MarketplaceAdSlide />
       <BusinessPromotionsStrip />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
