@@ -39,15 +39,15 @@ type ProfessionalProfile = {
   location: string;
   skills: string[];
   experience: Array<{
-    role?: string;
-    company?: string;
+    role: string;
+    company: string;
     start?: string;
     end?: string;
     summary?: string;
     verified?: boolean;
   }>;
   education: Array<{
-    institution?: string;
+    institution: string;
     degree?: string;
     field?: string;
     start?: string;
@@ -79,12 +79,38 @@ const emptyProfessional: ProfessionalProfile = {
 };
 
 function normalizePro(value: any): ProfessionalProfile {
+  const experience = Array.isArray(value?.experience)
+    ? value.experience
+        .filter((item: any) => item?.role || item?.company)
+        .map((item: any) => ({
+          role: String(item.role || 'Role'),
+          company: String(item.company || 'Company'),
+          start: item.start || undefined,
+          end: item.end || undefined,
+          summary: item.summary || undefined,
+          verified: Boolean(item.verified),
+        }))
+    : [];
+
+  const education = Array.isArray(value?.education)
+    ? value.education
+        .filter((item: any) => item?.institution)
+        .map((item: any) => ({
+          institution: String(item.institution || 'Institution'),
+          degree: item.degree || undefined,
+          field: item.field || undefined,
+          start: item.start || undefined,
+          end: item.end || undefined,
+          verified: Boolean(item.verified),
+        }))
+    : [];
+
   return {
     ...emptyProfessional,
     ...(value || {}),
     skills: Array.isArray(value?.skills) ? value.skills : [],
-    experience: Array.isArray(value?.experience) ? value.experience : [],
-    education: Array.isArray(value?.education) ? value.education : [],
+    experience,
+    education,
     links: Array.isArray(value?.links) ? value.links : [],
     endorsements: value?.endorsements || {},
   };
@@ -184,6 +210,8 @@ export default function ProfilePage() {
   const [eduStart, setEduStart] = useState('');
   const [eduEnd, setEduEnd] = useState('');
 
+  const collabSectionRef = useRef<HTMLDivElement | null>(null);
+
   const canUseProfessionalProfile =
     hasTier?.('creator') ||
     getTierRank(currentTier) >= getTierRank('creator') ||
@@ -195,8 +223,6 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<
     'posts' | 'professional' | 'photos'
   >(mode === 'professional' ? 'professional' : 'posts');
-
-  const collabSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -258,6 +284,7 @@ export default function ProfilePage() {
       bio: 'Welcome to my profile.',
       joinedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60),
       interests: [],
+      tier: 'free',
     } as any;
   }, [isOwnProfile, user, viewedUserId, viewedProfile]);
 
@@ -390,7 +417,8 @@ export default function ProfilePage() {
     const totalPosts = mine.length;
     const totalLikes = mine.reduce((a: number, p: any) => a + (p.likes || 0), 0);
     const totalComments = mine.reduce(
-      (a: number, p: any) => a + (Array.isArray(p.comments) ? p.comments.length : 0),
+      (a: number, p: any) =>
+        a + (Array.isArray(p.comments) ? p.comments.length : 0),
       0
     );
     const totalShares = mine.reduce(
@@ -499,21 +527,23 @@ export default function ProfilePage() {
         description: `You are now following ${viewedUser?.name || 'this user'}.`,
       });
 
-      supabase
-        .from('notifications')
-        .insert({
-          user_id: viewedUserId,
-          actor_id: myUserId,
-          type: 'follow',
-          title: 'New follower',
-          message: `${
-            user?.name || user?.email?.split('@')[0] || 'Someone'
-          } followed you.`,
-          action_url: `/profile/${myUserId}`,
-          is_read: false,
-        })
-        .then(() => null)
-        .catch(() => null);
+      void (async () => {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: viewedUserId,
+            actor_id: myUserId,
+            type: 'follow',
+            title: 'New follower',
+            message: `${
+              user?.name || user?.email?.split('@')[0] || 'Someone'
+            } followed you.`,
+            action_url: `/profile/${myUserId}`,
+            is_read: false,
+          });
+        } catch {
+          // notification failure must not block follow
+        }
+      })();
     } catch (error: any) {
       toast({
         title: 'Follow failed',
@@ -552,22 +582,24 @@ export default function ProfilePage() {
 
       setIsPendingConnection(true);
 
-      supabase
-        .from('notifications')
-        .upsert({
-          id: data.id,
-          user_id: viewedUserId,
-          actor_id: effectiveUserId,
-          type: 'connection_request',
-          title: 'New connection request',
-          message: `${
-            user?.name || user?.email?.split('@')[0] || 'Someone'
-          } wants to connect with you.`,
-          action_url: '/notifications',
-          is_read: false,
-        })
-        .then(() => null)
-        .catch(() => null);
+      void (async () => {
+        try {
+          await supabase.from('notifications').upsert({
+            id: data.id,
+            user_id: viewedUserId,
+            actor_id: effectiveUserId,
+            type: 'connection_request',
+            title: 'New connection request',
+            message: `${
+              user?.name || user?.email?.split('@')[0] || 'Someone'
+            } wants to connect with you.`,
+            action_url: '/notifications',
+            is_read: false,
+          });
+        } catch {
+          // notification failure must not block connection request
+        }
+      })();
 
       toast({
         title: 'Connection sent',
@@ -622,7 +654,8 @@ export default function ProfilePage() {
     } catch {
       toast({
         title: 'Bio saved locally',
-        description: 'Your bio was saved in the app. Supabase update did not complete.',
+        description:
+          'Your bio was saved in the app. Supabase update did not complete.',
       });
       setBioEditing(false);
     }
@@ -658,7 +691,8 @@ export default function ProfilePage() {
 
     toast({
       title: 'Professional profile saved',
-      description: 'Your professional information is now visible on your profile.',
+      description:
+        'Your professional information is now visible on your profile.',
     });
   };
 
@@ -666,7 +700,7 @@ export default function ProfilePage() {
     const skill = newSkill.trim();
     if (!skill) return;
 
-    const next = {
+    const next: ProfessionalProfile = {
       ...viewedPro,
       skills: Array.from(new Set([...viewedPro.skills, skill])),
     };
@@ -678,7 +712,7 @@ export default function ProfilePage() {
   const addExperience = async () => {
     if (!expRole.trim() || !expCompany.trim()) return;
 
-    const next = {
+    const next: ProfessionalProfile = {
       ...viewedPro,
       experience: [
         ...viewedPro.experience,
@@ -705,7 +739,7 @@ export default function ProfilePage() {
   const addEducation = async () => {
     if (!eduInstitution.trim()) return;
 
-    const next = {
+    const next: ProfessionalProfile = {
       ...viewedPro,
       education: [
         ...viewedPro.education,
@@ -755,7 +789,10 @@ export default function ProfilePage() {
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 sm:gap-6">
                 <div className="relative z-10 -mt-10 sm:-mt-12 md:-mt-16">
                   <Avatar className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 ring-2 ring-border bg-muted">
-                    <AvatarImage src={viewedUser?.avatar} alt={viewedUser?.name} />
+                    <AvatarImage
+                      src={viewedUser?.avatar}
+                      alt={viewedUser?.name}
+                    />
                     <AvatarFallback className="bg-muted text-foreground text-2xl font-semibold flex items-center justify-center">
                       {getInitial(viewedUser?.name, viewedUser?.email)}
                     </AvatarFallback>
@@ -1395,7 +1432,9 @@ export default function ProfilePage() {
                                   {experience.company || 'Company'}
                                   {(experience.start || experience.end) &&
                                     ` · ${experience.start || ''}${
-                                      experience.start && experience.end ? ' – ' : ''
+                                      experience.start && experience.end
+                                        ? ' – '
+                                        : ''
                                     }${experience.end || ''}`}
                                 </div>
                                 {experience.summary && (
@@ -1494,10 +1533,14 @@ export default function ProfilePage() {
                                 </div>
                                 <div className="text-xs text-muted-foreground">
                                   {education.degree || 'Degree'}
-                                  {education.field ? ` · ${education.field}` : ''}
+                                  {education.field
+                                    ? ` · ${education.field}`
+                                    : ''}
                                   {(education.start || education.end) &&
                                     ` · ${education.start || ''}${
-                                      education.start && education.end ? ' – ' : ''
+                                      education.start && education.end
+                                        ? ' – '
+                                        : ''
                                     }${education.end || ''}`}
                                 </div>
                               </div>
@@ -1752,7 +1795,9 @@ export default function ProfilePage() {
                             {viewedPro.openToCollab ? 'Open' : 'Closed'}
                           </button>
                         ) : (
-                          <Badge variant={viewedPro.openToCollab ? 'default' : 'outline'}>
+                          <Badge
+                            variant={viewedPro.openToCollab ? 'default' : 'outline'}
+                          >
                             {viewedPro.openToCollab ? 'Open' : 'Closed'}
                           </Badge>
                         )}
