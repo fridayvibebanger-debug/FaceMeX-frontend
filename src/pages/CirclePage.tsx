@@ -23,11 +23,12 @@ import {
   CheckCircle2,
   Heart,
   Share2,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   UserCog,
   AlertTriangle,
+  Upload,
+  Download,
+  XCircle,
 } from 'lucide-react';
 
 import Navbar from '@/components/layout/Navbar';
@@ -79,13 +80,15 @@ type LocalCirclePost = {
   authorAvatar?: string;
   text: string;
   title?: string;
-  documentUrl?: string;
-  documentPages?: string[];
   createdAt: string;
   pinned?: boolean;
   reactions?: {
     like?: number;
   };
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  fileDataUrl?: string;
 };
 
 type DisplayPost = {
@@ -97,22 +100,24 @@ type DisplayPost = {
   authorAvatar?: string;
   text: string;
   title?: string;
-  documentUrl?: string;
-  documentPages?: string[];
   createdAt: string;
   pinned?: boolean;
   reactions?: {
     like?: number;
   };
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  fileDataUrl?: string;
 };
 
 const DEFAULT_SETTINGS: CircleSettings = {
   whoCanPost: 'members',
   requireRulesAcceptance: true,
   rules: [
-    'Respect every member. No harassment, insults, or threats.',
+    'Respect every member. No harassment, insults, hate, threats, or bullying.',
     'Post useful content related to the purpose of this circle.',
-    'No scams, fake offers, spam, or misleading promotions.',
+    'No scams, fake jobs, spam, misleading promotions, or harmful content.',
   ],
 };
 
@@ -144,7 +149,7 @@ function writeJson(key: string, value: unknown) {
     if (typeof window === 'undefined') return;
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // ignore localStorage errors
+    // ignore
   }
 }
 
@@ -156,6 +161,10 @@ function getCircleRulesAcceptedKey(circleId: string, userId: string) {
   return `facemex:circle:${circleId}:rules-accepted:${userId}`;
 }
 
+function getCircleRulesDeclinedKey(circleId: string, userId: string) {
+  return `facemex:circle:${circleId}:rules-declined:${userId}`;
+}
+
 function getCircleAnalyticsKey(circleId: string) {
   return `facemex:circle:${circleId}:analytics`;
 }
@@ -164,23 +173,18 @@ function getLocalPostsKey(circleId: string) {
   return `facemex:circle:${circleId}:local-posts`;
 }
 
+function getLikesKey(circleId: string) {
+  return `facemex:circle:${circleId}:likes`;
+}
+
 function getHiddenCirclesKey() {
   return 'facemex:hidden-circles';
 }
 
-function splitDocumentPages(value: string) {
-  const clean = value.trim();
-
-  if (!clean) return [];
-
-  const pages = clean
-    .split('---')
-    .map((page) => page.trim())
-    .filter(Boolean);
-
-  if (pages.length > 0) return pages;
-
-  return [clean];
+function fileSizeLabel(size?: number) {
+  if (!size) return '';
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function whoCanPostLabel(value: WhoCanPost) {
@@ -188,6 +192,14 @@ function whoCanPostLabel(value: WhoCanPost) {
   if (value === 'admins') return 'Creator + admins';
   if (value === 'members') return 'Members / followers';
   return 'Everyone';
+}
+
+function isImageFile(type?: string) {
+  return String(type || '').startsWith('image/');
+}
+
+function isPdfFile(type?: string) {
+  return String(type || '').includes('pdf');
 }
 
 export default function CirclePage() {
@@ -216,16 +228,19 @@ export default function CirclePage() {
     socialStore.updateCircleMemberRole || (() => {});
   const deleteCircle = socialStore.deleteCircle;
 
-  const userId =
+  const userId = String(
     userStore.id ||
-    userStore.user?.id ||
-    userStore.profile?.id ||
-    'local-user';
+      userStore.user?.id ||
+      userStore.profile?.id ||
+      userStore.profile?.user_id ||
+      'local-user'
+  );
 
   const userName =
     userStore.name ||
     userStore.user?.name ||
     userStore.profile?.name ||
+    userStore.profile?.full_name ||
     'You';
 
   const avatar =
@@ -249,11 +264,10 @@ export default function CirclePage() {
 
   const [documentTitle, setDocumentTitle] = useState('');
   const [documentDescription, setDocumentDescription] = useState('');
-  const [documentPagesInput, setDocumentPagesInput] = useState('');
-  const [documentUrl, setDocumentUrl] = useState('');
-  const [documentPageIndex, setDocumentPageIndex] = useState<
-    Record<string, number>
-  >({});
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileDataUrl, setFileDataUrl] = useState('');
+  const [fileError, setFileError] = useState('');
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const circle = useMemo(
     () => circles.find((item) => item.id === (id || '')),
@@ -287,6 +301,10 @@ export default function CirclePage() {
     id ? readJson<LocalCirclePost[]>(getLocalPostsKey(id), []) : []
   );
 
+  const [likedByMap, setLikedByMap] = useState<Record<string, string[]>>(() =>
+    id ? readJson<Record<string, string[]>>(getLikesKey(id), {}) : {}
+  );
+
   const [analytics, setAnalytics] = useState<CircleAnalytics>(() =>
     id
       ? readJson<CircleAnalytics>(getCircleAnalyticsKey(id), {
@@ -306,6 +324,27 @@ export default function CirclePage() {
     return readJson<boolean>(getCircleRulesAcceptedKey(id, userId), false);
   });
 
+  const [rulesDeclined, setRulesDeclined] = useState(() => {
+    if (!id || !userId) return false;
+    return readJson<boolean>(getCircleRulesDeclinedKey(id, userId), false);
+  });
+
+  const ownerMember = members.find((member) => member.role === 'owner');
+
+  const isCreator =
+    String(circle?.creatorId || '') === userId ||
+    String(circle?.authorId || '') === userId ||
+    String(circle?.ownerId || '') === userId ||
+    String(ownerMember?.id || '') === userId ||
+    String(circle?.creatorName || '').toLowerCase().trim() ===
+      String(userName || '').toLowerCase().trim();
+
+  const currentMember = members.find((member) => String(member.id) === userId);
+  const isAdmin = currentMember?.role === 'admin';
+  const isMember = Boolean(circle?.isMember || currentMember || isCreator);
+  const canManageMembers = isCreator || isAdmin;
+  const memberCount = Math.max(circle?.memberCount || 0, members.length || 0);
+
   useEffect(() => {
     if (circle?.description) {
       setDescriptionDraft(circle.description);
@@ -322,9 +361,14 @@ export default function CirclePage() {
 
     setCircleSettings(nextSettings);
     setLocalPosts(readJson<LocalCirclePost[]>(getLocalPostsKey(id), []));
+    setLikedByMap(readJson<Record<string, string[]>>(getLikesKey(id), {}));
 
     setRulesAccepted(
       readJson<boolean>(getCircleRulesAcceptedKey(id, userId), false)
+    );
+
+    setRulesDeclined(
+      readJson<boolean>(getCircleRulesDeclinedKey(id, userId), false)
     );
   }, [id, userId]);
 
@@ -431,13 +475,6 @@ export default function CirclePage() {
     );
   }
 
-  const isCreator = circle.creatorId === userId;
-  const currentMember = members.find((member) => member.id === userId);
-  const isAdmin = currentMember?.role === 'admin';
-  const isMember = Boolean(circle.isMember || currentMember || isCreator);
-  const canManageMembers = isCreator || isAdmin;
-  const memberCount = Math.max(circle.memberCount || 0, members.length || 0);
-
   const rulesRequired =
     circleSettings.requireRulesAcceptance && !isCreator && !isAdmin;
 
@@ -451,17 +488,19 @@ export default function CirclePage() {
     return true;
   })();
 
-  const canPost = canPostBySetting && hasRulesAccess;
+  const canPost = canPostBySetting && hasRulesAccess && !rulesDeclined;
 
-  const postBlockedReason = !hasRulesAccess
-    ? 'Accept the circle rules before posting.'
-    : circleSettings.whoCanPost === 'creator'
-      ? 'Only the creator can post in this circle.'
-      : circleSettings.whoCanPost === 'admins'
-        ? 'Only the creator and admins can post in this circle.'
-        : !isMember && circleSettings.whoCanPost === 'members'
-          ? 'Join this circle to post.'
-          : 'You cannot post right now.';
+  const postBlockedReason = rulesDeclined
+    ? 'You declined the circle rules. Accept the rules to participate.'
+    : !hasRulesAccess
+      ? 'Accept the circle rules before posting.'
+      : circleSettings.whoCanPost === 'creator'
+        ? 'Only the creator can post in this circle.'
+        : circleSettings.whoCanPost === 'admins'
+          ? 'Only the creator and admins can post in this circle.'
+          : !isMember && circleSettings.whoCanPost === 'members'
+            ? 'Join this circle to post.'
+            : 'You cannot post right now.';
 
   const coverImage =
     circle.coverImage ||
@@ -477,6 +516,15 @@ export default function CirclePage() {
     writeJson(getLocalPostsKey(circle.id), next);
   };
 
+  const saveLikes = (next: Record<string, string[]>) => {
+    setLikedByMap(next);
+    writeJson(getLikesKey(circle.id), next);
+  };
+
+  const userLikedPost = (postId: string) => {
+    return Boolean(likedByMap[postId]?.includes(userId));
+  };
+
   const handleJoin = () => {
     joinCircle(circle.id);
   };
@@ -487,7 +535,21 @@ export default function CirclePage() {
 
   const handleAcceptRules = () => {
     writeJson(getCircleRulesAcceptedKey(circle.id, userId), true);
+    writeJson(getCircleRulesDeclinedKey(circle.id, userId), false);
     setRulesAccepted(true);
+    setRulesDeclined(false);
+  };
+
+  const handleDeclineRules = () => {
+    writeJson(getCircleRulesDeclinedKey(circle.id, userId), true);
+    writeJson(getCircleRulesAcceptedKey(circle.id, userId), false);
+    setRulesDeclined(true);
+    setRulesAccepted(false);
+  };
+
+  const handleReviewRulesAgain = () => {
+    writeJson(getCircleRulesDeclinedKey(circle.id, userId), false);
+    setRulesDeclined(false);
   };
 
   const handlePost = () => {
@@ -504,12 +566,43 @@ export default function CirclePage() {
     setNewMessage('');
   };
 
+  const handleFileUpload = (file: File | null) => {
+    setFileError('');
+    setSelectedFile(null);
+    setFileDataUrl('');
+
+    if (!file) return;
+
+    const maxSize = 8 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      setFileError('File is too large. Please upload a document under 8MB.');
+      return;
+    }
+
+    setUploadingFile(true);
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      setSelectedFile(file);
+      setFileDataUrl(String(reader.result || ''));
+      setUploadingFile(false);
+    };
+
+    reader.onerror = () => {
+      setFileError('Could not read this file. Please try another document.');
+      setUploadingFile(false);
+    };
+
+    reader.readAsDataURL(file);
+  };
+
   const handleDocumentPost = () => {
     const title = documentTitle.trim();
     const description = documentDescription.trim();
-    const pages = splitDocumentPages(documentPagesInput);
 
-    if (!canPost || !title) return;
+    if (!canPost || !title || !selectedFile || !fileDataUrl) return;
 
     const newPost: LocalCirclePost = {
       id: `circle-document-${Date.now()}`,
@@ -519,14 +612,10 @@ export default function CirclePage() {
       authorAvatar: avatar,
       title,
       text: description || 'Document shared with the circle.',
-      documentUrl: documentUrl.trim(),
-      documentPages:
-        pages.length > 0
-          ? pages
-          : [
-              description ||
-                'This document post is ready for members to read and discuss.',
-            ],
+      fileName: selectedFile.name,
+      fileType: selectedFile.type || 'application/octet-stream',
+      fileSize: selectedFile.size,
+      fileDataUrl,
       createdAt: new Date().toISOString(),
       pinned: false,
       reactions: {
@@ -538,8 +627,9 @@ export default function CirclePage() {
 
     setDocumentTitle('');
     setDocumentDescription('');
-    setDocumentPagesInput('');
-    setDocumentUrl('');
+    setSelectedFile(null);
+    setFileDataUrl('');
+    setFileError('');
     setDocumentOpen(false);
   };
 
@@ -564,17 +654,21 @@ export default function CirclePage() {
   };
 
   const handleReaction = (post: DisplayPost) => {
-    if (!isMember && circleSettings.whoCanPost === 'members') {
-      joinCircle(circle.id);
-      return;
-    }
+    if (userLikedPost(post.id)) return;
+
+    const nextLikes = {
+      ...likedByMap,
+      [post.id]: [...(likedByMap[post.id] || []), userId],
+    };
+
+    saveLikes(nextLikes);
 
     if (post.source === 'store') {
       toggleReaction(circle.id, post.id, 'like', 1);
       return;
     }
 
-    const next = localPosts.map((item) =>
+    const nextLocalPosts = localPosts.map((item) =>
       item.id === post.id
         ? {
             ...item,
@@ -586,7 +680,7 @@ export default function CirclePage() {
         : item
     );
 
-    saveLocalPosts(next);
+    saveLocalPosts(nextLocalPosts);
   };
 
   const handlePin = (post: DisplayPost) => {
@@ -662,7 +756,7 @@ export default function CirclePage() {
     }
 
     if (member.role === 'owner') {
-      setAdminFeedback('The owner is already above admin.');
+      setAdminFeedback('The owner already has full authority.');
       return;
     }
 
@@ -690,8 +784,6 @@ export default function CirclePage() {
     0
   );
 
-  const documentPosts = posts.filter((post) => post.kind === 'document');
-
   const renderAuthorAvatar = (post: DisplayPost) => {
     const src = post.authorAvatar || avatar;
 
@@ -712,23 +804,16 @@ export default function CirclePage() {
     );
   };
 
-  const renderDocumentPost = (post: DisplayPost) => {
-    const pages = post.documentPages?.length
-      ? post.documentPages
-      : [post.text || 'Document preview'];
-
-    const currentPage = documentPageIndex[post.id] || 0;
-    const safePage = Math.min(currentPage, pages.length - 1);
-
+  const renderDocumentPreview = (post: DisplayPost) => {
     return (
       <div className="mt-3 overflow-hidden rounded-3xl border bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
         <div className="border-b border-white/10 p-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-blue-300" />
                 <span className="text-xs font-medium uppercase tracking-wide text-blue-200">
-                  Document Post
+                  FaceMeX Document Post
                 </span>
               </div>
 
@@ -736,87 +821,70 @@ export default function CirclePage() {
                 {post.title || 'Untitled document'}
               </h3>
 
-              <p className="mt-1 line-clamp-2 text-xs text-slate-300">
+              <p className="mt-1 max-h-10 overflow-hidden text-xs text-slate-300">
                 {post.text}
               </p>
             </div>
 
             <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
-              {pages.length} page{pages.length === 1 ? '' : 's'}
+              {fileSizeLabel(post.fileSize)}
             </Badge>
           </div>
         </div>
 
         <div className="p-4">
-          <div className="min-h-[180px] rounded-2xl border border-white/10 bg-white p-4 text-slate-950 shadow-xl">
-            <div className="mb-3 flex items-center justify-between text-[11px] text-slate-500">
-              <span>FaceMeX Circle Document</span>
-              <span>
-                Page {safePage + 1} of {pages.length}
-              </span>
-            </div>
-
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">
-              {pages[safePage]}
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              disabled={safePage === 0}
-              onClick={() =>
-                setDocumentPageIndex((current) => ({
-                  ...current,
-                  [post.id]: Math.max(0, safePage - 1),
-                }))
-              }
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              Prev
-            </Button>
-
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-blue-400"
-                style={{
-                  width: `${((safePage + 1) / pages.length) * 100}%`,
-                }}
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white shadow-xl">
+            {isImageFile(post.fileType) && post.fileDataUrl ? (
+              <img
+                src={post.fileDataUrl}
+                alt={post.fileName || 'Document'}
+                className="max-h-[320px] w-full object-contain bg-white"
               />
-            </div>
+            ) : isPdfFile(post.fileType) && post.fileDataUrl ? (
+              <iframe
+                src={post.fileDataUrl}
+                title={post.fileName || 'PDF document'}
+                className="h-[320px] w-full bg-white"
+              />
+            ) : (
+              <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 bg-white p-6 text-center text-slate-950">
+                <FileText className="h-12 w-12 text-slate-400" />
 
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              disabled={safePage >= pages.length - 1}
-              onClick={() =>
-                setDocumentPageIndex((current) => ({
-                  ...current,
-                  [post.id]: Math.min(pages.length - 1, safePage + 1),
-                }))
-              }
-            >
-              Next
-              <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
+                <div>
+                  <div className="font-semibold">
+                    {post.fileName || 'Uploaded document'}
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-500">
+                    {post.fileType || 'Document'} · {fileSizeLabel(post.fileSize)}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {post.documentUrl && (
-            <Button
-              type="button"
-              size="sm"
-              className="mt-3 w-full rounded-full bg-white text-slate-950 hover:bg-slate-100"
-              onClick={() =>
-                window.open(post.documentUrl, '_blank', 'noopener,noreferrer')
-              }
-            >
-              Open full document
-            </Button>
+          {post.fileDataUrl && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-full bg-white text-slate-950 hover:bg-slate-100"
+                onClick={() =>
+                  window.open(post.fileDataUrl, '_blank', 'noopener,noreferrer')
+                }
+              >
+                Open document
+              </Button>
+
+              <a
+                href={post.fileDataUrl}
+                download={post.fileName || 'FaceMeX-document'}
+                className="inline-flex h-9 items-center justify-center rounded-full border border-white/20 bg-white/10 px-3 text-sm font-medium text-white hover:bg-white/20"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download
+              </a>
+            </div>
           )}
         </div>
       </div>
@@ -824,6 +892,8 @@ export default function CirclePage() {
   };
 
   const renderPostCard = (post: DisplayPost) => {
+    const liked = userLikedPost(post.id);
+
     return (
       <div
         key={`${post.source}-${post.id}`}
@@ -839,6 +909,12 @@ export default function CirclePage() {
                   <span className="truncate text-sm font-semibold">
                     {post.authorName}
                   </span>
+
+                  {post.authorId === userId && (
+                    <Badge variant="secondary" className="rounded-full">
+                      You
+                    </Badge>
+                  )}
 
                   {post.pinned && (
                     <Badge variant="secondary" className="rounded-full">
@@ -871,7 +947,7 @@ export default function CirclePage() {
             </div>
 
             {post.kind === 'document' ? (
-              renderDocumentPost(post)
+              renderDocumentPreview(post)
             ) : (
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                 {post.text}
@@ -881,13 +957,14 @@ export default function CirclePage() {
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-3">
               <Button
                 type="button"
-                variant="ghost"
+                variant={liked ? 'secondary' : 'ghost'}
                 size="sm"
                 className="rounded-full"
+                disabled={liked}
                 onClick={() => handleReaction(post)}
               >
                 <Heart className="mr-2 h-4 w-4" />
-                Like {post.reactions?.like || 0}
+                {liked ? 'Liked' : 'Like'} {post.reactions?.like || 0}
               </Button>
 
               <Button
@@ -997,7 +1074,7 @@ export default function CirclePage() {
                       {isCreator && (
                         <span className="inline-flex items-center gap-1">
                           <Crown className="h-3 w-3" />
-                          Creator
+                          Author
                         </span>
                       )}
                     </div>
@@ -1043,7 +1120,7 @@ export default function CirclePage() {
                     <p className="text-xs text-muted-foreground">
                       Created by{' '}
                       <span className="font-medium text-foreground">
-                        {circle.creatorName}
+                        {circle.creatorName || userName}
                       </span>
                     </p>
                   </CardContent>
@@ -1086,7 +1163,7 @@ export default function CirclePage() {
                         ))}
                       </div>
 
-                      {rulesRequired && !rulesAccepted && (
+                      {rulesRequired && !rulesAccepted && !rulesDeclined && (
                         <div className="rounded-2xl border bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
                           <div className="mb-2 flex items-center gap-2 font-semibold">
                             <AlertTriangle className="h-4 w-4" />
@@ -1098,12 +1175,46 @@ export default function CirclePage() {
                             participating.
                           </p>
 
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              className="rounded-full"
+                              onClick={handleAcceptRules}
+                            >
+                              I agree
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full"
+                              onClick={handleDeclineRules}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {rulesDeclined && (
+                        <div className="rounded-2xl border bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/20 dark:text-red-200">
+                          <div className="mb-2 flex items-center gap-2 font-semibold">
+                            <XCircle className="h-4 w-4" />
+                            Rules declined
+                          </div>
+
+                          <p>
+                            You declined the circle rules. You cannot post until
+                            you accept them.
+                          </p>
+
                           <Button
                             size="sm"
+                            variant="outline"
                             className="mt-3 rounded-full"
-                            onClick={handleAcceptRules}
+                            onClick={handleReviewRulesAgain}
                           >
-                            I agree to the rules
+                            Review rules again
                           </Button>
                         </div>
                       )}
@@ -1317,8 +1428,8 @@ export default function CirclePage() {
                     {isCreator ? (
                       <>
                         <p className="text-xs text-muted-foreground">
-                          Manage description, visibility, posting permissions,
-                          rules and admins.
+                          You are the author of this circle. You control rules,
+                          admins, visibility, posting permissions and deletion.
                         </p>
 
                         <div className="space-y-2">
@@ -1404,9 +1515,14 @@ export default function CirclePage() {
                           Delete circle
                         </Button>
                       </>
+                    ) : isAdmin ? (
+                      <p className="text-xs text-muted-foreground">
+                        You are an admin. You can help manage posts and members,
+                        but the author still controls the circle.
+                      </p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        Only the creator can manage this circle. Members can
+                        Only the author can manage this circle. Members can
                         participate based on circle settings and rules.
                       </p>
                     )}
@@ -1432,7 +1548,7 @@ export default function CirclePage() {
                       <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                         {members.map((member) => {
                           const isOwner = member.role === 'owner';
-                          const isSelf = member.id === userId;
+                          const isSelf = String(member.id) === userId;
                           const canActOn =
                             canManageMembers && !isOwner && !isSelf;
 
@@ -1530,7 +1646,7 @@ export default function CirclePage() {
 
                     {!canManageMembers && members.length > 0 && (
                       <p className="text-[10px] text-muted-foreground">
-                        Only the circle owner and admins can manage members.
+                        Only the circle author and admins can manage members.
                       </p>
                     )}
                   </CardContent>
@@ -1564,8 +1680,8 @@ export default function CirclePage() {
                   })
                 }
               >
-                <option value="creator">Creator only</option>
-                <option value="admins">Creator + admins</option>
+                <option value="creator">Author only</option>
+                <option value="admins">Author + admins</option>
                 <option value="members">Members / followers</option>
                 <option value="everyone">Everyone</option>
               </select>
@@ -1635,8 +1751,8 @@ export default function CirclePage() {
           <DialogHeader>
             <DialogTitle>Create document post</DialogTitle>
             <DialogDescription>
-              Share a beautiful document-style post. Separate pages with three
-              dashes: ---
+              Upload a document from your device and share it as a premium
+              FaceMeX circle post.
             </DialogDescription>
           </DialogHeader>
 
@@ -1654,28 +1770,74 @@ export default function CirclePage() {
               rows={2}
             />
 
-            <Textarea
-              placeholder={`Paste document page 1 here\n---\nPaste document page 2 here\n---\nPaste document page 3 here`}
-              value={documentPagesInput}
-              onChange={(event) => setDocumentPagesInput(event.target.value)}
-              rows={7}
-            />
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed bg-background/60 p-6 text-center hover:bg-muted/50">
+              <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
 
-            <Input
-              placeholder="Optional full document URL"
-              value={documentUrl}
-              onChange={(event) => setDocumentUrl(event.target.value)}
-            />
+              <div className="text-sm font-medium">
+                {selectedFile ? selectedFile.name : 'Upload document from device'}
+              </div>
+
+              <div className="mt-1 text-xs text-muted-foreground">
+                PDF, image, Word, text or presentation. Max 8MB.
+              </div>
+
+              <input
+                type="file"
+                className="hidden"
+                accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.ppt,.pptx,application/pdf,image/*"
+                onChange={(event) =>
+                  handleFileUpload(event.target.files?.[0] || null)
+                }
+              />
+            </label>
+
+            {uploadingFile && (
+              <p className="text-xs text-muted-foreground">
+                Reading file from device...
+              </p>
+            )}
+
+            {fileError && (
+              <p className="text-xs text-red-500">
+                {fileError}
+              </p>
+            )}
+
+            {selectedFile && (
+              <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <div className="font-medium text-foreground">
+                  {selectedFile.name}
+                </div>
+                <div>
+                  {selectedFile.type || 'Document'} ·{' '}
+                  {fileSizeLabel(selectedFile.size)}
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDocumentOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDocumentOpen(false);
+                setSelectedFile(null);
+                setFileDataUrl('');
+                setFileError('');
+              }}
+            >
               Cancel
             </Button>
 
             <Button
               onClick={handleDocumentPost}
-              disabled={!documentTitle.trim() || !canPost}
+              disabled={
+                !documentTitle.trim() ||
+                !selectedFile ||
+                !fileDataUrl ||
+                !canPost ||
+                uploadingFile
+              }
             >
               Publish document
             </Button>
@@ -1688,8 +1850,8 @@ export default function CirclePage() {
           <DialogHeader>
             <DialogTitle>Delete circle?</DialogTitle>
             <DialogDescription>
-              This will remove the circle from your communities view. This
-              action should only be used when you are sure.
+              This will remove the circle from your communities view. Only the
+              author can delete the circle.
             </DialogDescription>
           </DialogHeader>
 
