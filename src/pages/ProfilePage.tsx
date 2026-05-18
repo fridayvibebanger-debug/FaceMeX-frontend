@@ -18,6 +18,7 @@ import {
   FileText,
   Sparkles,
   MessageCircle,
+  Save,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePostStore } from '@/store/postStore';
@@ -30,13 +31,93 @@ import { useUserStore } from '@/store/userStore';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import IdentityVerifiedBadge from '@/components/safety/IdentityVerifiedBadge';
-import { deepseekReply } from '@/utils/ai';
 import { toast } from '@/components/ui/use-toast';
 
+type ProfessionalProfile = {
+  headline: string;
+  bio: string;
+  location: string;
+  skills: string[];
+  experience: Array<{
+    role?: string;
+    company?: string;
+    start?: string;
+    end?: string;
+    summary?: string;
+    verified?: boolean;
+  }>;
+  education: Array<{
+    institution?: string;
+    degree?: string;
+    field?: string;
+    start?: string;
+    end?: string;
+    verified?: boolean;
+  }>;
+  links: Array<{
+    type: string;
+    url: string;
+  }>;
+  endorsements: Record<string, number>;
+  openToCollab: boolean;
+  collabNote: string;
+  resumeSummary: string;
+};
+
+const emptyProfessional: ProfessionalProfile = {
+  headline: '',
+  bio: '',
+  location: '',
+  skills: [],
+  experience: [],
+  education: [],
+  links: [],
+  endorsements: {},
+  openToCollab: false,
+  collabNote: '',
+  resumeSummary: '',
+};
+
+function normalizePro(value: any): ProfessionalProfile {
+  return {
+    ...emptyProfessional,
+    ...(value || {}),
+    skills: Array.isArray(value?.skills) ? value.skills : [],
+    experience: Array.isArray(value?.experience) ? value.experience : [],
+    education: Array.isArray(value?.education) ? value.education : [],
+    links: Array.isArray(value?.links) ? value.links : [],
+    endorsements: value?.endorsements || {},
+  };
+}
+
+function getInitial(name?: string, email?: string) {
+  return (
+    name?.charAt(0)?.toUpperCase() ||
+    email?.charAt(0)?.toUpperCase() ||
+    'U'
+  );
+}
+
+function getTierRank(tier?: string) {
+  const clean = String(tier || 'free').toLowerCase();
+
+  const ranks: Record<string, number> = {
+    free: 0,
+    verified: 0,
+    pro: 1,
+    creator: 2,
+    business: 3,
+    exclusive: 4,
+  };
+
+  return ranks[clean] || 0;
+}
+
 export default function ProfilePage() {
-  const { user } = useAuthStore();
+  const { user, updateProfile } = useAuthStore() as any;
   const { posts } = usePostStore();
   const { currentTier } = useSubscriptionStore();
+
   const {
     professional,
     saveProfessional,
@@ -55,98 +136,79 @@ export default function ProfilePage() {
   const isOwnProfile = viewedUserId === effectiveUserId;
 
   const [viewedProfile, setViewedProfile] = useState<any>(null);
-  const [, setProfileLoading] = useState(false);
-
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [followerCount, setFollowerCount] = useState(user?.followers || 0);
+
+  const [followerCount, setFollowerCount] = useState(0);
+  const [connectionCount, setConnectionCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isPendingConnection, setIsPendingConnection] = useState(false);
-  const [connectionCount, setConnectionCount] = useState(0);
   const [buttonBusy, setButtonBusy] = useState<
     'connect' | 'follow' | 'message' | null
   >(null);
 
-  const [newSkill, setNewSkill] = useState('');
+  const [bioEditing, setBioEditing] = useState(false);
+  const [bioDraft, setBioDraft] = useState(user?.bio || '');
 
-  const pro = useMemo(
-    () =>
-      professional || {
-        headline: '',
-        bio: '',
-        location: '',
-        skills: [],
-        experience: [],
-        education: [],
-        links: [],
-        endorsements: {},
-        openToCollab: false,
-        collabNote: '',
-        resumeSummary: '',
-      },
+  const storePro = useMemo(
+    () => normalizePro(professional),
     [professional]
   );
 
-  const [collabNoteDraft, setCollabNoteDraft] = useState(pro.collabNote || '');
-  const [resumeDraft, setResumeDraft] = useState(pro.resumeSummary || '');
-  const [headlineDraft, setHeadlineDraft] = useState(pro.headline || '');
+  const viewedPro = useMemo(() => {
+    if (isOwnProfile) return storePro;
+    return normalizePro(viewedProfile?.professional);
+  }, [isOwnProfile, storePro, viewedProfile?.professional]);
+
+  const [newSkill, setNewSkill] = useState('');
+  const [headlineDraft, setHeadlineDraft] = useState(viewedPro.headline || '');
+  const [professionalBioDraft, setProfessionalBioDraft] = useState(
+    viewedPro.bio || ''
+  );
+  const [professionalLocationDraft, setProfessionalLocationDraft] = useState(
+    viewedPro.location || ''
+  );
+  const [resumeDraft, setResumeDraft] = useState(
+    viewedPro.resumeSummary || ''
+  );
+
   const [expRole, setExpRole] = useState('');
   const [expCompany, setExpCompany] = useState('');
   const [expStart, setExpStart] = useState('');
   const [expEnd, setExpEnd] = useState('');
   const [expSummary, setExpSummary] = useState('');
+
   const [eduInstitution, setEduInstitution] = useState('');
   const [eduDegree, setEduDegree] = useState('');
   const [eduField, setEduField] = useState('');
   const [eduStart, setEduStart] = useState('');
   const [eduEnd, setEduEnd] = useState('');
-  const [careerGoalsDraft, setCareerGoalsDraft] = useState(
-    pro.careerGoals || ''
-  );
-  const [industryInterestDraft, setIndustryInterestDraft] = useState('');
-  const [experienceLevelDraft, setExperienceLevelDraft] = useState(
-    pro.experienceLevel || ''
-  );
-  const [smartSummaryDraft, setSmartSummaryDraft] = useState(
-    pro.smartSummary || ''
-  );
-  const [smartPositioningDraft, setSmartPositioningDraft] = useState(
-    pro.smartPositioning || ''
-  );
-  const [smartSuggestedSkillsDraft, setSmartSuggestedSkillsDraft] = useState<
-    string[]
-  >(pro.smartSuggestedSkills || []);
-  const [aiSmartBusy, setAiSmartBusy] = useState<
-    null | 'rewrite' | 'skills' | 'positioning'
-  >(null);
 
-  const canUseAI = hasTier('pro');
-  const canSeeAnalytics = isOwnProfile && hasTier('pro');
+  const canUseProfessionalProfile =
+    hasTier?.('creator') ||
+    getTierRank(currentTier) >= getTierRank('creator') ||
+    getTierRank(user?.tier) >= getTierRank('creator');
+
+  const canEditProfessional = isOwnProfile && canUseProfessionalProfile;
+  const canSeeAnalytics = isOwnProfile && hasTier?.('pro');
 
   const [activeTab, setActiveTab] = useState<
-    'posts' | 'about' | 'professional' | 'photos'
+    'posts' | 'professional' | 'photos'
   >(mode === 'professional' ? 'professional' : 'posts');
 
   const collabSectionRef = useRef<HTMLDivElement | null>(null);
-  const [jumpToCollab, setJumpToCollab] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
       if (!viewedUserId) return;
 
-      setProfileLoading(true);
-
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', viewedUserId)
         .maybeSingle();
 
-      if (!error) {
-        setViewedProfile(data);
-      }
-
-      setProfileLoading(false);
+      setViewedProfile(data || null);
     };
 
     loadProfile();
@@ -175,13 +237,13 @@ export default function ProfilePage() {
           )}`,
         coverPhoto: viewedProfile.cover_photo || viewedProfile.coverPhoto || '',
         bio: viewedProfile.bio || 'Welcome to my profile.',
-        followers: followerCount,
         joinedDate: viewedProfile.created_at
           ? new Date(viewedProfile.created_at)
           : new Date(Date.now() - 1000 * 60 * 60 * 24 * 60),
         interests: viewedProfile.interests || [],
         location: viewedProfile.location || '',
         website: viewedProfile.website || '',
+        tier: viewedProfile.tier || viewedProfile.subscription_tier || 'free',
       } as any;
     }
 
@@ -194,60 +256,83 @@ export default function ProfilePage() {
       )}`,
       coverPhoto: '',
       bio: 'Welcome to my profile.',
-      followers: 0,
       joinedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60),
       interests: [],
     } as any;
-  }, [isOwnProfile, user, viewedUserId, viewedProfile, followerCount]);
+  }, [isOwnProfile, user, viewedUserId, viewedProfile]);
 
-  const userPosts = posts.filter((post) => post.userId === viewedUserId);
+  useEffect(() => {
+    setBioDraft(viewedUser?.bio || '');
+  }, [viewedUser?.bio]);
+
+  useEffect(() => {
+    setHeadlineDraft(viewedPro.headline || '');
+    setProfessionalBioDraft(viewedPro.bio || '');
+    setProfessionalLocationDraft(viewedPro.location || '');
+    setResumeDraft(viewedPro.resumeSummary || '');
+  }, [
+    viewedPro.headline,
+    viewedPro.bio,
+    viewedPro.location,
+    viewedPro.resumeSummary,
+  ]);
+
+  const userPosts = useMemo(() => {
+    return posts.filter((post: any) => {
+      return post.userId === viewedUserId || post.user_id === viewedUserId;
+    });
+  }, [posts, viewedUserId]);
 
   const loadProfileRelationships = async () => {
     if (!viewedUserId) return;
 
-    const [followersResult, connectionsResult] = await Promise.all([
-      supabase
+    try {
+      const [followersResult, connectionsResult] = await Promise.all([
+        supabase
+          .from('follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('following_id', viewedUserId),
+
+        supabase
+          .from('connection_requests')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'accepted')
+          .or(`sender_id.eq.${viewedUserId},receiver_id.eq.${viewedUserId}`),
+      ]);
+
+      setFollowerCount(followersResult.count || 0);
+      setConnectionCount(connectionsResult.count || 0);
+
+      if (!effectiveUserId || isOwnProfile) return;
+
+      const { data: followData } = await supabase
         .from('follows')
-        .select('*', { count: 'exact', head: true })
-        .eq('following_id', viewedUserId),
+        .select('id')
+        .eq('follower_id', effectiveUserId)
+        .eq('following_id', viewedUserId)
+        .maybeSingle();
 
-      supabase
+      setIsFollowing(Boolean(followData));
+
+      const { data: connectionRows } = await supabase
         .from('connection_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'accepted')
-        .or(`sender_id.eq.${viewedUserId},receiver_id.eq.${viewedUserId}`),
-    ]);
+        .select('id, sender_id, receiver_id, status')
+        .or(`sender_id.eq.${effectiveUserId},receiver_id.eq.${effectiveUserId}`);
 
-    setFollowerCount(followersResult.count || 0);
-    setConnectionCount(connectionsResult.count || 0);
+      const connection = (connectionRows || []).find((row: any) => {
+        return (
+          (row.sender_id === effectiveUserId &&
+            row.receiver_id === viewedUserId) ||
+          (row.sender_id === viewedUserId &&
+            row.receiver_id === effectiveUserId)
+        );
+      });
 
-    if (!effectiveUserId || isOwnProfile) return;
-
-    const { data: followData } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('follower_id', effectiveUserId)
-      .eq('following_id', viewedUserId)
-      .maybeSingle();
-
-    setIsFollowing(!!followData);
-
-    const { data: connectionRows } = await supabase
-      .from('connection_requests')
-      .select('id, sender_id, receiver_id, status')
-      .or(`sender_id.eq.${effectiveUserId},receiver_id.eq.${effectiveUserId}`);
-
-    const connection = (connectionRows || []).find((row: any) => {
-      return (
-        (row.sender_id === effectiveUserId &&
-          row.receiver_id === viewedUserId) ||
-        (row.sender_id === viewedUserId &&
-          row.receiver_id === effectiveUserId)
-      );
-    });
-
-    setIsConnected(connection?.status === 'accepted');
-    setIsPendingConnection(connection?.status === 'pending');
+      setIsConnected(connection?.status === 'accepted');
+      setIsPendingConnection(connection?.status === 'pending');
+    } catch {
+      // keep UI stable
+    }
   };
 
   useEffect(() => {
@@ -260,16 +345,12 @@ export default function ProfilePage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'follows' },
-        () => {
-          loadProfileRelationships();
-        }
+        () => loadProfileRelationships()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'connection_requests' },
-        () => {
-          loadProfileRelationships();
-        }
+        () => loadProfileRelationships()
       )
       .subscribe();
 
@@ -286,7 +367,9 @@ export default function ProfilePage() {
       const raw = localStorage.getItem(key);
       const n = raw ? parseInt(raw, 10) || 0 : 0;
       localStorage.setItem(key, String(n + 1));
-    } catch {}
+    } catch {
+      // ignore
+    }
   }, [isOwnProfile, viewedUserId]);
 
   const profileViews = useMemo(() => {
@@ -300,26 +383,25 @@ export default function ProfilePage() {
   }, [effectiveUserId]);
 
   const myPostAnalytics = useMemo(() => {
-    const mine = posts.filter((p) => p.userId === effectiveUserId);
+    const mine = posts.filter((p: any) => {
+      return p.userId === effectiveUserId || p.user_id === effectiveUserId;
+    });
+
     const totalPosts = mine.length;
-    const totalLikes = mine.reduce((a, p) => a + (p.likes || 0), 0);
+    const totalLikes = mine.reduce((a: number, p: any) => a + (p.likes || 0), 0);
     const totalComments = mine.reduce(
-      (a, p) => a + (Array.isArray(p.comments) ? p.comments.length : 0),
+      (a: number, p: any) => a + (Array.isArray(p.comments) ? p.comments.length : 0),
       0
     );
-    const totalShares = mine.reduce((a, p) => a + (p.shares || 0), 0);
+    const totalShares = mine.reduce(
+      (a: number, p: any) => a + (p.shares || 0),
+      0
+    );
+
     const engagement = totalLikes + totalComments + totalShares;
+
     const avgEngagement =
       totalPosts > 0 ? Math.round((engagement / totalPosts) * 10) / 10 : 0;
-    const topPost = mine
-      .slice()
-      .sort(
-        (a, b) =>
-          (b.likes || 0) +
-          (b.comments?.length || 0) +
-          (b.shares || 0) -
-          ((a.likes || 0) + (a.comments?.length || 0) + (a.shares || 0))
-      )[0];
 
     return {
       totalPosts,
@@ -328,98 +410,117 @@ export default function ProfilePage() {
       totalShares,
       engagement,
       avgEngagement,
-      topPost,
     };
   }, [posts, effectiveUserId]);
 
-  useEffect(() => {
-    if (
-      activeTab === 'professional' &&
-      jumpToCollab &&
-      collabSectionRef.current
-    ) {
-      collabSectionRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
-      setJumpToCollab(false);
-    }
-  }, [activeTab, jumpToCollab]);
+  const hasProfessionalPreview = useMemo(() => {
+    return Boolean(
+      viewedPro.headline ||
+        viewedPro.bio ||
+        viewedPro.location ||
+        viewedPro.skills.length > 0 ||
+        viewedPro.experience.length > 0 ||
+        viewedPro.education.length > 0 ||
+        viewedPro.links.length > 0
+    );
+  }, [viewedPro]);
 
-  useEffect(() => {
-    setHeadlineDraft(pro.headline || '');
-  }, [pro.headline]);
-
-  useEffect(() => {
-    setCareerGoalsDraft(pro.careerGoals || '');
-  }, [pro.careerGoals]);
-
-  useEffect(() => {
-    setExperienceLevelDraft(pro.experienceLevel || '');
-  }, [pro.experienceLevel]);
-
-  useEffect(() => {
-    setSmartSummaryDraft(pro.smartSummary || '');
-  }, [pro.smartSummary]);
-
-  useEffect(() => {
-    setSmartPositioningDraft(pro.smartPositioning || '');
-  }, [pro.smartPositioning]);
-
-  useEffect(() => {
-    setSmartSuggestedSkillsDraft(pro.smartSuggestedSkills || []);
-  }, [pro.smartSuggestedSkills]);
+  const profileTier = String(
+    viewedUser?.tier || currentTier || 'free'
+  ).toLowerCase();
 
   const handleFollowProfile = async () => {
-    if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
+    if (!viewedUserId || isOwnProfile) return;
 
     setButtonBusy('follow');
 
     try {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+
+      if (authError || !authData.user?.id) {
+        toast({
+          title: 'Login required',
+          description: 'Please login again before following someone.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const myUserId = authData.user.id;
+
+      if (myUserId === viewedUserId) {
+        toast({
+          title: 'Not allowed',
+          description: 'You cannot follow your own profile.',
+        });
+        return;
+      }
+
       if (isFollowing) {
         const { error } = await supabase
           .from('follows')
           .delete()
-          .eq('follower_id', effectiveUserId)
+          .eq('follower_id', myUserId)
           .eq('following_id', viewedUserId);
 
         if (error) throw error;
 
         setIsFollowing(false);
         setFollowerCount((count) => Math.max(0, count - 1));
+
+        toast({
+          title: 'Unfollowed',
+          description: `You unfollowed ${viewedUser?.name || 'this user'}.`,
+        });
+
         return;
       }
 
       const { error } = await supabase.from('follows').upsert(
         {
-          follower_id: effectiveUserId,
+          follower_id: myUserId,
           following_id: viewedUserId,
+          created_at: new Date().toISOString(),
         },
         {
           onConflict: 'follower_id,following_id',
+          ignoreDuplicates: true,
         }
       );
 
       if (error) throw error;
 
-      await supabase.from('notifications').insert({
-        user_id: viewedUserId,
-        actor_id: effectiveUserId,
-        type: 'follow',
-        title: 'New follower',
-        message: `${
-          user?.name || user?.email?.split('@')[0] || 'Someone'
-        } followed you.`,
-        action_url: `/profile/${effectiveUserId}`,
-        is_read: false,
-      });
-
       setIsFollowing(true);
       setFollowerCount((count) => count + 1);
+
+      toast({
+        title: 'Followed',
+        description: `You are now following ${viewedUser?.name || 'this user'}.`,
+      });
+
+      supabase
+        .from('notifications')
+        .insert({
+          user_id: viewedUserId,
+          actor_id: myUserId,
+          type: 'follow',
+          title: 'New follower',
+          message: `${
+            user?.name || user?.email?.split('@')[0] || 'Someone'
+          } followed you.`,
+          action_url: `/profile/${myUserId}`,
+          is_read: false,
+        })
+        .then(() => null)
+        .catch(() => null);
     } catch (error: any) {
       toast({
         title: 'Follow failed',
-        description: error?.message || 'Could not update follow right now.',
+        description:
+          error?.message ||
+          'Could not update follow right now. Check your Supabase follows policy.',
+        variant: 'destructive',
       });
     } finally {
       setButtonBusy(null);
@@ -449,24 +550,34 @@ export default function ProfilePage() {
 
       if (error) throw error;
 
-      await supabase.from('notifications').upsert({
-        id: data.id,
-        user_id: viewedUserId,
-        actor_id: effectiveUserId,
-        type: 'connection_request',
-        title: 'New connection request',
-        message: `${
-          user?.name || user?.email?.split('@')[0] || 'Someone'
-        } wants to connect with you.`,
-        action_url: '/notifications',
-        is_read: false,
-      });
-
       setIsPendingConnection(true);
+
+      supabase
+        .from('notifications')
+        .upsert({
+          id: data.id,
+          user_id: viewedUserId,
+          actor_id: effectiveUserId,
+          type: 'connection_request',
+          title: 'New connection request',
+          message: `${
+            user?.name || user?.email?.split('@')[0] || 'Someone'
+          } wants to connect with you.`,
+          action_url: '/notifications',
+          is_read: false,
+        })
+        .then(() => null)
+        .catch(() => null);
+
+      toast({
+        title: 'Connection sent',
+        description: 'Your connection request was sent.',
+      });
     } catch (error: any) {
       toast({
         title: 'Connect failed',
         description: error?.message || 'Could not send connection request.',
+        variant: 'destructive',
       });
     } finally {
       setButtonBusy(null);
@@ -475,177 +586,159 @@ export default function ProfilePage() {
 
   const startProfileChat = async () => {
     if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
-  
+
     setButtonBusy('message');
-  
+
     try {
       navigate(`/messages/${viewedUserId}?focus=1`);
     } finally {
       setButtonBusy(null);
     }
   };
-  
-  const addIndustryInterest = async () => {
-    const v = industryInterestDraft.trim();
-    if (!v) return;
-    const next = Array.from(new Set([...(pro.industryInterests || []), v]));
-    setIndustryInterestDraft('');
-    await saveProfessional({ ...pro, industryInterests: next });
-  };
 
-  const removeIndustryInterest = async (value: string) => {
-    const next = (pro.industryInterests || []).filter((x) => x !== value);
-    await saveProfessional({ ...pro, industryInterests: next });
-  };
+  const saveBio = async () => {
+    if (!isOwnProfile || !effectiveUserId) return;
 
-  const aiRewriteProfessionally = async () => {
-    if (!isOwnProfile) return;
+    const nextBio = bioDraft.trim();
 
-    if (!canUseAI) {
+    try {
+      updateProfile?.({
+        bio: nextBio,
+      });
+
+      await supabase
+        .from('profiles')
+        .update({
+          bio: nextBio,
+        })
+        .eq('id', effectiveUserId);
+
+      setBioEditing(false);
+
       toast({
-        title: 'Upgrade needed',
-        description: 'AI tools are available on Pro and above.',
+        title: 'Bio saved',
+        description: 'Your profile bio was updated.',
+      });
+    } catch {
+      toast({
+        title: 'Bio saved locally',
+        description: 'Your bio was saved in the app. Supabase update did not complete.',
+      });
+      setBioEditing(false);
+    }
+  };
+
+  const saveProfessionalLive = async (next: ProfessionalProfile) => {
+    if (!canEditProfessional || !effectiveUserId) {
+      toast({
+        title: 'Creator tier required',
+        description:
+          'Professional profile editing is available for Creator, Business and Exclusive users.',
       });
       return;
     }
 
-    setAiSmartBusy('rewrite');
+    await saveProfessional(next);
 
-    try {
-      const input = `Rewrite this user's Smart Profile professionally (clear, concise, no hype).\n\nSkills: ${(pro.skills || []).join(
-        ', '
-      )}\nCareer goals: ${
-        careerGoalsDraft || '(none)'
-      }\nIndustry interests: ${
-        (pro.industryInterests || []).join(', ') || '(none)'
-      }\nExperience level: ${
-        experienceLevelDraft || '(unspecified)'
-      }\n\nOutput 2 short paragraphs max (no headings, no bullets).`;
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        professional: next,
+      })
+      .eq('id', effectiveUserId);
 
-      const rewritten = await deepseekReply(input);
-      setSmartSummaryDraft(rewritten);
-
-      await saveProfessional({
-        ...pro,
-        careerGoals: careerGoalsDraft,
-        experienceLevel: experienceLevelDraft as any,
-        smartSummary: rewritten,
-      });
-    } catch {
+    if (error) {
       toast({
-        title: 'AI unavailable',
-        description: 'Could not rewrite right now. Try again in a moment.',
-      });
-    } finally {
-      setAiSmartBusy(null);
-    }
-  };
-
-  const aiSuggestMissingSkills = async () => {
-    if (!isOwnProfile) return;
-
-    if (!canUseAI) {
-      toast({
-        title: 'Upgrade needed',
-        description: 'AI tools are available on Pro and above.',
+        title: 'Saved locally',
+        description:
+          'Professional profile saved in the app. Add the professional jsonb column in Supabase to save it for real users.',
       });
       return;
     }
 
-    setAiSmartBusy('skills');
-
-    try {
-      const input = `Suggest 6 to 10 missing skills that would strengthen this profile for the stated career goals and industry interests.\n\nCurrent skills: ${
-        (pro.skills || []).join(', ') || '(none)'
-      }\nCareer goals: ${
-        careerGoalsDraft || '(none)'
-      }\nIndustry interests: ${
-        (pro.industryInterests || []).join(', ') || '(none)'
-      }\nExperience level: ${
-        experienceLevelDraft || '(unspecified)'
-      }\n\nReturn ONLY a comma-separated list of skills. No extra text.`;
-
-      const raw = await deepseekReply(input);
-
-      const list = raw
-        .split(/,|\n/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .slice(0, 12);
-
-      const unique = Array.from(new Set(list));
-      setSmartSuggestedSkillsDraft(unique);
-
-      await saveProfessional({
-        ...pro,
-        careerGoals: careerGoalsDraft,
-        experienceLevel: experienceLevelDraft as any,
-        smartSuggestedSkills: unique,
-      });
-    } catch {
-      toast({
-        title: 'AI unavailable',
-        description: 'Could not suggest skills right now. Try again later.',
-      });
-    } finally {
-      setAiSmartBusy(null);
-    }
+    toast({
+      title: 'Professional profile saved',
+      description: 'Your professional information is now visible on your profile.',
+    });
   };
 
-  const aiCareerPositioning = async () => {
-    if (!isOwnProfile) return;
+  const addSkill = async () => {
+    const skill = newSkill.trim();
+    if (!skill) return;
 
-    if (!canUseAI) {
-      toast({
-        title: 'Upgrade needed',
-        description: 'AI tools are available on Pro and above.',
-      });
-      return;
-    }
+    const next = {
+      ...viewedPro,
+      skills: Array.from(new Set([...viewedPro.skills, skill])),
+    };
 
-    setAiSmartBusy('positioning');
+    setNewSkill('');
+    await saveProfessionalLive(next);
+  };
 
-    try {
-      const input = `Write one sentence that positions this user for specific roles (not generic jobs).\nFormat like: "You are well positioned for junior data analyst roles in fintech."\n\nUse this info:\nSkills: ${
-        (pro.skills || []).join(', ') || '(none)'
-      }\nCareer goals: ${
-        careerGoalsDraft || '(none)'
-      }\nIndustry interests: ${
-        (pro.industryInterests || []).join(', ') || '(none)'
-      }\nExperience level: ${
-        experienceLevelDraft || '(unspecified)'
-      }\n\nReturn ONLY the sentence.`;
+  const addExperience = async () => {
+    if (!expRole.trim() || !expCompany.trim()) return;
 
-      const line = (await deepseekReply(input)).trim();
-      setSmartPositioningDraft(line);
+    const next = {
+      ...viewedPro,
+      experience: [
+        ...viewedPro.experience,
+        {
+          role: expRole.trim(),
+          company: expCompany.trim(),
+          start: expStart.trim() || undefined,
+          end: expEnd.trim() || undefined,
+          summary: expSummary.trim() || undefined,
+          verified: false,
+        },
+      ],
+    };
 
-      await saveProfessional({
-        ...pro,
-        careerGoals: careerGoalsDraft,
-        experienceLevel: experienceLevelDraft as any,
-        smartPositioning: line,
-      });
-    } catch {
-      toast({
-        title: 'AI unavailable',
-        description: 'Could not generate positioning right now. Try again later.',
-      });
-    } finally {
-      setAiSmartBusy(null);
-    }
+    setExpRole('');
+    setExpCompany('');
+    setExpStart('');
+    setExpEnd('');
+    setExpSummary('');
+
+    await saveProfessionalLive(next);
+  };
+
+  const addEducation = async () => {
+    if (!eduInstitution.trim()) return;
+
+    const next = {
+      ...viewedPro,
+      education: [
+        ...viewedPro.education,
+        {
+          institution: eduInstitution.trim(),
+          degree: eduDegree.trim() || undefined,
+          field: eduField.trim() || undefined,
+          start: eduStart.trim() || undefined,
+          end: eduEnd.trim() || undefined,
+          verified: false,
+        },
+      ],
+    };
+
+    setEduInstitution('');
+    setEduDegree('');
+    setEduField('');
+    setEduStart('');
+    setEduEnd('');
+
+    await saveProfessionalLive(next);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-background">
       <Navbar />
+
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-20 md:pb-6">
-        {/* Profile Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
           <Card className="mb-4 md:mb-6 overflow-hidden rounded-2xl border border-border/60 shadow-none">
-            {/* Cover Photo */}
             <div className="relative h-24 sm:h-28 md:h-40 lg:h-44">
               {viewedUser?.coverPhoto ? (
                 <img
@@ -664,10 +757,7 @@ export default function ProfilePage() {
                   <Avatar className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 ring-2 ring-border bg-muted">
                     <AvatarImage src={viewedUser?.avatar} alt={viewedUser?.name} />
                     <AvatarFallback className="bg-muted text-foreground text-2xl font-semibold flex items-center justify-center">
-                      {(viewedUser?.name && viewedUser.name.charAt(0)) ||
-                        (viewedUser?.email &&
-                          viewedUser.email.charAt(0).toUpperCase()) ||
-                        'U'}
+                      {getInitial(viewedUser?.name, viewedUser?.email)}
                     </AvatarFallback>
                   </Avatar>
 
@@ -683,25 +773,76 @@ export default function ProfilePage() {
                     <h1 className="text-xl sm:text-2xl md:text-3xl font-bold truncate">
                       {viewedUser?.name}
                     </h1>
+
                     <IdentityVerifiedBadge />
-                    {currentTier !== 'free' && (
+
+                    {profileTier !== 'free' && (
                       <Badge variant="secondary" className="ml-1">
-                        {currentTier.toUpperCase()}
+                        {profileTier.toUpperCase()}
                       </Badge>
                     )}
                   </div>
 
-                  {pro.headline ? (
+                  {viewedPro.headline ? (
                     <div className="text-sm md:text-base font-medium text-foreground/90 mb-2 break-words">
-                      {pro.headline}
+                      {viewedPro.headline}
                     </div>
                   ) : null}
 
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-3 break-words">
-                    {viewedUser?.bio}
-                  </p>
+                  {isOwnProfile && bioEditing ? (
+                    <div className="mb-3 space-y-2">
+                      <textarea
+                        className="w-full min-h-[72px] rounded-xl border bg-background px-3 py-2 text-sm"
+                        value={bioDraft}
+                        onChange={(event) => setBioDraft(event.target.value)}
+                        placeholder="Write your profile bio..."
+                      />
 
-                  {/* Interests */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={saveBio}
+                        >
+                          <Save className="h-4 w-4 mr-2" />
+                          Save bio
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full"
+                          onClick={() => {
+                            setBioDraft(viewedUser?.bio || '');
+                            setBioEditing(false);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-3">
+                      <p className="text-muted-foreground text-sm leading-relaxed break-words">
+                        {viewedUser?.bio || 'No bio added yet.'}
+                      </p>
+
+                      {isOwnProfile && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="mt-1 h-7 rounded-full px-2 text-xs"
+                          onClick={() => setBioEditing(true)}
+                        >
+                          Edit bio
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
                   {viewedUser?.interests && viewedUser.interests.length > 0 && (
                     <div className="hidden sm:flex flex-wrap gap-2 mb-3 justify-start">
                       {viewedUser.interests.map((interest: string) => (
@@ -719,6 +860,7 @@ export default function ProfilePage() {
                         {viewedUser.location}
                       </div>
                     )}
+
                     {viewedUser?.joinedDate && (
                       <div className="flex items-center">
                         <Calendar className="h-4 w-4 mr-1" />
@@ -728,11 +870,16 @@ export default function ProfilePage() {
                         })}
                       </div>
                     )}
+
                     {viewedUser?.website && (
                       <div className="flex items-center">
                         <LinkIcon className="h-4 w-4 mr-1" />
                         <a
-                          href={`https://${viewedUser.website}`}
+                          href={
+                            viewedUser.website.startsWith('http')
+                              ? viewedUser.website
+                              : `https://${viewedUser.website}`
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-foreground/80 hover:text-foreground underline-offset-4 hover:underline"
@@ -834,10 +981,11 @@ export default function ProfilePage() {
                         ) : (
                           <UserPlus className="h-4 w-4 mr-2" />
                         )}
+
                         {buttonBusy === 'follow'
                           ? 'Please wait...'
                           : isFollowing
-                            ? 'Following'
+                            ? 'Unfollow'
                             : 'Follow'}
                       </Button>
                     </div>
@@ -845,7 +993,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Stats */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -892,6 +1039,7 @@ export default function ProfilePage() {
                   PRO+
                 </Badge>
               </div>
+
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border bg-card p-3">
                   <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -901,9 +1049,10 @@ export default function ProfilePage() {
                     {profileViews}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    From local activity (device-based)
+                    Recent profile activity
                   </div>
                 </div>
+
                 <div className="rounded-xl border bg-card p-3">
                   <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     Post engagement
@@ -917,6 +1066,7 @@ export default function ProfilePage() {
                     {myPostAnalytics.totalShares} shares
                   </div>
                 </div>
+
                 <div className="rounded-xl border bg-card p-3">
                   <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     Average per post
@@ -933,110 +1083,103 @@ export default function ProfilePage() {
           </Card>
         ) : null}
 
-        {(pro.headline ||
-          pro.bio ||
-          pro.location ||
-          (pro.skills && pro.skills.length) ||
-          (pro.experience && pro.experience.length) ||
-          (pro.education && pro.education.length) ||
-          (pro.links && pro.links.length)) && (
+        {hasProfessionalPreview ? (
           <Card className="mb-4 md:mb-6 rounded-2xl border border-border/60 shadow-none">
             <CardContent className="py-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <h2 className="text-sm font-semibold">Professional</h2>
                 <Badge variant="outline" className="text-[10px]">
-                  LinkedIn style
+                  Public profile
                 </Badge>
               </div>
 
               <div className="space-y-3">
-                {pro.headline && (
+                {viewedPro.headline ? (
                   <div className="text-sm font-medium text-foreground">
-                    {pro.headline}
+                    {viewedPro.headline}
                   </div>
-                )}
+                ) : null}
 
-                {pro.location && (
+                {viewedPro.location ? (
                   <div className="text-xs text-muted-foreground flex items-center gap-2">
                     <MapPin className="h-3.5 w-3.5" />
-                    <span className="truncate">{pro.location}</span>
+                    <span className="truncate">{viewedPro.location}</span>
                   </div>
-                )}
+                ) : null}
 
-                {pro.experience && pro.experience.length > 0 && (
+                {viewedPro.experience.length > 0 ? (
                   <div className="rounded-xl border bg-card p-3">
                     <div className="text-xs font-semibold mb-1">
                       Experience
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {pro.experience[0]?.role}
-                      {pro.experience[0]?.company
-                        ? ` · ${pro.experience[0].company}`
+                      {viewedPro.experience[0]?.role}
+                      {viewedPro.experience[0]?.company
+                        ? ` · ${viewedPro.experience[0].company}`
                         : ''}
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                {pro.education && pro.education.length > 0 && (
+                {viewedPro.education.length > 0 ? (
                   <div className="rounded-xl border bg-card p-3">
                     <div className="text-xs font-semibold mb-1">Education</div>
                     <div className="text-xs text-muted-foreground">
-                      {pro.education[0]?.institution}
-                      {pro.education[0]?.degree
-                        ? ` · ${pro.education[0].degree}`
+                      {viewedPro.education[0]?.institution}
+                      {viewedPro.education[0]?.degree
+                        ? ` · ${viewedPro.education[0].degree}`
                         : ''}
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                {pro.skills && pro.skills.length > 0 && (
+                {viewedPro.skills.length > 0 ? (
                   <div>
                     <div className="text-xs font-semibold mb-2">Skills</div>
                     <div className="flex flex-wrap gap-2">
-                      {pro.skills.slice(0, 12).map((s) => (
+                      {viewedPro.skills.slice(0, 12).map((skill) => (
                         <Badge
-                          key={s}
+                          key={skill}
                           variant="secondary"
                           className="cursor-pointer"
                           onClick={() => {
                             setMode('professional');
-                            navigate(`/feed?skill=${encodeURIComponent(s)}`);
+                            navigate(`/feed?skill=${encodeURIComponent(skill)}`);
                           }}
                         >
-                          {s}
+                          {skill}
                         </Badge>
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                {pro.links && pro.links.length > 0 && (
+                {viewedPro.links.length > 0 ? (
                   <div>
                     <div className="text-xs font-semibold mb-2">Links</div>
                     <div className="flex flex-col gap-1">
-                      {pro.links.slice(0, 4).map((l, i) => (
+                      {viewedPro.links.slice(0, 4).map((link, index) => (
                         <a
-                          key={i}
+                          key={index}
                           className="text-xs text-primary hover:underline truncate"
-                          href={l.url}
+                          href={link.url}
                           target="_blank"
                           rel="noreferrer"
                         >
-                          {l.type}: {l.url}
+                          {link.type}: {link.url}
                         </a>
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
-        {/* Profile Content */}
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as any)}
+          onValueChange={(value) => setActiveTab(value as any)}
           className="w-full"
         >
           <TabsList className="w-full justify-start overflow-x-auto flex-nowrap rounded-none bg-transparent p-0 border-b border-border/60">
@@ -1046,18 +1189,14 @@ export default function ProfilePage() {
             >
               Posts
             </TabsTrigger>
-            <TabsTrigger
-              value="about"
-              className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
-            >
-              Smart Profile
-            </TabsTrigger>
+
             <TabsTrigger
               value="professional"
               className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
             >
               Professional
             </TabsTrigger>
+
             <TabsTrigger
               value="photos"
               className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
@@ -1068,12 +1207,12 @@ export default function ProfilePage() {
 
           <TabsContent value="posts" className="mt-6 space-y-4">
             {userPosts.length > 0 ? (
-              userPosts.map((post, index) => (
+              userPosts.map((post: any, index: number) => (
                 <motion.div
                   key={post.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
+                  transition={{ delay: index * 0.05 }}
                 >
                   <PostCard post={post} />
                 </motion.div>
@@ -1090,6 +1229,12 @@ export default function ProfilePage() {
           <TabsContent value="professional" className="mt-6">
             <Card className="rounded-2xl border border-border/60 shadow-none">
               <CardContent className="py-6">
+                {!canEditProfessional && isOwnProfile ? (
+                  <div className="mb-6 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    Creator, Business and Exclusive tiers can edit and publish a professional profile.
+                  </div>
+                ) : null}
+
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div className="space-y-4">
                     <div>
@@ -1097,30 +1242,35 @@ export default function ProfilePage() {
                         <Briefcase className="h-4 w-4 text-muted-foreground" />
                         <span>Headline</span>
                       </h3>
-                      {isOwnProfile ? (
+
+                      {canEditProfessional ? (
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <Input
                             value={headlineDraft}
-                            onChange={(e) => setHeadlineDraft(e.target.value)}
-                            placeholder="e.g. Frontend Developer · React · UI Systems"
+                            onChange={(event) =>
+                              setHeadlineDraft(event.target.value)
+                            }
+                            placeholder="Example: Founder · Product Builder · AI Social Platform"
                           />
+
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={async () => {
-                              await saveProfessional({
-                                ...pro,
+                            className="rounded-full"
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
                                 headline: headlineDraft,
-                              });
-                            }}
+                              })
+                            }
                           >
                             Save
                           </Button>
                         </div>
                       ) : (
                         <p className="text-muted-foreground">
-                          {pro.headline || 'Add a headline to showcase your role'}
+                          {viewedPro.headline || 'No headline added yet.'}
                         </p>
                       )}
                     </div>
@@ -1128,12 +1278,40 @@ export default function ProfilePage() {
                     <div>
                       <h3 className="font-semibold mb-1 flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span>Bio</span>
+                        <span>Professional bio</span>
                       </h3>
-                      <p className="text-muted-foreground">
-                        {pro.bio ||
-                          'Tell others about your professional background'}
-                      </p>
+
+                      {canEditProfessional ? (
+                        <div className="space-y-2">
+                          <textarea
+                            className="w-full min-h-[88px] rounded-xl border bg-background px-3 py-2 text-sm"
+                            value={professionalBioDraft}
+                            onChange={(event) =>
+                              setProfessionalBioDraft(event.target.value)
+                            }
+                            placeholder="Write your professional background..."
+                          />
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
+                                bio: professionalBioDraft,
+                              })
+                            }
+                          >
+                            Save bio
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          {viewedPro.bio || 'No professional bio added yet.'}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -1141,35 +1319,37 @@ export default function ProfilePage() {
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         <span>Location</span>
                       </h3>
-                      <p className="text-muted-foreground">
-                        {pro.location || 'Set your location'}
-                      </p>
-                    </div>
 
-                    <div>
-                      <h3 className="font-semibold mb-1 flex items-center gap-2">
-                        <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                        <span>Links</span>
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {(pro.links || []).length ? (
-                          pro.links!.map((l, i) => (
-                            <a
-                              key={i}
-                              className="text-sm text-primary hover:underline"
-                              href={l.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {l.type}: {l.url}
-                            </a>
-                          ))
-                        ) : (
-                          <p className="text-muted-foreground text-sm">
-                            No links yet
-                          </p>
-                        )}
-                      </div>
+                      {canEditProfessional ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <Input
+                            value={professionalLocationDraft}
+                            onChange={(event) =>
+                              setProfessionalLocationDraft(event.target.value)
+                            }
+                            placeholder="Example: Tzaneen, South Africa"
+                          />
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
+                                location: professionalLocationDraft,
+                              })
+                            }
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          {viewedPro.location || 'No location added yet.'}
+                        </p>
+                      )}
                     </div>
 
                     <div className="pt-4 border-t flex items-center justify-between gap-3">
@@ -1179,15 +1359,15 @@ export default function ProfilePage() {
                           <span>Professional Groups</span>
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                          Join industry-focused groups for discussions and
-                          collaboration.
+                          Join industry-focused groups for discussions and collaboration.
                         </p>
                       </div>
+
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="text-xs"
+                        className="text-xs rounded-full"
                         onClick={() => navigate('/groups/pro')}
                       >
                         View groups
@@ -1195,144 +1375,98 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="pt-4 border-t space-y-3">
-                      <div>
-                        <h3 className="font-semibold mb-1 flex items-center gap-2">
-                          <Briefcase className="h-4 w-4 text-muted-foreground" />
-                          <span>Experience</span>
-                        </h3>
-                        <div className="space-y-2">
-                          {(pro.experience || []).length ? (
-                            pro.experience!.map((e, idx) => (
-                              <div
-                                key={idx}
-                                className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
-                              >
-                                <div>
-                                  <div className="font-medium text-sm">
-                                    {e.role || 'Role'}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {e.company || 'Company'}
-                                    {(e.start || e.end) &&
-                                      ` • ${e.start || ''}${
-                                        e.start && e.end ? ' – ' : ''
-                                      }${e.end || ''}`}
-                                  </div>
-                                  {e.summary && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      {e.summary}
-                                    </div>
-                                  )}
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <Briefcase className="h-4 w-4 text-muted-foreground" />
+                        <span>Experience</span>
+                      </h3>
+
+                      <div className="space-y-2">
+                        {viewedPro.experience.length > 0 ? (
+                          viewedPro.experience.map((experience, index) => (
+                            <div
+                              key={index}
+                              className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                            >
+                              <div>
+                                <div className="font-medium text-sm">
+                                  {experience.role || 'Role'}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  {e.verified && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px]"
-                                    >
-                                      Verified
-                                    </Badge>
-                                  )}
-                                  {isOwnProfile && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-[10px]"
-                                      onClick={async () => {
-                                        const list = [
-                                          ...(pro.experience || []),
-                                        ];
-                                        list[idx] = {
-                                          ...list[idx],
-                                          verified: !list[idx].verified,
-                                        };
-                                        await saveProfessional({
-                                          ...pro,
-                                          experience: list,
-                                        });
-                                      }}
-                                    >
-                                      {e.verified ? 'Unverify' : 'Verify (dev)'}
-                                    </Button>
-                                  )}
+                                <div className="text-xs text-muted-foreground">
+                                  {experience.company || 'Company'}
+                                  {(experience.start || experience.end) &&
+                                    ` · ${experience.start || ''}${
+                                      experience.start && experience.end ? ' – ' : ''
+                                    }${experience.end || ''}`}
                                 </div>
+                                {experience.summary && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    {experience.summary}
+                                  </div>
+                                )}
                               </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Add roles you want to highlight.
-                            </p>
-                          )}
-                        </div>
+
+                              {experience.verified && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  Verified
+                                </Badge>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No experience added yet.
+                          </p>
+                        )}
                       </div>
 
-                      {isOwnProfile && (
+                      {canEditProfessional && (
                         <div className="space-y-2">
                           <div className="grid grid-cols-2 gap-2">
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                            <Input
                               placeholder="Role"
                               value={expRole}
-                              onChange={(e) => setExpRole(e.target.value)}
+                              onChange={(event) => setExpRole(event.target.value)}
                             />
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                            <Input
                               placeholder="Company"
                               value={expCompany}
-                              onChange={(e) => setExpCompany(e.target.value)}
+                              onChange={(event) =>
+                                setExpCompany(event.target.value)
+                              }
                             />
                           </div>
+
                           <div className="grid grid-cols-2 gap-2">
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
-                              placeholder="Start (e.g. 2022)"
+                            <Input
+                              placeholder="Start"
                               value={expStart}
-                              onChange={(e) => setExpStart(e.target.value)}
+                              onChange={(event) =>
+                                setExpStart(event.target.value)
+                              }
                             />
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
-                              placeholder="End (or Present)"
+                            <Input
+                              placeholder="End"
                               value={expEnd}
-                              onChange={(e) => setExpEnd(e.target.value)}
+                              onChange={(event) => setExpEnd(event.target.value)}
                             />
                           </div>
+
                           <textarea
-                            className="w-full min-h-[50px] px-2 py-1 border rounded text-xs bg-transparent"
-                            placeholder="Short summary (optional)"
+                            className="w-full min-h-[50px] px-3 py-2 border rounded-xl text-sm bg-background"
+                            placeholder="Short summary optional"
                             value={expSummary}
-                            onChange={(e) => setExpSummary(e.target.value)}
+                            onChange={(event) =>
+                              setExpSummary(event.target.value)
+                            }
                           />
+
                           <div className="flex justify-end">
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={async () => {
-                                if (!expRole.trim() || !expCompany.trim())
-                                  return;
-                                const next = {
-                                  role: expRole.trim(),
-                                  company: expCompany.trim(),
-                                  start: expStart.trim() || undefined,
-                                  end: expEnd.trim() || undefined,
-                                  summary: expSummary.trim() || undefined,
-                                  verified: false,
-                                };
-                                const list = [
-                                  ...(pro.experience || []),
-                                  next,
-                                ];
-                                await saveProfessional({
-                                  ...pro,
-                                  experience: list,
-                                });
-                                setExpRole('');
-                                setExpCompany('');
-                                setExpStart('');
-                                setExpEnd('');
-                                setExpSummary('');
-                              }}
+                              className="rounded-full"
+                              onClick={addExperience}
                             >
                               Add experience
                             </Button>
@@ -1342,136 +1476,95 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="pt-4 border-t space-y-3">
-                      <div>
-                        <h3 className="font-semibold mb-1 flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span>Education</span>
-                        </h3>
-                        <div className="space-y-2">
-                          {(pro.education || []).length ? (
-                            pro.education!.map((e, idx) => (
-                              <div
-                                key={idx}
-                                className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
-                              >
-                                <div>
-                                  <div className="font-medium text-sm">
-                                    {e.institution || 'Institution'}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {e.degree || 'Degree'}
-                                    {e.field ? ` • ${e.field}` : ''}
-                                    {(e.start || e.end) &&
-                                      ` • ${e.start || ''}${
-                                        e.start && e.end ? ' – ' : ''
-                                      }${e.end || ''}`}
-                                  </div>
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span>Education</span>
+                      </h3>
+
+                      <div className="space-y-2">
+                        {viewedPro.education.length > 0 ? (
+                          viewedPro.education.map((education, index) => (
+                            <div
+                              key={index}
+                              className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                            >
+                              <div>
+                                <div className="font-medium text-sm">
+                                  {education.institution || 'Institution'}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  {e.verified && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px]"
-                                    >
-                                      Verified
-                                    </Badge>
-                                  )}
-                                  {isOwnProfile && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-[10px]"
-                                      onClick={async () => {
-                                        const list = [
-                                          ...(pro.education || []),
-                                        ];
-                                        list[idx] = {
-                                          ...list[idx],
-                                          verified: !list[idx].verified,
-                                        };
-                                        await saveProfessional({
-                                          ...pro,
-                                          education: list,
-                                        });
-                                      }}
-                                    >
-                                      {e.verified ? 'Unverify' : 'Verify (dev)'}
-                                    </Button>
-                                  )}
+                                <div className="text-xs text-muted-foreground">
+                                  {education.degree || 'Degree'}
+                                  {education.field ? ` · ${education.field}` : ''}
+                                  {(education.start || education.end) &&
+                                    ` · ${education.start || ''}${
+                                      education.start && education.end ? ' – ' : ''
+                                    }${education.end || ''}`}
                                 </div>
                               </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Add education you want to highlight.
-                            </p>
-                          )}
-                        </div>
+
+                              {education.verified && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  Verified
+                                </Badge>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No education added yet.
+                          </p>
+                        )}
                       </div>
 
-                      {isOwnProfile && (
+                      {canEditProfessional && (
                         <div className="space-y-2">
-                          <input
-                            className="w-full px-2 py-1 border rounded text-xs bg-transparent"
+                          <Input
                             placeholder="Institution"
                             value={eduInstitution}
-                            onChange={(e) => setEduInstitution(e.target.value)}
+                            onChange={(event) =>
+                              setEduInstitution(event.target.value)
+                            }
                           />
+
                           <div className="grid grid-cols-2 gap-2">
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
+                            <Input
                               placeholder="Degree"
                               value={eduDegree}
-                              onChange={(e) => setEduDegree(e.target.value)}
+                              onChange={(event) =>
+                                setEduDegree(event.target.value)
+                              }
                             />
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
-                              placeholder="Field of study"
+                            <Input
+                              placeholder="Field"
                               value={eduField}
-                              onChange={(e) => setEduField(e.target.value)}
+                              onChange={(event) =>
+                                setEduField(event.target.value)
+                              }
                             />
                           </div>
+
                           <div className="grid grid-cols-2 gap-2">
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
-                              placeholder="Start (e.g. 2019)"
+                            <Input
+                              placeholder="Start"
                               value={eduStart}
-                              onChange={(e) => setEduStart(e.target.value)}
+                              onChange={(event) =>
+                                setEduStart(event.target.value)
+                              }
                             />
-                            <input
-                              className="px-2 py-1 border rounded text-xs bg-transparent"
-                              placeholder="End (or Present)"
+                            <Input
+                              placeholder="End"
                               value={eduEnd}
-                              onChange={(e) => setEduEnd(e.target.value)}
+                              onChange={(event) => setEduEnd(event.target.value)}
                             />
                           </div>
+
                           <div className="flex justify-end">
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={async () => {
-                                if (!eduInstitution.trim()) return;
-                                const next = {
-                                  institution: eduInstitution.trim(),
-                                  degree: eduDegree.trim() || undefined,
-                                  field: eduField.trim() || undefined,
-                                  start: eduStart.trim() || undefined,
-                                  end: eduEnd.trim() || undefined,
-                                  verified: false,
-                                };
-                                const list = [...(pro.education || []), next];
-                                await saveProfessional({
-                                  ...pro,
-                                  education: list,
-                                });
-                                setEduInstitution('');
-                                setEduDegree('');
-                                setEduField('');
-                                setEduStart('');
-                                setEduEnd('');
-                              }}
+                              className="rounded-full"
+                              onClick={addEducation}
                             >
                               Add education
                             </Button>
@@ -1487,60 +1580,62 @@ export default function ProfilePage() {
                         <Sparkles className="h-4 w-4 text-primary" />
                         <span>Skills & Endorsements</span>
                       </h3>
+
                       <div className="flex flex-wrap gap-2">
-                        {(pro.skills || []).length ? (
-                          pro.skills!.map((s) => (
+                        {viewedPro.skills.length > 0 ? (
+                          viewedPro.skills.map((skill) => (
                             <div
-                              key={s}
+                              key={skill}
                               className="flex items-center gap-2 border rounded-full px-3 py-1 cursor-pointer hover:bg-muted/60"
                               onClick={() => {
                                 setMode('professional');
-                                navigate(`/feed?skill=${encodeURIComponent(s)}`);
+                                navigate(`/feed?skill=${encodeURIComponent(skill)}`);
                               }}
                             >
-                              <span className="text-sm">{s}</span>
-                              <button
-                                className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  endorseSkill(s);
-                                }}
-                              >
-                                Endorse
-                              </button>
+                              <span className="text-sm">{skill}</span>
+
+                              {!isOwnProfile && (
+                                <button
+                                  className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    endorseSkill(skill);
+                                  }}
+                                >
+                                  Endorse
+                                </button>
+                              )}
+
                               <span className="text-xs text-muted-foreground">
-                                {pro.endorsements?.[s] || 0}
+                                {viewedPro.endorsements?.[skill] || 0}
                               </span>
                             </div>
                           ))
                         ) : (
                           <p className="text-muted-foreground text-sm">
-                            Add skills to get endorsements
+                            No skills added yet.
                           </p>
                         )}
                       </div>
-                      {isOwnProfile && (
+
+                      {canEditProfessional && (
                         <div className="mt-3 flex gap-2">
-                          <input
-                            className="px-3 py-2 border rounded w-48 bg-transparent"
+                          <Input
                             placeholder="Add a skill"
                             value={newSkill}
-                            onChange={(e) => setNewSkill(e.target.value)}
-                          />
-                          <Button
-                            onClick={async () => {
-                              const skill = newSkill.trim();
-                              if (!skill) return;
-                              const nextSkills = Array.from(
-                                new Set([...(pro.skills || []), skill])
-                              );
-                              await saveProfessional({
-                                ...pro,
-                                skills: nextSkills,
-                              });
-                              setNewSkill('');
+                            onChange={(event) => setNewSkill(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                addSkill();
+                              }
                             }}
+                          />
+
+                          <Button
+                            onClick={addSkill}
                             variant="outline"
+                            className="rounded-full"
                           >
                             Add
                           </Button>
@@ -1552,65 +1647,78 @@ export default function ProfilePage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <h3 className="font-semibold mb-1 flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-primary" />
-                            <span>AI Resume &amp; Skill Builder</span>
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span>Professional summary</span>
                           </h3>
                           <p className="text-xs text-muted-foreground">
-                            Create a short professional summary based on your
-                            headline, bio, and skills.
+                            A short summary visitors can see on your profile.
                           </p>
                         </div>
-                        {pro.resumeSummary && (
+
+                        {viewedPro.resumeSummary && (
                           <Badge variant="outline" className="text-[10px]">
                             Saved
                           </Badge>
                         )}
                       </div>
-                      <div className="space-y-2">
-                        <textarea
-                          className="w-full min-h-[80px] px-3 py-2 border rounded text-sm bg-transparent"
-                          placeholder="Use the generator or write a brief summary of your experience, focus areas, and skills."
-                          value={resumeDraft}
-                          onChange={(e) => setResumeDraft(e.target.value)}
-                        />
-                        <div className="flex justify-between items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const parts: string[] = [];
-                              if (pro.headline) parts.push(pro.headline);
-                              if (pro.bio) parts.push(pro.bio);
-                              if (pro.skills && pro.skills.length) {
-                                parts.push(
-                                  `Key skills: ${pro.skills.join(', ')}`
+
+                      {canEditProfessional ? (
+                        <div className="space-y-2">
+                          <textarea
+                            className="w-full min-h-[90px] px-3 py-2 border rounded-xl text-sm bg-background"
+                            placeholder="Write a short professional summary..."
+                            value={resumeDraft}
+                            onChange={(event) => setResumeDraft(event.target.value)}
+                          />
+
+                          <div className="flex justify-between items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => {
+                                const parts: string[] = [];
+                                if (headlineDraft) parts.push(headlineDraft);
+                                if (professionalBioDraft) {
+                                  parts.push(professionalBioDraft);
+                                }
+                                if (viewedPro.skills.length > 0) {
+                                  parts.push(
+                                    `Key skills: ${viewedPro.skills.join(', ')}`
+                                  );
+                                }
+
+                                setResumeDraft(
+                                  parts.length
+                                    ? parts.join(' • ')
+                                    : 'Add your role, experience, projects and skills.'
                                 );
-                              }
-                              const text = parts.length
-                                ? parts.join(' • ')
-                                : 'Professional summary generated from your profile. Add your role, key projects, and skills.';
-                              setResumeDraft(text);
-                            }}
-                          >
-                            Generate from profile
-                          </Button>
-                          {isOwnProfile && (
+                              }}
+                            >
+                              Generate from profile
+                            </Button>
+
                             <Button
                               type="button"
                               size="sm"
-                              onClick={async () => {
-                                await saveProfessional({
-                                  ...pro,
+                              className="rounded-full"
+                              onClick={() =>
+                                saveProfessionalLive({
+                                  ...viewedPro,
                                   resumeSummary: resumeDraft,
-                                });
-                              }}
+                                })
+                              }
                             >
                               Save summary
                             </Button>
-                          )}
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {viewedPro.resumeSummary || 'No summary added yet.'}
+                        </p>
+                      )}
                     </div>
 
                     <div
@@ -1623,323 +1731,35 @@ export default function ProfilePage() {
                             Open to creative collabs
                           </h3>
                           <p className="text-xs text-muted-foreground">
-                            Signal that you're interested in collaborating with
-                            creators and communities.
+                            Signal interest in collaborations and projects.
                           </p>
                         </div>
-                        <button
-                          className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                            pro.openToCollab
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-background text-muted-foreground'
-                          }`}
-                          onClick={async () => {
-                            await saveProfessional({
-                              ...pro,
-                              openToCollab: !pro.openToCollab,
-                            });
-                          }}
-                        >
-                          {pro.openToCollab ? 'Open' : 'Closed'}
-                        </button>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Collab note (optional)
-                        </p>
-                        <textarea
-                          className="w-full min-h-[60px] px-3 py-2 border rounded text-sm bg-transparent"
-                          placeholder="E.g. short-form video, brand design, storytelling collabs..."
-                          value={collabNoteDraft}
-                          onChange={(e) => {
-                            setCollabNoteDraft(e.target.value);
-                          }}
-                        />
-                      </div>
-                    </div>
 
-                    {isOwnProfile && (
-                      <div className="pt-2 border-t">
-                        <Button
-                          onClick={async () => {
-                            await saveProfessional(pro);
-                          }}
-                        >
-                          Save Professional Profile
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="about" className="mt-6">
-            <Card className="rounded-2xl border border-border/60 shadow-none">
-              <CardContent className="py-6 space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">Smart Profile</div>
-                    <div className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                      A professional snapshot focused on skills, goals, and
-                      career direction.
-                    </div>
-                  </div>
-                  {isOwnProfile ? (
-                    <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 shrink-0">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={aiSmartBusy !== null}
-                        onClick={aiRewriteProfessionally}
-                        className="w-full sm:w-auto"
-                      >
-                        {aiSmartBusy === 'rewrite'
-                          ? 'Rewriting…'
-                          : 'Rewrite professionally'}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={aiSmartBusy !== null}
-                        onClick={aiCareerPositioning}
-                        className="w-full sm:w-auto"
-                      >
-                        {aiSmartBusy === 'positioning'
-                          ? 'Working…'
-                          : 'Career positioning'}
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-
-                {smartPositioningDraft ? (
-                  <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
-                    <div className="text-muted-foreground">
-                      {smartPositioningDraft}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="grid gap-5 md:grid-cols-2">
-                  <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Skills
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(pro.skills || []).length ? (
-                        pro.skills!.slice(0, 20).map((s) => (
-                          <Badge
-                            key={s}
-                            variant="secondary"
-                            className="cursor-pointer"
-                            onClick={() => {
-                              setMode('professional');
-                              navigate(`/feed?skill=${encodeURIComponent(s)}`);
-                            }}
+                        {canEditProfessional ? (
+                          <button
+                            className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                              viewedPro.openToCollab
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-background text-muted-foreground'
+                            }`}
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
+                                openToCollab: !viewedPro.openToCollab,
+                              })
+                            }
                           >
-                            {s}
-                          </Badge>
-                        ))
-                      ) : (
-                        <div className="text-sm text-muted-foreground">
-                          No skills added yet.
-                        </div>
-                      )}
-                    </div>
-
-                    {isOwnProfile ? (
-                      <div className="pt-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={aiSmartBusy !== null}
-                          onClick={aiSuggestMissingSkills}
-                          className="w-full sm:w-auto"
-                        >
-                          {aiSmartBusy === 'skills'
-                            ? 'Suggesting…'
-                            : 'Suggest missing skills'}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Career goals
-                      </div>
-                      {isOwnProfile ? (
-                        <textarea
-                          className="w-full min-h-[84px] px-3 py-2 border rounded-xl text-sm bg-transparent"
-                          placeholder="E.g. Move into junior data analyst roles in fintech; build strong SQL + dashboarding skills."
-                          value={careerGoalsDraft}
-                          onChange={(e) => setCareerGoalsDraft(e.target.value)}
-                          onBlur={async () => {
-                            await saveProfessional({
-                              ...pro,
-                              careerGoals: careerGoalsDraft,
-                            });
-                          }}
-                        />
-                      ) : (
-                        <div className="text-sm text-muted-foreground leading-relaxed">
-                          {pro.careerGoals || 'Not specified.'}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Industry interests
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {(pro.industryInterests || []).length ? (
-                          (pro.industryInterests || []).map((x) => (
-                            <Badge
-                              key={x}
-                              variant="outline"
-                              className={isOwnProfile ? 'cursor-pointer' : ''}
-                              onClick={async () => {
-                                if (!isOwnProfile) return;
-                                await removeIndustryInterest(x);
-                              }}
-                            >
-                              {x}
-                              {isOwnProfile ? ' ×' : ''}
-                            </Badge>
-                          ))
+                            {viewedPro.openToCollab ? 'Open' : 'Closed'}
+                          </button>
                         ) : (
-                          <div className="text-sm text-muted-foreground">
-                            Not specified.
-                          </div>
+                          <Badge variant={viewedPro.openToCollab ? 'default' : 'outline'}>
+                            {viewedPro.openToCollab ? 'Open' : 'Closed'}
+                          </Badge>
                         )}
                       </div>
-                      {isOwnProfile ? (
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <Input
-                            value={industryInterestDraft}
-                            onChange={(e) =>
-                              setIndustryInterestDraft(e.target.value)
-                            }
-                            placeholder="Add an industry (e.g. fintech)"
-                            className="h-9"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addIndustryInterest();
-                              }
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={addIndustryInterest}
-                            className="w-full sm:w-auto"
-                          >
-                            Add
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Experience level
-                      </div>
-                      {isOwnProfile ? (
-                        <select
-                          className="w-full h-10 px-3 border rounded-xl bg-transparent text-sm"
-                          value={experienceLevelDraft}
-                          onChange={async (e) => {
-                            const v = e.target.value;
-                            setExperienceLevelDraft(v);
-                            await saveProfessional({
-                              ...pro,
-                              experienceLevel: v as any,
-                            });
-                          }}
-                        >
-                          <option value="">Select…</option>
-                          <option value="student">Student</option>
-                          <option value="entry">Entry</option>
-                          <option value="junior">Junior</option>
-                          <option value="mid">Mid</option>
-                          <option value="senior">Senior</option>
-                          <option value="lead">Lead</option>
-                          <option value="executive">Executive</option>
-                          <option value="career_switcher">
-                            Career switcher
-                          </option>
-                        </select>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">
-                          {pro.experienceLevel || 'Not specified.'}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
-
-                {isOwnProfile && smartSuggestedSkillsDraft.length ? (
-                  <div className="rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Suggested skills
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {smartSuggestedSkillsDraft.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          className="text-xs rounded-full border border-border/60 bg-background px-3 py-1 hover:bg-muted/30"
-                          onClick={async () => {
-                            const nextSkills = Array.from(
-                              new Set([...(pro.skills || []), s])
-                            );
-                            await saveProfessional({
-                              ...pro,
-                              skills: nextSkills,
-                            });
-                          }}
-                          title="Add to skills"
-                        >
-                          + {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {smartSummaryDraft ? (
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Professional summary
-                    </div>
-                    {isOwnProfile ? (
-                      <textarea
-                        className="w-full min-h-[110px] px-3 py-2 border rounded-xl text-sm bg-transparent"
-                        value={smartSummaryDraft}
-                        onChange={(e) => setSmartSummaryDraft(e.target.value)}
-                        onBlur={async () => {
-                          await saveProfessional({
-                            ...pro,
-                            smartSummary: smartSummaryDraft,
-                          });
-                        }}
-                      />
-                    ) : (
-                      <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                        {smartSummaryDraft}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1949,8 +1769,8 @@ export default function ProfilePage() {
               <CardContent className="py-6">
                 <div className="grid grid-cols-3 gap-2">
                   {userPosts
-                    .filter((post) => post.image)
-                    .map((post) => (
+                    .filter((post: any) => post.image)
+                    .map((post: any) => (
                       <div
                         key={post.id}
                         className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
@@ -1963,18 +1783,18 @@ export default function ProfilePage() {
                       </div>
                     ))}
                 </div>
-                {userPosts.filter((post) => post.image).length === 0 && (
+
+                {userPosts.filter((post: any) => post.image).length === 0 ? (
                   <p className="text-center text-muted-foreground py-6">
                     No photos yet
                   </p>
-                )}
+                ) : null}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Edit Profile Modal */}
       <EditProfileModal
         open={isEditModalOpen}
         onOpenChange={setIsEditModalOpen}
