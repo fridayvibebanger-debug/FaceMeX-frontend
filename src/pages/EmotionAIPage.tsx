@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -8,9 +8,27 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Loader2, Heart, ShieldCheck, RefreshCw } from 'lucide-react';
+import {
+  Sparkles,
+  Loader2,
+  Heart,
+  ShieldCheck,
+  RefreshCw,
+  AlertTriangle,
+  Trophy,
+  Target,
+  Users,
+  Briefcase,
+  Palette,
+  Handshake,
+  CheckCircle2,
+} from 'lucide-react';
 import { deepseekReply } from '@/utils/ai';
+import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
+import { useUserStore } from '@/store/userStore';
+import { useAuthStore } from '@/store/authStore';
+import { supabase } from '@/lib/supabaseClient';
 
 type Mood =
   | 'joy'
@@ -21,135 +39,319 @@ type Mood =
   | 'motivated'
   | 'tired';
 
+type RiskLevel = 'low' | 'medium' | 'high' | 'urgent';
+type ChallengeLevel = 'starter' | 'builder' | 'growth' | 'master';
+
 type AiResult = {
   mood: Mood;
+  riskLevel: RiskLevel;
   confidence: number;
   summary: string;
+  supportGuidance: string;
   suggestions: string[];
+  recommendedChallengeLevel: ChallengeLevel;
 };
+
+type EmotionChallenge = {
+  id: string;
+  title: string;
+  level: ChallengeLevel;
+  goal: string;
+  reviewGoal: string;
+  points: number;
+  category: string;
+};
+
+type FriendMatch = {
+  id: string;
+  userId?: string;
+  name: string;
+  avatar?: string;
+  compat: number;
+  basis: string;
+  matchType: 'growth' | 'creative' | 'professional';
+  tags: string[];
+};
+
+const STORAGE_JOINED_CHALLENGES = 'facemex_emotion_joined_challenges_v1';
+
+const DANGEROUS_PATTERNS = [
+  /kill\s+someone/i,
+  /i\s+want\s+to\s+kill/i,
+  /hurt\s+someone/i,
+  /harm\s+someone/i,
+  /murder/i,
+  /stab/i,
+  /shoot/i,
+  /revenge/i,
+  /attack/i,
+  /fight\s+someone/i,
+];
+
+const SELF_HARM_PATTERNS = [
+  /end\s+my\s+life/i,
+  /i\s+want\s+to\s+die/i,
+  /hurt\s+myself/i,
+  /self\s*harm/i,
+];
 
 const FALLBACK_BY_MOOD: Record<Mood, AiResult> = {
   joy: {
     mood: 'joy',
-    confidence: 82,
+    riskLevel: 'low',
+    confidence: 86,
     summary:
-      'Your message sounds positive and energetic. This is a good moment to share progress, connect with people, or create something.',
+      'Your message sounds positive and energetic. This is a strong moment for creativity, connection, and action.',
+    supportGuidance:
+      'Use this positive energy wisely. Share progress, encourage someone, or turn the momentum into one useful task.',
     suggestions: [
-      'Share a positive update',
-      'Save this moment as a journal note',
-      'Turn the energy into one small action',
+      'Share one positive update',
+      'Encourage someone who needs support',
+      'Turn this energy into one completed action',
     ],
+    recommendedChallengeLevel: 'builder',
   },
   sadness: {
     mood: 'sadness',
-    confidence: 76,
+    riskLevel: 'medium',
+    confidence: 86,
     summary:
-      'Your message sounds emotionally heavy. A slower pace, a trusted conversation, or a simple reset may help.',
+      'Your message sounds emotionally heavy. You may need support, rest, or a safe conversation instead of carrying it alone.',
+    supportGuidance:
+      'Try not to isolate yourself. Choose one safe person to message, step away from pressure, and focus on what your body needs right now.',
     suggestions: [
-      'Take a short pause',
-      'Write one thing you need right now',
-      'Reach out to someone you trust',
+      'Message one trusted person',
+      'Take a short walk or reset break',
+      'Write what you feel before reacting',
     ],
+    recommendedChallengeLevel: 'starter',
   },
   anger: {
     mood: 'anger',
-    confidence: 78,
+    riskLevel: 'medium',
+    confidence: 88,
     summary:
-      'Your message sounds frustrated or tense. It may help to cool down first before replying or making a decision.',
+      'Your message sounds angry or emotionally intense. This is a moment to slow down before reacting.',
+    supportGuidance:
+      'Strong anger can push you toward actions you may regret. Create distance from the situation, pause communication, and speak to someone calm before making a decision.',
     suggestions: [
-      'Wait before sending a strong reply',
-      'Write the message, then edit it softer',
-      'Take a short walk or breathing break',
+      'Step away from the conflict',
+      'Do not send a heated reply yet',
+      'Talk to someone calm before acting',
     ],
+    recommendedChallengeLevel: 'starter',
   },
   anxiety: {
     mood: 'anxiety',
-    confidence: 80,
+    riskLevel: 'medium',
+    confidence: 86,
     summary:
-      'Your message sounds worried or uncertain. Focus on the next small step instead of trying to solve everything at once.',
+      'Your message sounds worried or mentally overloaded. You may be trying to solve too much at once.',
+    supportGuidance:
+      'Bring the pressure down by choosing one controllable action. Do not try to fix everything now. Start with one small step.',
     suggestions: [
-      'Name the one thing you can control',
-      'Break the problem into one next step',
-      'Use a short grounding exercise',
+      'Focus on one task only',
+      'Reduce information overload',
+      'Take slow breaths for one minute',
     ],
+    recommendedChallengeLevel: 'starter',
   },
   motivated: {
     mood: 'motivated',
-    confidence: 84,
+    riskLevel: 'low',
+    confidence: 88,
     summary:
-      'Your message sounds focused and ready for action. This is a good time to plan, execute, and keep momentum.',
+      'Your message shows ambition and forward momentum. This is a strong moment for execution and consistency.',
+    supportGuidance:
+      'Use the energy while it is fresh. Write your next action, do it today, then review your progress.',
     suggestions: [
       'Write your next 3 actions',
-      'Send the message or proposal today',
-      'Block 30 minutes for execution',
+      'Complete one important task today',
+      'Post your progress or goal',
     ],
+    recommendedChallengeLevel: 'growth',
   },
   tired: {
     mood: 'tired',
-    confidence: 74,
+    riskLevel: 'medium',
+    confidence: 82,
     summary:
-      'Your message sounds low-energy or drained. A lighter task, rest, or a smaller goal may work better right now.',
+      'Your message suggests low energy or burnout. Recovery may help more than pushing harder right now.',
+    supportGuidance:
+      'Reduce pressure for a short time. Handle one simple task, hydrate, and give your mind a real pause.',
     suggestions: [
-      'Do one simple task only',
-      'Drink water and pause for a few minutes',
+      'Complete one simple task only',
+      'Take a short recovery break',
       'Move the hardest task to later',
     ],
+    recommendedChallengeLevel: 'starter',
   },
   neutral: {
     mood: 'neutral',
-    confidence: 65,
+    riskLevel: 'low',
+    confidence: 74,
     summary:
-      'Your message sounds balanced. You can use this moment to think clearly, plan calmly, or explore new ideas.',
+      'Your message appears balanced. FaceMeX can still help with growth, networking, and discovery.',
+    supportGuidance:
+      'This is a good moment to plan calmly, improve your profile, join a challenge, or connect with people who match your goals.',
     suggestions: [
-      'Discover new communities',
-      'Try a small creative challenge',
-      'Review your current goals',
+      'Join a useful challenge',
+      'Explore people with shared interests',
+      'Improve your profile strength',
     ],
+    recommendedChallengeLevel: 'builder',
   },
 };
 
-function detectMoodFallback(text: string): AiResult {
-  const t = text.toLowerCase();
+const CHALLENGES: Record<Mood, EmotionChallenge[]> = {
+  joy: [
+    {
+      id: 'joy-share-progress',
+      title: 'Share your win',
+      level: 'builder',
+      goal: 'Post one positive progress update.',
+      reviewGoal: 'Review how many people engaged or commented.',
+      points: 40,
+      category: 'Connection',
+    },
+    {
+      id: 'joy-encourage-three',
+      title: 'Encourage 3 people',
+      level: 'builder',
+      goal: 'Send support or encouragement to 3 people.',
+      reviewGoal: 'Review how the conversations made you feel.',
+      points: 50,
+      category: 'Community',
+    },
+  ],
+  sadness: [
+    {
+      id: 'sadness-check-in',
+      title: 'Check-in with someone',
+      level: 'starter',
+      goal: 'Message one trusted person and say you need support.',
+      reviewGoal: 'Review whether you felt less alone after reaching out.',
+      points: 30,
+      category: 'Support',
+    },
+    {
+      id: 'sadness-reset-walk',
+      title: '10-minute reset',
+      level: 'starter',
+      goal: 'Take a short walk or quiet reset break.',
+      reviewGoal: 'Review your mood before and after.',
+      points: 25,
+      category: 'Recovery',
+    },
+  ],
+  anger: [
+    {
+      id: 'anger-no-reply',
+      title: 'No heated reply',
+      level: 'starter',
+      goal: 'Wait before replying to anything that could escalate conflict.',
+      reviewGoal: 'Review whether waiting helped you respond better.',
+      points: 35,
+      category: 'Self-control',
+    },
+    {
+      id: 'anger-calm-plan',
+      title: 'Calm first plan',
+      level: 'starter',
+      goal: 'Step away, breathe, and write what happened without sending it.',
+      reviewGoal: 'Review what triggered the emotion.',
+      points: 35,
+      category: 'Safety',
+    },
+  ],
+  anxiety: [
+    {
+      id: 'anxiety-one-task',
+      title: 'One task only',
+      level: 'starter',
+      goal: 'Choose one small task and complete only that.',
+      reviewGoal: 'Review how much pressure reduced after completing it.',
+      points: 30,
+      category: 'Focus',
+    },
+    {
+      id: 'anxiety-grounding',
+      title: 'Grounding reset',
+      level: 'starter',
+      goal: 'Pause and name what you can see, hear, and feel around you.',
+      reviewGoal: 'Review whether your body felt calmer.',
+      points: 25,
+      category: 'Calm',
+    },
+  ],
+  motivated: [
+    {
+      id: 'motivated-deep-work',
+      title: '30-minute execution sprint',
+      level: 'growth',
+      goal: 'Work on your top goal for 30 minutes without distraction.',
+      reviewGoal: 'Review what moved forward and what blocked you.',
+      points: 70,
+      category: 'Growth',
+    },
+    {
+      id: 'motivated-public-progress',
+      title: 'Public progress post',
+      level: 'growth',
+      goal: 'Post one goal and one action you completed.',
+      reviewGoal: 'Review accountability and engagement.',
+      points: 60,
+      category: 'Accountability',
+    },
+  ],
+  tired: [
+    {
+      id: 'tired-light-task',
+      title: 'Light task challenge',
+      level: 'starter',
+      goal: 'Complete one easy task only.',
+      reviewGoal: 'Review whether you regained momentum.',
+      points: 25,
+      category: 'Recovery',
+    },
+    {
+      id: 'tired-recovery',
+      title: 'Recovery block',
+      level: 'starter',
+      goal: 'Take a short rest and avoid heavy decisions while drained.',
+      reviewGoal: 'Review what your body needed.',
+      points: 25,
+      category: 'Wellbeing',
+    },
+  ],
+  neutral: [
+    {
+      id: 'neutral-profile',
+      title: 'Profile strength review',
+      level: 'builder',
+      goal: 'Improve your bio, interests, or professional headline.',
+      reviewGoal: 'Review whether your profile better represents you.',
+      points: 40,
+      category: 'Profile',
+    },
+    {
+      id: 'neutral-connect',
+      title: 'Find one useful connection',
+      level: 'builder',
+      goal: 'Connect with one person who shares your interests.',
+      reviewGoal: 'Review whether the match supports your goals.',
+      points: 45,
+      category: 'Networking',
+    },
+  ],
+};
 
-  if (/(happy|great|love|excited|awesome|good|amazing|proud|win|blessed)/.test(t)) {
-    return FALLBACK_BY_MOOD.joy;
-  }
-
-  if (/(sad|down|tired of|bad|unhappy|hurt|lonely|cry|empty)/.test(t)) {
-    return FALLBACK_BY_MOOD.sadness;
-  }
-
-  if (/(angry|mad|annoyed|furious|irritated|hate|frustrated)/.test(t)) {
-    return FALLBACK_BY_MOOD.anger;
-  }
-
-  if (/(anxious|worried|nervous|stress|stressed|scared|overthinking|panic)/.test(t)) {
-    return FALLBACK_BY_MOOD.anxiety;
-  }
-
-  if (/(motivated|focused|ready|discipline|execute|build|goal|win big|hustle)/.test(t)) {
-    return FALLBACK_BY_MOOD.motivated;
-  }
-
-  if (/(tired|exhausted|burned out|sleepy|drained|low energy)/.test(t)) {
-    return FALLBACK_BY_MOOD.tired;
-  }
-
-  return FALLBACK_BY_MOOD.neutral;
-}
-
-function parseAiResult(raw: string, fallback: AiResult): AiResult {
+function safeJsonParse(raw: string, fallback: AiResult): AiResult {
   try {
-    const cleaned = raw
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim();
-
+    const cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
-    const mood = String(parsed?.mood || fallback.mood).toLowerCase() as Mood;
-
-    const allowed: Mood[] = [
+    const allowedMoods: Mood[] = [
       'joy',
       'sadness',
       'anger',
@@ -159,19 +361,109 @@ function parseAiResult(raw: string, fallback: AiResult): AiResult {
       'tired',
     ];
 
-    const finalMood = allowed.includes(mood) ? mood : fallback.mood;
+    const allowedRisks: RiskLevel[] = ['low', 'medium', 'high', 'urgent'];
+
+    const allowedLevels: ChallengeLevel[] = [
+      'starter',
+      'builder',
+      'growth',
+      'master',
+    ];
+
+    const mood = String(parsed?.mood || fallback.mood).toLowerCase() as Mood;
+    const riskLevel = String(
+      parsed?.riskLevel || fallback.riskLevel
+    ).toLowerCase() as RiskLevel;
+
+    const recommendedChallengeLevel = String(
+      parsed?.recommendedChallengeLevel || fallback.recommendedChallengeLevel
+    ).toLowerCase() as ChallengeLevel;
 
     return {
-      mood: finalMood,
-      confidence: Number(parsed?.confidence || fallback.confidence),
+      mood: allowedMoods.includes(mood) ? mood : fallback.mood,
+      riskLevel: allowedRisks.includes(riskLevel)
+        ? riskLevel
+        : fallback.riskLevel,
+      confidence: Math.min(
+        100,
+        Math.max(0, Number(parsed?.confidence || fallback.confidence))
+      ),
       summary: String(parsed?.summary || fallback.summary),
+      supportGuidance: String(
+        parsed?.supportGuidance || fallback.supportGuidance
+      ),
       suggestions: Array.isArray(parsed?.suggestions)
-        ? parsed.suggestions.slice(0, 3).map((item: unknown) => String(item))
+        ? parsed.suggestions.slice(0, 4).map((item: unknown) => String(item))
         : fallback.suggestions,
+      recommendedChallengeLevel: allowedLevels.includes(recommendedChallengeLevel)
+        ? recommendedChallengeLevel
+        : fallback.recommendedChallengeLevel,
     };
   } catch {
     return fallback;
   }
+}
+
+function detectMoodFallback(text: string): AiResult {
+  const t = text.toLowerCase();
+
+  if (
+    DANGEROUS_PATTERNS.some((pattern) => pattern.test(t)) ||
+    SELF_HARM_PATTERNS.some((pattern) => pattern.test(t))
+  ) {
+    return {
+      mood: 'anger',
+      riskLevel: 'urgent',
+      confidence: 98,
+      summary:
+        'FaceMeX detected intense distress or harmful language. This should not be treated as a normal mood check.',
+      supportGuidance:
+        'Pause immediately and create distance from the situation. Do not act while the emotion is high. Contact a trusted person, trusted adult, local emergency support, or someone nearby who can help keep everyone safe.',
+      suggestions: [
+        'Move away from the conflict or pressure point',
+        'Do not confront anyone while emotions are high',
+        'Contact someone you trust right now',
+        'Use emergency help if anyone may be in danger',
+      ],
+      recommendedChallengeLevel: 'starter',
+    };
+  }
+
+  if (/(sad|down|hurt|lonely|cry|empty|heartbroken|hopeless|broken)/.test(t)) {
+    return FALLBACK_BY_MOOD.sadness;
+  }
+
+  if (/(angry|mad|annoyed|furious|irritated|hate|frustrated|rage)/.test(t)) {
+    return FALLBACK_BY_MOOD.anger;
+  }
+
+  if (
+    /(anxious|worried|nervous|stress|stressed|scared|overthinking|panic|fear)/.test(
+      t
+    )
+  ) {
+    return FALLBACK_BY_MOOD.anxiety;
+  }
+
+  if (
+    /(motivated|focused|ready|discipline|execute|build|goal|success|business|growth|hustle)/.test(
+      t
+    )
+  ) {
+    return FALLBACK_BY_MOOD.motivated;
+  }
+
+  if (/(tired|exhausted|burned out|sleepy|drained|low energy)/.test(t)) {
+    return FALLBACK_BY_MOOD.tired;
+  }
+
+  if (
+    /(happy|great|love|excited|awesome|good|amazing|proud|win|blessed)/.test(t)
+  ) {
+    return FALLBACK_BY_MOOD.joy;
+  }
+
+  return FALLBACK_BY_MOOD.neutral;
 }
 
 function moodLabel(mood: Mood | null) {
@@ -185,14 +477,126 @@ function moodLabel(mood: Mood | null) {
   return 'Neutral';
 }
 
-function moodBadgeClass(mood: Mood | null) {
-  if (mood === 'joy') return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20';
-  if (mood === 'sadness') return 'bg-blue-500/10 text-blue-700 border-blue-500/20';
-  if (mood === 'anger') return 'bg-red-500/10 text-red-700 border-red-500/20';
-  if (mood === 'anxiety') return 'bg-amber-500/10 text-amber-700 border-amber-500/20';
-  if (mood === 'motivated') return 'bg-purple-500/10 text-purple-700 border-purple-500/20';
-  if (mood === 'tired') return 'bg-slate-500/10 text-slate-700 border-slate-500/20';
+function moodBadgeClass(mood: Mood | null, riskLevel?: RiskLevel) {
+  if (riskLevel === 'urgent' || riskLevel === 'high') {
+    return 'bg-red-500/10 text-red-700 border-red-500/30';
+  }
+
+  if (mood === 'joy') {
+    return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20';
+  }
+
+  if (mood === 'sadness') {
+    return 'bg-blue-500/10 text-blue-700 border-blue-500/20';
+  }
+
+  if (mood === 'anger') {
+    return 'bg-red-500/10 text-red-700 border-red-500/20';
+  }
+
+  if (mood === 'anxiety') {
+    return 'bg-amber-500/10 text-amber-700 border-amber-500/20';
+  }
+
+  if (mood === 'motivated') {
+    return 'bg-purple-500/10 text-purple-700 border-purple-500/20';
+  }
+
+  if (mood === 'tired') {
+    return 'bg-slate-500/10 text-slate-700 border-slate-500/20';
+  }
+
   return 'bg-muted text-muted-foreground border-border';
+}
+
+function riskLabel(level?: RiskLevel) {
+  if (level === 'urgent') return 'Urgent support';
+  if (level === 'high') return 'High support';
+  if (level === 'medium') return 'Support needed';
+  return 'Low risk';
+}
+
+function readJoinedChallenges(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(STORAGE_JOINED_CHALLENGES);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveJoinedChallenges(value: Record<string, boolean>) {
+  try {
+    localStorage.setItem(STORAGE_JOINED_CHALLENGES, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function normalizeList(values: unknown[]): string[] {
+  return values
+    .flatMap((item) => {
+      if (Array.isArray(item)) return item;
+      if (typeof item === 'object' && item !== null) return Object.values(item);
+      return item;
+    })
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function extractProfileTags(profile: any): string[] {
+  return normalizeList([
+    profile?.interests,
+    profile?.skills,
+    profile?.industry,
+    profile?.headline,
+    profile?.bio,
+    profile?.professional,
+    profile?.career_goals,
+    profile?.careerGoals,
+    profile?.category,
+  ]);
+}
+
+function scoreMatch(myTags: string[], otherTags: string[]) {
+  if (!myTags.length || !otherTags.length) return 0;
+
+  const mine = new Set(myTags);
+  let score = 0;
+
+  otherTags.forEach((tag) => {
+    if (mine.has(tag)) score += 14;
+
+    myTags.forEach((myTag) => {
+      if (tag.includes(myTag) || myTag.includes(tag)) score += 4;
+    });
+  });
+
+  return Math.min(99, score);
+}
+
+function chooseMatchType(tags: string[]): FriendMatch['matchType'] {
+  const text = tags.join(' ');
+
+  if (/(creator|design|music|video|art|fashion|content|photo|media)/.test(text)) {
+    return 'creative';
+  }
+
+  if (
+    /(career|job|skills|education|developer|engineering|data|technology|ai|industry|professional)/.test(
+      text
+    )
+  ) {
+    return 'professional';
+  }
+
+  return 'growth';
+}
+
+function matchTitle(type: FriendMatch['matchType']) {
+  if (type === 'creative') return 'Creative Builder';
+  if (type === 'professional') return 'Professional Network';
+  return 'Growth Partner';
 }
 
 export default function EmotionAIPage() {
@@ -201,10 +605,96 @@ export default function EmotionAIPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [showResources, setShowResources] = useState(false);
   const [usedFallback, setUsedFallback] = useState(false);
+  const [joinedChallenges, setJoinedChallenges] = useState<Record<string, boolean>>(
+    () => readJoinedChallenges()
+  );
+  const [realMatches, setRealMatches] = useState<FriendMatch[]>([]);
+
+  const auth = useAuthStore() as any;
+  const userStore = useUserStore() as any;
+
+  const currentUser = auth?.user || {};
+  const professional = userStore?.professional || {};
+
+  const profileInterests = useMemo(() => {
+    return normalizeList([
+      currentUser?.interests,
+      userStore?.interests,
+      professional?.skills,
+      professional?.industryInterests,
+      professional?.headline,
+      professional?.careerGoals,
+      professional?.experienceLevel,
+      currentUser?.bio,
+      currentUser?.location,
+    ]);
+  }, [currentUser, userStore, professional]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadRealMatches() {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .limit(40);
+
+        if (error || !Array.isArray(data)) return;
+
+        const currentId = currentUser?.id || userStore?.id || '';
+
+        const mapped: FriendMatch[] = data
+          .filter((profile: any) => profile?.id && profile.id !== currentId)
+          .map((profile: any) => {
+            const tags = extractProfileTags(profile);
+            const rawScore = scoreMatch(profileInterests, tags);
+            const matchType = chooseMatchType(tags);
+
+            const name =
+              profile?.full_name ||
+              profile?.name ||
+              profile?.username ||
+              profile?.email?.split('@')?.[0] ||
+              matchTitle(matchType);
+
+            return {
+              id: `match-${profile.id}`,
+              userId: profile.id,
+              name,
+              avatar: profile?.avatar_url || profile?.avatar || '',
+              compat: Math.max(60, rawScore || 60),
+              basis:
+                rawScore > 0
+                  ? `matches your ${matchType === 'growth' ? 'growth and business' : matchType === 'creative' ? 'creative and content' : 'professional and industry'} interests`
+                  : `can help expand your ${matchType === 'growth' ? 'growth' : matchType === 'creative' ? 'creative' : 'professional'} network`,
+              matchType,
+              tags: tags.slice(0, 3),
+            };
+          })
+          .sort((a, b) => b.compat - a.compat)
+          .slice(0, 6);
+
+        if (mounted) setRealMatches(mapped);
+      } catch {
+        // Keep fallback matching
+      }
+    }
+
+    loadRealMatches();
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser?.id, userStore?.id, profileInterests.join('|')]);
 
   const mood = result?.mood || null;
+  const riskLevel = result?.riskLevel || 'low';
 
-  const isLowMood =
+  const isSupportNeeded =
+    riskLevel === 'urgent' ||
+    riskLevel === 'high' ||
+    riskLevel === 'medium' ||
     mood === 'sadness' ||
     mood === 'anger' ||
     mood === 'anxiety' ||
@@ -214,29 +704,97 @@ export default function EmotionAIPage() {
     return result?.suggestions || FALLBACK_BY_MOOD.neutral.suggestions;
   }, [result]);
 
-  const friendMatches = useMemo(
-    () => [
+  const activeChallenges = useMemo(() => {
+    if (!mood) return CHALLENGES.neutral;
+    return CHALLENGES[mood] || CHALLENGES.neutral;
+  }, [mood]);
+
+  const friendMatches = useMemo<FriendMatch[]>(() => {
+    if (realMatches.length > 0) return realMatches;
+
+    const interestText = profileInterests.join(' ');
+
+    const businessScore = /(business|sales|entrepreneur|startup|logistics|finance|marketing|growth)/.test(
+      interestText
+    )
+      ? 97
+      : 86;
+
+    const creativeScore = /(creator|design|music|video|art|fashion|content|photography|media)/.test(
+      interestText
+    )
+      ? 96
+      : 84;
+
+    const professionalScore = /(developer|engineering|career|job|skills|education|data|technology|ai|professional)/.test(
+      interestText
+    )
+      ? 95
+      : 87;
+
+    return [
       {
-        id: 'u1',
+        id: 'growth-partner',
         name: 'Growth Partner',
-        compat: 92,
-        basis: 'similar execution mindset',
+        compat: businessScore,
+        basis:
+          businessScore >= 95
+            ? 'matches your business, growth, and execution interests'
+            : 'matches users who want accountability and personal growth',
+        matchType: 'growth',
+        tags: ['business', 'goals', 'accountability'],
       },
       {
-        id: 'u2',
+        id: 'creative-builder',
         name: 'Creative Builder',
-        compat: 88,
-        basis: 'matching content interests',
+        compat: creativeScore,
+        basis:
+          creativeScore >= 95
+            ? 'matches your creator, design, or content interests'
+            : 'matches users building creative projects and content',
+        matchType: 'creative',
+        tags: ['creator', 'content', 'collaboration'],
       },
       {
-        id: 'u3',
+        id: 'professional-network',
         name: 'Professional Network',
-        compat: 85,
-        basis: 'overlapping goals and activity',
+        compat: professionalScore,
+        basis:
+          professionalScore >= 95
+            ? 'matches your skills, career goals, or industry interests'
+            : 'matches users focused on careers, skills, and opportunities',
+        matchType: 'professional',
+        tags: ['career', 'skills', 'industry'],
       },
-    ],
-    []
-  );
+    ].sort((a, b) => b.compat - a.compat);
+  }, [realMatches, profileInterests]);
+
+  const getInternetSupportGuidance = async (
+    cleanText: string,
+    fallback: AiResult
+  ): Promise<Partial<AiResult> | null> => {
+    try {
+      const res = (await api.post('/api/emotion-support', {
+        text: cleanText,
+        mood: fallback.mood,
+        riskLevel: fallback.riskLevel,
+      })) as any;
+
+      if (!res || typeof res !== 'object') return null;
+
+      return {
+        supportGuidance:
+          typeof res.supportGuidance === 'string'
+            ? res.supportGuidance
+            : undefined,
+        suggestions: Array.isArray(res.suggestions)
+          ? res.suggestions.slice(0, 4).map((item: unknown) => String(item))
+          : undefined,
+      };
+    } catch {
+      return null;
+    }
+  };
 
   const detectFromText = async () => {
     const clean = text.trim();
@@ -254,36 +812,69 @@ export default function EmotionAIPage() {
 
     const fallback = detectMoodFallback(clean);
 
+    if (fallback.riskLevel === 'urgent') {
+      const webGuidance = await getInternetSupportGuidance(clean, fallback);
+
+      setResult({
+        ...fallback,
+        ...webGuidance,
+        suggestions: webGuidance?.suggestions || fallback.suggestions,
+      });
+
+      setShowResources(true);
+      setAnalyzing(false);
+      return;
+    }
+
     try {
       const prompt = `
-Analyze the emotion of this text for a social media wellbeing feature.
+You are the emotional intelligence system for FaceMeX.
 
-Return ONLY valid JSON.
-Do not include markdown.
-Do not give medical diagnosis.
-Do not mention any AI model.
-Do not include crisis instructions.
-Keep the tone supportive, short and practical.
+Analyze the emotional state of this user text carefully.
 
-Allowed mood values:
+VERY IMPORTANT:
+- Never classify harmful, violent, threatening, extreme anger, or self-harm language as neutral.
+- Detect anger, distress, anxiety, sadness, burnout, motivation, joy, and neutral tone.
+- Keep the response supportive and practical.
+- Do not give a diagnosis.
+- Do not mention any AI model.
+- Do not include markdown.
+- Return ONLY valid JSON.
+
+Allowed moods:
 joy, sadness, anger, anxiety, neutral, motivated, tired
+
+Risk levels:
+low, medium, high, urgent
+
+Challenge levels:
+starter, builder, growth, master
 
 JSON format:
 {
-  "mood": "neutral",
-  "confidence": 75,
-  "summary": "short user-friendly explanation",
-  "suggestions": ["short action 1", "short action 2", "short action 3"]
+  "mood": "anger",
+  "riskLevel": "high",
+  "confidence": 95,
+  "summary": "short explanation",
+  "supportGuidance": "helpful emotional support guidance",
+  "suggestions": ["short action 1", "short action 2", "short action 3", "short action 4"],
+  "recommendedChallengeLevel": "starter"
 }
 
-Text:
+User text:
 "${clean}"
 `;
 
       const raw = await deepseekReply(prompt);
-      const parsed = parseAiResult(raw, fallback);
+      const parsed = safeJsonParse(raw, fallback);
 
-      setResult(parsed);
+      const webGuidance = await getInternetSupportGuidance(clean, parsed);
+
+      setResult({
+        ...parsed,
+        ...webGuidance,
+        suggestions: webGuidance?.suggestions || parsed.suggestions,
+      });
     } catch {
       setResult(fallback);
       setUsedFallback(true);
@@ -291,7 +882,7 @@ Text:
       toast({
         title: 'Quick template used',
         description:
-          'Analysis was completed using a built-in template because smart analysis was not available.',
+          'Smart analysis was not available, so FaceMeX used a built-in support template.',
       });
     } finally {
       setAnalyzing(false);
@@ -305,43 +896,59 @@ Text:
     setShowResources(false);
   };
 
+  const joinChallenge = (challenge: EmotionChallenge) => {
+    const next = {
+      ...joinedChallenges,
+      [challenge.id]: !joinedChallenges[challenge.id],
+    };
+
+    setJoinedChallenges(next);
+    saveJoinedChallenges(next);
+
+    toast({
+      title: next[challenge.id] ? 'Challenge joined' : 'Challenge removed',
+      description: next[challenge.id]
+        ? `${challenge.title} added to your growth goals.`
+        : `${challenge.title} removed from your active goals.`,
+    });
+  };
+
   const resourcesBody = (
     <div className="space-y-3 text-xs sm:text-sm">
       <p className="text-muted-foreground">
-        These are short support tools for difficult moments. They are not medical
-        care and do not replace help from a trusted professional, trusted adult,
-        or emergency service.
+        These tools are for support and reflection. They do not replace help from
+        a trusted person, professional, trusted adult, or emergency service.
       </p>
 
       <div className="space-y-2">
         <div className="rounded-xl border bg-muted/30 p-3">
-          <div className="font-medium">Breathing reset</div>
+          <div className="font-medium">Immediate safety pause</div>
           <p className="mt-1 text-muted-foreground">
-            Sit comfortably, breathe in slowly, pause, then breathe out slowly.
-            Repeat a few times.
+            Move away from conflict, stop replying, and create physical and
+            emotional distance before doing anything else.
           </p>
         </div>
 
         <div className="rounded-xl border bg-muted/30 p-3">
-          <div className="font-medium">Grounding reset</div>
+          <div className="font-medium">Calm your body first</div>
           <p className="mt-1 text-muted-foreground">
-            Look around and name a few things you can see, hear, and feel around
-            you. This helps bring attention back to the present.
+            Slow your breathing, sit down if possible, and wait until the
+            strongest emotion drops before making decisions.
           </p>
         </div>
 
         <div className="rounded-xl border bg-muted/30 p-3">
-          <div className="font-medium">Talk to someone</div>
+          <div className="font-medium">Contact someone safe</div>
           <p className="mt-1 text-muted-foreground">
-            When it feels safe, message or call someone you trust and tell them
-            you need support.
+            Reach out to a trusted person nearby. If anyone may be in danger,
+            use local emergency support immediately.
           </p>
         </div>
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        If you feel in immediate danger, contact your local emergency services or
-        a trusted person near you right now.
+        FaceMeX keeps this private and uses it only to guide safer next steps and
+        better recommendations.
       </p>
     </div>
   );
@@ -359,13 +966,14 @@ Text:
                 </CardTitle>
 
                 <Badge variant="outline" className="rounded-full text-[10px]">
-                  Private preview
+                  Private
                 </Badge>
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Paste a message, caption, or journal note. FaceMeX will detect
-                the emotional tone and suggest safe next steps.
+                Paste a message, caption, or journal note. FaceMeX checks the
+                emotional tone, safety level, next steps, challenges, and better
+                matches.
               </p>
             </CardHeader>
 
@@ -374,14 +982,14 @@ Text:
                 placeholder="Type something you want to understand..."
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className="min-h-[130px] resize-none rounded-2xl"
+                className="min-h-[150px] resize-none rounded-2xl text-sm"
               />
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Button
                   onClick={detectFromText}
                   disabled={analyzing || !text.trim()}
-                  className="rounded-full"
+                  className="h-10 rounded-full px-5"
                 >
                   {analyzing ? (
                     <>
@@ -401,19 +1009,34 @@ Text:
                   variant="outline"
                   onClick={resetAnalysis}
                   disabled={analyzing && !text}
-                  className="rounded-full"
+                  className="h-10 rounded-full px-5"
                 >
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Reset
                 </Button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge
                     variant="outline"
-                    className={`rounded-full border ${moodBadgeClass(mood)}`}
+                    className={`rounded-full border ${moodBadgeClass(
+                      mood,
+                      riskLevel
+                    )}`}
                   >
                     Mood: {moodLabel(mood)}
                   </Badge>
+
+                  {result?.riskLevel ? (
+                    <Badge
+                      variant="outline"
+                      className={`rounded-full border ${moodBadgeClass(
+                        mood,
+                        result.riskLevel
+                      )}`}
+                    >
+                      {riskLabel(result.riskLevel)}
+                    </Badge>
+                  ) : null}
 
                   {result?.confidence ? (
                     <Badge variant="secondary" className="rounded-full">
@@ -425,12 +1048,24 @@ Text:
 
               {usedFallback && (
                 <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
-                  Smart analysis was slow, so FaceMeX used a quick built-in
-                  template to save time.
+                  FaceMeX used a quick support template because smart analysis
+                  was not available.
                 </div>
               )}
 
-              {result && (
+              {result?.riskLevel === 'urgent' && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
+                  <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-red-700">
+                    <AlertTriangle className="h-4 w-4" />
+                    Urgent support recommended
+                  </div>
+                  <p className="text-sm leading-relaxed text-red-800">
+                    {result.supportGuidance}
+                  </p>
+                </div>
+              )}
+
+              {result && result.riskLevel !== 'urgent' && (
                 <div className="rounded-2xl border bg-muted/30 p-3">
                   <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Summary
@@ -441,15 +1076,25 @@ Text:
                 </div>
               )}
 
+              {result?.riskLevel !== 'urgent' && result?.supportGuidance && (
+                <div className="rounded-2xl border bg-card p-3">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Guidance
+                  </div>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {result.supportGuidance}
+                  </p>
+                </div>
+              )}
+
               <div className="rounded-2xl border bg-muted/20 p-3 text-xs text-muted-foreground">
-                Video emotion analysis can be connected later through uploaded
-                clips or camera-based signals. For launch, text analysis is safer,
-                faster, and easier to control.
+                Emotion AI is private. It should guide reflection,
+                recommendations, safe actions, challenges, and better matching.
               </div>
             </CardContent>
           </Card>
 
-          {isLowMood && (
+          {isSupportNeeded && (
             <Card className="rounded-2xl border border-amber-300/70 bg-amber-50/60 shadow-sm dark:bg-amber-950/10">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -460,8 +1105,7 @@ Text:
 
               <CardContent className="space-y-3 text-xs sm:text-sm">
                 <p className="text-muted-foreground">
-                  This message may describe a difficult moment. You can open
-                  short supportive tools if that helps.
+                  FaceMeX detected that support may be useful right now.
                 </p>
 
                 <Button
@@ -478,7 +1122,10 @@ Text:
 
           <Card className="rounded-2xl border border-border/70 shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Emotion-based Recommendations</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Target className="h-4 w-4 text-primary" />
+                Emotion-based Recommendations
+              </CardTitle>
             </CardHeader>
 
             <CardContent className="space-y-2">
@@ -492,30 +1139,134 @@ Text:
               ))}
             </CardContent>
           </Card>
+
+          <Card className="rounded-2xl border border-border/70 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Trophy className="h-4 w-4 text-primary" />
+                Emotion Challenges
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-2">
+              {activeChallenges.map((challenge) => {
+                const joined = !!joinedChallenges[challenge.id];
+
+                return (
+                  <div
+                    key={challenge.id}
+                    className="rounded-2xl border bg-card p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-medium text-sm">
+                            {challenge.title}
+                          </div>
+                          <Badge variant="secondary" className="rounded-full">
+                            {challenge.level}
+                          </Badge>
+                          <Badge variant="outline" className="rounded-full">
+                            {challenge.points} pts
+                          </Badge>
+                        </div>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Goal: {challenge.goal}
+                        </p>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Review: {challenge.reviewGoal}
+                        </p>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        variant={joined ? 'secondary' : 'default'}
+                        className="shrink-0 rounded-full"
+                        onClick={() => joinChallenge(challenge)}
+                      >
+                        {joined ? (
+                          <>
+                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                            Joined
+                          </>
+                        ) : (
+                          'Join'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-4">
           <Card className="rounded-2xl border border-border/70 shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Friend Matching</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-4 w-4 text-primary" />
+                Friend Matching
+              </CardTitle>
             </CardHeader>
 
             <CardContent className="space-y-2">
-              {friendMatches.map((friend) => (
-                <div
-                  key={friend.id}
-                  className="flex items-center justify-between rounded-2xl border bg-card p-3"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{friend.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {friend.basis}
+              {friendMatches.map((friend) => {
+                const Icon =
+                  friend.matchType === 'creative'
+                    ? Palette
+                    : friend.matchType === 'professional'
+                      ? Briefcase
+                      : Handshake;
+
+                return (
+                  <div
+                    key={friend.id}
+                    className="rounded-2xl border bg-card p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted overflow-hidden">
+                          {friend.avatar ? (
+                            <img
+                              src={friend.avatar}
+                              alt={friend.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Icon className="h-4 w-4 text-primary" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {friend.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {friend.basis}
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {friend.tags.map((tag) => (
+                              <Badge
+                                key={tag}
+                                variant="outline"
+                                className="rounded-full text-[10px]"
+                              >
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Badge className="rounded-full">{friend.compat}%</Badge>
                     </div>
                   </div>
-
-                  <Badge className="rounded-full">{friend.compat}%</Badge>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -529,14 +1280,19 @@ Text:
 
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">
-                This feature should guide content recommendations, reflection,
-                and safer conversations. It should not label users permanently or
-                make serious decisions about them.
+                Emotion AI should guide support, safer recommendations,
+                challenges, and better matching. It must not shame users, expose
+                private emotion labels, or make serious decisions about them.
               </p>
 
               <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-                Safe prediction categories: mood tone, content interest,
-                community fit, and helpful next actions.
+                Safe prediction categories: mood tone, risk level, helpful next
+                step, challenge level, interest matching, and support guidance.
+              </div>
+
+              <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                Private by default. Do not show a user’s emotional signal
+                publicly unless they choose to share it.
               </div>
 
               <Button
@@ -557,17 +1313,17 @@ Text:
 
             <CardContent className="space-y-2 text-xs text-muted-foreground">
               <div className="rounded-xl border bg-card p-3">
-                Do not use emotional signals for discrimination, shame, or
-                manipulation.
+                Never classify violent or harmful messages as neutral.
               </div>
 
               <div className="rounded-xl border bg-card p-3">
-                Do not show sensitive labels publicly. Keep analysis private to
-                the user.
+                Do not use emotion signals for discrimination, manipulation, or
+                public ranking.
               </div>
 
               <div className="rounded-xl border bg-card p-3">
-                Use results for better recommendations, not for judging the user.
+                Use emotion signals to support the user, recommend healthier
+                actions, and improve discovery.
               </div>
             </CardContent>
           </Card>
