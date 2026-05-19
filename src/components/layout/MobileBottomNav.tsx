@@ -1,5 +1,14 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Briefcase, Bell, UsersRound, UserPlus, MessagesSquare, Sparkles } from 'lucide-react';
+import {
+  Home,
+  Users,
+  Briefcase,
+  Bell,
+  UsersRound,
+  UserPlus,
+  MessagesSquare,
+  Sparkles,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -18,7 +27,34 @@ const items = [
 
 function isActivePath(to: string, pathname: string) {
   if (to === '/groups/pro') return pathname.startsWith('/groups/pro');
-  return pathname === to;
+  if (to === '/feed') return pathname === '/feed';
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function scrollFeedToTopInstant() {
+  try {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+
+    const possibleFeedContainers = [
+      document.querySelector('[data-feed-scroll]'),
+      document.querySelector('#feed-scroll'),
+      document.querySelector('#feed'),
+      document.querySelector('main'),
+    ].filter(Boolean) as HTMLElement[];
+
+    possibleFeedContainers.forEach((el) => {
+      try {
+        el.scrollTop = 0;
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
 }
 
 export default function MobileBottomNav() {
@@ -44,6 +80,7 @@ export default function MobileBottomNav() {
   const onTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
     const t = e.touches?.[0];
     if (!t) return;
+
     touchStartRef.current = { x: t.clientX, y: t.clientY };
     touchDeltaRef.current = { dx: 0, dy: 0 };
     scrollStartRef.current = scrollRef.current?.scrollLeft || 0;
@@ -52,46 +89,95 @@ export default function MobileBottomNav() {
   const onTouchMove: React.TouchEventHandler<HTMLDivElement> = (e) => {
     const start = touchStartRef.current;
     const t = e.touches?.[0];
+
     if (!start || !t) return;
-    touchDeltaRef.current = { dx: t.clientX - start.x, dy: t.clientY - start.y };
+
+    touchDeltaRef.current = {
+      dx: t.clientX - start.x,
+      dy: t.clientY - start.y,
+    };
   };
 
   const onTouchEnd: React.TouchEventHandler<HTMLDivElement> = () => {
     const d = touchDeltaRef.current;
+
     touchStartRef.current = null;
     touchDeltaRef.current = null;
+
     if (!d) return;
 
-    // If the user actually scrolled the nav, do NOT treat it as a swipe-to-navigate.
-    const scrolledBy = Math.abs((scrollRef.current?.scrollLeft || 0) - scrollStartRef.current);
+    const scrolledBy = Math.abs(
+      (scrollRef.current?.scrollLeft || 0) - scrollStartRef.current
+    );
+
     if (scrolledBy > 8) return;
 
     const dx = d.dx;
     const dy = d.dy;
+
     if (Math.abs(dx) < 40) return;
     if (Math.abs(dx) < Math.abs(dy)) return;
 
     const nextIndex = dx < 0 ? activeIndex + 1 : activeIndex - 1;
     const clamped = Math.max(0, Math.min(items.length - 1, nextIndex));
     const to = items[clamped]?.to;
-    if (to && clamped !== activeIndex) navigate(to);
+
+    if (!to || clamped === activeIndex) return;
+
+    if (to === '/feed') {
+      navigate('/feed');
+      window.setTimeout(scrollFeedToTopInstant, 0);
+      window.setTimeout(scrollFeedToTopInstant, 80);
+      return;
+    }
+
+    navigate(to);
+  };
+
+  const handleNavClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    to: string
+  ) => {
+    if (to !== '/feed') return;
+
+    e.preventDefault();
+    setVisible(true);
+
+    if (location.pathname === '/feed') {
+      scrollFeedToTopInstant();
+      return;
+    }
+
+    navigate('/feed');
+
+    window.setTimeout(scrollFeedToTopInstant, 0);
+    window.setTimeout(scrollFeedToTopInstant, 80);
+    window.setTimeout(scrollFeedToTopInstant, 200);
   };
 
   useEffect(() => {
     const key = 'faceme_mobile_bottom_nav_scroll_left_v1';
     const el = scrollRef.current;
+
     if (!el) return;
+
     try {
       const raw = sessionStorage.getItem(key);
       if (raw) el.scrollLeft = Number(raw) || 0;
-    } catch {}
+    } catch {
+      // ignore
+    }
 
     const onScroll = () => {
       try {
         sessionStorage.setItem(key, String(el.scrollLeft || 0));
-      } catch {}
+      } catch {
+        // ignore
+      }
     };
+
     el.addEventListener('scroll', onScroll, { passive: true });
+
     return () => {
       el.removeEventListener('scroll', onScroll);
     };
@@ -107,6 +193,7 @@ export default function MobileBottomNav() {
 
     const onScroll = () => {
       if (tickingRef.current) return;
+
       tickingRef.current = true;
 
       window.requestAnimationFrame(() => {
@@ -128,6 +215,7 @@ export default function MobileBottomNav() {
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
+
     return () => {
       window.removeEventListener('scroll', onScroll);
     };
@@ -140,11 +228,11 @@ export default function MobileBottomNav() {
         visible ? 'translate-y-0' : 'translate-y-[110%]'
       )}
     >
-      <div className="mx-auto max-w-5xl px-2 pb-2">
+      <div className="mx-auto max-w-5xl px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
         <div className="relative rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-background/95 backdrop-blur-xl shadow-lg">
           <div
             ref={scrollRef}
-            className="flex gap-1 overflow-x-auto whitespace-nowrap scroll-smooth no-scrollbar px-1"
+            className="flex gap-1 overflow-x-auto whitespace-nowrap scroll-smooth no-scrollbar px-1.5 py-1"
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
@@ -157,30 +245,50 @@ export default function MobileBottomNav() {
                 <Link
                   key={to}
                   to={to}
+                  onClick={(e) => handleNavClick(e, to)}
+                  aria-label={label}
                   className={cn(
-                    'relative flex flex-col items-center justify-center py-1.5 text-[9px] transition-colors flex-none w-[64px]',
+                    'relative flex flex-col items-center justify-center py-2 text-[9px] transition-all duration-150 flex-none w-[66px] rounded-2xl active:scale-95',
                     active
                       ? 'text-slate-900 dark:text-slate-50'
-                      : 'text-slate-500 dark:text-slate-400'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-50'
                   )}
                 >
                   {active && (
                     <motion.div
                       layoutId="mobile-bottom-nav-active"
-                      className="absolute inset-x-1 top-1.5 bottom-1.5 rounded-xl bg-slate-100 dark:bg-slate-900"
-                      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                      className="absolute inset-x-1 top-1 bottom-1 rounded-2xl bg-slate-100 dark:bg-slate-900"
+                      transition={{
+                        type: 'spring',
+                        stiffness: 500,
+                        damping: 40,
+                      }}
                     />
                   )}
 
                   <div className="relative z-10">
-                    <Icon className={cn('h-5 w-5 mb-0.5', active ? 'text-slate-900 dark:text-slate-50' : '')} />
+                    <Icon
+                      className={cn(
+                        'h-5 w-5 mb-0.5 transition-transform duration-150',
+                        active
+                          ? 'text-slate-900 dark:text-slate-50 scale-105'
+                          : ''
+                      )}
+                    />
+
                     {showBadge && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center">
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center shadow-sm">
                         {unreadCount > 99 ? '99+' : unreadCount}
                       </span>
                     )}
                   </div>
-                  <span className={cn('relative z-10 font-medium', active ? 'text-slate-900 dark:text-slate-50' : '')}>
+
+                  <span
+                    className={cn(
+                      'relative z-10 font-medium tracking-tight',
+                      active ? 'text-slate-900 dark:text-slate-50' : ''
+                    )}
+                  >
                     {label}
                   </span>
                 </Link>
