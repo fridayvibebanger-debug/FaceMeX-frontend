@@ -1,13 +1,5 @@
 import { useEffect } from 'react';
-import {
-  Home,
-  User,
-  MessageCircle,
-  Settings,
-  Users,
-  Briefcase,
-  Sparkles,
-} from 'lucide-react';
+import { Home, Users, Briefcase, Bell, UsersRound, UserPlus, MessagesSquare, Sparkles } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { cn } from '@/lib/utils';
