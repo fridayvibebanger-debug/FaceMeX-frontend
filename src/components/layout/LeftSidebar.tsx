@@ -27,6 +27,7 @@ const menuItems = [
   { icon: Briefcase, label: 'Jobs', path: '/jobs' },
 
   { icon: Sparkles, label: 'Emotion AI', path: '/emotion' },
+
   { icon: Briefcase, label: 'AI CV Builder', path: '/ai/resume' },
   { icon: Briefcase, label: 'AI Cover Letter', path: '/ai/cover-letter' },
   { icon: Briefcase, label: 'AI Job Assistant', path: '/ai/job-assistant' },
