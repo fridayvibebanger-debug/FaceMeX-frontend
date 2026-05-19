@@ -709,66 +709,71 @@ export default function EmotionAIPage() {
     return CHALLENGES[mood] || CHALLENGES.neutral;
   }, [mood]);
 
-  const friendMatches = useMemo<FriendMatch[]>(() => {
-    if (realMatches.length > 0) return realMatches;
+ const friendMatches = useMemo<FriendMatch[]>(() => {
+  if (realMatches.length > 0) return realMatches;
 
-    const interestText = profileInterests.join(' ');
+  const interestText = profileInterests.join(' ');
 
-    const businessScore = /(business|sales|entrepreneur|startup|logistics|finance|marketing|growth)/.test(
+  const businessScore =
+    /(business|sales|entrepreneur|startup|logistics|finance|marketing|growth)/.test(
       interestText
     )
       ? 97
       : 86;
 
-    const creativeScore = /(creator|design|music|video|art|fashion|content|photography|media)/.test(
+  const creativeScore =
+    /(creator|design|music|video|art|fashion|content|photography|media)/.test(
       interestText
     )
       ? 96
       : 84;
 
-    const professionalScore = /(developer|engineering|career|job|skills|education|data|technology|ai|professional)/.test(
+  const professionalScore =
+    /(developer|engineering|career|job|skills|education|data|technology|ai|professional)/.test(
       interestText
     )
       ? 95
       : 87;
 
-    return [
-      {
-        id: 'growth-partner',
-        name: 'Growth Partner',
-        compat: businessScore,
-        basis:
-          businessScore >= 95
-            ? 'matches your business, growth, and execution interests'
-            : 'matches users who want accountability and personal growth',
-        matchType: 'growth',
-        tags: ['business', 'goals', 'accountability'],
-      },
-      {
-        id: 'creative-builder',
-        name: 'Creative Builder',
-        compat: creativeScore,
-        basis:
-          creativeScore >= 95
-            ? 'matches your creator, design, or content interests'
-            : 'matches users building creative projects and content',
-        matchType: 'creative',
-        tags: ['creator', 'content', 'collaboration'],
-      },
-      {
-        id: 'professional-network',
-        name: 'Professional Network',
-        compat: professionalScore,
-        basis:
-          professionalScore >= 95
-            ? 'matches your skills, career goals, or industry interests'
-            : 'matches users focused on careers, skills, and opportunities',
-        matchType: 'professional',
-        tags: ['career', 'skills', 'industry'],
-      },
-    ].sort((a, b) => b.compat - a.compat);
-  }, [realMatches, profileInterests]);
+  const fallbackMatches: FriendMatch[] = [
+    {
+      id: 'growth-partner',
+      name: 'Growth Partner',
+      compat: businessScore,
+      basis:
+        businessScore >= 95
+          ? 'matches your business, growth, and execution interests'
+          : 'matches users who want accountability and personal growth',
+      matchType: 'growth',
+      tags: ['business', 'goals', 'accountability'],
+    },
+    {
+      id: 'creative-builder',
+      name: 'Creative Builder',
+      compat: creativeScore,
+      basis:
+        creativeScore >= 95
+          ? 'matches your creator, design, or content interests'
+          : 'matches users building creative projects and content',
+      matchType: 'creative',
+      tags: ['creator', 'content', 'collaboration'],
+    },
+    {
+      id: 'professional-network',
+      name: 'Professional Network',
+      compat: professionalScore,
+      basis:
+        professionalScore >= 95
+          ? 'matches your skills, career goals, or industry interests'
+          : 'matches users focused on careers, skills, and opportunities',
+      matchType: 'professional',
+      tags: ['career', 'skills', 'industry'],
+    },
+  ];
 
+  return fallbackMatches.sort((a, b) => b.compat - a.compat);
+}, [realMatches, profileInterests]);
+  
   const getInternetSupportGuidance = async (
     cleanText: string,
     fallback: AiResult
