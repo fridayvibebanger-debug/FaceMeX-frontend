@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Briefcase, Bell, UsersRound, UserPlus, MessagesSquare } from 'lucide-react';
+import { Home, Users, Briefcase, Bell, UsersRound, UserPlus, MessagesSquare, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -12,6 +12,7 @@ const items = [
   { to: '/messages', label: 'Messages', Icon: MessagesSquare },
   { to: '/notifications', label: 'Alerts', Icon: Bell },
   { to: '/jobs', label: 'Jobs', Icon: Briefcase },
+  { to: '/emotion', label: 'Emotion', Icon: Sparkles },
   { to: '/groups/pro', label: 'Groups', Icon: UsersRound },
 ];
 
