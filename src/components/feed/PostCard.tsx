@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import {
   Send,
   CheckCircle,
-  Mic,
   Heart,
   Bookmark,
   MoreHorizontal,
@@ -90,8 +89,7 @@ export default function PostCard({ post }: PostCardProps) {
   const hasInvite = !!myId && collabInvites.includes(myId);
   const canEdit = isOwner || isCollaborator;
 
- const displayName = post.userName || 'FaceMeX Member';
-
+  const displayName = post.userName || 'FaceMeX Member';
   const displayAvatar = post.userAvatar || '';
 
   const isAuthorVerified =
@@ -130,10 +128,7 @@ export default function PostCard({ post }: PostCardProps) {
   const getVoiceCommentDailyLimit = () => {
     const t = String((tier || user?.tier || '')).toLowerCase();
 
-    if (t.startsWith('creator') || t.startsWith('business') || t.startsWith('exclusive')) {
-      return Infinity;
-    }
-
+    if (t.startsWith('creator') || t.startsWith('business') || t.startsWith('exclusive')) return Infinity;
     if (t.startsWith('pro')) return 20;
 
     return 5;
@@ -141,11 +136,9 @@ export default function PostCard({ post }: PostCardProps) {
 
   const getVoiceCommentUsageKey = () => {
     const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-
-    return `faceme:voice_comment_count:${yyyy}${mm}${dd}`;
+    return `faceme:voice_comment_count:${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(
+      d.getDate()
+    ).padStart(2, '0')}`;
   };
 
   const getVoiceCommentCountToday = () => {
@@ -161,8 +154,7 @@ export default function PostCard({ post }: PostCardProps) {
   const incrementVoiceCommentCountToday = () => {
     try {
       const key = getVoiceCommentUsageKey();
-      const current = getVoiceCommentCountToday();
-      localStorage.setItem(key, String(current + 1));
+      localStorage.setItem(key, String(getVoiceCommentCountToday() + 1));
     } catch {}
   };
 
@@ -182,12 +174,7 @@ export default function PostCard({ post }: PostCardProps) {
   const uploadVoiceComment = async (blob: Blob) => {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-
-      reader.onloadend = () => {
-        const base64Audio = reader.result as string;
-        resolve(base64Audio);
-      };
-
+      reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = () => reject(new Error('Voice upload failed'));
       reader.readAsDataURL(blob);
     });
@@ -202,14 +189,10 @@ export default function PostCard({ post }: PostCardProps) {
 
       recorder.onstop = async () => {
         try {
-          const audioBlob = new Blob(audioChunksRef.current, {
-            type: 'audio/webm',
-          });
-
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           audioChunksRef.current = [];
 
           const voiceUrl = await uploadVoiceComment(audioBlob);
-
           await addVoiceComment(post.id, voiceUrl);
 
           incrementVoiceCommentCountToday();
@@ -248,7 +231,6 @@ export default function PostCard({ post }: PostCardProps) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
       audioStreamRef.current = stream;
 
       const recorder = new MediaRecorder(stream);
@@ -262,21 +244,15 @@ export default function PostCard({ post }: PostCardProps) {
       clearRecordTimer();
 
       recordIntervalRef.current = window.setInterval(() => {
-  setRecordSeconds((prev) => {
-    const next = prev + 1;
-
-    if (next >= limitSeconds) {
-      stopVoiceRecording();
-    }
-
-    return next;
-  });
-}, 1000);
+        setRecordSeconds((prev) => {
+          const next = prev + 1;
+          if (next >= limitSeconds) stopVoiceRecording();
+          return next;
+        });
+      }, 1000);
 
       recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
       };
 
       recorder.start();
@@ -292,13 +268,6 @@ export default function PostCard({ post }: PostCardProps) {
     setLightboxOpen(true);
   };
 
-  const openCommentsAndFocus = () => {
-    setShowComments(true);
-    window.setTimeout(() => {
-      replyInputRef.current?.focus();
-    }, 0);
-  };
-
   const toggleSaved = () => {
     setSaved((prev) => {
       const next = !prev;
@@ -307,9 +276,7 @@ export default function PostCard({ post }: PostCardProps) {
         const raw = localStorage.getItem('faceme_saved_posts_v1');
         const ids = raw ? (JSON.parse(raw) as string[]) : [];
         const safe = Array.isArray(ids) ? ids : [];
-        const updated = next
-          ? Array.from(new Set([...safe, post.id]))
-          : safe.filter((id) => id !== post.id);
+        const updated = next ? Array.from(new Set([...safe, post.id])) : safe.filter((id) => id !== post.id);
 
         localStorage.setItem('faceme_saved_posts_v1', JSON.stringify(updated));
       } catch {}
@@ -319,25 +286,22 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const handleShare = async () => {
-  try {
-    const url = `${window.location.origin}/post/${post.id}`;
-    const navAny =
-      typeof navigator !== 'undefined' ? (navigator as any) : null;
+    try {
+      const url = `${window.location.origin}/post/${post.id}`;
+      const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
 
-    if (navAny && typeof navAny.share === 'function') {
-      await navAny.share({
-        title: 'FaceMeX',
-        url,
-      });
-    } else if (navAny?.clipboard?.writeText) {
-      await navAny.clipboard.writeText(url);
+      if (navAny && typeof navAny.share === 'function') {
+        await navAny.share({ title: 'FaceMeX', url });
+      } else if (navAny?.clipboard?.writeText) {
+        await navAny.clipboard.writeText(url);
+      }
+    } catch (error) {
+      console.log(error);
     }
-  } catch (error) {
-    console.log(error);
-  }
 
-  sharePost(post.id);
-};
+    sharePost(post.id);
+  };
+
   const startEditPost = () => {
     if (!canEdit) return;
     setPostDraft(post.content);
@@ -346,7 +310,6 @@ export default function PostCard({ post }: PostCardProps) {
 
   const saveEditPost = async () => {
     const next = postDraft.trim();
-
     if (!next || !canEdit) return;
 
     await editPost(post.id, next);
@@ -357,7 +320,6 @@ export default function PostCard({ post }: PostCardProps) {
     if (!isOwner) return;
 
     const ok = window.confirm('Delete this post?');
-
     if (!ok) return;
 
     await deletePost(post.id);
@@ -385,7 +347,6 @@ export default function PostCard({ post }: PostCardProps) {
 
   const handleDeleteComment = async (commentId: string) => {
     const ok = window.confirm('Delete this comment?');
-
     if (!ok) return;
 
     await deleteComment(post.id, commentId);
@@ -408,9 +369,9 @@ export default function PostCard({ post }: PostCardProps) {
 
   const reactionClass = (() => {
     if (!post.isLiked) return '';
-
     switch (reactionType) {
       case 'love':
+      case 'angry':
         return 'text-destructive';
       case 'like':
       case 'haha':
@@ -418,41 +379,38 @@ export default function PostCard({ post }: PostCardProps) {
         return 'text-primary';
       case 'sad':
         return 'text-muted-foreground';
-      case 'angry':
-        return 'text-destructive';
       default:
         return 'text-primary';
     }
   })();
 
   const imgs =
-    Array.isArray(post.images) && post.images.length > 0
-      ? post.images
-      : post.image
-      ? [post.image]
-      : [];
+    Array.isArray(post.images) && post.images.length > 0 ? post.images : post.image ? [post.image] : [];
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      className="mx-auto w-full max-w-[760px] px-0 sm:px-2 lg:px-0"
+      initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      transition={{ duration: 0.25 }}
     >
-      <Card className="mb-4 overflow-hidden rounded-2xl border bg-card">
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3 px-4 pt-4">
+      <Card className="mb-6 w-full overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.08)]">
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 px-5 pb-3 pt-5 sm:px-7 sm:pt-7">
           <button
             type="button"
-            className="flex items-center space-x-3 text-left"
+            className="flex items-center gap-4 text-left"
             onClick={() => navigate(`/profile/${post.userId}`)}
           >
             <div className="relative">
-              <Avatar>
+              <Avatar className="h-16 w-16 bg-slate-100 text-xl sm:h-20 sm:w-20">
                 <AvatarImage src={displayAvatar} alt={displayName} />
-                <AvatarFallback>{displayName ? displayName.charAt(0) : 'U'}</AvatarFallback>
+                <AvatarFallback className="bg-slate-100 text-slate-900">
+                  {displayName ? displayName.charAt(0) : 'U'}
+                </AvatarFallback>
               </Avatar>
 
               {isAuthorVerified && (
-                <span className="absolute -bottom-1 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-background ring-1 ring-border">
+                <span className="absolute -bottom-1 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white ring-1 ring-slate-200">
                   <CheckCircle className="h-3 w-3 text-primary" />
                 </span>
               )}
@@ -460,18 +418,14 @@ export default function PostCard({ post }: PostCardProps) {
 
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-semibold text-sm md:text-base hover:underline">
+                <p className="text-[20px] font-bold leading-tight text-slate-950 sm:text-[22px] hover:underline">
                   {displayName}
                 </p>
 
-                {isAuthorVerified && (
-                  <span className="text-[11px] text-muted-foreground">
-                    Verified
-                  </span>
-                )}
+                {isAuthorVerified && <span className="text-[11px] text-slate-500">Verified</span>}
               </div>
 
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-1 text-[15px] text-slate-500 sm:text-base">
                 {formatDistanceToNow(post.timestamp, { addSuffix: true })}
               </p>
             </div>
@@ -479,8 +433,8 @@ export default function PostCard({ post }: PostCardProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                <MoreHorizontal className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full text-slate-500 hover:text-slate-900">
+                <MoreHorizontal className="h-6 w-6" />
               </Button>
             </DropdownMenuTrigger>
 
@@ -495,9 +449,7 @@ export default function PostCard({ post }: PostCardProps) {
               {hasInvite && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => acceptCollabInvite(post.id)}>
-                    Accept invite
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => acceptCollabInvite(post.id)}>Accept invite</DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => rejectCollabInvite(post.id)}
                     className="text-destructive focus:text-destructive"
@@ -510,9 +462,7 @@ export default function PostCard({ post }: PostCardProps) {
               {isOwner && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleInviteCollaborator}>
-                    Invite collaborator
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleInviteCollaborator}>Invite collaborator</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleDeletePost} className="text-destructive focus:text-destructive">
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -524,11 +474,11 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="space-y-3 px-4 pb-4">
+        <CardContent className="space-y-5 px-5 pb-5 sm:px-7 sm:pb-7">
           {editingPost ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <textarea
-                className="w-full min-h-[92px] rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm outline-none"
+                className="min-h-[110px] w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none focus:border-slate-300"
                 value={postDraft}
                 onChange={(e) => setPostDraft(e.target.value)}
               />
@@ -543,17 +493,17 @@ export default function PostCard({ post }: PostCardProps) {
               </div>
             </div>
           ) : (
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+            <p className="whitespace-pre-wrap text-[19px] leading-relaxed text-slate-950 sm:text-[20px]">
               {post.content.replace(/\[CREATOR_CONTENT\]/g, '')}
             </p>
           )}
 
           {post.hashtags && (
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {post.hashtags.map((tag, index) => (
                 <span
                   key={index}
-                  className="text-xs text-primary hover:underline cursor-pointer"
+                  className="cursor-pointer text-sm text-primary hover:underline"
                   onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
                   {tag.startsWith('#') ? tag : `#${tag}`}
@@ -561,29 +511,29 @@ export default function PostCard({ post }: PostCardProps) {
               ))}
             </div>
           )}
-          
+
           {imgs.length === 1 && (
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
-               <img
-                 src={imgs[0]}
-                 alt="Post image"
-                 className="w-full max-h-[650px] object-cover cursor-pointer rounded-3xl"
-                 onClick={() => openLightbox(imgs[0])}
+            <div className="relative overflow-hidden rounded-[26px] border border-slate-100 bg-black">
+              <img
+                src={imgs[0]}
+                alt="Post image"
+                className="max-h-[720px] w-full cursor-pointer rounded-[26px] object-cover"
+                onClick={() => openLightbox(imgs[0])}
               />
             </div>
           )}
 
           {imgs.length > 1 && (
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/20 shadow-2xl">
+            <div className="relative overflow-hidden rounded-[26px] border border-slate-100 bg-black/20 shadow-xl">
               <Carousel opts={{ loop: false }} setApi={(api) => setCarouselApi(api)}>
                 <CarouselContent>
                   {imgs.slice(0, 5).map((src, idx) => (
                     <CarouselItem key={`${post.id}-img-${idx}`} className="basis-full">
-                      <div className="relative w-full aspect-[4/5] bg-black">
+                      <div className="relative aspect-[4/5] w-full bg-black">
                         <img
                           src={src}
                           alt={`Post image ${idx + 1}`}
-                          className="absolute inset-0 h-full w-full object-cover cursor-pointer"
+                          className="absolute inset-0 h-full w-full cursor-pointer object-cover"
                           loading="lazy"
                           onClick={() => openLightbox(src)}
                         />
@@ -602,26 +552,22 @@ export default function PostCard({ post }: PostCardProps) {
               if (!open) setLightboxSrc(null);
             }}
           >
-            <DialogContent className="max-w-[96vw] w-[96vw] h-[92vh] p-0 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur border border-border/60">
-              <div className="h-full w-full flex items-center justify-center">
+            <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] border border-border/60 bg-background/95 p-0 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+              <div className="flex h-full w-full items-center justify-center">
                 {lightboxSrc && (
-                  <img
-                    src={lightboxSrc}
-                    alt="Full image"
-                    className="max-h-[92vh] max-w-[96vw] object-contain"
-                  />
+                  <img src={lightboxSrc} alt="Full image" className="max-h-[92vh] max-w-[96vw] object-contain" />
                 )}
               </div>
             </DialogContent>
           </Dialog>
 
           {post.audio && (
-            <div className="rounded-2xl border bg-background p-4">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-3 flex items-center gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-500">
                   <AudioLines className="h-4 w-4" />
                 </span>
-                <div className="text-sm font-medium">Voice note</div>
+                <div className="text-sm font-semibold">Voice note</div>
               </div>
 
               <audio
@@ -635,8 +581,8 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-1 flex-wrap">
+          <div className="pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -644,17 +590,15 @@ export default function PostCard({ post }: PostCardProps) {
                     variant="ghost"
                     size="sm"
                     aria-label="React"
-                    className={reactionClass}
+                    className={`h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50 ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
-                    <span className="text-sm">React</span>
-                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-                      {post.likes || 0}
-                    </span>
+                    React
+                    <span className="ml-2 text-base font-semibold tabular-nums text-slate-500">{post.likes || 0}</span>
                   </Button>
                 </DropdownMenuTrigger>
 
-                <DropdownMenuContent align="start" className="flex gap-1">
+                <DropdownMenuContent align="start" className="flex gap-1 rounded-2xl">
                   <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="px-2">
                     <Heart className="h-4 w-4 text-destructive" />
                   </DropdownMenuItem>
@@ -676,23 +620,39 @@ export default function PostCard({ post }: PostCardProps) {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button type="button" variant="ghost" size="sm" onClick={() => setShowComments((v) => !v)}>
-                <span className="text-sm">Reply</span>
-                <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-                  {commentCount}
-                </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowComments((v) => !v)}
+                className="h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50"
+              >
+                Reply
+                <span className="ml-2 text-base font-semibold tabular-nums text-slate-500">{commentCount}</span>
               </Button>
 
-              <Button type="button" variant="ghost" size="sm" onClick={handleShare}>
-                <span className="text-sm">Share</span>
-                <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-                  {post.shares || 0}
-                </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleShare}
+                className="h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50"
+              >
+                Share
+                <span className="ml-2 text-base font-semibold tabular-nums text-slate-500">{post.shares || 0}</span>
               </Button>
 
-              <Button type="button" variant="ghost" size="sm" onClick={toggleSaved} className={saved ? 'text-foreground' : ''}>
-                <Bookmark className="h-4 w-4 mr-1" />
-                <span className="text-sm">{saved ? 'Saved' : 'Save'}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={toggleSaved}
+                className={`h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50 ${
+                  saved ? 'text-slate-950' : ''
+                }`}
+              >
+                <Bookmark className="mr-2 h-6 w-6" />
+                {saved ? 'Saved' : 'Save'}
               </Button>
             </div>
 
@@ -706,10 +666,10 @@ export default function PostCard({ post }: PostCardProps) {
                 if (!Number.isFinite(l)) return false;
                 return getVoiceCommentCountToday() >= l;
               })()}
-              className="w-full rounded-full border border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 shadow-[0_0_35px_rgba(168,85,247,0.35)] hover:shadow-[0_0_45px_rgba(34,211,238,0.45)] transition-all"
+              className="mt-4 h-14 w-full rounded-full border border-fuchsia-300/50 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[18px] font-bold text-slate-950 shadow-[0_0_38px_rgba(168,85,247,0.25)] transition-all hover:shadow-[0_0_45px_rgba(34,211,238,0.35)]"
             >
-              <span className="mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20">
-                <AudioLines className={`h-3.5 w-3.5 text-purple-500 ${isRecording ? 'animate-pulse' : ''}`} />
+              <span className="mr-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-purple-200/70">
+                <AudioLines className={`h-5 w-5 text-purple-600 ${isRecording ? 'animate-pulse' : ''}`} />
               </span>
               {isRecording
                 ? `${recordSeconds}s`
@@ -723,39 +683,37 @@ export default function PostCard({ post }: PostCardProps) {
             </Button>
           </div>
 
-          <div className="flex items-center gap-2 pt-3">
-           <Input
+          <div className="flex items-center gap-3 pt-3">
+            <Input
               ref={replyInputRef}
-              placeholder="Reply…"
+              placeholder="Reply..."
               value={commentText}
               onFocus={() => undefined}
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={(e) => {
-                 if (e.key === 'Enter') {
-                    handleComment();
-                   }
-                 }}
-             className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
-           />
+                if (e.key === 'Enter') handleComment();
+              }}
+              className="h-16 rounded-[24px] border border-slate-200 bg-white px-5 text-[18px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
 
-          <Button
+            <Button
               size="icon"
               variant="ghost"
               onClick={handleComment}
               aria-label="Send reply"
-            className="text-muted-foreground hover:text-foreground"
-           >
-         <Send className="h-4 w-4" />
-       </Button>
-     </div>
-          
+              className="h-14 w-14 rounded-full text-slate-500 hover:text-slate-950"
+            >
+              <Send className="h-7 w-7" />
+            </Button>
+          </div>
+
           <AnimatePresence>
             {showComments && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="w-full space-y-4 pt-4 border-t border-border/60"
+                className="w-full space-y-4 border-t border-slate-200 pt-5"
               >
                 {post.comments.map((comment) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
@@ -768,29 +726,25 @@ export default function PostCard({ post }: PostCardProps) {
                       animate={{ opacity: 1, x: 0 }}
                       className="flex gap-3"
                     >
-                      <Avatar className="h-7 w-7">
+                      <Avatar className="h-9 w-9">
                         <AvatarImage src={comment.userAvatar} alt={comment.userName} />
-                        <AvatarFallback>
-                          {comment.userName ? comment.userName.charAt(0) : 'U'}
-                        </AvatarFallback>
+                        <AvatarFallback>{comment.userName ? comment.userName.charAt(0) : 'U'}</AvatarFallback>
                       </Avatar>
 
-                      <div className="flex-1 pl-3 border-l border-border/40">
+                      <div className="flex-1 border-l border-slate-200 pl-3">
                         <div className="flex items-baseline gap-2">
-                          <p className="text-sm font-medium text-foreground">
-                            {comment.userName}
-                          </p>
+                          <p className="text-sm font-semibold text-slate-950">{comment.userName}</p>
 
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-[11px] text-slate-500">
                             {formatDistanceToNow(comment.timestamp, { addSuffix: true })}
                           </span>
                         </div>
 
-                        <div className="mt-1 text-sm leading-relaxed text-foreground">
+                        <div className="mt-1 text-sm leading-relaxed text-slate-900">
                           {isVoice && comment.voiceUrl ? (
-                            <div className="mt-2 flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-2">
-                              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center shadow-sm">
-                                <AudioLines className="h-4 w-4 text-purple-500" />
+                            <div className="mt-2 flex items-center gap-2 rounded-full border bg-slate-50 px-3 py-2">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 shadow-sm">
+                                <AudioLines className="h-4 w-4 text-purple-600" />
                               </div>
 
                               <audio
@@ -817,7 +771,7 @@ export default function PostCard({ post }: PostCardProps) {
                           <button
                             type="button"
                             onClick={() => handleReplyToComment(comment.userName)}
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-950"
                           >
                             <MessageCircle className="h-3 w-3" />
                             Reply
