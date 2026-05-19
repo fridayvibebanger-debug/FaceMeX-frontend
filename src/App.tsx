@@ -4,6 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 
 import AuthPage from './components/auth/AuthPage';
+import EmotionAIPage from './pages/EmotionAIPage';
 import FeedPage from './pages/FeedPage';
 import WatchPage from './pages/WatchPage';
 import ProfilePage from './pages/ProfilePage';
@@ -120,6 +121,15 @@ function App() {
           }
         />
 
+        <Route
+          path="/emotion"
+          element={
+            <ProtectedRoute>
+              <EmotionAIPage />
+            </ProtectedRoute>
+          }
+        />
+        
         <Route
           path="/feed"
           element={
