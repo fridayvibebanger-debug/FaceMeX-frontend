@@ -25,6 +25,13 @@ import { createYocoCheckoutSession } from '@/lib/billing';
 
 type SellerCta = 'contact' | 'website' | 'whatsapp' | 'call' | 'message';
 
+type EscrowStatus =
+  | 'draft'
+  | 'payment_pending'
+  | 'funded'
+  | 'released'
+  | 'cancelled';
+
 interface ShopItem {
   id: string;
   title: string;
@@ -72,14 +79,18 @@ interface EscrowItem {
   id: string;
   title: string;
   amount: number;
-  status: 'draft' | 'funded' | 'released';
+  status: EscrowStatus;
   createdAt: string;
+  yocoCheckoutId?: string;
+  fundedAt?: string;
+  releasedAt?: string;
+  cancelledAt?: string;
 }
 
 const SHOP_ADDON_PRICE_ZAR = 370;
 const SHOP_ADDON_BONUS_IMPRESSIONS = 1000;
 
-const exampleShops: Shop[] = [
+const STARTER_SHOPS: Shop[] = [
   {
     id: 'shop-food-001',
     shopName: 'Nkowankowa Kota House',
@@ -125,15 +136,15 @@ const exampleShops: Shop[] = [
     category: 'Fashion',
     tagline: 'Premium sneakers, caps, T-shirts and weekend outfits.',
     description:
-      'A youth fashion seller offering clean streetwear looks, casual wear and selected sneaker drops.',
+      'A fashion seller offering streetwear looks, casual wear and selected sneaker drops.',
     coverImage:
       'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=1200&q=80',
     sellerName: 'Streetwear Seller',
     whatsapp: '+27710000000',
     phone: '+27710000000',
-    website: 'https://example.com',
+    website: '',
     location: 'Tzaneen',
-    cta: 'website',
+    cta: 'whatsapp',
     featured: true,
     items: [
       {
@@ -198,59 +209,116 @@ const exampleShops: Shop[] = [
   },
 ];
 
+function readLS<T>(key: string, fallback: T): T {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveLS(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function cleanUrl(url?: string) {
+  const value = String(url || '').trim();
+  if (!value) return '';
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+  return `https://${value}`;
+}
+
+function shopNameKey(shop: Shop) {
+  return `${String(shop.shopName || '').trim().toLowerCase()}::${String(
+    shop.category || ''
+  )
+    .trim()
+    .toLowerCase()}`;
+}
+
+function dedupeItems(items: ShopItem[] = []) {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const key =
+      item.id ||
+      `${String(item.title || '').toLowerCase()}::${String(
+        item.description || ''
+      )
+        .toLowerCase()
+        .slice(0, 50)}`;
+
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeShops(shops: Shop[]) {
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const result: Shop[] = [];
+
+  shops.filter(Boolean).forEach((shop) => {
+    const idKey = String(shop.id || '').trim();
+    const nameKey = shopNameKey(shop);
+
+    if ((idKey && seenIds.has(idKey)) || seenNames.has(nameKey)) return;
+
+    if (idKey) seenIds.add(idKey);
+    seenNames.add(nameKey);
+
+    result.push({
+      ...shop,
+      items: dedupeItems(shop.items || []),
+    });
+  });
+
+  return result;
+}
+
+function formatMoney(value: number) {
+  return `R${Number(value || 0).toFixed(2)}`;
+}
+
 export default function MarketplacePage() {
   const { tier, hasTier } = useUserStore();
 
-  const saveLS = (key: string, value: any) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      // ignore
-    }
-  };
+  const currentTier = String(tier || 'free').toLowerCase();
 
-  const readLS = (key: string) => {
-    try {
-      const value = localStorage.getItem(key);
-      return value ? JSON.parse(value) : null;
-    } catch {
-      return null;
-    }
-  };
+  const businessPlusCanOpenShopFree =
+    Boolean(hasTier?.('business')) ||
+    currentTier === 'business' ||
+    currentTier === 'exclusive';
 
-  const readLocalShops = (): Shop[] => {
-    const local = readLS('mall:shops');
-    return Array.isArray(local) ? local : [];
-  };
+  const [query, setQuery] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'card'>('card');
 
-  const getShopAddonActive = () => {
+  const [shops, setShops] = useState<Shop[]>(() => {
+    const local = readLS<Shop[]>('mall:shops', []);
+    return dedupeShops([...local, ...STARTER_SHOPS]);
+  });
+
+  const [loadingShops, setLoadingShops] = useState(false);
+  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
+  const [itemsOpen, setItemsOpen] = useState(false);
+
+  const [shopOpen, setShopOpen] = useState(false);
+  const [shopCheckoutBusy, setShopCheckoutBusy] = useState(false);
+  const [shopAddonActive, setShopAddonActive] = useState(() => {
     try {
       return localStorage.getItem('facemex_marketplace_shop_addon') === 'active';
     } catch {
       return false;
     }
-  };
+  });
 
-  const [query, setQuery] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'card'>('card');
-
-  const [creditsOpen, setCreditsOpen] = useState(false);
-  const [campaignOpen, setCampaignOpen] = useState(false);
-  const [creditsRand, setCreditsRand] = useState<number>(200);
-  const [campaignName, setCampaignName] = useState('');
-  const [campaignObjective, setCampaignObjective] = useState('Awareness');
-  const [campaignBudget, setCampaignBudget] = useState('500');
-
-  const [shops, setShops] = useState<Shop[]>(exampleShops);
-  const [loadingShops, setLoadingShops] = useState(false);
-
-  const [shopOpen, setShopOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(false);
-  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
-  const [shopCheckoutBusy, setShopCheckoutBusy] = useState(false);
-  const [shopAddonActive, setShopAddonActive] = useState(() =>
-    getShopAddonActive()
-  );
+  const canOpenShop = businessPlusCanOpenShopFree || shopAddonActive;
 
   const [shopName, setShopName] = useState('');
   const [sellerName, setSellerName] = useState('');
@@ -271,9 +339,17 @@ export default function MarketplacePage() {
   const [itemShowPrice, setItemShowPrice] = useState(true);
   const [draftItems, setDraftItems] = useState<ShopItem[]>([]);
 
-  const [creditsBalance, setCreditsBalance] = useState<number>(
-    () => readLS('ads:credits') || 0
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  const [creditsRand, setCreditsRand] = useState(200);
+  const [creditsCheckoutBusy, setCreditsCheckoutBusy] = useState(false);
+  const [creditsBalance, setCreditsBalance] = useState<number>(() =>
+    readLS<number>('ads:credits', 0)
   );
+
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [campaignName, setCampaignName] = useState('');
+  const [campaignObjective, setCampaignObjective] = useState('Awareness');
+  const [campaignBudget, setCampaignBudget] = useState('500');
 
   const [drafts, setDrafts] = useState<
     Array<{
@@ -283,14 +359,9 @@ export default function MarketplacePage() {
       ts: string;
       lastRun?: string;
     }>
-  >(() =>
-    Array.isArray(readLS('ads:campaigns')) ? readLS('ads:campaigns') : []
-  );
+  >(() => readLS('ads:campaigns', []));
 
-  const [usage, setUsage] = useState<Array<any>>(() =>
-    Array.isArray(readLS('ads:usage')) ? readLS('ads:usage') : []
-  );
-
+  const [usage, setUsage] = useState<any[]>(() => readLS('ads:usage', []));
   const [showAllDrafts, setShowAllDrafts] = useState(false);
 
   const [gigOpen, setGigOpen] = useState(false);
@@ -307,46 +378,36 @@ export default function MarketplacePage() {
 
   const [escrowTitle, setEscrowTitle] = useState('');
   const [escrowAmount, setEscrowAmount] = useState('');
+  const [escrowCheckoutBusyId, setEscrowCheckoutBusyId] = useState<string | null>(
+    null
+  );
 
   const [gigs, setGigs] = useState<CreatorGig[]>(() =>
-    Array.isArray(readLS('facemex_marketplace_gigs'))
-      ? readLS('facemex_marketplace_gigs')
-      : []
+    readLS<CreatorGig[]>('facemex_marketplace_gigs', [])
   );
 
   const [projects, setProjects] = useState<BusinessProject[]>(() =>
-    Array.isArray(readLS('facemex_business_projects'))
-      ? readLS('facemex_business_projects')
-      : []
+    readLS<BusinessProject[]>('facemex_business_projects', [])
   );
 
   const [escrows, setEscrows] = useState<EscrowItem[]>(() =>
-    Array.isArray(readLS('facemex_escrows')) ? readLS('facemex_escrows') : []
+    readLS<EscrowItem[]>('facemex_escrows', [])
   );
 
-  const currentTier = String(tier || 'free').toLowerCase();
-
-  const businessPlusCanOpenShopFree =
-    Boolean(hasTier?.('business')) ||
-    currentTier === 'business' ||
-    currentTier === 'exclusive';
-
-  const canOpenShop = businessPlusCanOpenShopFree || shopAddonActive;
-
-  const impressionsFor = (rands: number) => Math.max(0, (rands || 0) * 10);
+  const impressionsFor = (rands: number) => Math.max(0, Number(rands || 0) * 10);
 
   const pushUsage = (event: any) => {
     const next = [{ ts: new Date().toISOString(), ...event }, ...usage].slice(
       0,
       50
     );
+
     setUsage(next);
     saveLS('ads:usage', next);
   };
 
   const addImpressions = (amount: number, reason: string) => {
     const next = creditsBalance + amount;
-
     setCreditsBalance(next);
     saveLS('ads:credits', next);
 
@@ -365,7 +426,6 @@ export default function MarketplacePage() {
 
     try {
       const lastBonusMonth = localStorage.getItem(bonusKey);
-
       if (lastBonusMonth === monthKey) return;
 
       localStorage.setItem(bonusKey, monthKey);
@@ -377,95 +437,108 @@ export default function MarketplacePage() {
 
       toast({
         title: 'Shop boost added',
-        description: `Your R${SHOP_ADDON_PRICE_ZAR}/month shop add-on added ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions.`,
+        description: `Your shop add-on added ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions.`,
       });
     } catch {
       // ignore
     }
   };
 
+  const saveEscrows = (next: EscrowItem[]) => {
+    setEscrows(next);
+    saveLS('facemex_escrows', next);
+  };
+
+  const updateEscrow = (escrowId: string, patch: Partial<EscrowItem>) => {
+    const next = escrows.map((escrow) =>
+      escrow.id === escrowId ? { ...escrow, ...patch } : escrow
+    );
+
+    saveEscrows(next);
+  };
+
   useEffect(() => {
     let mounted = true;
 
     async function loadMarketplaceShops() {
-      const localShops = readLocalShops();
+      setLoadingShops(true);
 
-      setShops([...localShops, ...exampleShops]);
-      setLoadingShops(false);
+      const localShops = readLS<Shop[]>('mall:shops', []);
 
-      const { data: dbShops, error: shopsError } = await supabase
-        .from('marketplace_shops')
-        .select('*')
-        .eq('is_active', true)
-        .order('featured', { ascending: false })
-        .order('created_at', { ascending: false });
+      try {
+        const { data: dbShops, error: shopsError } = await supabase
+          .from('marketplace_shops')
+          .select('*')
+          .eq('is_active', true)
+          .order('featured', { ascending: false })
+          .order('created_at', { ascending: false });
 
-      if (shopsError) {
-        console.log('Marketplace shops load failed:', shopsError.message);
-        return;
-      }
+        if (shopsError || !dbShops?.length) {
+          if (mounted) {
+            setShops(dedupeShops([...localShops, ...STARTER_SHOPS]));
+          }
+          return;
+        }
 
-      if (!dbShops || dbShops.length === 0) {
-        return;
-      }
+        const shopIds = dbShops.map((shop: any) => shop.id);
 
-      const shopIds = dbShops.map((shop: any) => shop.id);
+        const { data: dbItems } = await supabase
+          .from('marketplace_items')
+          .select('*')
+          .in('shop_id', shopIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
 
-      const { data: dbItems, error: itemsError } = await supabase
-        .from('marketplace_items')
-        .select('*')
-        .in('shop_id', shopIds)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        const itemsByShop = new Map<string, ShopItem[]>();
 
-      if (itemsError) {
-        console.log('Marketplace items load failed:', itemsError.message);
-      }
+        (dbItems || []).forEach((item: any) => {
+          const list = itemsByShop.get(item.shop_id) || [];
 
-      const itemsByShop = new Map<string, ShopItem[]>();
+          list.push({
+            id: item.id,
+            title: item.title || 'Untitled item',
+            description: item.description || 'Contact seller for details.',
+            image:
+              item.image ||
+              'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80',
+            showPrice: item.show_price !== false,
+            price: item.price ? Number(item.price) : undefined,
+            currency: 'ZAR',
+          });
 
-      (dbItems || []).forEach((item: any) => {
-        const list = itemsByShop.get(item.shop_id) || [];
-
-        list.push({
-          id: item.id,
-          title: item.title || 'Untitled item',
-          description: item.description || 'Contact seller for details.',
-          image:
-            item.image ||
-            'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80',
-          showPrice: item.show_price !== false,
-          price: item.price ? Number(item.price) : undefined,
-          currency: 'ZAR',
+          itemsByShop.set(item.shop_id, list);
         });
 
-        itemsByShop.set(item.shop_id, list);
-      });
+        const mapped: Shop[] = dbShops.map((shop: any) => ({
+          id: shop.id,
+          shopName: shop.shop_name || 'Untitled shop',
+          category: shop.category || 'General',
+          tagline: shop.tagline || 'Premium shop on FaceMeX Marketplace.',
+          description:
+            shop.description ||
+            'This seller has listed products or services on FaceMeX Marketplace.',
+          coverImage:
+            shop.cover_image ||
+            'https://images.unsplash.com/photo-1481437156560-3205f6a55735?auto=format&fit=crop&w=1200&q=80',
+          sellerName: shop.seller_name || 'Seller',
+          phone: shop.phone || '',
+          whatsapp: shop.whatsapp || '',
+          website: shop.website || '',
+          location: shop.location || '',
+          cta: (shop.cta || 'contact') as SellerCta,
+          featured: Boolean(shop.featured),
+          items: itemsByShop.get(shop.id) || [],
+        }));
 
-      const mapped: Shop[] = dbShops.map((shop: any) => ({
-        id: shop.id,
-        shopName: shop.shop_name || 'Untitled shop',
-        category: shop.category || 'General',
-        tagline: shop.tagline || 'Premium shop on FaceMeX Marketplace.',
-        description:
-          shop.description ||
-          'This seller has listed products or services on FaceMeX Marketplace.',
-        coverImage:
-          shop.cover_image ||
-          'https://images.unsplash.com/photo-1481437156560-3205f6a55735?auto=format&fit=crop&w=1200&q=80',
-        sellerName: shop.seller_name || 'Seller',
-        phone: shop.phone || '',
-        whatsapp: shop.whatsapp || '',
-        website: shop.website || '',
-        location: shop.location || '',
-        cta: (shop.cta || 'contact') as SellerCta,
-        featured: !!shop.featured,
-        items: itemsByShop.get(shop.id) || [],
-      }));
-
-      if (mounted) {
-        setShops([...localShops, ...mapped, ...exampleShops]);
-        setLoadingShops(false);
+        if (mounted) {
+          setShops(dedupeShops([...localShops, ...mapped, ...STARTER_SHOPS]));
+        }
+      } catch {
+        if (mounted) {
+          setShops(dedupeShops([...localShops, ...STARTER_SHOPS]));
+        }
+      } finally {
+        if (mounted) setLoadingShops(false);
       }
     }
 
@@ -484,6 +557,91 @@ export default function MarketplacePage() {
       setShopAddonActive(true);
       addMonthlyShopBonus();
       setShopOpen(true);
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (params.get('ad_credits') === 'success') {
+      const pending = readLS<{
+        amountZar: number;
+        impressions: number;
+        createdAt: string;
+      } | null>('facemex_pending_ad_credits', null);
+
+      if (pending?.impressions) {
+        const nextBalance = creditsBalance + pending.impressions;
+        setCreditsBalance(nextBalance);
+        saveLS('ads:credits', nextBalance);
+
+        pushUsage({
+          type: 'buy_credits',
+          rands: pending.amountZar,
+          impressions: pending.impressions,
+          balance: nextBalance,
+        });
+
+        localStorage.removeItem('facemex_pending_ad_credits');
+
+        toast({
+          title: 'Ad credits activated',
+          description: `${pending.impressions.toLocaleString()} impressions added to your account.`,
+        });
+      }
+
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (params.get('escrow') === 'success') {
+      const pending = readLS<{
+        escrowId: string;
+        checkoutId?: string;
+      } | null>('facemex_pending_escrow', null);
+
+      if (pending?.escrowId) {
+        const next = escrows.map((escrow) =>
+          escrow.id === pending.escrowId
+            ? {
+                ...escrow,
+                status: 'funded' as EscrowStatus,
+                fundedAt: new Date().toISOString(),
+                yocoCheckoutId: pending.checkoutId,
+              }
+            : escrow
+        );
+
+        saveEscrows(next);
+        localStorage.removeItem('facemex_pending_escrow');
+
+        toast({
+          title: 'Escrow funded',
+          description:
+            'Payment received. Funds are now marked as funded until release.',
+        });
+      }
+
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (
+      params.get('escrow') === 'cancelled' ||
+      params.get('escrow') === 'failed'
+    ) {
+      const pending = readLS<{ escrowId: string } | null>(
+        'facemex_pending_escrow',
+        null
+      );
+
+      if (pending?.escrowId) {
+        updateEscrow(pending.escrowId, { status: 'draft' });
+        localStorage.removeItem('facemex_pending_escrow');
+      }
+
+      toast({
+        title: 'Escrow payment not completed',
+        description: 'The escrow record is still saved as a draft.',
+      });
 
       window.history.replaceState({}, '', window.location.pathname);
     }
@@ -492,7 +650,7 @@ export default function MarketplacePage() {
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
 
-    return shops.filter((shop) => {
+    return dedupeShops(shops).filter((shop) => {
       if (!q) return true;
 
       return (
@@ -510,9 +668,11 @@ export default function MarketplacePage() {
   }, [shops, query]);
 
   const saveShopsToLocal = (next: Shop[]) => {
-    const onlyLocal = next.filter((shop) => shop.id.startsWith('local-shop-'));
+    const deduped = dedupeShops(next);
+    const onlyLocal = deduped.filter((shop) => shop.id.startsWith('local-shop-'));
+
     saveLS('mall:shops', onlyLocal);
-    setShops(next);
+    setShops(deduped);
   };
 
   const openShopItems = (shop: Shop) => {
@@ -529,11 +689,6 @@ export default function MarketplacePage() {
     if (currentTier === 'pro') {
       try {
         setShopCheckoutBusy(true);
-
-        toast({
-          title: 'Marketplace shop add-on',
-          description: `Pro users pay R${SHOP_ADDON_PRICE_ZAR}/month and receive ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions monthly.`,
-        });
 
         const origin = window.location.origin;
 
@@ -601,13 +756,13 @@ export default function MarketplacePage() {
     toast({
       title: 'Seller contact',
       description:
-        'This seller has not added WhatsApp or phone details yet. Try viewing their items or website.',
+        'This seller has not added WhatsApp or phone details yet. Try viewing items or website.',
     });
   };
 
   const secondaryShopAction = (shop: Shop) => {
     if (shop.website && shop.cta === 'website') {
-      window.open(shop.website, '_blank', 'noopener,noreferrer');
+      window.open(cleanUrl(shop.website), '_blank', 'noopener,noreferrer');
       return;
     }
 
@@ -625,10 +780,10 @@ export default function MarketplacePage() {
 
     return {
       id: `local-item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      title: itemTitle,
-      description: itemDescription || 'Contact seller for more details.',
+      title: itemTitle.trim(),
+      description: itemDescription.trim() || 'Contact seller for more details.',
       image:
-        itemImage ||
+        itemImage.trim() ||
         'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80',
       showPrice: itemShowPrice,
       price: itemShowPrice ? Number(itemPrice || 0) : undefined,
@@ -638,10 +793,9 @@ export default function MarketplacePage() {
 
   const addDraftItem = () => {
     const item = buildDraftItem();
-
     if (!item) return;
 
-    setDraftItems((current) => [item, ...current]);
+    setDraftItems((current) => dedupeItems([item, ...current]));
     setItemTitle('');
     setItemDescription('');
     setItemImage('');
@@ -683,6 +837,8 @@ export default function MarketplacePage() {
       if (item) finalItems = [item, ...finalItems];
     }
 
+    finalItems = dedupeItems(finalItems);
+
     if (finalItems.length === 0) {
       toast({
         title: 'Add at least one item',
@@ -693,20 +849,20 @@ export default function MarketplacePage() {
 
     const newShop: Shop = {
       id: `local-shop-${Date.now()}`,
-      shopName,
-      category: shopCategory,
-      tagline: shopTagline || 'Premium local shop on FaceMeX Marketplace.',
+      shopName: shopName.trim(),
+      category: shopCategory.trim() || 'General',
+      tagline: shopTagline.trim() || 'Premium local shop on FaceMeX Marketplace.',
       description:
-        shopDescription ||
+        shopDescription.trim() ||
         'This shop sells products and services through FaceMeX Marketplace.',
       coverImage:
-        shopCoverImage ||
+        shopCoverImage.trim() ||
         'https://images.unsplash.com/photo-1481437156560-3205f6a55735?auto=format&fit=crop&w=1200&q=80',
-      sellerName,
-      phone: shopPhone,
-      whatsapp: shopWhatsapp,
-      website: shopWebsite,
-      location: shopLocation,
+      sellerName: sellerName.trim(),
+      phone: shopPhone.trim(),
+      whatsapp: shopWhatsapp.trim(),
+      website: cleanUrl(shopWebsite),
+      location: shopLocation.trim(),
       cta: shopCta,
       featured: false,
       items: finalItems,
@@ -733,7 +889,7 @@ export default function MarketplacePage() {
 
     toast({
       title: 'Shop published',
-      description: `${newShop.shopName} is now displayed in the marketplace mall.`,
+      description: `${newShop.shopName} is now displayed in the marketplace.`,
     });
   };
 
@@ -757,12 +913,13 @@ export default function MarketplacePage() {
     if (creditsBalance < needed) {
       toast({
         title: 'Not enough credits',
-        description: `Need ${needed.toLocaleString()} impressions, you have ${creditsBalance.toLocaleString()}. Buy more credits or use your shop bonus impressions.`,
+        description: `Need ${needed.toLocaleString()} impressions, you have ${creditsBalance.toLocaleString()}.`,
       });
       return;
     }
 
     const newBalance = creditsBalance - needed;
+
     setCreditsBalance(newBalance);
     saveLS('ads:credits', newBalance);
 
@@ -770,11 +927,9 @@ export default function MarketplacePage() {
     updated[index] = { ...draft, lastRun: new Date().toISOString() };
     saveDrafts(updated);
 
-    const promotedShop = shops[0];
+    const promotedShop = dedupeShops(shops)[0];
 
-    const feedAds = Array.isArray(readLS('facemex_feed_slide_ads'))
-      ? readLS('facemex_feed_slide_ads')
-      : [];
+    const feedAds = readLS<any[]>('facemex_feed_slide_ads', []);
 
     const newFeedAd = {
       id: `feed-ad-${Date.now()}`,
@@ -809,7 +964,7 @@ export default function MarketplacePage() {
 
     toast({
       title: 'Campaign running',
-      description: `${draft.name} launched · ${needed.toLocaleString()} impressions added to feed slide recommendations nearby.`,
+      description: `${draft.name} launched with ${needed.toLocaleString()} impressions.`,
     });
   };
 
@@ -822,9 +977,9 @@ export default function MarketplacePage() {
     const next = [
       {
         id: `gig-${Date.now()}`,
-        title: gigTitle,
+        title: gigTitle.trim(),
         price: Number(gigPrice || 0),
-        description: gigDescription || 'Creator service available.',
+        description: gigDescription.trim() || 'Creator service available.',
         createdAt: new Date().toISOString(),
       },
       ...gigs,
@@ -849,9 +1004,9 @@ export default function MarketplacePage() {
     const next = [
       {
         id: `project-${Date.now()}`,
-        title: projectTitle,
+        title: projectTitle.trim(),
         budget: Number(projectBudget || 0),
-        description: projectDescription || 'Business project available.',
+        description: projectDescription.trim() || 'Business project available.',
         createdAt: new Date().toISOString(),
       },
       ...projects,
@@ -873,57 +1028,141 @@ export default function MarketplacePage() {
       return;
     }
 
+    const amount = Number(escrowAmount || 0);
+
+    if (!amount || amount <= 0) {
+      toast({
+        title: 'Add valid amount',
+        description: 'Escrow amount must be more than R0.',
+      });
+      return;
+    }
+
     const next: EscrowItem[] = [
       {
         id: `escrow-${Date.now()}`,
-        title: escrowTitle,
-        amount: Number(escrowAmount || 0),
+        title: escrowTitle.trim(),
+        amount,
         status: 'draft',
         createdAt: new Date().toISOString(),
       },
       ...escrows,
     ];
 
-    setEscrows(next);
-    saveLS('facemex_escrows', next);
+    saveEscrows(next);
     setEscrowTitle('');
     setEscrowAmount('');
     setEscrowOpen(false);
 
-    toast({ title: 'Escrow created', description: 'Escrow draft saved.' });
+    toast({
+      title: 'Escrow created',
+      description: 'Escrow record saved. Fund it before work starts.',
+    });
   };
 
-  const updateEscrowStatus = (
-    escrowId: string,
-    status: EscrowItem['status']
-  ) => {
-    const next = escrows.map((escrow) =>
-      escrow.id === escrowId ? { ...escrow, status } : escrow
-    );
+  const fundEscrow = async (escrow: EscrowItem) => {
+    if (!escrow.amount || escrow.amount <= 0) {
+      toast({
+        title: 'Invalid escrow',
+        description: 'Escrow amount must be more than R0.',
+      });
+      return;
+    }
 
-    setEscrows(next);
-    saveLS('facemex_escrows', next);
+    try {
+      setEscrowCheckoutBusyId(escrow.id);
+      updateEscrow(escrow.id, { status: 'payment_pending' });
+
+      const origin = window.location.origin;
+
+      const checkout = await createYocoCheckoutSession({
+        amountZar: escrow.amount,
+        currency: 'ZAR',
+        successUrl: `${origin}/marketplace?escrow=success`,
+        cancelUrl: `${origin}/marketplace?escrow=cancelled`,
+        failureUrl: `${origin}/marketplace?escrow=failed`,
+        metadata: {
+          billingPurpose: 'marketplace_escrow',
+          escrowId: escrow.id,
+          title: escrow.title,
+          amountZar: String(escrow.amount),
+        },
+        externalId: `marketplace-escrow-${escrow.id}`,
+      });
+
+      localStorage.setItem(
+        'facemex_pending_escrow',
+        JSON.stringify({
+          escrowId: escrow.id,
+          checkoutId: checkout.id,
+          amountZar: escrow.amount,
+        })
+      );
+
+      window.location.href = checkout.redirectUrl;
+    } catch (error: any) {
+      updateEscrow(escrow.id, { status: 'draft' });
+
+      toast({
+        title: 'Escrow checkout failed',
+        description:
+          error?.message || 'Could not open secure card checkout for escrow.',
+      });
+    } finally {
+      setEscrowCheckoutBusyId(null);
+    }
+  };
+
+  const releaseEscrow = (escrow: EscrowItem) => {
+    if (escrow.status !== 'funded') return;
+
+    updateEscrow(escrow.id, {
+      status: 'released',
+      releasedAt: new Date().toISOString(),
+    });
 
     toast({
-      title: 'Escrow updated',
-      description: `Escrow status changed to ${status}.`,
+      title: 'Escrow released',
+      description: 'Payment was marked as released after delivery.',
     });
+  };
+
+  const cancelEscrow = (escrow: EscrowItem) => {
+    if (escrow.status === 'released') return;
+
+    updateEscrow(escrow.id, {
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+    });
+
+    toast({
+      title: 'Escrow cancelled',
+      description: 'Escrow record was cancelled.',
+    });
+  };
+
+  const statusBadge = (status: EscrowStatus) => {
+    if (status === 'funded') return 'Funded';
+    if (status === 'released') return 'Released';
+    if (status === 'payment_pending') return 'Payment pending';
+    if (status === 'cancelled') return 'Cancelled';
+    return 'Draft';
   };
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-0 pb-10 md:pt-1">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-3 pb-10 md:pt-4">
         <div className="rounded-2xl border bg-card px-4 py-3">
           <div className="text-sm font-semibold">FaceMeX Marketplace Mall</div>
           <div className="text-xs text-muted-foreground">
-            Example shops are shown below so users can see how sellers display
-            products, prices, contact buttons and item previews.
+            Sellers can display shops, products, prices, contact buttons, campaigns,
+            gigs, business projects and escrow records.
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <Input
-            className="min-w-[240px] flex-1"
+            className="min-w-[240px] flex-1 rounded-full"
             placeholder="Search shops, products, services..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -948,9 +1187,7 @@ export default function MarketplacePage() {
             )}
 
             {shopAddonActive && (
-              <Badge variant="outline">
-                Shop add-on active · +1,000/mo
-              </Badge>
+              <Badge variant="outline">Shop add-on active · +1,000/mo</Badge>
             )}
 
             <Button
@@ -967,17 +1204,16 @@ export default function MarketplacePage() {
               onClick={handleOpenShopClick}
               disabled={shopCheckoutBusy}
             >
-              {canOpenShop
-                ? 'Open Shop'
-                : currentTier === 'pro'
-                  ? 'Open Shop · R370/mo'
-                  : 'Open Shop'}
+              {shopCheckoutBusy
+                ? 'Opening checkout...'
+                : canOpenShop
+                  ? 'Open Shop'
+                  : currentTier === 'pro'
+                    ? 'Open Shop · R370/mo'
+                    : 'Open Shop'}
             </Button>
 
-            <Button
-              className="rounded-full"
-              onClick={() => setCampaignOpen(true)}
-            >
+            <Button className="rounded-full" onClick={() => setCampaignOpen(true)}>
               Create Campaign
             </Button>
           </div>
@@ -1058,7 +1294,7 @@ export default function MarketplacePage() {
 
                               <div className="text-xs font-semibold">
                                 {item.showPrice && item.price
-                                  ? `R${Number(item.price).toFixed(2)}`
+                                  ? formatMoney(item.price)
                                   : 'Ask seller'}
                               </div>
                             </div>
@@ -1104,20 +1340,14 @@ export default function MarketplacePage() {
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-sm font-semibold">Draft Campaigns</div>
 
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="rounded-full"
-                      onClick={() => setCreditsOpen(true)}
-                    >
-                      Top up
-                    </Button>
-
-                    <div className="text-xs text-muted-foreground">
-                      Stored locally
-                    </div>
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => setCreditsOpen(true)}
+                  >
+                    Top up
+                  </Button>
                 </div>
 
                 {drafts.length === 0 ? (
@@ -1126,44 +1356,41 @@ export default function MarketplacePage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {drafts
-                      .slice(0, showAllDrafts ? 10 : 5)
-                      .map((draft, index) => (
-                        <div
-                          key={`${draft.ts}-${index}`}
-                          className="flex items-center justify-between gap-2 rounded border p-2"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
-                              {draft.name}
-                            </div>
-
-                            <div className="truncate text-xs text-muted-foreground">
-                              {draft.objective} · Budget R{draft.budget} · Est{' '}
-                              {impressionsFor(
-                                parseInt(draft.budget || '0', 10)
-                              ).toLocaleString()}{' '}
-                              impressions
-                            </div>
-
-                            {draft.lastRun && (
-                              <div className="text-[11px] text-muted-foreground">
-                                Last run:{' '}
-                                {new Date(draft.lastRun).toLocaleString()}
-                              </div>
-                            )}
+                    {drafts.slice(0, showAllDrafts ? 10 : 5).map((draft, index) => (
+                      <div
+                        key={`${draft.ts}-${index}`}
+                        className="flex items-center justify-between gap-2 rounded border p-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {draft.name}
                           </div>
 
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="rounded-full"
-                            onClick={() => runDraft(index)}
-                          >
-                            Run
-                          </Button>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {draft.objective} · Budget R{draft.budget} · Est{' '}
+                            {impressionsFor(
+                              parseInt(draft.budget || '0', 10)
+                            ).toLocaleString()}{' '}
+                            impressions
+                          </div>
+
+                          {draft.lastRun && (
+                            <div className="text-[11px] text-muted-foreground">
+                              Last run: {new Date(draft.lastRun).toLocaleString()}
+                            </div>
+                          )}
                         </div>
-                      ))}
+
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="rounded-full"
+                          onClick={() => runDraft(index)}
+                        >
+                          Run
+                        </Button>
+                      </div>
+                    ))}
 
                     {drafts.length > 5 && (
                       <div className="flex justify-center">
@@ -1187,9 +1414,7 @@ export default function MarketplacePage() {
                 </div>
 
                 {usage.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">
-                    No usage yet.
-                  </div>
+                  <div className="text-xs text-muted-foreground">No usage yet.</div>
                 ) : (
                   <div className="space-y-1">
                     {usage.slice(0, 5).map((event, index) => (
@@ -1245,7 +1470,8 @@ export default function MarketplacePage() {
 
               {gigs.length === 0 ? (
                 <div className="text-xs text-muted-foreground">
-                  Create a gig for design, editing, content, delivery promo or social media services.
+                  Create a gig for design, editing, content, delivery promo or
+                  social media services.
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1309,9 +1535,7 @@ export default function MarketplacePage() {
 
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <div className="text-muted-foreground">
-                  Secure in-app payments
-                </div>
+                <div className="text-muted-foreground">Secure project payments</div>
                 <Button
                   size="sm"
                   className="rounded-full"
@@ -1323,37 +1547,61 @@ export default function MarketplacePage() {
 
               {escrows.length === 0 ? (
                 <div className="text-xs text-muted-foreground">
-                  Create payment records before work starts.
+                  Create an escrow payment record before work starts.
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {escrows.slice(0, 3).map((escrow) => (
+                  {escrows.slice(0, 4).map((escrow) => (
                     <div key={escrow.id} className="rounded-xl border p-2">
-                      <div className="truncate text-sm font-medium">
-                        {escrow.title}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        R{escrow.amount || 0} · {escrow.status}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {escrow.title}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            R{escrow.amount || 0} · {statusBadge(escrow.status)}
+                          </div>
+                        </div>
+
+                        <Badge variant="outline" className="shrink-0 text-[10px]">
+                          {statusBadge(escrow.status)}
+                        </Badge>
                       </div>
 
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={escrow.status !== 'draft'}
-                          onClick={() => updateEscrowStatus(escrow.id, 'funded')}
+                          disabled={
+                            escrow.status !== 'draft' ||
+                            escrowCheckoutBusyId === escrow.id
+                          }
+                          onClick={() => fundEscrow(escrow)}
                         >
-                          Fund
+                          {escrowCheckoutBusyId === escrow.id
+                            ? 'Opening...'
+                            : 'Fund'}
                         </Button>
+
                         <Button
                           size="sm"
                           variant="secondary"
                           disabled={escrow.status !== 'funded'}
-                          onClick={() =>
-                            updateEscrowStatus(escrow.id, 'released')
-                          }
+                          onClick={() => releaseEscrow(escrow)}
                         >
                           Release
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={
+                            escrow.status === 'released' ||
+                            escrow.status === 'cancelled'
+                          }
+                          onClick={() => cancelEscrow(escrow)}
+                        >
+                          Cancel
                         </Button>
                       </div>
                     </div>
@@ -1385,38 +1633,44 @@ export default function MarketplacePage() {
                   {selectedShop.description}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
-                  {selectedShop.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="overflow-hidden rounded-2xl border bg-card"
-                    >
-                      <div className="aspect-square bg-black/5">
-                        <img
-                          src={item.image}
-                          alt={item.title}
-                          className="h-full w-full object-cover"
-                        />
+                {selectedShop.items.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    No items added yet. Contact seller for more details.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                    {selectedShop.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="overflow-hidden rounded-2xl border bg-card"
+                      >
+                        <div className="aspect-square bg-black/5">
+                          <img
+                            src={item.image}
+                            alt={item.title}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5 p-2.5">
+                          <div className="truncate text-xs font-semibold">
+                            {item.title}
+                          </div>
+
+                          <div className="h-10 overflow-hidden text-[11px] leading-snug text-muted-foreground">
+                            {item.description}
+                          </div>
+
+                          <div className="text-xs font-bold">
+                            {item.showPrice && item.price
+                              ? formatMoney(item.price)
+                              : 'Price on request'}
+                          </div>
+                        </div>
                       </div>
-
-                      <div className="space-y-1.5 p-2.5">
-                        <div className="truncate text-xs font-semibold">
-                          {item.title}
-                        </div>
-
-                        <div className="h-10 overflow-hidden text-[11px] leading-snug text-muted-foreground">
-                          {item.description}
-                        </div>
-
-                        <div className="text-xs font-bold">
-                          {item.showPrice && item.price
-                            ? `R${Number(item.price).toFixed(2)}`
-                            : 'Price on request'}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1648,27 +1902,52 @@ export default function MarketplacePage() {
             </Button>
 
             <Button
-              onClick={() => {
-                const added = impressionsFor(creditsRand);
-                const newBalance = creditsBalance + added;
+              disabled={creditsCheckoutBusy || !creditsRand || creditsRand <= 0}
+              onClick={async () => {
+                try {
+                  setCreditsCheckoutBusy(true);
 
-                setCreditsBalance(newBalance);
-                saveLS('ads:credits', newBalance);
-                pushUsage({
-                  type: 'buy_credits',
-                  rands: creditsRand,
-                  impressions: added,
-                  balance: newBalance,
-                });
-                setCreditsOpen(false);
+                  const origin = window.location.origin;
+                  const impressions = impressionsFor(creditsRand);
 
-                toast({
-                  title: 'Ad credits added',
-                  description: `Your balance is now ${newBalance.toLocaleString()} impressions.`,
-                });
+                  localStorage.setItem(
+                    'facemex_pending_ad_credits',
+                    JSON.stringify({
+                      amountZar: creditsRand,
+                      impressions,
+                      createdAt: new Date().toISOString(),
+                    })
+                  );
+
+                  const checkout = await createYocoCheckoutSession({
+                    amountZar: creditsRand,
+                    currency: 'ZAR',
+                    successUrl: `${origin}/marketplace?ad_credits=success`,
+                    cancelUrl: `${origin}/marketplace?ad_credits=cancelled`,
+                    failureUrl: `${origin}/marketplace?ad_credits=failed`,
+                    metadata: {
+                      billingPurpose: 'marketplace_ad_credits',
+                      amountZar: String(creditsRand),
+                      impressions: String(impressions),
+                    },
+                    externalId: `marketplace-ad-credits-${Date.now()}`,
+                  });
+
+                  window.location.href = checkout.redirectUrl;
+                } catch (error: any) {
+                  localStorage.removeItem('facemex_pending_ad_credits');
+
+                  toast({
+                    title: 'Checkout failed',
+                    description:
+                      error?.message || 'Could not open card checkout.',
+                  });
+                } finally {
+                  setCreditsCheckoutBusy(false);
+                }
               }}
             >
-              Confirm Purchase
+              {creditsCheckoutBusy ? 'Opening checkout...' : 'Pay & Activate'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1679,7 +1958,8 @@ export default function MarketplacePage() {
           <DialogHeader>
             <DialogTitle>Create Campaign</DialogTitle>
             <DialogDescription>
-              Save a draft, then run it from Draft Campaigns to show in feed slide recommendations.
+              Save a draft, then run it from Draft Campaigns to show in feed slide
+              recommendations.
             </DialogDescription>
           </DialogHeader>
 
@@ -1740,7 +2020,8 @@ export default function MarketplacePage() {
           <DialogHeader>
             <DialogTitle>Create Creator Gig</DialogTitle>
             <DialogDescription>
-              Offer a service like design, video editing, delivery promo, or social media content.
+              Offer a service like design, video editing, delivery promo, or social
+              media content.
             </DialogDescription>
           </DialogHeader>
 
@@ -1814,7 +2095,8 @@ export default function MarketplacePage() {
           <DialogHeader>
             <DialogTitle>Create Escrow</DialogTitle>
             <DialogDescription>
-              Create a secure payment record before work starts.
+              Create a secure payment record. Buyer pays first, then payment can be
+              released after work is delivered.
             </DialogDescription>
           </DialogHeader>
 
@@ -1836,7 +2118,7 @@ export default function MarketplacePage() {
             <Button variant="outline" onClick={() => setEscrowOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={saveEscrow}>Save Escrow</Button>
+            <Button onClick={saveEscrow}>Create Escrow</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
