@@ -10,6 +10,8 @@ import {
   Plus,
   Image as ImageIcon,
   Mic,
+  Phone,
+  Video,
   Paperclip,
   Edit2,
   Check,
@@ -48,7 +50,6 @@ import { toast } from '@/components/ui/use-toast';
 import { io, Socket } from 'socket.io-client';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import SafetyWarningDialog from '@/components/safety/SafetyWarningDialog';
-import { getRealName, getRealAvatar } from '@/lib/profileName';
 import { reportSafetyEvent, safetyScanText, type SafetyScanResult } from '@/lib/safety';
 
 type MessageType = 'text' | 'image' | 'document' | 'voice';
@@ -154,7 +155,11 @@ function VoiceMessageBubble({ src }: { src: string }) {
           <div className="mt-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
             <div
               className="h-full bg-white/40"
-              style={{ width: `${duration > 0 ? Math.min(100, (current / duration) * 100) : 0}%` }}
+              style={{
+                width: `${
+                  duration > 0 ? Math.min(100, (current / duration) * 100) : 0
+                }%`,
+              }}
             />
           </div>
 
@@ -198,7 +203,7 @@ export default function MessagesPage() {
   const navigate = useNavigate();
   const { userId } = useParams();
   const { tier, hasTier } = useUserStore();
-  
+
   const focusOnOpen =
     typeof window !== 'undefined'
       ? new URLSearchParams(window.location.search).get('focus') === '1'
@@ -272,7 +277,7 @@ export default function MessagesPage() {
 
   const getProfileName = (profile?: ProfileRow | null) => {
     if (!profile) return 'FaceMeX Member';
-  
+
     return (
       profile?.full_name ||
       profile?.name ||
@@ -401,66 +406,66 @@ export default function MessagesPage() {
   }, [currentUserId]);
 
   useEffect(() => {
-  if (!currentUserId || !userId) return;
+    if (!currentUserId || !userId) return;
 
-  let cancelled = false;
+    let cancelled = false;
 
-  async function openMessageFromButton() {
-    setActiveConversation(userId);
-    activeConversationRef.current = userId;
+    async function openMessageFromButton() {
+      setActiveConversation(userId);
+      activeConversationRef.current = userId;
 
-    await loadMessages(userId);
+      await loadMessages(userId);
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, full_name, name, username, avatar_url, avatar, is_active')
-      .eq('id', userId)
-      .maybeSingle();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, full_name, name, username, avatar_url, avatar, is_active')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (cancelled) return;
+      if (cancelled) return;
 
-    const realName = getProfileName(profile as ProfileRow);
-    const realAvatar = getProfileAvatar(profile as ProfileRow);
+      const realName = getProfileName(profile as ProfileRow);
+      const realAvatar = getProfileAvatar(profile as ProfileRow);
 
-    setConversations((prev) => {
-      const old = prev.find((conversation) => conversation.id === userId);
+      setConversations((prev) => {
+        const old = prev.find((conversation) => conversation.id === userId);
 
-      const openedConversation: UiConversation = {
-        id: userId,
-        type: 'dm',
-        name: realName,
-        participants: [
-          {
-            id: userId,
-            name: realName,
-            avatar: realAvatar,
-            isOnline: !!profile?.is_active,
-          },
-        ],
-        lastMessage: old?.lastMessage,
-        unreadCount: old?.unreadCount || 0,
-        isTyping: old?.isTyping,
-      };
+        const openedConversation: UiConversation = {
+          id: userId,
+          type: 'dm',
+          name: realName,
+          participants: [
+            {
+              id: userId,
+              name: realName,
+              avatar: realAvatar,
+              isOnline: !!profile?.is_active,
+            },
+          ],
+          lastMessage: old?.lastMessage,
+          unreadCount: old?.unreadCount || 0,
+          isTyping: old?.isTyping,
+        };
 
-      return [
-        openedConversation,
-        ...prev.filter((conversation) => conversation.id !== userId),
-      ];
-    });
+        return [
+          openedConversation,
+          ...prev.filter((conversation) => conversation.id !== userId),
+        ];
+      });
 
-    if (focusOnOpen) {
-      window.setTimeout(() => {
-        messageInputRef.current?.focus();
-      }, 300);
+      if (focusOnOpen) {
+        window.setTimeout(() => {
+          messageInputRef.current?.focus();
+        }, 300);
+      }
     }
-  }
 
-  openMessageFromButton();
+    openMessageFromButton();
 
-  return () => {
-    cancelled = true;
-  };
-}, [currentUserId, userId, focusOnOpen]);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, userId, focusOnOpen]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -499,9 +504,10 @@ export default function MessagesPage() {
     if (activeConversation || conversations.length === 0) return;
 
     try {
-      const isDesktop = typeof window !== 'undefined'
-        ? window.matchMedia('(min-width: 768px)').matches
-        : true;
+      const isDesktop =
+        typeof window !== 'undefined'
+          ? window.matchMedia('(min-width: 768px)').matches
+          : true;
 
       if (isDesktop) {
         setActiveConversation(conversations[0].id);
@@ -864,9 +870,10 @@ export default function MessagesPage() {
     pcRef.current = pc;
 
     if (!localStream) {
-      const constraints = type === 'voice'
-        ? { audio: true, video: false }
-        : { audio: true, video: true };
+      const constraints =
+        type === 'voice'
+          ? { audio: true, video: false }
+          : { audio: true, video: true };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -959,7 +966,10 @@ export default function MessagesPage() {
 
   const handleSendMessage = async () => {
     if (!activeConversation) {
-      toast({ title: 'Select a conversation', description: 'Choose a chat to send a message.' });
+      toast({
+        title: 'Select a conversation',
+        description: 'Choose a chat to send a message.',
+      });
       return;
     }
 
@@ -995,7 +1005,10 @@ export default function MessagesPage() {
 
       try {
         const url = await uploadMedia(file, 'messages/voice');
-        await sendSupabaseMessage(url, 'voice', { mediaUrl: url, fileName: file.name });
+        await sendSupabaseMessage(url, 'voice', {
+          mediaUrl: url,
+          fileName: file.name,
+        });
         setPendingVoiceBlob(null);
         setPendingVoiceUrl(null);
       } catch (e: any) {
@@ -1020,7 +1033,11 @@ export default function MessagesPage() {
       reportSafetyEvent({
         content: messageText,
         scan,
-        context: { location: 'messages', conversationId: activeConversation, direction: 'outgoing' },
+        context: {
+          location: 'messages',
+          conversationId: activeConversation,
+          direction: 'outgoing',
+        },
       }).catch(() => {});
 
       return;
@@ -1049,7 +1066,11 @@ export default function MessagesPage() {
       reportSafetyEvent({
         content: incoming.content,
         scan,
-        context: { location: 'messages', conversationId: activeConversation, direction: 'incoming' },
+        context: {
+          location: 'messages',
+          conversationId: activeConversation,
+          direction: 'incoming',
+        },
       }).catch(() => {});
     }
   }, [activeConversation, activeMessages.length, currentUserId]);
@@ -1070,7 +1091,10 @@ export default function MessagesPage() {
 
     try {
       const url = await uploadMedia(file, 'messages/images');
-      await sendSupabaseMessage(url, 'image', { mediaUrl: url, fileName: file.name });
+      await sendSupabaseMessage(url, 'image', {
+        mediaUrl: url,
+        fileName: file.name,
+      });
     } catch (e: any) {
       toast({
         title: 'Upload failed',
@@ -1088,7 +1112,10 @@ export default function MessagesPage() {
 
     try {
       const url = await uploadMedia(file, 'messages/documents');
-      await sendSupabaseMessage(url, 'document', { mediaUrl: url, fileName: file.name });
+      await sendSupabaseMessage(url, 'document', {
+        mediaUrl: url,
+        fileName: file.name,
+      });
     } catch (e: any) {
       toast({
         title: 'Upload failed',
@@ -1111,10 +1138,10 @@ export default function MessagesPage() {
         if (stored) targetLang = stored;
       } catch {}
 
-      const res = await api.post('/api/ai/translate', {
+      const res = (await api.post('/api/ai/translate', {
         text,
         targetLang,
-      }) as any;
+      })) as any;
 
       const translated = res?.translated || text;
 
@@ -1156,8 +1183,13 @@ export default function MessagesPage() {
       return;
     }
 
-    const lastIncoming = [...activeMessages].reverse().find((m) => m.senderId !== currentUserId);
-    const base = lastIncoming?.content || 'Draft a friendly, concise, positive reply.';
+    const lastIncoming = [...activeMessages]
+      .reverse()
+      .find((m) => m.senderId !== currentUserId);
+
+    const base =
+      lastIncoming?.content || 'Draft a friendly, concise, positive reply.';
+
     const input = `You are replying in a private chat. Write like a real human: warm, natural, and easy to read. Keep it short (ideally 1–4 sentences, never more than about 270 words). Avoid lists and headings.
 
 Last message you are replying to:
@@ -1175,39 +1207,27 @@ Last message you are replying to:
         localStorage.setItem(`dm:ai:${todayKey}`, String(used + 1));
       } catch {}
     } catch {
-      toast({ title: 'AI reply unavailable', description: 'Try again in a moment.' });
+      toast({
+        title: 'AI reply unavailable',
+        description: 'Try again in a moment.',
+      });
     } finally {
       setAiTyping(false);
     }
   };
 
-  const handleStartCall = async (type: 'voice' | 'video') => {
-    if (!activeConversation || !socketRef.current) return;
-
-    try {
-      setCallType(type);
-      setIsCaller(true);
-      const socket = socketRef.current;
-      socket.emit('call:join', { roomId: activeConversation });
-      const pc = await ensurePeerConnection(type);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('call:offer', { roomId: activeConversation, offer, type });
-      setIsCallModalOpen(true);
-      setIsRinging(true);
-
-      if (ringingTimeoutRef.current) clearTimeout(ringingTimeoutRef.current);
-      ringingTimeoutRef.current = window.setTimeout(() => {
-        endCallInternal();
-      }, 20000);
-    } catch (e) {
-      console.error('Error starting call', e);
+  const handleStartCall = (type: 'voice' | 'video') => {
+    if (!activeConversation) {
       toast({
-        title: 'Call failed',
-        description: 'Could not start the call. Check camera/mic permissions.',
+        title: 'Select a chat',
+        description: 'Choose a conversation before starting a call.',
       });
-      endCallInternal();
+      return;
     }
+
+    const callTypeParam = type === 'video' ? 'video' : 'audio';
+
+    navigate(`/call/${activeConversation}?type=${callTypeParam}`);
   };
 
   const handleAcceptIncomingCall = async () => {
@@ -1218,12 +1238,15 @@ Last message you are replying to:
       await ensurePeerConnection(callType);
       const pc = pcRef.current;
       if (!pc) return;
+
       await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
 
       if (!localStream) {
-        const constraints = callType === 'voice'
-          ? { audio: true, video: false }
-          : { audio: true, video: true };
+        const constraints =
+          callType === 'voice'
+            ? { audio: true, video: false }
+            : { audio: true, video: true };
+
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
         setLocalStream(stream);
@@ -1253,6 +1276,7 @@ Last message you are replying to:
 
   const handleToggleMute = () => {
     if (!localStream) return;
+
     localStream.getAudioTracks().forEach((track) => {
       track.enabled = !track.enabled;
     });
@@ -1260,6 +1284,7 @@ Last message you are replying to:
 
   const handleToggleVideo = () => {
     if (!localStream) return;
+
     localStream.getVideoTracks().forEach((track) => {
       track.enabled = !track.enabled;
     });
@@ -1267,23 +1292,30 @@ Last message you are replying to:
 
   const getConversationName = (conv: UiConversation) => conv.name || 'Unknown';
 
-  const getConversationAvatar = (conv: UiConversation) => conv.participants[0]?.avatar || '';
+  const getConversationAvatar = (conv: UiConversation) =>
+    conv.participants[0]?.avatar || '';
 
   const getLastPreview = (conv: UiConversation) => {
     const draft = draftByConversation[conv.id];
     if (typeof draft === 'string' && draft.trim()) return `Draft: ${draft.trim()}`;
+
     const msg = conv.lastMessage;
     if (!msg) return '';
+
     if (conv.isTyping && conv.isTyping.length > 0) return 'typing…';
     if (msg.type === 'image') return 'Photo';
-    if (msg.type === 'document') return msg.fileName ? `Document • ${msg.fileName}` : 'Document';
+    if (msg.type === 'document') {
+      return msg.fileName ? `Document • ${msg.fileName}` : 'Document';
+    }
     if (msg.type === 'voice') return 'Voice note';
+
     return msg.content || '';
   };
 
   const getLastTimeLabel = (conv: UiConversation) => {
     const msg = conv.lastMessage;
     if (!msg?.timestamp) return '';
+
     try {
       return formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true });
     } catch {
@@ -1295,15 +1327,26 @@ Last message you are replying to:
     const msg = conv.lastMessage;
     if (!msg) return null;
     if (msg.senderId !== currentUserId) return null;
-    return msg.isRead ? { label: 'Seen', icon: CheckCheck } : { label: 'Delivered', icon: Check };
+
+    return msg.isRead
+      ? { label: 'Seen', icon: CheckCheck }
+      : { label: 'Delivered', icon: Check };
   };
 
   const getSmartSortKey = (conv: UiConversation) => {
     const pinned = pinnedConversations[conv.id] ? 1 : 0;
     const unread = (conv.unreadCount || 0) > 0 ? 1 : 0;
     const interaction = interactionByConversation[conv.id] || 0;
-    const t = conv.lastMessage?.timestamp ? new Date(conv.lastMessage.timestamp).getTime() : 0;
-    return pinned * 1_000_000_000 + unread * 10_000_000 + interaction * 10_000 + Math.floor(t / 1000);
+    const t = conv.lastMessage?.timestamp
+      ? new Date(conv.lastMessage.timestamp).getTime()
+      : 0;
+
+    return (
+      pinned * 1_000_000_000 +
+      unread * 10_000_000 +
+      interaction * 10_000 +
+      Math.floor(t / 1000)
+    );
   };
 
   const openConversation = (conversationId: string) => {
@@ -1335,6 +1378,7 @@ Last message you are replying to:
     setQuickReplyFor(null);
     await loadConversations();
     if (activeConversation === conversationId) await loadMessages(conversationId);
+
     toast({ title: 'Sent', description: 'Quick reply delivered.' });
   };
 
@@ -1345,6 +1389,7 @@ Last message you are replying to:
 
   const handleViewProfile = () => {
     const p = getDmParticipant();
+
     if (!p) {
       toast({
         title: 'Not available',
@@ -1352,13 +1397,16 @@ Last message you are replying to:
       });
       return;
     }
+
     navigate(`/profile/${p.id}`);
   };
 
   const handleMuteFromMenu = () => {
     if (!activeConversation) return;
+
     const willMute = !mutedConversations[activeConversation];
     toggleMuteConversation(activeConversation);
+
     toast({
       title: willMute ? 'Muted' : 'Unmuted',
       description: 'Notification preference updated for this conversation.',
@@ -1367,12 +1415,17 @@ Last message you are replying to:
 
   const handleDeleteConversation = () => {
     if (!activeConversation) return;
+
     const ok = window.confirm('Archive this conversation?');
     if (!ok) return;
 
     toggleArchiveConversation(activeConversation);
     setActiveConversation(null);
-    toast({ title: 'Archived', description: 'Conversation moved to archive.' });
+
+    toast({
+      title: 'Archived',
+      description: 'Conversation moved to archive.',
+    });
   };
 
   const filteredConversations = conversations.filter((conv) => {
@@ -1417,17 +1470,19 @@ Last message you are replying to:
           <div className="p-3 md:p-4 border-b space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base md:text-xl font-semibold">Messages</h2>
+
               <div className="flex items-center gap-1">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 px-2 text-xs"
+                  className="h-8 px-2 text-xs rounded-full"
                   onClick={() => setShowArchived((v) => !v)}
                 >
                   {showArchived ? 'Hide archived' : 'Archived'}
                 </Button>
-                <Button size="icon" variant="ghost">
+
+                <Button size="icon" variant="ghost" className="rounded-full">
                   <Plus className="h-5 w-5" />
                 </Button>
               </div>
@@ -1435,11 +1490,12 @@ Last message you are replying to:
 
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+
               <Input
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-9 text-sm"
+                className="pl-10 h-9 text-sm rounded-full"
               />
             </div>
 
@@ -1448,16 +1504,17 @@ Last message you are replying to:
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 px-2"
+                className="h-7 px-2 rounded-full"
                 onClick={() => navigate('/jobs')}
               >
                 Jobs
               </Button>
+
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 px-2"
+                className="h-7 px-2 rounded-full"
                 onClick={() => navigate('/groups/pro')}
               >
                 Pro Groups
@@ -1485,13 +1542,16 @@ Last message you are replying to:
                             {pinnedConversations[conv.id] ? 'Unpin' : 'Pin'}
                           </div>
                         </div>
+
                         <div className="w-1/2 bg-muted/20 flex items-center justify-end px-4">
                           <div className="flex items-center gap-3">
                             <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
                               <BellOff className="h-4 w-4" />
                               {mutedConversations[conv.id] ? 'Unmute' : 'Mute'}
                             </div>
+
                             <div className="h-6 w-px bg-slate-400/30" />
+
                             <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
                               <Archive className="h-4 w-4" />
                               {archivedConversations[conv.id] ? 'Unarchive' : 'Archive'}
@@ -1508,6 +1568,7 @@ Last message you are replying to:
                       onClick={() => openConversation(conv.id)}
                       onDragEnd={(_, info) => {
                         const x = info.offset.x;
+
                         if (x > 90) {
                           togglePinConversation(conv.id);
                           toast({
@@ -1516,6 +1577,7 @@ Last message you are replying to:
                           });
                           return;
                         }
+
                         if (x < -140) {
                           toggleArchiveConversation(conv.id);
                           toast({
@@ -1524,6 +1586,7 @@ Last message you are replying to:
                           });
                           return;
                         }
+
                         if (x < -70) {
                           toggleMuteConversation(conv.id);
                           toast({
@@ -1551,9 +1614,11 @@ Last message you are replying to:
                               {getConversationName(conv)?.charAt(0)}
                             </div>
                           )}
+
                           {conv.type === 'dm' && conv.participants[0]?.isOnline && (
                             <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background shadow-[0_0_0_3px_rgba(16,185,129,0.15)]" />
                           )}
+
                           {conv.unreadCount > 0 && (
                             <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary ring-2 ring-background" />
                           )}
@@ -1566,18 +1631,22 @@ Last message you are replying to:
                                 {pinnedConversations[conv.id] && (
                                   <Pin className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                                 )}
+
                                 {mutedConversations[conv.id] && (
                                   <BellOff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                                 )}
+
                                 <p className="font-semibold text-sm md:text-base truncate">
                                   {getConversationName(conv)}
                                 </p>
                               </div>
                             </div>
+
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="hidden sm:inline text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
                                 {getLastTimeLabel(conv)}
                               </span>
+
                               {conv.unreadCount > 0 && (
                                 <Badge className="bg-primary/15 text-foreground h-5 px-2 rounded-full text-[10px]">
                                   {conv.unreadCount}
@@ -1591,16 +1660,26 @@ Last message you are replying to:
                               {!draftByConversation[conv.id]?.trim() && conv.lastMessage?.type === 'image' && (
                                 <ImageIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               )}
+
                               {!draftByConversation[conv.id]?.trim() && conv.lastMessage?.type === 'document' && (
                                 <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               )}
+
                               {!draftByConversation[conv.id]?.trim() && conv.lastMessage?.type === 'voice' && (
                                 <Mic className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               )}
+
                               {draftByConversation[conv.id]?.trim() && (
                                 <Edit2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                               )}
-                              <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+
+                              <p
+                                className={`text-xs truncate ${
+                                  conv.unreadCount > 0
+                                    ? 'text-foreground font-medium'
+                                    : 'text-muted-foreground'
+                                }`}
+                              >
                                 {getLastPreview(conv)}
                               </p>
                             </div>
@@ -1608,7 +1687,9 @@ Last message you are replying to:
                             {(() => {
                               const rr = getReadReceipt(conv);
                               if (!rr) return null;
+
                               const Icon = rr.icon;
+
                               return (
                                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground whitespace-nowrap">
                                   <Icon className="h-3 w-3" />
@@ -1619,17 +1700,21 @@ Last message you are replying to:
                           </div>
 
                           {quickReplyFor === conv.id && (
-                            <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div
+                              className="mt-2 flex items-center gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Input
                                 value={quickReplyText}
                                 onChange={(e) => setQuickReplyText(e.target.value)}
                                 placeholder="Quick reply…"
-                                className="h-8 text-xs"
+                                className="h-8 text-xs rounded-full"
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
                                     handleQuickReplySend(conv.id);
                                   }
+
                                   if (e.key === 'Escape') {
                                     e.preventDefault();
                                     setQuickReplyFor(null);
@@ -1638,10 +1723,11 @@ Last message you are replying to:
                                 }}
                                 autoFocus
                               />
+
                               <Button
                                 type="button"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="h-8 w-8 rounded-full"
                                 onClick={() => handleQuickReplySend(conv.id)}
                                 disabled={!quickReplyText.trim()}
                                 aria-label="Send quick reply"
@@ -1667,6 +1753,7 @@ Last message you are replying to:
                               <MoreVertical className="h-4 w-4 text-muted-foreground" />
                             </button>
                           </DropdownMenuTrigger>
+
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
                               onClick={(e) => {
@@ -1676,6 +1763,7 @@ Last message you are replying to:
                             >
                               {pinnedConversations[conv.id] ? 'Unpin' : 'Pin to top'}
                             </DropdownMenuItem>
+
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1684,6 +1772,7 @@ Last message you are replying to:
                             >
                               {mutedConversations[conv.id] ? 'Unmute' : 'Mute'}
                             </DropdownMenuItem>
+
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1692,6 +1781,7 @@ Last message you are replying to:
                             >
                               {archivedConversations[conv.id] ? 'Unarchive' : 'Archive'}
                             </DropdownMenuItem>
+
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1701,6 +1791,7 @@ Last message you are replying to:
                             >
                               Quick reply
                             </DropdownMenuItem>
+
                             {draftByConversation[conv.id]?.trim() && (
                               <DropdownMenuItem
                                 onClick={(e) => {
@@ -1732,14 +1823,18 @@ Last message you are replying to:
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="md:hidden h-8 w-8"
+                        className="md:hidden h-8 w-8 rounded-full"
                         onClick={() => setActiveConversation(null)}
                         aria-label="Back"
                       >
                         <span className="text-lg">←</span>
                       </Button>
+
                       <div>
-                        <p className="font-semibold text-sm md:text-base">{getConversationName(activeConv)}</p>
+                        <p className="font-semibold text-sm md:text-base">
+                          {getConversationName(activeConv)}
+                        </p>
+
                         <p className="text-xs text-muted-foreground">
                           {activeConv.participants[0]?.isOnline ? 'Active now' : 'Offline'}
                         </p>
@@ -1749,17 +1844,25 @@ Last message you are replying to:
                     <div className="flex items-center gap-1 md:gap-2">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost">
+                          <Button size="icon" variant="ghost" className="rounded-full">
                             <MoreVertical className="h-5 w-5" />
                           </Button>
                         </DropdownMenuTrigger>
+
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate('/jobs')}>Jobs</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => navigate('/groups/pro')}>Pro Groups</DropdownMenuItem>
-                          {(tier === 'exclusive' || tier === 'business') ? (
+                          <DropdownMenuItem onClick={() => navigate('/jobs')}>
+                            Jobs
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem onClick={() => navigate('/groups/pro')}>
+                            Pro Groups
+                          </DropdownMenuItem>
+
+                          {tier === 'exclusive' || tier === 'business' ? (
                             <DropdownMenuItem
                               onClick={() => {
                                 if (!activeConversation) return;
+
                                 setTranslatorAutoByConv((prev) => ({
                                   ...prev,
                                   [activeConversation]: !translatorAuto,
@@ -1769,10 +1872,17 @@ Last message you are replying to:
                               {translatorAuto ? 'Translator: On' : 'Translator: Off'}
                             </DropdownMenuItem>
                           ) : null}
-                          <DropdownMenuItem onClick={handleViewProfile}>View Profile</DropdownMenuItem>
-                          <DropdownMenuItem onClick={handleMuteFromMenu}>
-                            {activeConversation && mutedConversations[activeConversation] ? 'Unmute Notifications' : 'Mute Notifications'}
+
+                          <DropdownMenuItem onClick={handleViewProfile}>
+                            View Profile
                           </DropdownMenuItem>
+
+                          <DropdownMenuItem onClick={handleMuteFromMenu}>
+                            {activeConversation && mutedConversations[activeConversation]
+                              ? 'Unmute Notifications'
+                              : 'Mute Notifications'}
+                          </DropdownMenuItem>
+
                           <DropdownMenuItem className="text-red-500" onClick={handleDeleteConversation}>
                             Archive Conversation
                           </DropdownMenuItem>
@@ -1789,11 +1899,22 @@ Last message you are replying to:
                           {getConversationName(activeConv)} is calling you.
                         </p>
                       </div>
+
                       <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={handleDeclineIncomingCall}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full"
+                          onClick={handleDeclineIncomingCall}
+                        >
                           Decline
                         </Button>
-                        <Button size="sm" onClick={handleAcceptIncomingCall}>
+
+                        <Button
+                          size="sm"
+                          className="rounded-full"
+                          onClick={handleAcceptIncomingCall}
+                        >
                           Accept
                         </Button>
                       </div>
@@ -1805,6 +1926,7 @@ Last message you are replying to:
                       <AnimatePresence>
                         {activeMessages.map((message) => {
                           const isOwn = message.senderId === currentUserId;
+
                           return (
                             <motion.div
                               key={message.id}
@@ -1813,7 +1935,11 @@ Last message you are replying to:
                               exit={{ opacity: 0 }}
                               className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
                             >
-                              <div className={`flex items-end space-x-2 max-w-[82%] ${isOwn ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                              <div
+                                className={`flex items-end space-x-2 max-w-[82%] ${
+                                  isOwn ? 'flex-row-reverse space-x-reverse' : ''
+                                }`}
+                              >
                                 <div>
                                   <div
                                     className={`rounded-3xl px-3 py-2.5 ${
@@ -1829,7 +1955,12 @@ Last message you are replying to:
                                         {message.type === 'voice' && (message.mediaUrl || message.content) ? (
                                           <VoiceMessageBubble src={message.mediaUrl || message.content} />
                                         ) : message.type === 'image' && (message.mediaUrl || message.content) ? (
-                                          <a href={message.mediaUrl || message.content} target="_blank" rel="noreferrer" className="block">
+                                          <a
+                                            href={message.mediaUrl || message.content}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="block"
+                                          >
                                             <img
                                               src={message.mediaUrl || message.content}
                                               alt={message.fileName || 'Image'}
@@ -1854,12 +1985,18 @@ Last message you are replying to:
                                             </span>
                                           </a>
                                         ) : (
-                                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+                                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                            {message.content}
+                                          </p>
                                         )}
+
                                         {message.edited && (
-                                          <p className="mt-1 text-[10px] opacity-75">edited</p>
+                                          <p className="mt-1 text-[10px] opacity-75">
+                                            edited
+                                          </p>
                                         )}
                                       </div>
+
                                       {isOwn && !message.deleted && (
                                         <DropdownMenu>
                                           <DropdownMenuTrigger asChild>
@@ -1868,14 +2005,15 @@ Last message you are replying to:
                                               variant="ghost"
                                               className={
                                                 message.type === 'voice'
-                                                  ? 'h-7 w-7 -mr-1 -mt-1 text-muted-foreground hover:text-foreground hover:bg-muted/30'
-                                                  : 'h-7 w-7 -mr-1 -mt-1 text-white/90 hover:text-white hover:bg-white/15'
+                                                  ? 'h-7 w-7 -mr-1 -mt-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-full'
+                                                  : 'h-7 w-7 -mr-1 -mt-1 text-white/90 hover:text-white hover:bg-white/15 rounded-full'
                                               }
                                               aria-label="Message actions"
                                             >
                                               <MoreVertical className="h-4 w-4" />
                                             </Button>
                                           </DropdownMenuTrigger>
+
                                           <DropdownMenuContent align="end">
                                             <DropdownMenuItem
                                               disabled={message.type === 'voice'}
@@ -1886,6 +2024,7 @@ Last message you are replying to:
                                             >
                                               Edit
                                             </DropdownMenuItem>
+
                                             <DropdownMenuItem
                                               className="text-red-500"
                                               onClick={async () => {
@@ -1902,7 +2041,10 @@ Last message you are replying to:
                                                   .eq('sender_id', currentUserId);
 
                                                 if (error) {
-                                                  toast({ title: 'Delete failed', description: error.message });
+                                                  toast({
+                                                    title: 'Delete failed',
+                                                    description: error.message,
+                                                  });
                                                   return;
                                                 }
 
@@ -1919,29 +2061,44 @@ Last message you are replying to:
                                   </div>
 
                                   {translatedMessages[message.id] && (
-                                    <p className={`mt-1 text-xs text-muted-foreground ${isOwn ? 'text-right' : ''}`}>
+                                    <p
+                                      className={`mt-1 text-xs text-muted-foreground ${
+                                        isOwn ? 'text-right' : ''
+                                      }`}
+                                    >
                                       {translatedMessages[message.id]}
                                     </p>
                                   )}
+
                                   {translatorAuto && !isOwn && !translatedMessages[message.id] && (
                                     <button
-                                      className={`mt-1 text-[11px] underline text-muted-foreground hover:text-foreground ${isOwn ? 'ml-auto' : ''}`}
+                                      className={`mt-1 text-[11px] underline text-muted-foreground hover:text-foreground ${
+                                        isOwn ? 'ml-auto' : ''
+                                      }`}
                                       type="button"
                                       onClick={() => translateMessage(message.id, message.content)}
                                     >
                                       Auto-translate preview
                                     </button>
                                   )}
+
                                   {!translatorAuto && !translatedMessages[message.id] && (
                                     <button
-                                      className={`mt-1 text-[11px] underline text-muted-foreground hover:text-foreground ${isOwn ? 'ml-auto' : ''}`}
+                                      className={`mt-1 text-[11px] underline text-muted-foreground hover:text-foreground ${
+                                        isOwn ? 'ml-auto' : ''
+                                      }`}
                                       type="button"
                                       onClick={() => translateMessage(message.id, message.content)}
                                     >
                                       Translate
                                     </button>
                                   )}
-                                  <p className={`text-xs text-muted-foreground mt-1 ${isOwn ? 'text-right' : ''}`}>
+
+                                  <p
+                                    className={`text-xs text-muted-foreground mt-1 ${
+                                      isOwn ? 'text-right' : ''
+                                    }`}
+                                  >
                                     {formatDistanceToNow(message.timestamp, { addSuffix: true })}
                                   </p>
                                 </div>
@@ -1950,6 +2107,7 @@ Last message you are replying to:
                           );
                         })}
                       </AnimatePresence>
+
                       <div ref={messagesEndRef} />
                       <div className="h-[calc(env(safe-area-inset-bottom)+92px)]" />
                     </div>
@@ -1960,17 +2118,23 @@ Last message you are replying to:
                       {aiDraftNotice ? (
                         <div className="mb-2 rounded-2xl border border-border/60 bg-muted/30 px-3 py-2 text-sm">
                           <div className="font-medium">Suggested reply ready</div>
-                          <div className="mt-0.5 text-muted-foreground leading-relaxed">{aiDraftNotice}</div>
+                          <div className="mt-0.5 text-muted-foreground leading-relaxed">
+                            {aiDraftNotice}
+                          </div>
                         </div>
                       ) : null}
+
                       {showAiSuggestion ? (
                         <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm">
-                          <div className="text-muted-foreground">Get a suggested reply (quiet, professional tone).</div>
+                          <div className="text-muted-foreground">
+                            Get a suggested reply.
+                          </div>
+
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="h-8 px-3 text-xs"
+                            className="h-8 px-3 text-xs rounded-full"
                             disabled={aiTyping}
                             onClick={() => {
                               setAiSuggestionDismissed(true);
@@ -1981,27 +2145,34 @@ Last message you are replying to:
                           </Button>
                         </div>
                       ) : null}
+
                       {safetyNotice ? (
                         <div className="mb-2 rounded-2xl border border-border/60 bg-muted/30 px-3 py-2 text-sm">
                           <div className="font-medium">Message not sent</div>
-                          <div className="mt-0.5 text-muted-foreground leading-relaxed">{safetyNotice}</div>
+                          <div className="mt-0.5 text-muted-foreground leading-relaxed">
+                            {safetyNotice}
+                          </div>
                         </div>
                       ) : null}
+
                       {pendingVoiceUrl && !isRecording ? (
                         <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
                           <div className="min-w-0 flex-1">
                             <VoiceMessageBubble src={pendingVoiceUrl} />
                           </div>
+
                           <div className="flex items-center gap-2 shrink-0">
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="h-8 px-3 text-xs"
+                              className="h-8 px-3 text-xs rounded-full"
                               onClick={() => {
                                 setPendingVoiceUrl((prev) => {
                                   if (prev) {
-                                    try { URL.revokeObjectURL(prev); } catch {}
+                                    try {
+                                      URL.revokeObjectURL(prev);
+                                    } catch {}
                                   }
                                   return null;
                                 });
@@ -2010,10 +2181,11 @@ Last message you are replying to:
                             >
                               Undo
                             </Button>
+
                             <Button
                               type="button"
                               size="sm"
-                              className="h-8 px-3 text-xs"
+                              className="h-8 px-3 text-xs rounded-full"
                               disabled={!activeConversation}
                               onClick={handleSendMessage}
                             >
@@ -2022,16 +2194,20 @@ Last message you are replying to:
                           </div>
                         </div>
                       ) : null}
+
                       {isRecording ? (
                         <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm">
                           <div className="text-muted-foreground">
-                            Recording · {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+                            Recording ·{' '}
+                            {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:
+                            {String(recordingSeconds % 60).padStart(2, '0')}
                           </div>
+
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="h-8 px-3 text-xs"
+                            className="h-8 px-3 text-xs rounded-full"
                             onClick={handleToggleRecording}
                             disabled={!activeConversation}
                           >
@@ -2052,6 +2228,7 @@ Last message you are replying to:
                             e.currentTarget.value = '';
                           }}
                         />
+
                         <input
                           ref={docInputRef}
                           type="file"
@@ -2076,35 +2253,99 @@ Last message you are replying to:
                               <Plus className="h-5 w-5" />
                             </Button>
                           </DrawerTrigger>
-                          <DrawerContent className="rounded-t-[18px]">
-                            <DrawerHeader>
-                              <DrawerTitle>More</DrawerTitle>
+
+                          <DrawerContent className="rounded-t-[22px]">
+                            <DrawerHeader className="pb-2">
+                              <DrawerTitle className="text-left text-base">
+                                Send or start something
+                              </DrawerTitle>
                             </DrawerHeader>
-                            <div className="px-4 pb-4 space-y-2">
+
+                            <div className="px-4 pb-5 space-y-2">
                               <DrawerClose asChild>
-                                <Button type="button" variant="outline" className="w-full justify-start" onClick={handlePickImage}>
-                                  Attach image
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-12 w-full justify-start gap-3 rounded-2xl"
+                                  onClick={handlePickImage}
+                                  disabled={!activeConversation || isSendingAttachment}
+                                >
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                                    <ImageIcon className="h-4 w-4" />
+                                  </span>
+                                  <span className="text-sm font-medium">
+                                    Attach image
+                                  </span>
                                 </Button>
                               </DrawerClose>
+
                               <DrawerClose asChild>
-                                <Button type="button" variant="outline" className="w-full justify-start" onClick={handlePickDocument}>
-                                  Attach document
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-12 w-full justify-start gap-3 rounded-2xl"
+                                  onClick={handlePickDocument}
+                                  disabled={!activeConversation || isSendingAttachment}
+                                >
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                                    <Paperclip className="h-4 w-4" />
+                                  </span>
+                                  <span className="text-sm font-medium">
+                                    Attach document
+                                  </span>
                                 </Button>
                               </DrawerClose>
+
                               <DrawerClose asChild>
-                                <Button type="button" variant="outline" className="w-full justify-start" onClick={handleToggleRecording} disabled={!activeConversation}>
-                                  {isRecording ? 'Stop voice note' : 'Record voice note'}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-12 w-full justify-start gap-3 rounded-2xl"
+                                  onClick={handleToggleRecording}
+                                  disabled={!activeConversation}
+                                >
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                                    <Mic className="h-4 w-4" />
+                                  </span>
+                                  <span className="text-sm font-medium">
+                                    {isRecording ? 'Stop voice note' : 'Record voice note'}
+                                  </span>
                                 </Button>
                               </DrawerClose>
-                              <div className="pt-1" />
+
+                              <div className="pt-2" />
+
                               <DrawerClose asChild>
-                                <Button type="button" variant="outline" className="w-full justify-start" onClick={() => handleStartCall('voice')}>
-                                  Start call
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-12 w-full justify-start gap-3 rounded-2xl"
+                                  onClick={() => handleStartCall('voice')}
+                                  disabled={!activeConversation}
+                                >
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                                    <Phone className="h-4 w-4" />
+                                  </span>
+                                  <span className="text-sm font-medium">
+                                    Start voice call
+                                  </span>
                                 </Button>
                               </DrawerClose>
+
                               <DrawerClose asChild>
-                                <Button type="button" variant="outline" className="w-full justify-start" onClick={() => handleStartCall('video')}>
-                                  Start video call
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-12 w-full justify-start gap-3 rounded-2xl"
+                                  onClick={() => handleStartCall('video')}
+                                  disabled={!activeConversation}
+                                >
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
+                                    <Video className="h-4 w-4" />
+                                  </span>
+                                  <span className="text-sm font-medium">
+                                    Start video call
+                                  </span>
                                 </Button>
                               </DrawerClose>
                             </div>
@@ -2129,9 +2370,13 @@ Last message you are replying to:
                         <Button
                           size="icon"
                           onClick={handleSendMessage}
-                          disabled={!activeConversation || isSendingAttachment || ((!messageText.trim() && !editingMessageId) && !pendingVoiceUrl)}
+                          disabled={
+                            !activeConversation ||
+                            isSendingAttachment ||
+                            ((!messageText.trim() && !editingMessageId) && !pendingVoiceUrl)
+                          }
                           aria-label="Send"
-                          className="h-9 w-9"
+                          className="h-9 w-9 rounded-full"
                         >
                           <Send className="h-4 w-4" />
                         </Button>
