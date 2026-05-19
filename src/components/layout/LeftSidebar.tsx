@@ -22,11 +22,11 @@ import {
 const menuItems = [
   { icon: Home, label: 'Home', path: '/feed' },
   { icon: User, label: 'Profile', path: '/profile' },
-  { icon: Users, label: 'Communities', path: '/communities' },
+  { icon: Users, label: 'Network', path: '/communities' },
   { icon: MessageCircle, label: 'Messages', path: '/messages' },
   { icon: Briefcase, label: 'Jobs', path: '/jobs' },
 
-  // Professional AI tools
+  { icon: Sparkles, label: 'Emotion AI', path: '/emotion' },
   { icon: Briefcase, label: 'AI CV Builder', path: '/ai/resume' },
   { icon: Briefcase, label: 'AI Cover Letter', path: '/ai/cover-letter' },
   { icon: Briefcase, label: 'AI Job Assistant', path: '/ai/job-assistant' },
@@ -86,10 +86,10 @@ export default function LeftSidebar() {
   };
 
   return (
-    <aside className="hidden md:block fixed left-0 top-16 h-[calc(100vh-4rem)] w-60 border-r border-slate-200/70 dark:border-slate-800/70 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-xl px-3 py-4 overflow-y-auto">
+    <aside className="hidden md:block fixed left-0 top-16 h-[calc(100vh-4rem)] w-60 border-r border-slate-200/70 dark:border-slate-800/70 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-xl px-3 py-3 overflow-y-auto">
       <Link
         to="/profile"
-        className="mb-4 flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-slate-100/80 dark:hover:bg-slate-900/60 transition-colors"
+        className="mb-3 flex items-center gap-3 rounded-2xl px-2.5 py-2.5 hover:bg-slate-100/80 dark:hover:bg-slate-900/60 transition-colors"
       >
         <Avatar className="h-10 w-10 border border-slate-200 dark:border-slate-800">
           <AvatarImage src={avatarUrl} alt={displayName} />
@@ -108,7 +108,7 @@ export default function LeftSidebar() {
         </div>
       </Link>
 
-      <div className="mb-4 rounded-2xl border border-slate-200/70 bg-white/70 p-2 dark:border-slate-800/70 dark:bg-slate-900/50">
+      <div className="mb-3 rounded-2xl border border-slate-200/70 bg-white/70 p-2 dark:border-slate-800/70 dark:bg-slate-900/50">
         <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Feed Mode
         </div>
@@ -134,7 +134,7 @@ export default function LeftSidebar() {
             title={
               canUseProfessionalMode
                 ? 'Professional Mode'
-                : 'Professional Mode is for Creator tier and above'
+                : 'Professional Mode unlocks from Creator tier'
             }
             onClick={() => handleModeChange('professional')}
             className={cn(
@@ -158,7 +158,7 @@ export default function LeftSidebar() {
         )}
       </div>
 
-      <nav className="space-y-1.5 text-sm">
+      <nav className="space-y-1 text-sm">
         {menuItems.map((item) => {
           const Icon = item.icon;
 
@@ -177,8 +177,10 @@ export default function LeftSidebar() {
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-50 dark:hover:bg-slate-900/60'
               )}
             >
-              <Icon className="h-4 w-4" />
-              <span className="font-medium tracking-tight">{item.label}</span>
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate font-medium tracking-tight">
+                {item.label}
+              </span>
             </Link>
           );
         })}
