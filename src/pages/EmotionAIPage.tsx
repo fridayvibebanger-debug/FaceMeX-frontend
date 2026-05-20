@@ -954,10 +954,10 @@ User text:
   );
 
   return (
-    <div className="min-h-screen bg-background pt-16">
-      <div className="mx-auto grid max-w-5xl gap-4 p-4 md:grid-cols-2">
+    <div className="min-h-screen bg-background pt-20 md:pt-16">
+     <div className="mx-auto grid max-w-5xl gap-4 px-3 py-4 sm:px-4 md:grid-cols-2">
         <div className="space-y-4">
-          <Card className="rounded-2xl border border-border/70 shadow-sm">
+          <Card className="rounded-2xl border border-border/70 shadow-sm overflow-hidden">
             <CardHeader className="space-y-1 pb-3">
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
@@ -982,10 +982,10 @@ User text:
                 placeholder="Type something you want to understand..."
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className="min-h-[150px] resize-none rounded-2xl text-sm"
+                className="min-h-[150px] resize-none rounded-2xl text-sm w-full"
               />
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <Button
                   onClick={detectFromText}
                   disabled={analyzing || !text.trim()}
