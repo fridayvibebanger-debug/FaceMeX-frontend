@@ -474,36 +474,37 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="space-y-5 px-5 pb-5 sm:px-7 sm:pb-7">
+        <CardContent className="space-y-3 px-4 pb-4">
           {editingPost ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <textarea
-                className="min-h-[110px] w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none focus:border-slate-300"
+                className="w-full min-h-[92px] rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
                 value={postDraft}
                 onChange={(e) => setPostDraft(e.target.value)}
               />
-
+        
               <div className="flex justify-end gap-2">
                 <Button size="sm" variant="ghost" onClick={() => setEditingPost(false)}>
                   Cancel
                 </Button>
+        
                 <Button size="sm" onClick={saveEditPost}>
                   Save
                 </Button>
               </div>
             </div>
           ) : (
-            <p className="whitespace-pre-wrap text-[19px] leading-relaxed text-slate-950 sm:text-[20px]">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-950">
               {post.content.replace(/\[CREATOR_CONTENT\]/g, '')}
             </p>
           )}
-
+        
           {post.hashtags && (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-1">
               {post.hashtags.map((tag, index) => (
                 <span
                   key={index}
-                  className="cursor-pointer text-sm text-primary hover:underline"
+                  className="cursor-pointer text-xs text-primary hover:underline"
                   onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
                   {tag.startsWith('#') ? tag : `#${tag}`}
@@ -511,20 +512,20 @@ export default function PostCard({ post }: PostCardProps) {
               ))}
             </div>
           )}
-
+        
           {imgs.length === 1 && (
-            <div className="relative overflow-hidden rounded-[26px] border border-slate-100 bg-black">
+            <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-black">
               <img
                 src={imgs[0]}
                 alt="Post image"
-                className="max-h-[720px] w-full cursor-pointer rounded-[26px] object-cover"
+                className="max-h-[620px] w-full cursor-pointer rounded-3xl object-cover"
                 onClick={() => openLightbox(imgs[0])}
               />
             </div>
           )}
-
+        
           {imgs.length > 1 && (
-            <div className="relative overflow-hidden rounded-[26px] border border-slate-100 bg-black/20 shadow-xl">
+            <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-black/20">
               <Carousel opts={{ loop: false }} setApi={(api) => setCarouselApi(api)}>
                 <CarouselContent>
                   {imgs.slice(0, 5).map((src, idx) => (
@@ -544,32 +545,38 @@ export default function PostCard({ post }: PostCardProps) {
               </Carousel>
             </div>
           )}
-
+        
           <Dialog
             open={lightboxOpen}
             onOpenChange={(open) => {
               setLightboxOpen(open);
+        
               if (!open) setLightboxSrc(null);
             }}
           >
-            <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] border border-border/60 bg-background/95 p-0 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] border border-border/60 bg-background/95 p-0">
               <div className="flex h-full w-full items-center justify-center">
                 {lightboxSrc && (
-                  <img src={lightboxSrc} alt="Full image" className="max-h-[92vh] max-w-[96vw] object-contain" />
+                  <img
+                    src={lightboxSrc}
+                    alt="Full image"
+                    className="max-h-[92vh] max-w-[96vw] object-contain"
+                  />
                 )}
               </div>
             </DialogContent>
           </Dialog>
-
+        
           {post.audio && (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-3 flex items-center gap-2">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-500">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-500">
                   <AudioLines className="h-4 w-4" />
                 </span>
-                <div className="text-sm font-semibold">Voice note</div>
+        
+                <div className="text-sm font-medium">Voice note</div>
               </div>
-
+        
               <audio
                 controls
                 controlsList="nodownload noplaybackrate"
@@ -580,9 +587,9 @@ export default function PostCard({ post }: PostCardProps) {
               />
             </div>
           )}
-
+        
           <div className="pt-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -590,72 +597,87 @@ export default function PostCard({ post }: PostCardProps) {
                     variant="ghost"
                     size="sm"
                     aria-label="React"
-                    className={`h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50 ${reactionClass}`}
+                    className={`h-9 rounded-full px-2 text-sm font-semibold text-slate-950 hover:bg-slate-50 ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
                     React
-                    <span className="ml-2 text-base font-semibold tabular-nums text-slate-500">{post.likes || 0}</span>
+        
+                    <span className="ml-1 text-xs font-medium tabular-nums text-slate-500">
+                      {post.likes || 0}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
-
+        
                 <DropdownMenuContent align="start" className="flex gap-1 rounded-2xl">
                   <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="px-2">
                     <Heart className="h-4 w-4 text-destructive" />
                   </DropdownMenuItem>
+        
                   <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="px-2">
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
+        
                   <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="px-2">
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
+        
                   <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="px-2">
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
+        
                   <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="px-2">
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
+        
                   <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="px-2">
                     <Angry className="h-4 w-4 text-destructive" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
+        
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowComments((v) => !v)}
-                className="h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50"
+                className="h-9 rounded-full px-2 text-sm font-semibold text-slate-950 hover:bg-slate-50"
               >
                 Reply
-                <span className="ml-2 text-base font-semibold tabular-nums text-slate-500">{commentCount}</span>
+        
+                <span className="ml-1 text-xs font-medium tabular-nums text-slate-500">
+                  {commentCount}
+                </span>
               </Button>
-
+        
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={handleShare}
-                className="h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50"
+                className="h-9 rounded-full px-2 text-sm font-semibold text-slate-950 hover:bg-slate-50"
               >
                 Share
-                <span className="ml-2 text-base font-semibold tabular-nums text-slate-500">{post.shares || 0}</span>
+        
+                <span className="ml-1 text-xs font-medium tabular-nums text-slate-500">
+                  {post.shares || 0}
+                </span>
               </Button>
-
+        
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={toggleSaved}
-                className={`h-11 rounded-full px-3 text-[18px] font-bold text-slate-950 hover:bg-slate-50 ${
+                className={`h-9 rounded-full px-2 text-sm font-semibold text-slate-950 hover:bg-slate-50 ${
                   saved ? 'text-slate-950' : ''
                 }`}
               >
-                <Bookmark className="mr-2 h-6 w-6" />
+                <Bookmark className="mr-1 h-4 w-4" />
+        
                 {saved ? 'Saved' : 'Save'}
               </Button>
             </div>
-
+        
             <Button
               type="button"
               size="sm"
@@ -663,27 +685,35 @@ export default function PostCard({ post }: PostCardProps) {
               onClick={toggleVoiceRecording}
               disabled={(() => {
                 const l = getVoiceCommentDailyLimit();
+        
                 if (!Number.isFinite(l)) return false;
+        
                 return getVoiceCommentCountToday() >= l;
               })()}
-              className="mt-4 h-14 w-full rounded-full border border-fuchsia-300/50 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[18px] font-bold text-slate-950 shadow-[0_0_38px_rgba(168,85,247,0.25)] transition-all hover:shadow-[0_0_45px_rgba(34,211,238,0.35)]"
+              className="mt-3 h-11 w-full rounded-full border border-fuchsia-300/40 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-sm font-semibold text-slate-950"
             >
-              <span className="mr-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-purple-200/70">
-                <AudioLines className={`h-5 w-5 text-purple-600 ${isRecording ? 'animate-pulse' : ''}`} />
+              <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-purple-200/70">
+                <AudioLines
+                  className={`h-4 w-4 text-purple-600 ${isRecording ? 'animate-pulse' : ''}`}
+                />
               </span>
+        
               {isRecording
                 ? `${recordSeconds}s`
                 : (() => {
                     const l = getVoiceCommentDailyLimit();
+        
                     if (!Number.isFinite(l)) return 'Voice';
+        
                     const used = getVoiceCommentCountToday();
                     const remaining = Math.max(0, l - used);
+        
                     return `Voice (${remaining})`;
                   })()}
             </Button>
           </div>
-
-          <div className="flex items-center gap-3 pt-3">
+        
+          <div className="flex items-center gap-2 pt-3">
             <Input
               ref={replyInputRef}
               placeholder="Reply..."
@@ -693,108 +723,19 @@ export default function PostCard({ post }: PostCardProps) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleComment();
               }}
-              className="h-16 rounded-[24px] border border-slate-200 bg-white px-5 text-[18px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
             />
-
+        
             <Button
               size="icon"
               variant="ghost"
               onClick={handleComment}
               aria-label="Send reply"
-              className="h-14 w-14 rounded-full text-slate-500 hover:text-slate-950"
+              className="h-10 w-10 rounded-full text-slate-500 hover:text-slate-950"
             >
-              <Send className="h-7 w-7" />
+              <Send className="h-4 w-4" />
             </Button>
           </div>
-
-          <AnimatePresence>
-            {showComments && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="w-full space-y-4 border-t border-slate-200 pt-5"
-              >
-                {post.comments.map((comment) => {
-                  const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const canDeleteComment = String(comment.userId || '') === myId || isOwner;
-
-                  return (
-                    <motion.div
-                      key={comment.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="flex gap-3"
-                    >
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={comment.userAvatar} alt={comment.userName} />
-                        <AvatarFallback>{comment.userName ? comment.userName.charAt(0) : 'U'}</AvatarFallback>
-                      </Avatar>
-
-                      <div className="flex-1 border-l border-slate-200 pl-3">
-                        <div className="flex items-baseline gap-2">
-                          <p className="text-sm font-semibold text-slate-950">{comment.userName}</p>
-
-                          <span className="text-[11px] text-slate-500">
-                            {formatDistanceToNow(comment.timestamp, { addSuffix: true })}
-                          </span>
-                        </div>
-
-                        <div className="mt-1 text-sm leading-relaxed text-slate-900">
-                          {isVoice && comment.voiceUrl ? (
-                            <div className="mt-2 flex items-center gap-2 rounded-full border bg-slate-50 px-3 py-2">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 shadow-sm">
-                                <AudioLines className="h-4 w-4 text-purple-600" />
-                              </div>
-
-                              <audio
-                                controls
-                                controlsList="nodownload noplaybackrate"
-                                preload="metadata"
-                                className="h-8 w-full"
-                                onContextMenu={(e) => e.preventDefault()}
-                              >
-                                <source src={comment.voiceUrl} type="audio/webm" />
-                              </audio>
-                            </div>
-                          ) : (
-                            <p>
-                              {comment.content.replace(
-                                /\[(REAL_LIFE|PRO COLLAB|PRO COLLAB INVITE|CREATOR_CONTENT)\s*/g,
-                                ''
-                              )}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="mt-2 flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => handleReplyToComment(comment.userName)}
-                            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-950"
-                          >
-                            <MessageCircle className="h-3 w-3" />
-                            Reply
-                          </button>
-
-                          {canDeleteComment && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </CardContent>
       </Card>
     </motion.div>
