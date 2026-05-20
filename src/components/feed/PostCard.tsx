@@ -474,7 +474,7 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="space-y-3 px-4 pb-4">
+        <CardContent className="space-y-3 px-4 pb-24">
           {editingPost ? (
             <div className="space-y-2">
               <textarea
@@ -494,7 +494,7 @@ export default function PostCard({ post }: PostCardProps) {
               </div>
             </div>
           ) : (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-950">
+            <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-950">
               {post.content.replace(/\[CREATOR_CONTENT\]/g, '')}
             </p>
           )}
@@ -597,7 +597,7 @@ export default function PostCard({ post }: PostCardProps) {
                     variant="ghost"
                     size="sm"
                     aria-label="React"
-                    className={`h-9 rounded-full px-2 text-sm font-semibold text-slate-950 hover:bg-slate-50 ${reactionClass}`}
+                    className={`h-9 rounded-full px-2 text-base font-bold text-slate-950 hover:bg-slate-50 ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
                     React
