@@ -433,7 +433,7 @@ export default function AIResumePage() {
                     <Input
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder="e.g. Ramoshweu Moshe Rakgoale"
+                      placeholder="e.g. Ben Moshe Mothibane"
                     />
                   </div>
 
