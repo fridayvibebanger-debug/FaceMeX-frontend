@@ -95,7 +95,7 @@ export default function PostCard({ post }: PostCardProps) {
   const displayAvatar = post.userAvatar || '';
 
   const isAuthorVerified =
-    (post as any)?.userVerified === true ||
+    (post as any)?.verified === true ||
     (!!addons?.verified && post.userId === currentUserId);
 
   useEffect(() => {
