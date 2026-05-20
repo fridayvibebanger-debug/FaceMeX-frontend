@@ -604,7 +604,6 @@ export default function EmotionAIPage() {
   const [result, setResult] = useState<AiResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [showResources, setShowResources] = useState(false);
-  const [usedFallback, setUsedFallback] = useState(false);
   const [joinedChallenges, setJoinedChallenges] = useState<Record<string, boolean>>(
     () => readJoinedChallenges()
   );
@@ -666,8 +665,20 @@ export default function EmotionAIPage() {
               compat: Math.max(60, rawScore || 60),
               basis:
                 rawScore > 0
-                  ? `matches your ${matchType === 'growth' ? 'growth and business' : matchType === 'creative' ? 'creative and content' : 'professional and industry'} interests`
-                  : `can help expand your ${matchType === 'growth' ? 'growth' : matchType === 'creative' ? 'creative' : 'professional'} network`,
+                  ? `matches your ${
+                      matchType === 'growth'
+                        ? 'growth and business'
+                        : matchType === 'creative'
+                          ? 'creative and content'
+                          : 'professional and industry'
+                    } interests`
+                  : `can help expand your ${
+                      matchType === 'growth'
+                        ? 'growth'
+                        : matchType === 'creative'
+                          ? 'creative'
+                          : 'professional'
+                    } network`,
               matchType,
               tags: tags.slice(0, 3),
             };
@@ -709,71 +720,71 @@ export default function EmotionAIPage() {
     return CHALLENGES[mood] || CHALLENGES.neutral;
   }, [mood]);
 
- const friendMatches = useMemo<FriendMatch[]>(() => {
-  if (realMatches.length > 0) return realMatches;
+  const friendMatches = useMemo<FriendMatch[]>(() => {
+    if (realMatches.length > 0) return realMatches;
 
-  const interestText = profileInterests.join(' ');
+    const interestText = profileInterests.join(' ');
 
-  const businessScore =
-    /(business|sales|entrepreneur|startup|logistics|finance|marketing|growth)/.test(
-      interestText
-    )
-      ? 97
-      : 86;
+    const businessScore =
+      /(business|sales|entrepreneur|startup|logistics|finance|marketing|growth)/.test(
+        interestText
+      )
+        ? 97
+        : 86;
 
-  const creativeScore =
-    /(creator|design|music|video|art|fashion|content|photography|media)/.test(
-      interestText
-    )
-      ? 96
-      : 84;
+    const creativeScore =
+      /(creator|design|music|video|art|fashion|content|photography|media)/.test(
+        interestText
+      )
+        ? 96
+        : 84;
 
-  const professionalScore =
-    /(developer|engineering|career|job|skills|education|data|technology|ai|professional)/.test(
-      interestText
-    )
-      ? 95
-      : 87;
+    const professionalScore =
+      /(developer|engineering|career|job|skills|education|data|technology|ai|professional)/.test(
+        interestText
+      )
+        ? 95
+        : 87;
 
-  const fallbackMatches: FriendMatch[] = [
-    {
-      id: 'growth-partner',
-      name: 'Growth Partner',
-      compat: businessScore,
-      basis:
-        businessScore >= 95
-          ? 'matches your business, growth, and execution interests'
-          : 'matches users who want accountability and personal growth',
-      matchType: 'growth',
-      tags: ['business', 'goals', 'accountability'],
-    },
-    {
-      id: 'creative-builder',
-      name: 'Creative Builder',
-      compat: creativeScore,
-      basis:
-        creativeScore >= 95
-          ? 'matches your creator, design, or content interests'
-          : 'matches users building creative projects and content',
-      matchType: 'creative',
-      tags: ['creator', 'content', 'collaboration'],
-    },
-    {
-      id: 'professional-network',
-      name: 'Professional Network',
-      compat: professionalScore,
-      basis:
-        professionalScore >= 95
-          ? 'matches your skills, career goals, or industry interests'
-          : 'matches users focused on careers, skills, and opportunities',
-      matchType: 'professional',
-      tags: ['career', 'skills', 'industry'],
-    },
-  ];
+    const fallbackMatches: FriendMatch[] = [
+      {
+        id: 'growth-partner',
+        name: 'Growth Partner',
+        compat: businessScore,
+        basis:
+          businessScore >= 95
+            ? 'matches your business, growth, and execution interests'
+            : 'matches users who want accountability and personal growth',
+        matchType: 'growth',
+        tags: ['business', 'goals', 'accountability'],
+      },
+      {
+        id: 'creative-builder',
+        name: 'Creative Builder',
+        compat: creativeScore,
+        basis:
+          creativeScore >= 95
+            ? 'matches your creator, design, or content interests'
+            : 'matches users building creative projects and content',
+        matchType: 'creative',
+        tags: ['creator', 'content', 'collaboration'],
+      },
+      {
+        id: 'professional-network',
+        name: 'Professional Network',
+        compat: professionalScore,
+        basis:
+          professionalScore >= 95
+            ? 'matches your skills, career goals, or industry interests'
+            : 'matches users focused on careers, skills, and opportunities',
+        matchType: 'professional',
+        tags: ['career', 'skills', 'industry'],
+      },
+    ];
 
-  return fallbackMatches.sort((a, b) => b.compat - a.compat);
-}, [realMatches, profileInterests]);
-  
+    return fallbackMatches.sort((a, b) => b.compat - a.compat);
+  }, [realMatches, profileInterests]);
+
   const getInternetSupportGuidance = async (
     cleanText: string,
     fallback: AiResult
@@ -813,7 +824,6 @@ export default function EmotionAIPage() {
     }
 
     setAnalyzing(true);
-    setUsedFallback(false);
 
     const fallback = detectMoodFallback(clean);
 
@@ -882,13 +892,6 @@ User text:
       });
     } catch {
       setResult(fallback);
-      setUsedFallback(true);
-
-      toast({
-        title: 'Quick template used',
-        description:
-          'Smart analysis was not available, so FaceMeX used a built-in support template.',
-      });
     } finally {
       setAnalyzing(false);
     }
@@ -897,7 +900,6 @@ User text:
   const resetAnalysis = () => {
     setText('');
     setResult(null);
-    setUsedFallback(false);
     setShowResources(false);
   };
 
@@ -926,7 +928,7 @@ User text:
       </p>
 
       <div className="space-y-2">
-        <div className="rounded-xl border bg-muted/30 p-3">
+        <div className="rounded-xl border bg-muted/30 p-3.5">
           <div className="font-medium">Immediate safety pause</div>
           <p className="mt-1 text-muted-foreground">
             Move away from conflict, stop replying, and create physical and
@@ -934,7 +936,7 @@ User text:
           </p>
         </div>
 
-        <div className="rounded-xl border bg-muted/30 p-3">
+        <div className="rounded-xl border bg-muted/30 p-3.5">
           <div className="font-medium">Calm your body first</div>
           <p className="mt-1 text-muted-foreground">
             Slow your breathing, sit down if possible, and wait until the
@@ -942,7 +944,7 @@ User text:
           </p>
         </div>
 
-        <div className="rounded-xl border bg-muted/30 p-3">
+        <div className="rounded-xl border bg-muted/30 p-3.5">
           <div className="font-medium">Contact someone safe</div>
           <p className="mt-1 text-muted-foreground">
             Reach out to a trusted person nearby. If anyone may be in danger,
@@ -959,11 +961,11 @@ User text:
   );
 
   return (
-    <div className="min-h-screen bg-background pt-16">
-      <div className="mx-auto grid max-w-5xl gap-4 p-4 md:grid-cols-2">
+    <div className="min-h-screen bg-background pt-14 md:pt-16">
+      <div className="mx-auto grid max-w-5xl gap-4 px-3 py-4 sm:px-4 md:grid-cols-2 md:py-5">
         <div className="space-y-4">
-          <Card className="rounded-2xl border border-border/70 shadow-sm">
-            <CardHeader className="space-y-1 pb-3">
+          <Card className="rounded-3xl border border-border/70 shadow-sm">
+            <CardHeader className="space-y-1.5 pb-3.5">
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Sparkles className="h-4 w-4 text-primary" />
@@ -982,19 +984,19 @@ User text:
               </p>
             </CardHeader>
 
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3.5">
               <Textarea
                 placeholder="Type something you want to understand..."
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className="min-h-[150px] resize-none rounded-2xl text-sm"
+                className="min-h-[155px] resize-none rounded-3xl text-sm leading-relaxed px-4 py-3"
               />
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Button
                   onClick={detectFromText}
                   disabled={analyzing || !text.trim()}
-                  className="h-10 rounded-full px-5"
+                  className="h-10 rounded-full px-5 font-medium shadow-sm active:scale-[0.98] transition"
                 >
                   {analyzing ? (
                     <>
@@ -1014,7 +1016,7 @@ User text:
                   variant="outline"
                   onClick={resetAnalysis}
                   disabled={analyzing && !text}
-                  className="h-10 rounded-full px-5"
+                  className="h-10 rounded-full px-5 font-medium shadow-sm active:scale-[0.98] transition"
                 >
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Reset
@@ -1051,15 +1053,8 @@ User text:
                 </div>
               </div>
 
-              {usedFallback && (
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
-                  FaceMeX used a quick support template because smart analysis
-                  was not available.
-                </div>
-              )}
-
               {result?.riskLevel === 'urgent' && (
-                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3.5">
                   <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-red-700">
                     <AlertTriangle className="h-4 w-4" />
                     Urgent support recommended
@@ -1071,7 +1066,7 @@ User text:
               )}
 
               {result && result.riskLevel !== 'urgent' && (
-                <div className="rounded-2xl border bg-muted/30 p-3">
+                <div className="rounded-2xl border bg-muted/30 p-3.5">
                   <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Summary
                   </div>
@@ -1082,7 +1077,7 @@ User text:
               )}
 
               {result?.riskLevel !== 'urgent' && result?.supportGuidance && (
-                <div className="rounded-2xl border bg-card p-3">
+                <div className="rounded-2xl border bg-card p-3.5 shadow-sm">
                   <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Guidance
                   </div>
@@ -1092,7 +1087,7 @@ User text:
                 </div>
               )}
 
-              <div className="rounded-2xl border bg-muted/20 p-3 text-xs text-muted-foreground">
+              <div className="rounded-2xl border bg-muted/20 p-3.5 text-xs text-muted-foreground">
                 Emotion AI is private. It should guide reflection,
                 recommendations, safe actions, challenges, and better matching.
               </div>
@@ -1100,15 +1095,15 @@ User text:
           </Card>
 
           {isSupportNeeded && (
-            <Card className="rounded-2xl border border-amber-300/70 bg-amber-50/60 shadow-sm dark:bg-amber-950/10">
-              <CardHeader className="pb-2">
+            <Card className="rounded-3xl border border-amber-300/70 bg-amber-50/60 shadow-sm dark:bg-amber-950/10">
+              <CardHeader className="pb-3.5">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Heart className="h-4 w-4 text-amber-600" />
                   Support tools available
                 </CardTitle>
               </CardHeader>
 
-              <CardContent className="space-y-3 text-xs sm:text-sm">
+              <CardContent className="space-y-3.5 text-xs sm:text-sm">
                 <p className="text-muted-foreground">
                   FaceMeX detected that support may be useful right now.
                 </p>
@@ -1116,7 +1111,7 @@ User text:
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-full"
+                  className="rounded-full font-medium shadow-sm active:scale-[0.98] transition"
                   onClick={() => setShowResources(true)}
                 >
                   View support tools
@@ -1125,19 +1120,19 @@ User text:
             </Card>
           )}
 
-          <Card className="rounded-2xl border border-border/70 shadow-sm">
-            <CardHeader className="pb-3">
+          <Card className="rounded-3xl border border-border/70 shadow-sm">
+            <CardHeader className="pb-3.5">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Target className="h-4 w-4 text-primary" />
                 Emotion-based Recommendations
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2.5">
               {suggestions.map((suggestion) => (
                 <div
                   key={suggestion}
-                  className="rounded-2xl border bg-card px-3 py-3 text-sm"
+                  className="rounded-2xl border bg-card px-3.5 py-3 text-sm shadow-sm"
                 >
                   {suggestion}
                 </div>
@@ -1145,22 +1140,22 @@ User text:
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border border-border/70 shadow-sm">
-            <CardHeader className="pb-3">
+          <Card className="rounded-3xl border border-border/70 shadow-sm">
+            <CardHeader className="pb-3.5">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Trophy className="h-4 w-4 text-primary" />
                 Emotion Challenges
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2.5">
               {activeChallenges.map((challenge) => {
                 const joined = !!joinedChallenges[challenge.id];
 
                 return (
                   <div
                     key={challenge.id}
-                    className="rounded-2xl border bg-card p-3"
+                    className="rounded-2xl border bg-card p-3.5 shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1188,7 +1183,7 @@ User text:
                       <Button
                         size="sm"
                         variant={joined ? 'secondary' : 'default'}
-                        className="shrink-0 rounded-full"
+                        className="shrink-0 rounded-full font-medium shadow-sm active:scale-[0.98] transition"
                         onClick={() => joinChallenge(challenge)}
                       >
                         {joined ? (
@@ -1209,15 +1204,15 @@ User text:
         </div>
 
         <div className="space-y-4">
-          <Card className="rounded-2xl border border-border/70 shadow-sm">
-            <CardHeader className="pb-3">
+          <Card className="rounded-3xl border border-border/70 shadow-sm">
+            <CardHeader className="pb-3.5">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Users className="h-4 w-4 text-primary" />
                 Friend Matching
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2.5">
               {friendMatches.map((friend) => {
                 const Icon =
                   friend.matchType === 'creative'
@@ -1229,7 +1224,7 @@ User text:
                 return (
                   <div
                     key={friend.id}
-                    className="rounded-2xl border bg-card p-3"
+                    className="rounded-2xl border bg-card p-3.5 shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-start gap-3">
@@ -1275,27 +1270,27 @@ User text:
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border border-border/70 shadow-sm">
-            <CardHeader className="pb-3">
+          <Card className="rounded-3xl border border-border/70 shadow-sm">
+            <CardHeader className="pb-3.5">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShieldCheck className="h-4 w-4 text-primary" />
                 Safe Use
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="space-y-3.5 text-sm">
               <p className="text-muted-foreground">
                 Emotion AI should guide support, safer recommendations,
                 challenges, and better matching. It must not shame users, expose
                 private emotion labels, or make serious decisions about them.
               </p>
 
-              <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div className="rounded-2xl border bg-muted/30 p-3.5 text-xs text-muted-foreground">
                 Safe prediction categories: mood tone, risk level, helpful next
                 step, challenge level, interest matching, and support guidance.
               </div>
 
-              <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div className="rounded-2xl border bg-muted/30 p-3.5 text-xs text-muted-foreground">
                 Private by default. Do not show a user’s emotional signal
                 publicly unless they choose to share it.
               </div>
@@ -1303,7 +1298,7 @@ User text:
               <Button
                 size="sm"
                 variant="outline"
-                className="rounded-full"
+                className="rounded-full font-medium shadow-sm active:scale-[0.98] transition"
                 onClick={() => setShowResources(true)}
               >
                 Open support tools
@@ -1311,22 +1306,22 @@ User text:
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border border-border/70 shadow-sm">
-            <CardHeader className="pb-3">
+          <Card className="rounded-3xl border border-border/70 shadow-sm">
+            <CardHeader className="pb-3.5">
               <CardTitle className="text-base">Launch Rules</CardTitle>
             </CardHeader>
 
-            <CardContent className="space-y-2 text-xs text-muted-foreground">
-              <div className="rounded-xl border bg-card p-3">
+            <CardContent className="space-y-2.5 text-xs text-muted-foreground">
+              <div className="rounded-xl border bg-card p-3.5">
                 Never classify violent or harmful messages as neutral.
               </div>
 
-              <div className="rounded-xl border bg-card p-3">
+              <div className="rounded-xl border bg-card p-3.5">
                 Do not use emotion signals for discrimination, manipulation, or
                 public ranking.
               </div>
 
-              <div className="rounded-xl border bg-card p-3">
+              <div className="rounded-xl border bg-card p-3.5">
                 Use emotion signals to support the user, recommend healthier
                 actions, and improve discovery.
               </div>
@@ -1337,7 +1332,7 @@ User text:
 
       {showResources && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-md space-y-3 rounded-2xl border bg-background p-4 shadow-2xl">
+          <div className="w-full max-w-md space-y-3.5 rounded-3xl border bg-background p-4 shadow-2xl">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">
                 Supportive tools & information
@@ -1345,7 +1340,7 @@ User text:
 
               <button
                 type="button"
-                className="rounded-full px-3 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition"
                 onClick={() => setShowResources(false)}
               >
                 Close
