@@ -30,7 +30,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { useUserStore } from '@/store/userStore';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
-import IdentityVerifiedBadge from '@/components/safety/IdentityVerifiedBadge';
 import { toast } from '@/components/ui/use-toast';
 
 type ProfessionalProfile = {
@@ -78,6 +77,20 @@ const emptyProfessional: ProfessionalProfile = {
   resumeSummary: '',
 };
 
+function PremiumVerifiedBadge({ size = 'md' }: { size?: 'sm' | 'md' }) {
+  const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
+
+  return (
+    <span
+      title="Verified FaceMeX profile"
+      className="inline-flex items-center gap-1 rounded-full border border-blue-400/40 bg-gradient-to-r from-blue-600 via-cyan-500 to-purple-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow-[0_0_18px_rgba(59,130,246,0.45)]"
+    >
+      <CheckCircle className={`${iconSize} fill-white/20 text-white`} />
+      Verified
+    </span>
+  );
+}
+
 function normalizePro(value: any): ProfessionalProfile {
   const experience = Array.isArray(value?.experience)
     ? value.experience
@@ -117,7 +130,11 @@ function normalizePro(value: any): ProfessionalProfile {
 }
 
 function getInitial(name?: string, email?: string) {
-  return name?.charAt(0)?.toUpperCase() || email?.charAt(0)?.toUpperCase() || 'U';
+  return (
+    name?.charAt(0)?.toUpperCase() ||
+    email?.charAt(0)?.toUpperCase() ||
+    'U'
+  );
 }
 
 function getTierRank(tier?: string) {
@@ -159,31 +176,45 @@ export default function ProfilePage() {
 
   const [viewedProfile, setViewedProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
-  const [profileMissing, setProfileMissing] = useState(false);
-
+  const [profileNotFound, setProfileNotFound] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
   const [followerCount, setFollowerCount] = useState(0);
   const [connectionCount, setConnectionCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isPendingConnection, setIsPendingConnection] = useState(false);
-  const [buttonBusy, setButtonBusy] = useState<'connect' | 'follow' | 'message' | null>(null);
+  const [buttonBusy, setButtonBusy] = useState<
+    'connect' | 'follow' | 'message' | null
+  >(null);
 
   const [bioEditing, setBioEditing] = useState(false);
   const [bioDraft, setBioDraft] = useState(user?.bio || '');
 
-  const storePro = useMemo(() => normalizePro(professional), [professional]);
+  const storePro = useMemo(
+    () => normalizePro(professional),
+    [professional]
+  );
 
   const viewedPro = useMemo(() => {
-    if (isOwnProfile) return normalizePro(viewedProfile?.professional || professional);
+    if (isOwnProfile) {
+      return normalizePro(viewedProfile?.professional || professional);
+    }
+
     return normalizePro(viewedProfile?.professional);
   }, [isOwnProfile, professional, viewedProfile?.professional]);
 
   const [newSkill, setNewSkill] = useState('');
   const [headlineDraft, setHeadlineDraft] = useState(viewedPro.headline || '');
-  const [professionalBioDraft, setProfessionalBioDraft] = useState(viewedPro.bio || '');
-  const [professionalLocationDraft, setProfessionalLocationDraft] = useState(viewedPro.location || '');
-  const [resumeDraft, setResumeDraft] = useState(viewedPro.resumeSummary || '');
+  const [professionalBioDraft, setProfessionalBioDraft] = useState(
+    viewedPro.bio || ''
+  );
+  const [professionalLocationDraft, setProfessionalLocationDraft] = useState(
+    viewedPro.location || ''
+  );
+  const [resumeDraft, setResumeDraft] = useState(
+    viewedPro.resumeSummary || ''
+  );
 
   const [expRole, setExpRole] = useState('');
   const [expCompany, setExpCompany] = useState('');
@@ -207,20 +238,19 @@ export default function ProfilePage() {
   const canEditProfessional = isOwnProfile && canUseProfessionalProfile;
   const canSeeAnalytics = isOwnProfile && hasTier?.('pro');
 
-  const [activeTab, setActiveTab] = useState<'posts' | 'professional' | 'photos'>(
-    mode === 'professional' ? 'professional' : 'posts'
-  );
+  const [activeTab, setActiveTab] = useState<
+    'posts' | 'professional' | 'photos'
+  >(mode === 'professional' ? 'professional' : 'posts');
 
   useEffect(() => {
     const loadProfile = async () => {
       if (!viewedUserId) {
         setProfileLoading(false);
-        setProfileMissing(true);
         return;
       }
 
       setProfileLoading(true);
-      setProfileMissing(false);
+      setProfileNotFound(false);
 
       const { data, error } = await supabase
         .from('profiles')
@@ -229,14 +259,21 @@ export default function ProfilePage() {
         .maybeSingle();
 
       if (error) {
+        console.error('Profile load error:', error);
         setViewedProfile(null);
-        setProfileMissing(true);
+        setProfileNotFound(true);
+        setProfileLoading(false);
+        return;
+      }
+
+      if (!data && !isOwnProfile) {
+        setViewedProfile(null);
+        setProfileNotFound(true);
         setProfileLoading(false);
         return;
       }
 
       setViewedProfile(data || null);
-      setProfileMissing(!data && !isOwnProfile);
       setProfileLoading(false);
     };
 
@@ -245,10 +282,9 @@ export default function ProfilePage() {
 
   const viewedUser = useMemo(() => {
     if (isOwnProfile) {
-      if (!user && !viewedProfile) return null;
-
       return {
-        id: viewedProfile?.id || user?.id || viewedUserId,
+        ...user,
+        id: user?.id || viewedUserId,
         email: viewedProfile?.email || user?.email || '',
         name:
           viewedProfile?.full_name ||
@@ -256,7 +292,7 @@ export default function ProfilePage() {
           viewedProfile?.username ||
           user?.name ||
           user?.email?.split('@')?.[0] ||
-          '',
+          'FaceMeX user',
         avatar:
           viewedProfile?.avatar_url ||
           viewedProfile?.avatar ||
@@ -297,8 +333,8 @@ export default function ProfilePage() {
       viewedProfile.full_name ||
       viewedProfile.name ||
       viewedProfile.username ||
-      viewedProfile.email?.split('@')?.[0] ||
-      '';
+      viewedProfile.email?.split('@')[0] ||
+      'FaceMeX user';
 
     return {
       id: viewedProfile.id || viewedUserId,
@@ -307,20 +343,27 @@ export default function ProfilePage() {
       avatar: viewedProfile.avatar_url || viewedProfile.avatar || '',
       coverPhoto: viewedProfile.cover_photo || viewedProfile.coverPhoto || '',
       bio: viewedProfile.bio || '',
-      joinedDate: viewedProfile.created_at ? new Date(viewedProfile.created_at) : null,
+      joinedDate: viewedProfile.created_at
+        ? new Date(viewedProfile.created_at)
+        : null,
       interests: viewedProfile.interests || [],
       location: viewedProfile.location || '',
       website: viewedProfile.website || '',
       tier: viewedProfile.tier || viewedProfile.subscription_tier || 'free',
-      verified: viewedProfile.verified === true || viewedProfile.is_verified === true,
+      verified:
+        viewedProfile.verified === true ||
+        viewedProfile.is_verified === true,
     } as any;
-  }, [isOwnProfile, user, viewedUserId, viewedProfile, currentTier, addons?.verified]);
+  }, [
+    isOwnProfile,
+    user,
+    viewedUserId,
+    viewedProfile,
+    currentTier,
+    addons?.verified,
+  ]);
 
-  const isProfileVerified =
-    viewedUser?.verified === true ||
-    viewedProfile?.verified === true ||
-    viewedProfile?.is_verified === true ||
-    addons?.verified === true;
+  const isProfileVerified = Boolean(viewedUser?.verified);
 
   useEffect(() => {
     setBioDraft(viewedUser?.bio || '');
@@ -331,7 +374,12 @@ export default function ProfilePage() {
     setProfessionalBioDraft(viewedPro.bio || '');
     setProfessionalLocationDraft(viewedPro.location || '');
     setResumeDraft(viewedPro.resumeSummary || '');
-  }, [viewedPro.headline, viewedPro.bio, viewedPro.location, viewedPro.resumeSummary]);
+  }, [
+    viewedPro.headline,
+    viewedPro.bio,
+    viewedPro.location,
+    viewedPro.resumeSummary,
+  ]);
 
   const userPosts = useMemo(() => {
     return posts.filter((post: any) => {
@@ -377,8 +425,10 @@ export default function ProfilePage() {
 
       const connection = (connectionRows || []).find((row: any) => {
         return (
-          (row.sender_id === effectiveUserId && row.receiver_id === viewedUserId) ||
-          (row.sender_id === viewedUserId && row.receiver_id === effectiveUserId)
+          (row.sender_id === effectiveUserId &&
+            row.receiver_id === viewedUserId) ||
+          (row.sender_id === viewedUserId &&
+            row.receiver_id === effectiveUserId)
         );
       });
 
@@ -396,8 +446,10 @@ export default function ProfilePage() {
 
     const channel = supabase
       .channel(`profile-relationship-${viewedUserId}-${effectiveUserId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, () =>
-        loadProfileRelationships()
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'follows' },
+        () => loadProfileRelationships()
       )
       .on(
         'postgres_changes',
@@ -419,7 +471,9 @@ export default function ProfilePage() {
       const raw = localStorage.getItem(key);
       const n = raw ? parseInt(raw, 10) || 0 : 0;
       localStorage.setItem(key, String(n + 1));
-    } catch {}
+    } catch {
+      // ignore
+    }
   }, [isOwnProfile, viewedUserId]);
 
   const profileViews = useMemo(() => {
@@ -440,12 +494,19 @@ export default function ProfilePage() {
     const totalPosts = mine.length;
     const totalLikes = mine.reduce((a: number, p: any) => a + (p.likes || 0), 0);
     const totalComments = mine.reduce(
-      (a: number, p: any) => a + (Array.isArray(p.comments) ? p.comments.length : 0),
+      (a: number, p: any) =>
+        a + (Array.isArray(p.comments) ? p.comments.length : 0),
       0
     );
-    const totalShares = mine.reduce((a: number, p: any) => a + (p.shares || 0), 0);
+    const totalShares = mine.reduce(
+      (a: number, p: any) => a + (p.shares || 0),
+      0
+    );
+
     const engagement = totalLikes + totalComments + totalShares;
-    const avgEngagement = totalPosts > 0 ? Math.round((engagement / totalPosts) * 10) / 10 : 0;
+
+    const avgEngagement =
+      totalPosts > 0 ? Math.round((engagement / totalPosts) * 10) / 10 : 0;
 
     return {
       totalPosts,
@@ -469,7 +530,9 @@ export default function ProfilePage() {
     );
   }, [viewedPro]);
 
-  const profileTier = String(viewedUser?.tier || currentTier || 'free').toLowerCase();
+  const profileTier = String(
+    viewedUser?.tier || currentTier || 'free'
+  ).toLowerCase();
 
   const handleFollowProfile = async () => {
     if (!viewedUserId || isOwnProfile) return;
@@ -477,7 +540,8 @@ export default function ProfilePage() {
     setButtonBusy('follow');
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
 
       if (authError || !authData.user?.id) {
         toast({
@@ -547,7 +611,9 @@ export default function ProfilePage() {
             actor_id: myUserId,
             type: 'follow',
             title: 'New follower',
-            message: `${user?.name || user?.email?.split('@')[0] || 'Someone'} followed you.`,
+            message: `${
+              user?.name || user?.email?.split('@')[0] || 'Someone'
+            } followed you.`,
             action_url: `/profile/${myUserId}`,
             is_read: false,
           });
@@ -557,7 +623,8 @@ export default function ProfilePage() {
       toast({
         title: 'Follow failed',
         description:
-          error?.message || 'Could not update follow right now. Check your Supabase follows policy.',
+          error?.message ||
+          'Could not update follow right now. Check your Supabase follows policy.',
         variant: 'destructive',
       });
     } finally {
@@ -598,7 +665,9 @@ export default function ProfilePage() {
             actor_id: effectiveUserId,
             type: 'connection_request',
             title: 'New connection request',
-            message: `${user?.name || user?.email?.split('@')[0] || 'Someone'} wants to connect with you.`,
+            message: `${
+              user?.name || user?.email?.split('@')[0] || 'Someone'
+            } wants to connect with you.`,
             action_url: '/notifications',
             is_read: false,
           });
@@ -658,7 +727,8 @@ export default function ProfilePage() {
     } catch {
       toast({
         title: 'Bio saved locally',
-        description: 'Your bio was saved in the app. Supabase update did not complete.',
+        description:
+          'Your bio was saved in the app. Supabase update did not complete.',
       });
       setBioEditing(false);
     }
@@ -694,7 +764,8 @@ export default function ProfilePage() {
 
     toast({
       title: 'Professional profile saved',
-      description: 'Your professional information is now visible on your profile.',
+      description:
+        'Your professional information is now visible on your profile.',
     });
   };
 
@@ -780,14 +851,21 @@ export default function ProfilePage() {
     );
   }
 
-  if (profileMissing || !viewedUser) {
+  if (profileNotFound || !viewedUser) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-background">
         <Navbar />
         <div className="max-w-5xl mx-auto pt-20 px-3 sm:px-4 pb-20">
           <Card className="rounded-2xl border border-border/60 shadow-none">
             <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Profile not found.</p>
+              <p className="text-sm text-muted-foreground">Profile not found.</p>
+              <Button
+                className="mt-4 rounded-full"
+                variant="outline"
+                onClick={() => navigate('/feed')}
+              >
+                Back to feed
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -800,11 +878,18 @@ export default function ProfilePage() {
       <Navbar />
 
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-20 md:pb-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
           <Card className="mb-4 md:mb-6 overflow-hidden rounded-2xl border border-border/60 shadow-none">
             <div className="relative h-24 sm:h-28 md:h-40 lg:h-44">
               {viewedUser?.coverPhoto ? (
-                <img src={viewedUser.coverPhoto} alt="Cover" className="w-full h-full object-cover" />
+                <img
+                  src={viewedUser.coverPhoto}
+                  alt="Cover"
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <div className="w-full h-full bg-muted/40" />
               )}
@@ -814,15 +899,18 @@ export default function ProfilePage() {
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 sm:gap-6">
                 <div className="relative z-10 -mt-10 sm:-mt-12 md:-mt-16">
                   <Avatar className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 ring-2 ring-border bg-muted">
-                    <AvatarImage src={viewedUser?.avatar} alt={viewedUser?.name} />
+                    <AvatarImage
+                      src={viewedUser?.avatar}
+                      alt={viewedUser?.name}
+                    />
                     <AvatarFallback className="bg-muted text-foreground text-2xl font-semibold flex items-center justify-center">
                       {getInitial(viewedUser?.name, viewedUser?.email)}
                     </AvatarFallback>
                   </Avatar>
 
                   {isProfileVerified && (
-                    <span className="md:hidden absolute -bottom-1 -right-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-sm ring-1 ring-border">
-                      <CheckCircle className="h-4 w-4 text-primary" />
+                    <span className="absolute -bottom-2 -right-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-300/60 bg-gradient-to-br from-blue-600 via-cyan-500 to-purple-600 shadow-[0_0_22px_rgba(59,130,246,0.65)] ring-2 ring-background">
+                      <CheckCircle className="h-4 w-4 fill-white/20 text-white" />
                     </span>
                   )}
                 </div>
@@ -833,9 +921,7 @@ export default function ProfilePage() {
                       {viewedUser?.name}
                     </h1>
 
-                    {isProfileVerified && <CheckCircle className="h-5 w-5 text-primary" />}
-
-                    <IdentityVerifiedBadge />
+                    {isProfileVerified && <PremiumVerifiedBadge />}
 
                     {profileTier !== 'free' && (
                       <Badge variant="secondary" className="ml-1">
@@ -860,7 +946,12 @@ export default function ProfilePage() {
                       />
 
                       <div className="flex items-center gap-2">
-                        <Button type="button" size="sm" className="rounded-full" onClick={saveBio}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={saveBio}
+                        >
                           <Save className="h-4 w-4 mr-2" />
                           Save bio
                         </Button>
@@ -920,7 +1011,10 @@ export default function ProfilePage() {
                     {viewedUser?.joinedDate && (
                       <div className="flex items-center">
                         <Calendar className="h-4 w-4 mr-1" />
-                        Joined {formatDistanceToNow(viewedUser.joinedDate, { addSuffix: true })}
+                        Joined{' '}
+                        {formatDistanceToNow(viewedUser.joinedDate, {
+                          addSuffix: true,
+                        })}
                       </div>
                     )}
 
@@ -973,7 +1067,9 @@ export default function ProfilePage() {
                               disabled={buttonBusy === 'message'}
                             >
                               <MessageCircle className="h-4 w-4 mr-2" />
-                              {buttonBusy === 'message' ? 'Opening...' : 'Message'}
+                              {buttonBusy === 'message'
+                                ? 'Opening...'
+                                : 'Message'}
                             </Button>
                           </motion.div>
                         ) : isPendingConnection ? (
@@ -985,7 +1081,12 @@ export default function ProfilePage() {
                             transition={{ duration: 0.22 }}
                             className="w-full sm:w-auto"
                           >
-                            <Button type="button" variant="outline" className="w-full sm:w-auto rounded-full px-5" disabled>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full sm:w-auto rounded-full px-5"
+                              disabled
+                            >
                               <CheckCircle className="h-4 w-4 mr-2" />
                               Pending
                             </Button>
@@ -1007,7 +1108,9 @@ export default function ProfilePage() {
                               disabled={buttonBusy === 'connect'}
                             >
                               <UserPlus className="h-4 w-4 mr-2" />
-                              {buttonBusy === 'connect' ? 'Sending...' : 'Connect'}
+                              {buttonBusy === 'connect'
+                                ? 'Sending...'
+                                : 'Connect'}
                             </Button>
                           </motion.div>
                         )}
@@ -1020,8 +1123,17 @@ export default function ProfilePage() {
                         onClick={handleFollowProfile}
                         disabled={buttonBusy === 'follow'}
                       >
-                        {isFollowing ? <UserMinus className="h-4 w-4 mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
-                        {buttonBusy === 'follow' ? 'Please wait...' : isFollowing ? 'Unfollow' : 'Follow'}
+                        {isFollowing ? (
+                          <UserMinus className="h-4 w-4 mr-2" />
+                        ) : (
+                          <UserPlus className="h-4 w-4 mr-2" />
+                        )}
+
+                        {buttonBusy === 'follow'
+                          ? 'Please wait...'
+                          : isFollowing
+                            ? 'Unfollow'
+                            : 'Follow'}
                       </Button>
                     </div>
                   )}
@@ -1035,35 +1147,207 @@ export default function ProfilePage() {
                 className="grid grid-cols-3 gap-2 sm:flex sm:justify-start sm:space-x-8 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t"
               >
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">{userPosts.length}</p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">Posts</p>
+                  <p className="text-base sm:text-2xl font-bold">
+                    {userPosts.length}
+                  </p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">
+                    Posts
+                  </p>
                 </div>
 
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">{connectionCount}</p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">Connections</p>
+                  <p className="text-base sm:text-2xl font-bold">
+                    {connectionCount}
+                  </p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">
+                    Connections
+                  </p>
                 </div>
 
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">{followerCount}</p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">Followers</p>
+                  <p className="text-base sm:text-2xl font-bold">
+                    {followerCount}
+                  </p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">
+                    Followers
+                  </p>
                 </div>
               </motion.div>
             </CardContent>
           </Card>
         </motion.div>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full">
+        {canSeeAnalytics ? (
+          <Card className="mb-4 md:mb-6 rounded-2xl border border-border/60 shadow-none">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="text-sm font-semibold">Analytics</h2>
+                <Badge variant="outline" className="text-[10px]">
+                  PRO+
+                </Badge>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border bg-card p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Profile views
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {profileViews}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Recent profile activity
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-card p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Post engagement
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {myPostAnalytics.engagement}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {myPostAnalytics.totalLikes} likes ·{' '}
+                    {myPostAnalytics.totalComments} comments ·{' '}
+                    {myPostAnalytics.totalShares} shares
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-card p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Average per post
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {myPostAnalytics.avgEngagement}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Across {myPostAnalytics.totalPosts} posts
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {hasProfessionalPreview ? (
+          <Card className="mb-4 md:mb-6 rounded-2xl border border-border/60 shadow-none">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="text-sm font-semibold">Professional</h2>
+                <Badge variant="outline" className="text-[10px]">
+                  Public profile
+                </Badge>
+              </div>
+
+              <div className="space-y-3">
+                {viewedPro.headline ? (
+                  <div className="text-sm font-medium text-foreground">
+                    {viewedPro.headline}
+                  </div>
+                ) : null}
+
+                {viewedPro.location ? (
+                  <div className="text-xs text-muted-foreground flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5" />
+                    <span className="truncate">{viewedPro.location}</span>
+                  </div>
+                ) : null}
+
+                {viewedPro.experience.length > 0 ? (
+                  <div className="rounded-xl border bg-card p-3">
+                    <div className="text-xs font-semibold mb-1">
+                      Experience
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {viewedPro.experience[0]?.role}
+                      {viewedPro.experience[0]?.company
+                        ? ` · ${viewedPro.experience[0].company}`
+                        : ''}
+                    </div>
+                  </div>
+                ) : null}
+
+                {viewedPro.education.length > 0 ? (
+                  <div className="rounded-xl border bg-card p-3">
+                    <div className="text-xs font-semibold mb-1">Education</div>
+                    <div className="text-xs text-muted-foreground">
+                      {viewedPro.education[0]?.institution}
+                      {viewedPro.education[0]?.degree
+                        ? ` · ${viewedPro.education[0].degree}`
+                        : ''}
+                    </div>
+                  </div>
+                ) : null}
+
+                {viewedPro.skills.length > 0 ? (
+                  <div>
+                    <div className="text-xs font-semibold mb-2">Skills</div>
+                    <div className="flex flex-wrap gap-2">
+                      {viewedPro.skills.slice(0, 12).map((skill) => (
+                        <Badge
+                          key={skill}
+                          variant="secondary"
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setMode('professional');
+                            navigate(`/feed?skill=${encodeURIComponent(skill)}`);
+                          }}
+                        >
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {viewedPro.links.length > 0 ? (
+                  <div>
+                    <div className="text-xs font-semibold mb-2">Links</div>
+                    <div className="flex flex-col gap-1">
+                      {viewedPro.links.slice(0, 4).map((link, index) => (
+                        <a
+                          key={index}
+                          className="text-xs text-primary hover:underline truncate"
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {link.type}: {link.url}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as any)}
+          className="w-full"
+        >
           <TabsList className="w-full justify-start overflow-x-auto flex-nowrap rounded-none bg-transparent p-0 border-b border-border/60">
-            <TabsTrigger value="posts" className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground">
+            <TabsTrigger
+              value="posts"
+              className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
+            >
               Posts
             </TabsTrigger>
 
-            <TabsTrigger value="professional" className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground">
+            <TabsTrigger
+              value="professional"
+              className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
+            >
               Professional
             </TabsTrigger>
 
-            <TabsTrigger value="photos" className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground">
+            <TabsTrigger
+              value="photos"
+              className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
+            >
               Media
             </TabsTrigger>
           </TabsList>
@@ -1092,9 +1376,541 @@ export default function ProfilePage() {
           <TabsContent value="professional" className="mt-6">
             <Card className="rounded-2xl border border-border/60 shadow-none">
               <CardContent className="py-6">
-                <p className="text-sm text-muted-foreground">
-                  Professional profile section kept active. Your existing editor content can stay below this area.
-                </p>
+                {!canEditProfessional && isOwnProfile ? (
+                  <div className="mb-6 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    Creator, Business and Exclusive tiers can edit and publish a professional profile.
+                  </div>
+                ) : null}
+
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <Briefcase className="h-4 w-4 text-muted-foreground" />
+                        <span>Headline</span>
+                      </h3>
+
+                      {canEditProfessional ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <Input
+                            value={headlineDraft}
+                            onChange={(event) =>
+                              setHeadlineDraft(event.target.value)
+                            }
+                            placeholder="Example: Founder · Product Builder · AI Social Platform"
+                          />
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
+                                headline: headlineDraft,
+                              })
+                            }
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          {viewedPro.headline || 'No headline added yet.'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span>Professional bio</span>
+                      </h3>
+
+                      {canEditProfessional ? (
+                        <div className="space-y-2">
+                          <textarea
+                            className="w-full min-h-[88px] rounded-xl border bg-background px-3 py-2 text-sm"
+                            value={professionalBioDraft}
+                            onChange={(event) =>
+                              setProfessionalBioDraft(event.target.value)
+                            }
+                            placeholder="Write your professional background..."
+                          />
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
+                                bio: professionalBioDraft,
+                              })
+                            }
+                          >
+                            Save bio
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          {viewedPro.bio || 'No professional bio added yet.'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span>Location</span>
+                      </h3>
+
+                      {canEditProfessional ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <Input
+                            value={professionalLocationDraft}
+                            onChange={(event) =>
+                              setProfessionalLocationDraft(event.target.value)
+                            }
+                            placeholder="Example: Tzaneen, South Africa"
+                          />
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
+                                location: professionalLocationDraft,
+                              })
+                            }
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          {viewedPro.location || 'No location added yet.'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold mb-1 flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-muted-foreground" />
+                          <span>Professional Groups</span>
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Join industry-focused groups for discussions and collaboration.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-xs rounded-full"
+                        onClick={() => navigate('/groups/pro')}
+                      >
+                        View groups
+                      </Button>
+                    </div>
+
+                    <div className="pt-4 border-t space-y-3">
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <Briefcase className="h-4 w-4 text-muted-foreground" />
+                        <span>Experience</span>
+                      </h3>
+
+                      <div className="space-y-2">
+                        {viewedPro.experience.length > 0 ? (
+                          viewedPro.experience.map((experience, index) => (
+                            <div
+                              key={index}
+                              className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                            >
+                              <div>
+                                <div className="font-medium text-sm">
+                                  {experience.role || 'Role'}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {experience.company || 'Company'}
+                                  {(experience.start || experience.end) &&
+                                    ` · ${experience.start || ''}${
+                                      experience.start && experience.end
+                                        ? ' – '
+                                        : ''
+                                    }${experience.end || ''}`}
+                                </div>
+                                {experience.summary && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    {experience.summary}
+                                  </div>
+                                )}
+                              </div>
+
+                              {experience.verified && (
+                                <PremiumVerifiedBadge size="sm" />
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No experience added yet.
+                          </p>
+                        )}
+                      </div>
+
+                      {canEditProfessional && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Role"
+                              value={expRole}
+                              onChange={(event) => setExpRole(event.target.value)}
+                            />
+                            <Input
+                              placeholder="Company"
+                              value={expCompany}
+                              onChange={(event) =>
+                                setExpCompany(event.target.value)
+                              }
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Start"
+                              value={expStart}
+                              onChange={(event) =>
+                                setExpStart(event.target.value)
+                              }
+                            />
+                            <Input
+                              placeholder="End"
+                              value={expEnd}
+                              onChange={(event) => setExpEnd(event.target.value)}
+                            />
+                          </div>
+
+                          <textarea
+                            className="w-full min-h-[50px] px-3 py-2 border rounded-xl text-sm bg-background"
+                            placeholder="Short summary optional"
+                            value={expSummary}
+                            onChange={(event) =>
+                              setExpSummary(event.target.value)
+                            }
+                          />
+
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full"
+                              onClick={addExperience}
+                            >
+                              Add experience
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t space-y-3">
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span>Education</span>
+                      </h3>
+
+                      <div className="space-y-2">
+                        {viewedPro.education.length > 0 ? (
+                          viewedPro.education.map((education, index) => (
+                            <div
+                              key={index}
+                              className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                            >
+                              <div>
+                                <div className="font-medium text-sm">
+                                  {education.institution || 'Institution'}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {education.degree || 'Degree'}
+                                  {education.field
+                                    ? ` · ${education.field}`
+                                    : ''}
+                                  {(education.start || education.end) &&
+                                    ` · ${education.start || ''}${
+                                      education.start && education.end
+                                        ? ' – '
+                                        : ''
+                                    }${education.end || ''}`}
+                                </div>
+                              </div>
+
+                              {education.verified && (
+                                <PremiumVerifiedBadge size="sm" />
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No education added yet.
+                          </p>
+                        )}
+                      </div>
+
+                      {canEditProfessional && (
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="Institution"
+                            value={eduInstitution}
+                            onChange={(event) =>
+                              setEduInstitution(event.target.value)
+                            }
+                          />
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Degree"
+                              value={eduDegree}
+                              onChange={(event) =>
+                                setEduDegree(event.target.value)
+                              }
+                            />
+                            <Input
+                              placeholder="Field"
+                              value={eduField}
+                              onChange={(event) =>
+                                setEduField(event.target.value)
+                              }
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Start"
+                              value={eduStart}
+                              onChange={(event) =>
+                                setEduStart(event.target.value)
+                              }
+                            />
+                            <Input
+                              placeholder="End"
+                              value={eduEnd}
+                              onChange={(event) => setEduEnd(event.target.value)}
+                            />
+                          </div>
+
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full"
+                              onClick={addEducation}
+                            >
+                              Add education
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold mb-2 flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span>Skills & Endorsements</span>
+                      </h3>
+
+                      <div className="flex flex-wrap gap-2">
+                        {viewedPro.skills.length > 0 ? (
+                          viewedPro.skills.map((skill) => (
+                            <div
+                              key={skill}
+                              className="flex items-center gap-2 border rounded-full px-3 py-1 cursor-pointer hover:bg-muted/60"
+                              onClick={() => {
+                                setMode('professional');
+                                navigate(`/feed?skill=${encodeURIComponent(skill)}`);
+                              }}
+                            >
+                              <span className="text-sm">{skill}</span>
+
+                              {!isOwnProfile && (
+                                <button
+                                  className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    endorseSkill(skill);
+                                  }}
+                                >
+                                  Endorse
+                                </button>
+                              )}
+
+                              <span className="text-xs text-muted-foreground">
+                                {viewedPro.endorsements?.[skill] || 0}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground text-sm">
+                            No skills added yet.
+                          </p>
+                        )}
+                      </div>
+
+                      {canEditProfessional && (
+                        <div className="mt-3 flex gap-2">
+                          <Input
+                            placeholder="Add a skill"
+                            value={newSkill}
+                            onChange={(event) => setNewSkill(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                addSkill();
+                              }
+                            }}
+                          />
+
+                          <Button
+                            onClick={addSkill}
+                            variant="outline"
+                            className="rounded-full"
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold mb-1 flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span>Professional summary</span>
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            A short summary visitors can see on your profile.
+                          </p>
+                        </div>
+
+                        {viewedPro.resumeSummary && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Saved
+                          </Badge>
+                        )}
+                      </div>
+
+                      {canEditProfessional ? (
+                        <div className="space-y-2">
+                          <textarea
+                            className="w-full min-h-[90px] px-3 py-2 border rounded-xl text-sm bg-background"
+                            placeholder="Write a short professional summary..."
+                            value={resumeDraft}
+                            onChange={(event) => setResumeDraft(event.target.value)}
+                          />
+
+                          <div className="flex justify-between items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() => {
+                                const parts: string[] = [];
+                                if (headlineDraft) parts.push(headlineDraft);
+                                if (professionalBioDraft) {
+                                  parts.push(professionalBioDraft);
+                                }
+                                if (viewedPro.skills.length > 0) {
+                                  parts.push(
+                                    `Key skills: ${viewedPro.skills.join(', ')}`
+                                  );
+                                }
+
+                                setResumeDraft(
+                                  parts.length
+                                    ? parts.join(' • ')
+                                    : 'Add your role, experience, projects and skills.'
+                                );
+                              }}
+                            >
+                              Generate from profile
+                            </Button>
+
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="rounded-full"
+                              onClick={() =>
+                                saveProfessionalLive({
+                                  ...viewedPro,
+                                  resumeSummary: resumeDraft,
+                                })
+                              }
+                            >
+                              Save summary
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {viewedPro.resumeSummary || 'No summary added yet.'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div
+                      ref={collabSectionRef}
+                      className="pt-2 border-t space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold mb-1">
+                            Open to creative collabs
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            Signal interest in collaborations and projects.
+                          </p>
+                        </div>
+
+                        {canEditProfessional ? (
+                          <button
+                            className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                              viewedPro.openToCollab
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-background text-muted-foreground'
+                            }`}
+                            onClick={() =>
+                              saveProfessionalLive({
+                                ...viewedPro,
+                                openToCollab: !viewedPro.openToCollab,
+                              })
+                            }
+                          >
+                            {viewedPro.openToCollab ? 'Open' : 'Closed'}
+                          </button>
+                        ) : (
+                          <Badge
+                            variant={viewedPro.openToCollab ? 'default' : 'outline'}
+                          >
+                            {viewedPro.openToCollab ? 'Open' : 'Closed'}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1110,13 +1926,19 @@ export default function ProfilePage() {
                         key={post.id}
                         className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
                       >
-                        <img src={post.image} alt="Post" className="w-full h-full object-cover" />
+                        <img
+                          src={post.image}
+                          alt="Post"
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                     ))}
                 </div>
 
                 {userPosts.filter((post: any) => post.image).length === 0 ? (
-                  <p className="text-center text-muted-foreground py-6">No photos yet</p>
+                  <p className="text-center text-muted-foreground py-6">
+                    No photos yet
+                  </p>
                 ) : null}
               </CardContent>
             </Card>
@@ -1124,7 +1946,10 @@ export default function ProfilePage() {
         </Tabs>
       </div>
 
-      <EditProfileModal open={isEditModalOpen} onOpenChange={setIsEditModalOpen} />
+      <EditProfileModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+      />
     </div>
   );
 }
