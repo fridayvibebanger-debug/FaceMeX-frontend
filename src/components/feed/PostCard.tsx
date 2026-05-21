@@ -96,6 +96,7 @@ export default function PostCard({ post }: PostCardProps) {
 
   const isAuthorVerified =
     (post as any)?.verified === true ||
+    (post as any)?.userVerified === true ||
     (!!addons?.verified && post.userId === currentUserId);
 
   useEffect(() => {
