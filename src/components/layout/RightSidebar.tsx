@@ -1,30 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
-import { API_URL } from '@/lib/api';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Search, UserPlus, Users, ExternalLink } from 'lucide-react';
+import { Search, UserPlus, Users, ExternalLink, Circle } from 'lucide-react';
 import { useFriendStore } from '@/store/friendStore';
 import { useUserStore } from '@/store/userStore';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabaseClient';
 
-type SuggestedUser = {
+type ActiveUser = {
   id: string;
-  name?: string;
-  full_name?: string;
-  username?: string;
-  bio?: string;
-  headline?: string;
-  avatar?: string;
-  avatar_url?: string;
-  location?: string;
-  tier?: string;
+  full_name?: string | null;
+  name?: string | null;
+  username?: string | null;
+  email?: string | null;
+  bio?: string | null;
+  headline?: string | null;
+  avatar?: string | null;
+  avatar_url?: string | null;
+  location?: string | null;
+  tier?: string | null;
+  is_active?: boolean | null;
+  last_seen?: string | null;
 };
 
 export default function RightSidebar() {
   const navigate = useNavigate();
-  const { id: userId, name: userName } = useUserStore();
+
+  const {
+    id: storeUserId,
+    name: storeUserName,
+  } = useUserStore();
 
   const {
     outgoing,
@@ -33,75 +40,68 @@ export default function RightSidebar() {
     sendRequest,
   } = useFriendStore();
 
+  const [authUserId, setAuthUserId] = useState('');
+  const [authUserName, setAuthUserName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    initRealtime(userId);
-    loadRequests().catch(() => {});
-  }, [initRealtime, loadRequests, userId]);
+  const currentUserId = storeUserId || authUserId;
+  const currentUserName = storeUserName || authUserName || 'FaceMeX User';
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadSuggestedUsers() {
-      try {
-        if (!API_URL) return;
+    async function loadAuthUser() {
+      const { data } = await supabase.auth.getUser();
+      const user = data?.user;
 
-        setLoading(true);
+      if (!mounted || !user) return;
 
-        const res = await fetch(`${API_URL}/api/users/suggested`, {
-          credentials: 'include',
-        });
-
-        if (!res.ok) return;
-
-        const data = await res.json();
-
-        if (!mounted) return;
-
-        const users = Array.isArray(data?.users) ? data.users : [];
-
-        setSuggestedUsers(
-          users
-            .filter((user: SuggestedUser) => user?.id && user.id !== userId)
-            .slice(0, 8)
-        );
-      } catch {
-        if (mounted) setSuggestedUsers([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
+      setAuthUserId(user.id);
+      setAuthUserName(
+        user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'FaceMeX User'
+      );
     }
 
-    loadSuggestedUsers();
+    loadAuthUser();
 
     return () => {
       mounted = false;
     };
-  }, [userId]);
+  }, []);
 
-  const getDisplayName = (user: SuggestedUser) => {
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    initRealtime(currentUserId);
+    loadRequests().catch(() => {});
+  }, [initRealtime, loadRequests, currentUserId]);
+
+  const getDisplayName = (user: ActiveUser) => {
     return (
       user.full_name ||
       user.name ||
       user.username ||
+      user.email?.split('@')[0] ||
       'FaceMeX Member'
     );
   };
 
-  const getDisplayBio = (user: SuggestedUser) => {
+  const getDisplayBio = (user: ActiveUser) => {
     return (
       user.headline ||
       user.bio ||
       user.location ||
-      'Connect on FaceMeX'
+      'Active on FaceMeX'
     );
   };
 
-  const getAvatar = (user: SuggestedUser) => {
+  const getAvatar = (user: ActiveUser) => {
     return user.avatar_url || user.avatar || '';
   };
 
@@ -125,29 +125,90 @@ export default function RightSidebar() {
     );
   };
 
+  const loadActiveUsers = async () => {
+    if (!currentUserId) return;
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(
+          'id, full_name, name, username, email, bio, headline, avatar_url, avatar, location, tier, is_active, last_seen'
+        )
+        .neq('id', currentUserId)
+        .eq('is_active', true)
+        .order('last_seen', { ascending: false, nullsFirst: false })
+        .limit(12);
+
+      if (error) {
+        console.error('Failed to load active users:', error);
+        setActiveUsers([]);
+        return;
+      }
+
+      setActiveUsers((data || []) as ActiveUser[]);
+    } catch (error) {
+      console.error('Failed to load active users:', error);
+      setActiveUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    loadActiveUsers();
+
+    const channel = supabase
+      .channel(`right-sidebar-active-users-${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+        },
+        () => {
+          loadActiveUsers();
+        }
+      )
+      .subscribe();
+
+    const interval = window.setInterval(() => {
+      loadActiveUsers();
+    }, 30000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.clearInterval(interval);
+    };
+  }, [currentUserId]);
+
   const filteredUsers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
-    if (!q) return suggestedUsers;
+    if (!q) return activeUsers;
 
-    return suggestedUsers.filter((user) => {
+    return activeUsers.filter((user) => {
       const name = getDisplayName(user).toLowerCase();
       const bio = getDisplayBio(user).toLowerCase();
 
       return name.includes(q) || bio.includes(q);
     });
-  }, [searchQuery, suggestedUsers]);
+  }, [searchQuery, activeUsers]);
 
-  const handleConnect = async (targetUser: SuggestedUser) => {
-    if (!userId || !targetUser.id) return;
+  const handleConnect = async (targetUser: ActiveUser) => {
+    if (!currentUserId || !targetUser.id) return;
 
     try {
       setSendingId(targetUser.id);
 
       await sendRequest(
         {
-          id: userId,
-          name: userName || 'FaceMeX User',
+          id: currentUserId,
+          name: currentUserName,
         },
         {
           id: targetUser.id,
@@ -170,7 +231,7 @@ export default function RightSidebar() {
                   Connect
                 </CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Discover people, creators, professionals, and businesses.
+                  Active people you can connect with now.
                 </p>
               </div>
 
@@ -186,7 +247,7 @@ export default function RightSidebar() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search people..."
+                placeholder="Search active users..."
                 className="h-9 rounded-full pl-9 text-xs"
               />
             </div>
@@ -194,7 +255,7 @@ export default function RightSidebar() {
             {loading ? (
               <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-4 text-center">
                 <p className="text-xs text-muted-foreground">
-                  Loading people...
+                  Loading active users...
                 </p>
               </div>
             ) : filteredUsers.length ? (
@@ -211,15 +272,23 @@ export default function RightSidebar() {
                       className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-2.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/50 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={getAvatar(user)} alt={name} />
-                          <AvatarFallback>{getInitials(name)}</AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={getAvatar(user)} alt={name} />
+                            <AvatarFallback>{getInitials(name)}</AvatarFallback>
+                          </Avatar>
+
+                          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-slate-900" />
+                        </div>
 
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
-                            {name}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
+                              {name}
+                            </p>
+                            <Circle className="h-2.5 w-2.5 fill-emerald-500 text-emerald-500 shrink-0" />
+                          </div>
+
                           <p className="text-xs text-muted-foreground truncate">
                             {bio}
                           </p>
@@ -257,10 +326,10 @@ export default function RightSidebar() {
               <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-5 text-center">
                 <Users className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
                 <p className="text-xs font-medium text-slate-900 dark:text-slate-50">
-                  No new people right now
+                  No active users right now
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  When more users join FaceMeX, they will show here.
+                  When real users are active, they will show here.
                 </p>
               </div>
             )}
