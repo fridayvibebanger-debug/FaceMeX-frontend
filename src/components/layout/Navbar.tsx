@@ -14,8 +14,6 @@ import {
   Wrench,
   Moon,
   X,
-  UserPlus,
-  MessagesSquare,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +44,7 @@ import {
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
+
   const {
     notifications,
     unreadCount,
@@ -64,6 +63,7 @@ export default function Navbar() {
   const { tier, addons, loadMe, mode, setMode } = userStore;
 
   const [searchText, setSearchText] = useState('');
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     typeof window !== 'undefined' && localStorage.getItem('theme') === 'dark'
       ? 'dark'
@@ -193,11 +193,11 @@ export default function Navbar() {
     const q = searchText.trim();
 
     if (!q) {
-      navigate('/connect');
+      navigate('/feed');
       return;
     }
 
-    navigate(`/connect?search=${encodeURIComponent(q)}`);
+    navigate(`/feed?search=${encodeURIComponent(q)}`);
   };
 
   const handleModeChange = (nextMode: 'social' | 'professional') => {
@@ -210,7 +210,9 @@ export default function Navbar() {
 
     try {
       localStorage.setItem('faceme_mode', nextMode);
-    } catch {}
+    } catch {
+      // ignore
+    }
 
     navigate('/feed');
   };
@@ -383,30 +385,9 @@ export default function Navbar() {
                         </DrawerClose>
 
                         <DrawerClose asChild>
-                          <Link to="/connect" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
-                            <UserPlus className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">Connect</span>
-                          </Link>
-                        </DrawerClose>
-
-                        <DrawerClose asChild>
-                          <Link to="/messages" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
-                            <MessagesSquare className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">Messages</span>
-                          </Link>
-                        </DrawerClose>
-
-                        <DrawerClose asChild>
                           <Link to="/marketplace" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
                             <ShoppingBag className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm font-medium">Marketplace</span>
-                          </Link>
-                        </DrawerClose>
-
-                        <DrawerClose asChild>
-                          <Link to="/jobs" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
-                            <Briefcase className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">Jobs</span>
                           </Link>
                         </DrawerClose>
 
@@ -420,7 +401,21 @@ export default function Navbar() {
                         <DrawerClose asChild>
                           <Link to="/media-shop" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
                             <Megaphone className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">Business Promotions</span>
+                            <span className="text-sm font-medium">Promotions</span>
+                          </Link>
+                        </DrawerClose>
+
+                        <DrawerClose asChild>
+                          <Link to="/ai/job-assistant" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
+                            <Briefcase className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">Job Assistant</span>
+                          </Link>
+                        </DrawerClose>
+
+                        <DrawerClose asChild>
+                          <Link to="/tools" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
+                            <Wrench className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">Tools</span>
                           </Link>
                         </DrawerClose>
                       </div>
@@ -443,13 +438,6 @@ export default function Navbar() {
                           <Link to="/ai/cover-letter" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
                             <FileText className="h-4 w-4 text-muted-foreground" />
                             <span className="flex-1 text-sm font-medium">AI Cover Letter</span>
-                          </Link>
-                        </DrawerClose>
-
-                        <DrawerClose asChild>
-                          <Link to="/ai/job-assistant" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
-                            <Briefcase className="h-4 w-4 text-muted-foreground" />
-                            <span className="flex-1 text-sm font-medium">Job Assistant</span>
                           </Link>
                         </DrawerClose>
 
@@ -527,7 +515,7 @@ export default function Navbar() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSearch();
                 }}
-                placeholder="Search users, creators, jobs..."
+                placeholder="Search creators, topics, tools..."
                 className="pl-10 h-9 rounded-full border-slate-200 bg-slate-100/60 dark:bg-slate-800/60 dark:border-slate-700 focus-visible:ring-1 focus-visible:ring-slate-400"
               />
 
@@ -548,24 +536,20 @@ export default function Navbar() {
               Feed
             </Link>
 
-            <Link to="/connect" className={linkClass('/connect')}>
-              Connect
-            </Link>
-
-            <Link to="/messages" className={linkClass('/messages')}>
-              Messages
-            </Link>
-
             <Link to="/marketplace" className={linkClass('/marketplace')}>
               Marketplace
             </Link>
 
-            <Link to="/jobs" className={linkClass('/jobs')}>
-              Jobs
+            <Link to="/media-shop" className={linkClass('/media-shop')}>
+              Business Promotions
             </Link>
 
             <Link to="/subscriptions" className={linkClass('/subscriptions')}>
               Subscriptions
+            </Link>
+
+            <Link to="/tools" className={linkClass('/tools')}>
+              Tools
             </Link>
 
             <div className="flex items-center gap-1 ml-2">
