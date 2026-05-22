@@ -305,72 +305,88 @@ export default function MessagesPage() {
 
   const loadMessages = async (otherUserId: string) => {
     if (!currentUserId || !otherUserId) return;
-
+  
+    const cached = messages[otherUserId];
+  
+    if (cached && cached.length > 0) {
+      setActiveConversation(otherUserId);
+    }
+  
     const { data, error } = await supabase
       .from('messages')
-      .select('*')
+      .select(
+        'id, sender_id, receiver_id, content, created_at, is_read, message_type, media_url, file_name, edited_at, deleted_at'
+      )
       .or(
         `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
       )
-      .order('created_at', { ascending: true });
-
+      .order('created_at', { ascending: true })
+      .limit(80);
+  
     if (error) {
       toast({ title: 'Messages failed', description: error.message });
       return;
     }
-
+  
     setMessages((prev) => ({
       ...prev,
-      [otherUserId]: (data || []).map((row) => mapSupabaseMessage(row as DbMessage)),
+      [otherUserId]: (data || []).map((row) =>
+        mapSupabaseMessage(row as DbMessage)),
     }));
   };
 
   const loadConversations = async () => {
     if (!currentUserId) return;
-
+  
     const { data, error } = await supabase
       .from('messages')
-      .select('*')
+      .select(
+        'id, sender_id, receiver_id, content, created_at, is_read, message_type, media_url, file_name, edited_at, deleted_at'
+      )
       .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
-      .order('created_at', { ascending: false });
-
+      .order('created_at', { ascending: false })
+      .limit(120);
+  
     if (error) {
       toast({ title: 'Conversations failed', description: error.message });
       return;
     }
-
+  
     const unique = new Map<string, DbMessage>();
-
+  
     (data || []).forEach((raw) => {
       const msg = raw as DbMessage;
-      const otherId = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
-
+      const otherId =
+        msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
+  
       if (!unique.has(otherId)) {
         unique.set(otherId, msg);
       }
     });
-
+  
     const ids = Array.from(unique.keys());
-    let profiles: ProfileRow[] = [];
-
-    if (ids.length > 0) {
-      const { data: profileRows } = await supabase
-        .from('profiles')
-        .select('id, full_name, name, username, avatar_url, avatar, is_active')
-        .in('id', ids);
-
-      profiles = (profileRows || []) as ProfileRow[];
+  
+    if (ids.length === 0) {
+      setConversations([]);
+      return;
     }
-
+  
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, full_name, name, username, avatar_url, avatar, is_active')
+      .in('id', ids);
+  
+    const profiles = (profileRows || []) as ProfileRow[];
     const profileMap = new Map<string, ProfileRow>();
+  
     profiles.forEach((profile) => profileMap.set(profile.id, profile));
-
+  
     const nextConversations: UiConversation[] = ids.map((otherId) => {
       const profile = profileMap.get(otherId);
       const name = getProfileName(profile);
       const avatar = getProfileAvatar(profile);
       const last = unique.get(otherId);
-
+  
       return {
         id: otherId,
         type: 'dm',
@@ -387,7 +403,7 @@ export default function MessagesPage() {
         unreadCount: 0,
       };
     });
-
+  
     setConversations(nextConversations);
   };
 
@@ -413,9 +429,13 @@ export default function MessagesPage() {
     async function openMessageFromButton() {
       setActiveConversation(userId);
       activeConversationRef.current = userId;
-
-      await loadMessages(userId);
-
+      
+      /**
+       * Open the chat immediately first.
+       * Then load messages and profile without blocking the screen.
+       */
+      loadMessages(userId).catch(() => {});
+      
       const { data: profile } = await supabase
         .from('profiles')
         .select('id, full_name, name, username, avatar_url, avatar, is_active')
@@ -1351,10 +1371,13 @@ Last message you are replying to:
 
   const openConversation = (conversationId: string) => {
     setActiveConversation(conversationId);
-    loadMessages(conversationId);
+    activeConversationRef.current = conversationId;
+  
     bumpInteraction(conversationId, 3);
     setQuickReplyFor(null);
     setQuickReplyText('');
+  
+    loadMessages(conversationId).catch(() => {});
   };
 
   const handleQuickReplySend = async (conversationId: string) => {
@@ -1376,8 +1399,11 @@ Last message you are replying to:
     bumpInteraction(conversationId, 2);
     setQuickReplyText('');
     setQuickReplyFor(null);
-    await loadConversations();
-    if (activeConversation === conversationId) await loadMessages(conversationId);
+    if (activeConversation === conversationId) {
+      await loadMessages(conversationId);
+    }
+    
+    loadConversations().catch(() => {});
 
     toast({ title: 'Sent', description: 'Quick reply delivered.' });
   };
