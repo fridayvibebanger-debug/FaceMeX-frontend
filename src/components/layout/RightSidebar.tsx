@@ -28,22 +28,14 @@ type ActiveUser = {
 export default function RightSidebar() {
   const navigate = useNavigate();
 
-  const {
-    id: storeUserId,
-    name: storeUserName,
-  } = useUserStore();
+  const { id: storeUserId, name: storeUserName } = useUserStore();
 
-  const {
-    outgoing,
-    initRealtime,
-    loadRequests,
-    sendRequest,
-  } = useFriendStore();
+  const { outgoing, initRealtime, loadRequests, sendRequest } = useFriendStore();
 
   const [authUserId, setAuthUserId] = useState('');
   const [authUserName, setAuthUserName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<ActiveUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
 
@@ -93,12 +85,7 @@ export default function RightSidebar() {
   };
 
   const getDisplayBio = (user: ActiveUser) => {
-    return (
-      user.headline ||
-      user.bio ||
-      user.location ||
-      'Active on FaceMeX'
-    );
+    return user.headline || user.bio || user.location || 'Online now';
   };
 
   const getAvatar = (user: ActiveUser) => {
@@ -106,10 +93,7 @@ export default function RightSidebar() {
   };
 
   const getInitials = (name: string) => {
-    const parts = String(name || '')
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
 
     if (!parts.length) return '?';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
@@ -125,32 +109,69 @@ export default function RightSidebar() {
     );
   };
 
-  const loadActiveUsers = async () => {
+  const loadOnlineConnectedUsers = async () => {
     if (!currentUserId) return;
 
     setLoading(true);
 
     try {
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+
+      const [{ data: followingRows }, { data: connectionRows }] =
+        await Promise.all([
+          supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', currentUserId),
+
+          supabase
+            .from('connection_requests')
+            .select('sender_id, receiver_id, status')
+            .eq('status', 'accepted')
+            .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`),
+        ]);
+
+      const followingIds = (followingRows || [])
+        .map((row: any) => row.following_id)
+        .filter(Boolean);
+
+      const connectionIds = (connectionRows || [])
+        .map((row: any) =>
+          row.sender_id === currentUserId ? row.receiver_id : row.sender_id
+        )
+        .filter(Boolean);
+
+      const allowedIds = Array.from(
+        new Set([...followingIds, ...connectionIds])
+      ).filter((id) => id && id !== currentUserId);
+
+      if (allowedIds.length === 0) {
+        setOnlineUsers([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .select(
           'id, full_name, name, username, email, bio, headline, avatar_url, avatar, location, tier, is_active, last_seen'
         )
-        .neq('id', currentUserId)
+        .in('id', allowedIds)
         .eq('is_active', true)
-        .order('last_seen', { ascending: false, nullsFirst: false })
+        .gte('last_seen', twoMinutesAgo)
+        .order('last_seen', { ascending: false })
         .limit(12);
 
       if (error) {
-        console.error('Failed to load active users:', error);
-        setActiveUsers([]);
+        console.error('Failed to load online connected users:', error);
+        setOnlineUsers([]);
         return;
       }
 
-      setActiveUsers((data || []) as ActiveUser[]);
+      setOnlineUsers((data || []) as ActiveUser[]);
     } catch (error) {
-      console.error('Failed to load active users:', error);
-      setActiveUsers([]);
+      console.error('Failed to load online connected users:', error);
+      setOnlineUsers([]);
     } finally {
       setLoading(false);
     }
@@ -159,10 +180,10 @@ export default function RightSidebar() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    loadActiveUsers();
+    loadOnlineConnectedUsers();
 
     const channel = supabase
-      .channel(`right-sidebar-active-users-${currentUserId}`)
+      .channel(`right-sidebar-online-connected-${currentUserId}`)
       .on(
         'postgres_changes',
         {
@@ -171,14 +192,36 @@ export default function RightSidebar() {
           table: 'profiles',
         },
         () => {
-          loadActiveUsers();
+          loadOnlineConnectedUsers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'follows',
+        },
+        () => {
+          loadOnlineConnectedUsers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'connection_requests',
+        },
+        () => {
+          loadOnlineConnectedUsers();
         }
       )
       .subscribe();
 
     const interval = window.setInterval(() => {
-      loadActiveUsers();
-    }, 30000);
+      loadOnlineConnectedUsers();
+    }, 15000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -189,15 +232,15 @@ export default function RightSidebar() {
   const filteredUsers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
-    if (!q) return activeUsers;
+    if (!q) return onlineUsers;
 
-    return activeUsers.filter((user) => {
+    return onlineUsers.filter((user) => {
       const name = getDisplayName(user).toLowerCase();
       const bio = getDisplayBio(user).toLowerCase();
 
       return name.includes(q) || bio.includes(q);
     });
-  }, [searchQuery, activeUsers]);
+  }, [searchQuery, onlineUsers]);
 
   const handleConnect = async (targetUser: ActiveUser) => {
     if (!currentUserId || !targetUser.id) return;
@@ -231,7 +274,7 @@ export default function RightSidebar() {
                   Connect
                 </CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Active people you can connect with now.
+                  Online people you follow or are connected with.
                 </p>
               </div>
 
@@ -244,10 +287,11 @@ export default function RightSidebar() {
           <CardContent className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search active users..."
+                placeholder="Search online contacts..."
                 className="h-9 rounded-full pl-9 text-xs"
               />
             </div>
@@ -255,7 +299,7 @@ export default function RightSidebar() {
             {loading ? (
               <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-4 text-center">
                 <p className="text-xs text-muted-foreground">
-                  Loading active users...
+                  Loading online contacts...
                 </p>
               </div>
             ) : filteredUsers.length ? (
@@ -286,6 +330,7 @@ export default function RightSidebar() {
                             <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
                               {name}
                             </p>
+
                             <Circle className="h-2.5 w-2.5 fill-emerald-500 text-emerald-500 shrink-0" />
                           </div>
 
@@ -326,10 +371,10 @@ export default function RightSidebar() {
               <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-5 text-center">
                 <Users className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
                 <p className="text-xs font-medium text-slate-900 dark:text-slate-50">
-                  No active users right now
+                  No online contacts
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  When real users are active, they will show here.
+                  Only users you follow or are connected with will show here when they are online.
                 </p>
               </div>
             )}
