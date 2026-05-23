@@ -78,7 +78,9 @@ interface BusinessProject {
 interface EscrowItem {
   id: string;
   title: string;
-  amount: number;
+  amount: number; // Total amount paid by buyer, including FaceMeX protection fee
+  serviceAmount?: number; // Original agreed service amount before fees
+  protectionFee?: number; // FaceMeX protection fee added automatically
   status: EscrowStatus;
   createdAt: string;
   yocoCheckoutId?: string;
@@ -286,6 +288,19 @@ function formatMoney(value: number) {
   return `R${Number(value || 0).toFixed(2)}`;
 }
 
+function calculateEscrowProtectionFee(amount: number) {
+  const safeAmount = Number(amount || 0);
+
+  if (safeAmount <= 0) return 0;
+  if (safeAmount <= 100) return 7;
+  if (safeAmount <= 200) return 10;
+  if (safeAmount <= 300) return 12;
+  if (safeAmount <= 500) return 15;
+  if (safeAmount <= 1000) return 25;
+
+  return Math.ceil(safeAmount * 0.03);
+}
+
 export default function MarketplacePage() {
   const { tier, hasTier } = useUserStore();
 
@@ -393,6 +408,13 @@ export default function MarketplacePage() {
   const [escrows, setEscrows] = useState<EscrowItem[]>(() =>
     readLS<EscrowItem[]>('facemex_escrows', [])
   );
+
+  const escrowServiceAmount = Number(escrowAmount || 0);
+  const escrowProtectionFee =
+    escrowServiceAmount > 0
+      ? calculateEscrowProtectionFee(escrowServiceAmount)
+      : 0;
+  const escrowTotalAmount = escrowServiceAmount + escrowProtectionFee;
 
   const impressionsFor = (rands: number) => Math.max(0, Number(rands || 0) * 10);
 
@@ -1042,7 +1064,9 @@ export default function MarketplacePage() {
       {
         id: `escrow-${Date.now()}`,
         title: escrowTitle.trim(),
-        amount,
+        serviceAmount: amount,
+        protectionFee: escrowProtectionFee,
+        amount: escrowTotalAmount,
         status: 'draft',
         createdAt: new Date().toISOString(),
       },
@@ -1085,7 +1109,9 @@ export default function MarketplacePage() {
           billingPurpose: 'marketplace_escrow',
           escrowId: escrow.id,
           title: escrow.title,
-          amountZar: String(escrow.amount),
+          serviceAmountZar: String(escrow.serviceAmount || escrow.amount),
+          protectionFeeZar: String(escrow.protectionFee || 0),
+          totalAmountZar: String(escrow.amount),
         },
         externalId: `marketplace-escrow-${escrow.id}`,
       });
@@ -1095,7 +1121,9 @@ export default function MarketplacePage() {
         JSON.stringify({
           escrowId: escrow.id,
           checkoutId: checkout.id,
-          amountZar: escrow.amount,
+          serviceAmountZar: escrow.serviceAmount || escrow.amount,
+          protectionFeeZar: escrow.protectionFee || 0,
+          totalAmountZar: escrow.amount,
         })
       );
 
@@ -1559,7 +1587,13 @@ export default function MarketplacePage() {
                             {escrow.title}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            R{escrow.amount || 0} · {statusBadge(escrow.status)}
+                            Service {formatMoney(escrow.serviceAmount || escrow.amount)}
+                            {escrow.protectionFee
+                              ? ` + Protection ${formatMoney(escrow.protectionFee)}`
+                              : ''}
+                          </div>
+                          <div className="text-xs font-semibold">
+                            Total due: {formatMoney(escrow.amount || 0)}
                           </div>
                         </div>
 
@@ -2112,6 +2146,36 @@ export default function MarketplacePage() {
               value={escrowAmount}
               onChange={(event) => setEscrowAmount(event.target.value)}
             />
+
+            {escrowServiceAmount > 0 && (
+              <div className="space-y-2 rounded-xl border bg-muted/30 p-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Service Amount</span>
+                  <span className="font-medium">
+                    {formatMoney(escrowServiceAmount)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">
+                    FaceMeX Protection Fee
+                  </span>
+                  <span className="font-medium">
+                    {formatMoney(escrowProtectionFee)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 border-t pt-2 font-semibold">
+                  <span>Total Due</span>
+                  <span>{formatMoney(escrowTotalAmount)}</span>
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  The protection fee is added automatically before the buyer funds
+                  escrow. Yoco checkout will charge the total due.
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -2125,3 +2189,4 @@ export default function MarketplacePage() {
     </div>
   );
 }
+
