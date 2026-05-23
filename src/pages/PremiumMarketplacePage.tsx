@@ -63,6 +63,9 @@ interface CreatorGig {
   id: string;
   title: string;
   price: number;
+  serviceAmount?: number;
+  platformFee?: number;
+  totalAmount?: number;
   description: string;
   createdAt: string;
 }
@@ -71,6 +74,9 @@ interface BusinessProject {
   id: string;
   title: string;
   budget: number;
+  serviceAmount?: number;
+  platformFee?: number;
+  totalAmount?: number;
   description: string;
   createdAt: string;
 }
@@ -288,6 +294,30 @@ function formatMoney(value: number) {
   return `R${Number(value || 0).toFixed(2)}`;
 }
 
+function calculateMarketplacePlatformFee(amount: number) {
+  const safeAmount = Number(amount || 0);
+
+  if (safeAmount <= 0) return 0;
+  if (safeAmount <= 200) return 10;
+  if (safeAmount <= 400) return 15;
+  if (safeAmount <= 600) return 20;
+  if (safeAmount <= 1000) return 25;
+
+  return Math.ceil(safeAmount * 0.03);
+}
+
+function buildMarketplaceBreakdown(amount: number) {
+  const serviceAmount = Number(amount || 0);
+  const platformFee = calculateMarketplacePlatformFee(serviceAmount);
+  const totalAmount = serviceAmount + platformFee;
+
+  return {
+    serviceAmount,
+    platformFee,
+    totalAmount,
+  };
+}
+
 function calculateEscrowProtectionFee(amount: number) {
   const safeAmount = Number(amount || 0);
 
@@ -301,6 +331,18 @@ function calculateEscrowProtectionFee(amount: number) {
   return Math.ceil(safeAmount * 0.03);
 }
 
+function buildEscrowBreakdown(amount: number) {
+  const serviceAmount = Number(amount || 0);
+  const protectionFee = calculateEscrowProtectionFee(serviceAmount);
+  const totalAmount = serviceAmount + protectionFee;
+
+  return {
+    serviceAmount,
+    protectionFee,
+    totalAmount,
+  };
+}
+
 export default function MarketplacePage() {
   const { tier, hasTier } = useUserStore();
 
@@ -310,6 +352,9 @@ export default function MarketplacePage() {
     Boolean(hasTier?.('business')) ||
     currentTier === 'business' ||
     currentTier === 'exclusive';
+
+  const creatorOrProCanOpenShopWithAddon =
+    currentTier === 'creator' || currentTier === 'pro';
 
   const [query, setQuery] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'card'>('card');
@@ -371,6 +416,9 @@ export default function MarketplacePage() {
       name: string;
       objective: string;
       budget: string;
+      serviceAmount?: number;
+      platformFee?: number;
+      totalAmount?: number;
       ts: string;
       lastRun?: string;
     }>
@@ -409,12 +457,25 @@ export default function MarketplacePage() {
     readLS<EscrowItem[]>('facemex_escrows', [])
   );
 
-  const escrowServiceAmount = Number(escrowAmount || 0);
-  const escrowProtectionFee =
-    escrowServiceAmount > 0
-      ? calculateEscrowProtectionFee(escrowServiceAmount)
-      : 0;
-  const escrowTotalAmount = escrowServiceAmount + escrowProtectionFee;
+  const escrowBreakdown = buildEscrowBreakdown(Number(escrowAmount || 0));
+  const escrowServiceAmount = escrowBreakdown.serviceAmount;
+  const escrowProtectionFee = escrowBreakdown.protectionFee;
+  const escrowTotalAmount = escrowBreakdown.totalAmount;
+
+  const gigBreakdown = buildMarketplaceBreakdown(Number(gigPrice || 0));
+  const gigServiceAmount = gigBreakdown.serviceAmount;
+  const gigPlatformFee = gigBreakdown.platformFee;
+  const gigTotalAmount = gigBreakdown.totalAmount;
+
+  const projectBreakdown = buildMarketplaceBreakdown(Number(projectBudget || 0));
+  const projectServiceAmount = projectBreakdown.serviceAmount;
+  const projectPlatformFee = projectBreakdown.platformFee;
+  const projectTotalAmount = projectBreakdown.totalAmount;
+
+  const campaignBreakdown = buildMarketplaceBreakdown(Number(campaignBudget || 0));
+  const campaignServiceAmount = campaignBreakdown.serviceAmount;
+  const campaignPlatformFee = campaignBreakdown.platformFee;
+  const campaignTotalAmount = campaignBreakdown.totalAmount;
 
   const impressionsFor = (rands: number) => Math.max(0, Number(rands || 0) * 10);
 
@@ -708,7 +769,7 @@ export default function MarketplacePage() {
       return;
     }
 
-    if (currentTier === 'pro') {
+    if (creatorOrProCanOpenShopWithAddon) {
       try {
         setShopCheckoutBusy(true);
 
@@ -726,7 +787,7 @@ export default function MarketplacePage() {
             monthlyBonusImpressions: String(SHOP_ADDON_BONUS_IMPRESSIONS),
             tier: currentTier,
           },
-          externalId: `marketplace-shop-${Date.now()}`,
+          externalId: `marketplace-shop-${currentTier}-${Date.now()}`
         });
 
         window.location.href = checkout.redirectUrl;
@@ -746,7 +807,7 @@ export default function MarketplacePage() {
     toast({
       title: 'Upgrade required',
       description:
-        'Business and Exclusive users open shops for free. Pro users can unlock a shop for R370/month with 1,000 bonus impressions.',
+        'Business and Exclusive users open shops for free. Creator and Pro users can unlock a shop for R370/month with 1,000 bonus impressions.',
     });
   };
 
@@ -996,11 +1057,17 @@ export default function MarketplacePage() {
       return;
     }
 
+    const price = Number(gigPrice || 0);
+    const breakdown = buildMarketplaceBreakdown(price);
+
     const next = [
       {
         id: `gig-${Date.now()}`,
         title: gigTitle.trim(),
-        price: Number(gigPrice || 0),
+        price: breakdown.totalAmount,
+        serviceAmount: breakdown.serviceAmount,
+        platformFee: breakdown.platformFee,
+        totalAmount: breakdown.totalAmount,
         description: gigDescription.trim() || 'Creator service available.',
         createdAt: new Date().toISOString(),
       },
@@ -1014,7 +1081,10 @@ export default function MarketplacePage() {
     setGigDescription('');
     setGigOpen(false);
 
-    toast({ title: 'Gig created', description: 'Your creator gig is saved.' });
+    toast({
+      title: 'Gig created',
+      description: `Total shown is ${formatMoney(breakdown.totalAmount)} including platform fee.`,
+    });
   };
 
   const saveProject = () => {
@@ -1023,11 +1093,17 @@ export default function MarketplacePage() {
       return;
     }
 
+    const budget = Number(projectBudget || 0);
+    const breakdown = buildMarketplaceBreakdown(budget);
+
     const next = [
       {
         id: `project-${Date.now()}`,
         title: projectTitle.trim(),
-        budget: Number(projectBudget || 0),
+        budget: breakdown.totalAmount,
+        serviceAmount: breakdown.serviceAmount,
+        platformFee: breakdown.platformFee,
+        totalAmount: breakdown.totalAmount,
         description: projectDescription.trim() || 'Business project available.',
         createdAt: new Date().toISOString(),
       },
@@ -1041,7 +1117,10 @@ export default function MarketplacePage() {
     setProjectDescription('');
     setProjectOpen(false);
 
-    toast({ title: 'Project created', description: 'Business project saved.' });
+    toast({
+      title: 'Project created',
+      description: `Total budget is ${formatMoney(breakdown.totalAmount)} including platform fee.`,
+    });
   };
 
   const saveEscrow = () => {
@@ -1060,13 +1139,15 @@ export default function MarketplacePage() {
       return;
     }
 
+    const breakdown = buildEscrowBreakdown(amount);
+
     const next: EscrowItem[] = [
       {
         id: `escrow-${Date.now()}`,
         title: escrowTitle.trim(),
-        serviceAmount: amount,
-        protectionFee: escrowProtectionFee,
-        amount: escrowTotalAmount,
+        serviceAmount: breakdown.serviceAmount,
+        protectionFee: breakdown.protectionFee,
+        amount: breakdown.totalAmount,
         status: 'draft',
         createdAt: new Date().toISOString(),
       },
@@ -1080,15 +1161,19 @@ export default function MarketplacePage() {
 
     toast({
       title: 'Escrow created',
-      description: 'Escrow record saved. Fund it before work starts.',
+      description: `Total due is ${formatMoney(breakdown.totalAmount)} including FaceMeX protection fee.`,
     });
   };
 
   const fundEscrow = async (escrow: EscrowItem) => {
-    if (!escrow.amount || escrow.amount <= 0) {
+    const totalAmount = Number(escrow.amount || 0);
+    const serviceAmount = Number(escrow.serviceAmount || escrow.amount || 0);
+    const protectionFee = Number(escrow.protectionFee || 0);
+
+    if (!totalAmount || totalAmount <= 0) {
       toast({
         title: 'Invalid escrow',
-        description: 'Escrow amount must be more than R0.',
+        description: 'Escrow total amount must be more than R0.',
       });
       return;
     }
@@ -1100,7 +1185,7 @@ export default function MarketplacePage() {
       const origin = window.location.origin;
 
       const checkout = await createYocoCheckoutSession({
-        amountZar: escrow.amount,
+        amountZar: totalAmount,
         currency: 'ZAR',
         successUrl: `${origin}/marketplace?escrow=success`,
         cancelUrl: `${origin}/marketplace?escrow=cancelled`,
@@ -1109,21 +1194,25 @@ export default function MarketplacePage() {
           billingPurpose: 'marketplace_escrow',
           escrowId: escrow.id,
           title: escrow.title,
-          serviceAmountZar: String(escrow.serviceAmount || escrow.amount),
-          protectionFeeZar: String(escrow.protectionFee || 0),
-          totalAmountZar: String(escrow.amount),
+          serviceAmountZar: String(serviceAmount),
+          protectionFeeZar: String(protectionFee),
+          totalAmountZar: String(totalAmount),
         },
         externalId: `marketplace-escrow-${escrow.id}`,
       });
+
+      if (!checkout?.redirectUrl) {
+        throw new Error('Yoco did not return a checkout link. Check your backend Yoco route.');
+      }
 
       localStorage.setItem(
         'facemex_pending_escrow',
         JSON.stringify({
           escrowId: escrow.id,
           checkoutId: checkout.id,
-          serviceAmountZar: escrow.serviceAmount || escrow.amount,
-          protectionFeeZar: escrow.protectionFee || 0,
-          totalAmountZar: escrow.amount,
+          serviceAmountZar: serviceAmount,
+          protectionFeeZar: protectionFee,
+          totalAmountZar: totalAmount,
         })
       );
 
@@ -1166,6 +1255,24 @@ export default function MarketplacePage() {
     toast({
       title: 'Escrow cancelled',
       description: 'Escrow record was cancelled.',
+    });
+  };
+
+  const deleteEscrow = (escrow: EscrowItem) => {
+    if (escrow.status === 'funded' || escrow.status === 'payment_pending') {
+      toast({
+        title: 'Cannot delete active escrow',
+        description: 'Cancel or release the escrow before deleting it.',
+      });
+      return;
+    }
+
+    const next = escrows.filter((item) => item.id !== escrow.id);
+    saveEscrows(next);
+
+    toast({
+      title: 'Escrow deleted',
+      description: 'The escrow payment project was removed.',
     });
   };
 
@@ -1236,7 +1343,7 @@ export default function MarketplacePage() {
                 ? 'Opening checkout...'
                 : canOpenShop
                   ? 'Open Shop'
-                  : currentTier === 'pro'
+                  : creatorOrProCanOpenShopWithAddon
                     ? 'Open Shop · R370/mo'
                     : 'Open Shop'}
             </Button>
@@ -1509,7 +1616,10 @@ export default function MarketplacePage() {
                         {gig.title}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        From R{gig.price || 0}
+                        From {formatMoney(gig.serviceAmount || gig.price || 0)}
+                        {gig.platformFee
+                          ? ` + fee ${formatMoney(gig.platformFee)}`
+                          : ''}
                       </div>
                     </div>
                   ))}
@@ -1547,7 +1657,10 @@ export default function MarketplacePage() {
                         {project.title}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Budget R{project.budget || 0}
+                        Budget {formatMoney(project.serviceAmount || project.budget || 0)}
+                        {project.platformFee
+                          ? ` + fee ${formatMoney(project.platformFee)}`
+                          : ''}
                       </div>
                     </div>
                   ))}
@@ -1636,6 +1749,18 @@ export default function MarketplacePage() {
                           onClick={() => cancelEscrow(escrow)}
                         >
                           Cancel
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={
+                            escrow.status === 'funded' ||
+                            escrow.status === 'payment_pending'
+                          }
+                          onClick={() => deleteEscrow(escrow)}
+                        >
+                          Delete
                         </Button>
                       </div>
                     </div>
@@ -1736,7 +1861,7 @@ export default function MarketplacePage() {
                 ? 'Business+ opens shops for free.'
                 : shopAddonActive
                   ? 'Your marketplace shop add-on is active.'
-                  : `Pro users pay R${SHOP_ADDON_PRICE_ZAR}/month and receive ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions monthly.`}
+                  : `Creator and Pro users pay R${SHOP_ADDON_PRICE_ZAR}/month and receive ${SHOP_ADDON_BONUS_IMPRESSIONS.toLocaleString()} bonus impressions monthly.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -2016,6 +2141,27 @@ export default function MarketplacePage() {
               onChange={(event) => setCampaignBudget(event.target.value)}
             />
 
+            {campaignServiceAmount > 0 && (
+              <div className="space-y-2 rounded-xl border bg-muted/30 p-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Campaign Budget</span>
+                  <span className="font-medium">
+                    {formatMoney(campaignServiceAmount)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">FaceMeX Campaign Fee</span>
+                  <span className="font-medium">
+                    {formatMoney(campaignPlatformFee)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t pt-2 font-semibold">
+                  <span>Total Campaign Budget</span>
+                  <span>{formatMoney(campaignTotalAmount)}</span>
+                </div>
+              </div>
+            )}
+
             <Textarea placeholder="Creative notes, audience, location, product..." />
           </div>
 
@@ -2029,7 +2175,10 @@ export default function MarketplacePage() {
                 const draft = {
                   name: campaignName || 'Untitled',
                   objective: campaignObjective,
-                  budget: campaignBudget,
+                  budget: String(campaignBreakdown.totalAmount),
+                  serviceAmount: campaignBreakdown.serviceAmount,
+                  platformFee: campaignBreakdown.platformFee,
+                  totalAmount: campaignBreakdown.totalAmount,
                   ts: new Date().toISOString(),
                 };
 
@@ -2039,7 +2188,7 @@ export default function MarketplacePage() {
 
                 toast({
                   title: 'Draft saved',
-                  description: `${draft.name}, budget R${draft.budget}`,
+                  description: `${draft.name}, total budget ${formatMoney(Number(draft.budget || 0))}`,
                 });
               }}
             >
@@ -2071,6 +2220,23 @@ export default function MarketplacePage() {
               value={gigPrice}
               onChange={(event) => setGigPrice(event.target.value)}
             />
+
+            {gigServiceAmount > 0 && (
+              <div className="space-y-2 rounded-xl border bg-muted/30 p-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Gig Price</span>
+                  <span className="font-medium">{formatMoney(gigServiceAmount)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">FaceMeX Platform Fee</span>
+                  <span className="font-medium">{formatMoney(gigPlatformFee)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t pt-2 font-semibold">
+                  <span>Total Shown</span>
+                  <span>{formatMoney(gigTotalAmount)}</span>
+                </div>
+              </div>
+            )}
             <Textarea
               placeholder="Describe your service"
               value={gigDescription}
@@ -2108,6 +2274,27 @@ export default function MarketplacePage() {
               value={projectBudget}
               onChange={(event) => setProjectBudget(event.target.value)}
             />
+
+            {projectServiceAmount > 0 && (
+              <div className="space-y-2 rounded-xl border bg-muted/30 p-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Project Budget</span>
+                  <span className="font-medium">
+                    {formatMoney(projectServiceAmount)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">FaceMeX Project Fee</span>
+                  <span className="font-medium">
+                    {formatMoney(projectPlatformFee)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t pt-2 font-semibold">
+                  <span>Total Budget</span>
+                  <span>{formatMoney(projectTotalAmount)}</span>
+                </div>
+              </div>
+            )}
             <Textarea
               placeholder="Describe what you need"
               value={projectDescription}
@@ -2189,4 +2376,5 @@ export default function MarketplacePage() {
     </div>
   );
 }
+
 
