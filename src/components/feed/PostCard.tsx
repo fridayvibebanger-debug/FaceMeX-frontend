@@ -26,7 +26,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
-import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -38,6 +37,48 @@ import {
 
 interface PostCardProps {
   post: Post;
+}
+
+function normalizePostImages(post: Post): string[] {
+  const images = new Set<string>();
+
+  const addImage = (value: unknown) => {
+    if (typeof value !== 'string') return;
+    const clean = value.trim();
+    if (!clean) return;
+    images.add(clean);
+  };
+
+  const rawImages = (post as any).images;
+
+  if (Array.isArray(rawImages)) {
+    rawImages.forEach(addImage);
+  } else if (typeof rawImages === 'string' && rawImages.trim()) {
+    try {
+      const parsed = JSON.parse(rawImages);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(addImage);
+      } else {
+        addImage(rawImages);
+      }
+    } catch {
+      rawImages
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach(addImage);
+    }
+  }
+
+  const singleImage = (post as any).image;
+
+  if (Array.isArray(singleImage)) {
+    singleImage.forEach(addImage);
+  } else {
+    addImage(singleImage);
+  }
+
+  return Array.from(images);
 }
 
 export default function PostCard({ post }: PostCardProps) {
@@ -61,7 +102,6 @@ export default function PostCard({ post }: PostCardProps) {
   const [saved, setSaved] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
-  const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
@@ -71,7 +111,14 @@ export default function PostCard({ post }: PostCardProps) {
   const recordIntervalRef = useRef<number | null>(null);
   const replyInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { addons, id: currentUserId, tier, name: currentUserName, avatar: currentUserAvatar } = useUserStore();
+  const {
+    addons,
+    id: currentUserId,
+    tier,
+    name: currentUserName,
+    avatar: currentUserAvatar,
+  } = useUserStore();
+
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
@@ -90,8 +137,7 @@ export default function PostCard({ post }: PostCardProps) {
   const hasInvite = !!myId && collabInvites.includes(myId);
   const canEdit = isOwner || isCollaborator;
 
- const displayName = post.userName || 'FaceMeX Member';
-
+  const displayName = post.userName || 'FaceMeX Member';
   const displayAvatar = post.userAvatar || '';
 
   const isAuthorVerified =
@@ -102,21 +148,6 @@ export default function PostCard({ post }: PostCardProps) {
   useEffect(() => {
     setPostDraft(post.content);
   }, [post.content]);
-
-  useEffect(() => {
-    if (!carouselApi) return;
-
-    const id = window.setInterval(() => {
-      try {
-        const total = carouselApi.scrollSnapList().length;
-        if (total <= 1) return;
-        const selected = carouselApi.selectedScrollSnap();
-        carouselApi.scrollTo((selected + 1) % total);
-      } catch {}
-    }, 3500);
-
-    return () => window.clearInterval(id);
-  }, [carouselApi]);
 
   useEffect(() => {
     try {
@@ -131,7 +162,11 @@ export default function PostCard({ post }: PostCardProps) {
   const getVoiceCommentDailyLimit = () => {
     const t = String((tier || user?.tier || '')).toLowerCase();
 
-    if (t.startsWith('creator') || t.startsWith('business') || t.startsWith('exclusive')) {
+    if (
+      t.startsWith('creator') ||
+      t.startsWith('business') ||
+      t.startsWith('exclusive')
+    ) {
       return Infinity;
     }
 
@@ -243,7 +278,9 @@ export default function PostCard({ post }: PostCardProps) {
     const used = getVoiceCommentCountToday();
 
     if (Number.isFinite(limit) && used >= limit) {
-      alert(`Daily limit reached. You can send ${limit} voice note comments per day on your plan.`);
+      alert(
+        `Daily limit reached. You can send ${limit} voice note comments per day on your plan.`
+      );
       return;
     }
 
@@ -263,16 +300,16 @@ export default function PostCard({ post }: PostCardProps) {
       clearRecordTimer();
 
       recordIntervalRef.current = window.setInterval(() => {
-  setRecordSeconds((prev) => {
-    const next = prev + 1;
+        setRecordSeconds((prev) => {
+          const next = prev + 1;
 
-    if (next >= limitSeconds) {
-      stopVoiceRecording();
-    }
+          if (next >= limitSeconds) {
+            stopVoiceRecording();
+          }
 
-    return next;
-  });
-}, 1000);
+          return next;
+        });
+      }, 1000);
 
       recorder.ondataavailable = (event: BlobEvent) => {
         if (event.data && event.data.size > 0) {
@@ -320,25 +357,26 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const handleShare = async () => {
-  try {
-    const url = `${window.location.origin}/post/${post.id}`;
-    const navAny =
-      typeof navigator !== 'undefined' ? (navigator as any) : null;
+    try {
+      const url = `${window.location.origin}/post/${post.id}`;
+      const navAny =
+        typeof navigator !== 'undefined' ? (navigator as any) : null;
 
-    if (navAny && typeof navAny.share === 'function') {
-      await navAny.share({
-        title: 'FaceMeX',
-        url,
-      });
-    } else if (navAny?.clipboard?.writeText) {
-      await navAny.clipboard.writeText(url);
+      if (navAny && typeof navAny.share === 'function') {
+        await navAny.share({
+          title: 'FaceMeX',
+          url,
+        });
+      } else if (navAny?.clipboard?.writeText) {
+        await navAny.clipboard.writeText(url);
+      }
+    } catch (error) {
+      console.log(error);
     }
-  } catch (error) {
-    console.log(error);
-  }
 
-  sharePost(post.id);
-};
+    sharePost(post.id);
+  };
+
   const startEditPost = () => {
     if (!canEdit) return;
     setPostDraft(post.content);
@@ -401,10 +439,124 @@ export default function PostCard({ post }: PostCardProps) {
     }, 0);
   };
 
+  const renderImageGrid = (imgs: string[]) => {
+    if (!imgs.length) return null;
+
+    if (imgs.length === 1) {
+      return (
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
+          <img
+            src={imgs[0]}
+            alt="Post image"
+            className="w-full max-h-[650px] object-cover cursor-pointer rounded-3xl"
+            onClick={() => openLightbox(imgs[0])}
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    if (imgs.length === 2) {
+      return (
+        <div className="relative grid h-[260px] sm:h-[420px] grid-cols-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black">
+          {imgs.slice(0, 2).map((src, index) => (
+            <button
+              key={`${post.id}-image-${index}`}
+              type="button"
+              className="relative h-full w-full overflow-hidden bg-black"
+              onClick={() => openLightbox(src)}
+            >
+              <img
+                src={src}
+                alt={`Post image ${index + 1}`}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (imgs.length === 3) {
+      return (
+        <div className="relative grid h-[320px] sm:h-[460px] grid-cols-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black">
+          <button
+            type="button"
+            className="relative h-full w-full overflow-hidden bg-black"
+            onClick={() => openLightbox(imgs[0])}
+          >
+            <img
+              src={imgs[0]}
+              alt="Post image 1"
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          </button>
+
+          <div className="grid h-full grid-rows-2 gap-1">
+            {imgs.slice(1, 3).map((src, index) => (
+              <button
+                key={`${post.id}-image-${index + 1}`}
+                type="button"
+                className="relative h-full w-full overflow-hidden bg-black"
+                onClick={() => openLightbox(src)}
+              >
+                <img
+                  src={src}
+                  alt={`Post image ${index + 2}`}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="relative grid h-[340px] sm:h-[480px] grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black">
+        {imgs.slice(0, 4).map((src, index) => {
+          const extraCount = imgs.length - 4;
+          const showMore = index === 3 && extraCount > 0;
+
+          return (
+            <button
+              key={`${post.id}-image-${index}`}
+              type="button"
+              className="relative h-full w-full overflow-hidden bg-black"
+              onClick={() => openLightbox(src)}
+            >
+              <img
+                src={src}
+                alt={`Post image ${index + 1}`}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+
+              {showMore && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-3xl font-bold text-white">
+                  +{extraCount}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   const commentCount = post.comments?.length || 0;
 
   const reactionType = post.isLiked
-    ? ((post.reaction || 'like') as 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry')
+    ? ((post.reaction || 'like') as
+        | 'love'
+        | 'like'
+        | 'haha'
+        | 'wow'
+        | 'sad'
+        | 'angry')
     : undefined;
 
   const reactionClass = (() => {
@@ -426,12 +578,7 @@ export default function PostCard({ post }: PostCardProps) {
     }
   })();
 
-  const imgs =
-    Array.isArray(post.images) && post.images.length > 0
-      ? post.images
-      : post.image
-      ? [post.image]
-      : [];
+  const imgs = normalizePostImages(post);
 
   return (
     <motion.div
@@ -449,7 +596,9 @@ export default function PostCard({ post }: PostCardProps) {
             <div className="relative">
               <Avatar>
                 <AvatarImage src={displayAvatar} alt={displayName} />
-                <AvatarFallback>{displayName ? displayName.charAt(0) : 'U'}</AvatarFallback>
+                <AvatarFallback>
+                  {displayName ? displayName.charAt(0) : 'U'}
+                </AvatarFallback>
               </Avatar>
 
               {isAuthorVerified && (
@@ -480,7 +629,11 @@ export default function PostCard({ post }: PostCardProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -515,7 +668,10 @@ export default function PostCard({ post }: PostCardProps) {
                     Invite collaborator
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleDeletePost} className="text-destructive focus:text-destructive">
+                  <DropdownMenuItem
+                    onClick={handleDeletePost}
+                    className="text-destructive focus:text-destructive"
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </DropdownMenuItem>
@@ -535,7 +691,11 @@ export default function PostCard({ post }: PostCardProps) {
               />
 
               <div className="flex justify-end gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setEditingPost(false)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEditingPost(false)}
+                >
                   Cancel
                 </Button>
                 <Button size="sm" onClick={saveEditPost}>
@@ -562,39 +722,8 @@ export default function PostCard({ post }: PostCardProps) {
               ))}
             </div>
           )}
-          
-          {imgs.length === 1 && (
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
-               <img
-                 src={imgs[0]}
-                 alt="Post image"
-                 className="w-full max-h-[650px] object-cover cursor-pointer rounded-3xl"
-                 onClick={() => openLightbox(imgs[0])}
-              />
-            </div>
-          )}
 
-          {imgs.length > 1 && (
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/20 shadow-2xl">
-              <Carousel opts={{ loop: false }} setApi={(api) => setCarouselApi(api)}>
-                <CarouselContent>
-                  {imgs.slice(0, 5).map((src, idx) => (
-                    <CarouselItem key={`${post.id}-img-${idx}`} className="basis-full">
-                      <div className="relative w-full aspect-[4/5] bg-black">
-                        <img
-                          src={src}
-                          alt={`Post image ${idx + 1}`}
-                          className="absolute inset-0 h-full w-full object-cover cursor-pointer"
-                          loading="lazy"
-                          onClick={() => openLightbox(src)}
-                        />
-                      </div>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-              </Carousel>
-            </div>
-          )}
+          {renderImageGrid(imgs)}
 
           <Dialog
             open={lightboxOpen}
@@ -646,7 +775,9 @@ export default function PostCard({ post }: PostCardProps) {
                     size="sm"
                     aria-label="React"
                     className={reactionClass}
-                    onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                    onClick={() =>
+                      likePost(post.id, (post.reaction || 'like') as any)
+                    }
                   >
                     <span className="text-sm">React</span>
                     <span className="ml-2 text-xs text-muted-foreground tabular-nums">
@@ -656,42 +787,76 @@ export default function PostCard({ post }: PostCardProps) {
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent align="start" className="flex gap-1">
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="px-2">
+                  <DropdownMenuItem
+                    onClick={() => likePost(post.id, 'love')}
+                    className="px-2"
+                  >
                     <Heart className="h-4 w-4 text-destructive" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="px-2">
+                  <DropdownMenuItem
+                    onClick={() => likePost(post.id, 'like')}
+                    className="px-2"
+                  >
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="px-2">
+                  <DropdownMenuItem
+                    onClick={() => likePost(post.id, 'haha')}
+                    className="px-2"
+                  >
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="px-2">
+                  <DropdownMenuItem
+                    onClick={() => likePost(post.id, 'wow')}
+                    className="px-2"
+                  >
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="px-2">
+                  <DropdownMenuItem
+                    onClick={() => likePost(post.id, 'sad')}
+                    className="px-2"
+                  >
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="px-2">
+                  <DropdownMenuItem
+                    onClick={() => likePost(post.id, 'angry')}
+                    className="px-2"
+                  >
                     <Angry className="h-4 w-4 text-destructive" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button type="button" variant="ghost" size="sm" onClick={() => setShowComments((v) => !v)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowComments((v) => !v)}
+              >
                 <span className="text-sm">Reply</span>
                 <span className="ml-2 text-xs text-muted-foreground tabular-nums">
                   {commentCount}
                 </span>
               </Button>
 
-              <Button type="button" variant="ghost" size="sm" onClick={handleShare}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleShare}
+              >
                 <span className="text-sm">Share</span>
                 <span className="ml-2 text-xs text-muted-foreground tabular-nums">
                   {post.shares || 0}
                 </span>
               </Button>
 
-              <Button type="button" variant="ghost" size="sm" onClick={toggleSaved} className={saved ? 'text-foreground' : ''}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={toggleSaved}
+                className={saved ? 'text-foreground' : ''}
+              >
                 <Bookmark className="h-4 w-4 mr-1" />
                 <span className="text-sm">{saved ? 'Saved' : 'Save'}</span>
               </Button>
@@ -710,7 +875,11 @@ export default function PostCard({ post }: PostCardProps) {
               className="w-full rounded-full border border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 shadow-[0_0_35px_rgba(168,85,247,0.35)] hover:shadow-[0_0_45px_rgba(34,211,238,0.45)] transition-all"
             >
               <span className="mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20">
-                <AudioLines className={`h-3.5 w-3.5 text-purple-500 ${isRecording ? 'animate-pulse' : ''}`} />
+                <AudioLines
+                  className={`h-3.5 w-3.5 text-purple-500 ${
+                    isRecording ? 'animate-pulse' : ''
+                  }`}
+                />
               </span>
               {isRecording
                 ? `${recordSeconds}s`
@@ -725,31 +894,31 @@ export default function PostCard({ post }: PostCardProps) {
           </div>
 
           <div className="flex items-center gap-2 pt-3">
-           <Input
+            <Input
               ref={replyInputRef}
               placeholder="Reply…"
               value={commentText}
               onFocus={() => undefined}
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={(e) => {
-                 if (e.key === 'Enter') {
-                    handleComment();
-                   }
-                 }}
-             className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
-           />
+                if (e.key === 'Enter') {
+                  handleComment();
+                }
+              }}
+              className="h-10 rounded-2xl bg-muted/30 border-border/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
 
-          <Button
+            <Button
               size="icon"
               variant="ghost"
               onClick={handleComment}
               aria-label="Send reply"
-            className="text-muted-foreground hover:text-foreground"
-           >
-         <Send className="h-4 w-4" />
-       </Button>
-     </div>
-          
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+
           <AnimatePresence>
             {showComments && (
               <motion.div
@@ -760,7 +929,8 @@ export default function PostCard({ post }: PostCardProps) {
               >
                 {post.comments.map((comment) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const canDeleteComment = String(comment.userId || '') === myId || isOwner;
+                  const canDeleteComment =
+                    String(comment.userId || '') === myId || isOwner;
 
                   return (
                     <motion.div
@@ -770,7 +940,10 @@ export default function PostCard({ post }: PostCardProps) {
                       className="flex gap-3"
                     >
                       <Avatar className="h-7 w-7">
-                        <AvatarImage src={comment.userAvatar} alt={comment.userName} />
+                        <AvatarImage
+                          src={comment.userAvatar}
+                          alt={comment.userName}
+                        />
                         <AvatarFallback>
                           {comment.userName ? comment.userName.charAt(0) : 'U'}
                         </AvatarFallback>
@@ -783,7 +956,9 @@ export default function PostCard({ post }: PostCardProps) {
                           </p>
 
                           <span className="text-[11px] text-muted-foreground">
-                            {formatDistanceToNow(comment.timestamp, { addSuffix: true })}
+                            {formatDistanceToNow(comment.timestamp, {
+                              addSuffix: true,
+                            })}
                           </span>
                         </div>
 
