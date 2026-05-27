@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import {
   Send,
   CheckCircle,
-  Mic,
   Heart,
   Bookmark,
   MoreHorizontal,
@@ -19,6 +18,12 @@ import {
   Trash2,
   AudioLines,
   MessageCircle,
+  FileText,
+  Lock,
+  ChevronLeft,
+  ChevronRight,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -39,46 +44,476 @@ interface PostCardProps {
   post: Post;
 }
 
-function normalizePostImages(post: Post): string[] {
-  const images = new Set<string>();
+type PostMediaItem = {
+  type: 'image' | 'video';
+  src: string;
+};
 
-  const addImage = (value: unknown) => {
-    if (typeof value !== 'string') return;
-    const clean = value.trim();
-    if (!clean) return;
-    images.add(clean);
-  };
+type PostDocumentItem = {
+  id: string;
+  title: string;
+  url: string;
+  pages: string[];
+  totalPages: number;
+  previewPages: number;
+};
 
-  const rawImages = (post as any).images;
+function cleanString(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
 
-  if (Array.isArray(rawImages)) {
-    rawImages.forEach(addImage);
-  } else if (typeof rawImages === 'string' && rawImages.trim()) {
+function normalizeStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => cleanString(item))
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
     try {
-      const parsed = JSON.parse(rawImages);
+      const parsed = JSON.parse(value);
       if (Array.isArray(parsed)) {
-        parsed.forEach(addImage);
-      } else {
-        addImage(rawImages);
+        return parsed
+          .map((item) => cleanString(item))
+          .filter(Boolean);
       }
     } catch {
-      rawImages
+      // fall back below
+    }
+
+    if (value.includes(',')) {
+      return value
         .split(',')
         .map((item) => item.trim())
-        .filter(Boolean)
-        .forEach(addImage);
+        .filter(Boolean);
+    }
+
+    return [value.trim()];
+  }
+
+  return [];
+}
+
+function normalizePostMedia(post: Post): PostMediaItem[] {
+  const media: PostMediaItem[] = [];
+  const seen = new Set<string>();
+
+  const add = (type: 'image' | 'video', value: unknown) => {
+    const src = cleanString(value);
+    if (!src) return;
+
+    const key = `${type}:${src}`;
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    media.push({ type, src });
+  };
+
+  const addMany = (type: 'image' | 'video', value: unknown) => {
+    normalizeStringArray(value).forEach((src) => add(type, src));
+  };
+
+  addMany('image', (post as any).images);
+  addMany('image', (post as any).image);
+
+  addMany('video', (post as any).videos);
+  addMany('video', (post as any).video);
+  addMany('video', (post as any).videoUrl);
+
+  if ((post as any).mediaType === 'video' || (post as any).media_type === 'video') {
+    add('video', (post as any).mediaUrl || (post as any).media_url);
+  }
+
+  return media;
+}
+
+function normalizePostDocuments(post: Post): PostDocumentItem[] {
+  const docs: PostDocumentItem[] = [];
+
+  const addDoc = (raw: any, index: number) => {
+    if (!raw) return;
+
+    const pages = normalizeStringArray(
+      raw.pages ||
+        raw.documentPages ||
+        raw.document_pages ||
+        raw.pageImages ||
+        raw.page_images
+    );
+
+    const url = cleanString(
+      raw.url ||
+        raw.documentUrl ||
+        raw.document_url ||
+        raw.fileUrl ||
+        raw.file_url ||
+        raw.mediaUrl ||
+        raw.media_url
+    );
+
+    const title =
+      cleanString(raw.title || raw.fileName || raw.file_name || raw.name) ||
+      `Document ${index + 1}`;
+
+    if (!url && pages.length === 0) return;
+
+    const rawTotalPages = Number(
+      raw.totalPages ||
+        raw.total_pages ||
+        raw.pageCount ||
+        raw.page_count ||
+        pages.length ||
+        1
+    );
+
+    const totalPages = Math.max(1, Number.isFinite(rawTotalPages) ? rawTotalPages : 1);
+
+    const rawPreviewPages = Number(
+      raw.previewPages ||
+        raw.preview_pages ||
+        raw.unlockedPages ||
+        raw.unlocked_pages ||
+        raw.visiblePages ||
+        raw.visible_pages ||
+        Math.min(1, totalPages)
+    );
+
+    const previewPages = Math.max(
+      1,
+      Math.min(Number.isFinite(rawPreviewPages) ? rawPreviewPages : 1, totalPages)
+    );
+
+    docs.push({
+      id: cleanString(raw.id) || `${post.id}-doc-${index}`,
+      title,
+      url,
+      pages,
+      totalPages,
+      previewPages,
+    });
+  };
+
+  const rawDocuments = (post as any).documents;
+
+  if (Array.isArray(rawDocuments)) {
+    rawDocuments.forEach((doc, index) => addDoc(doc, index));
+  } else if (typeof rawDocuments === 'string' && rawDocuments.trim()) {
+    try {
+      const parsed = JSON.parse(rawDocuments);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((doc, index) => addDoc(doc, index));
+      }
+    } catch {
+      // ignore invalid document json
     }
   }
 
-  const singleImage = (post as any).image;
+  const directDocumentUrl =
+    (post as any).documentUrl ||
+    (post as any).document_url ||
+    (post as any).document ||
+    (post as any).fileUrl ||
+    (post as any).file_url;
 
-  if (Array.isArray(singleImage)) {
-    singleImage.forEach(addImage);
-  } else {
-    addImage(singleImage);
+  const directPages = normalizeStringArray(
+    (post as any).documentPages ||
+      (post as any).document_pages ||
+      (post as any).pageImages ||
+      (post as any).page_images
+  );
+
+  if (directDocumentUrl || directPages.length) {
+    addDoc(
+      {
+        url: directDocumentUrl,
+        title:
+          (post as any).documentTitle ||
+          (post as any).document_title ||
+          (post as any).fileName ||
+          (post as any).file_name ||
+          'Document',
+        pages: directPages,
+        totalPages:
+          (post as any).documentTotalPages ||
+          (post as any).document_total_pages ||
+          directPages.length ||
+          1,
+        previewPages:
+          (post as any).documentPreviewPages ||
+          (post as any).document_preview_pages ||
+          (post as any).previewPages ||
+          (post as any).preview_pages ||
+          Math.min(1, directPages.length || 1),
+      },
+      docs.length
+    );
   }
 
-  return Array.from(images);
+  return docs;
+}
+
+function playPaperFlipSound() {
+  try {
+    const AudioContextClass =
+      window.AudioContext || (window as any).webkitAudioContext;
+
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    const duration = 0.18;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      const fade = Math.pow(1 - t, 2);
+      data[i] = (Math.random() * 2 - 1) * fade * 0.22;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 900;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.35;
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+
+    noise.start();
+    noise.stop(ctx.currentTime + duration);
+
+    window.setTimeout(() => {
+      try {
+        ctx.close();
+      } catch {
+        // ignore
+      }
+    }, 350);
+  } catch {
+    // browser may block audio until user interaction
+  }
+}
+
+function DocumentMagazine({
+  document,
+  postId,
+  canControl,
+}: {
+  document: PostDocumentItem;
+  postId: string;
+  canControl: boolean;
+}) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [localPreviewPages, setLocalPreviewPages] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`facemex:doc_preview:${postId}:${document.id}`);
+      const stored = raw ? Number(raw) : 0;
+      if (stored > 0) return stored;
+    } catch {
+      // ignore
+    }
+
+    return document.previewPages;
+  });
+
+  const totalPages = Math.max(1, document.totalPages || document.pages.length || 1);
+
+  const previewPages = Math.max(1, Math.min(localPreviewPages || 1, totalPages));
+
+  const visiblePageCount = Math.min(
+    previewPages,
+    document.pages.length || previewPages
+  );
+
+  const lockedCount = Math.max(0, totalPages - previewPages);
+  const hasPageImages = document.pages.length > 0;
+  const currentSrc = hasPageImages ? document.pages[currentPage] : '';
+
+  const goToPage = (nextPage: number, nextDirection: number) => {
+    if (!hasPageImages) return;
+
+    const safeNext = Math.max(0, Math.min(nextPage, visiblePageCount - 1));
+
+    if (safeNext === currentPage) return;
+
+    setDirection(nextDirection);
+    setCurrentPage(safeNext);
+    playPaperFlipSound();
+  };
+
+  const updatePreviewPages = (next: number) => {
+    const safe = Math.max(1, Math.min(next, totalPages));
+    setLocalPreviewPages(safe);
+
+    try {
+      localStorage.setItem(`facemex:doc_preview:${postId}:${document.id}`, String(safe));
+    } catch {
+      // ignore
+    }
+
+    if (currentPage >= safe) {
+      setCurrentPage(Math.max(0, safe - 1));
+    }
+  };
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950 text-white shadow-2xl">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+            <FileText className="h-4 w-4" />
+          </span>
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{document.title}</p>
+            <p className="text-xs text-white/50">
+              Preview {previewPages} of {totalPages} page
+              {totalPages === 1 ? '' : 's'}
+            </p>
+          </div>
+        </div>
+
+        {lockedCount > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-[11px] text-white/70">
+            <Lock className="h-3 w-3" />
+            {lockedCount} locked
+          </span>
+        )}
+      </div>
+
+      {hasPageImages ? (
+        <div className="relative h-[360px] overflow-hidden bg-[#111827] sm:h-[520px]">
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={`${document.id}-${currentPage}-${previewPages}`}
+              custom={direction}
+              initial={{
+                opacity: 0,
+                rotateY: direction > 0 ? -42 : 42,
+                x: direction > 0 ? 42 : -42,
+                scale: 0.985,
+              }}
+              animate={{
+                opacity: 1,
+                rotateY: 0,
+                x: 0,
+                scale: 1,
+              }}
+              exit={{
+                opacity: 0,
+                rotateY: direction > 0 ? 42 : -42,
+                x: direction > 0 ? -42 : 42,
+                scale: 0.985,
+              }}
+              transition={{
+                duration: 0.45,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="absolute inset-0 flex items-center justify-center [transform-style:preserve-3d]"
+            >
+              <img
+                src={currentSrc}
+                alt={`${document.title} page ${currentPage + 1}`}
+                className="h-full w-full object-contain"
+                loading="lazy"
+              />
+
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-black/20 shadow-[0_0_30px_rgba(0,0,0,0.45)]" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+            </motion.div>
+          </AnimatePresence>
+
+          <button
+            type="button"
+            onClick={() => goToPage(currentPage - 1, -1)}
+            disabled={currentPage <= 0}
+            className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur disabled:opacity-30"
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => goToPage(currentPage + 1, 1)}
+            disabled={currentPage >= visiblePageCount - 1}
+            className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur disabled:opacity-30"
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white/80 backdrop-blur">
+            Page {currentPage + 1} / {visiblePageCount}
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 bg-slate-900 px-5 py-10 text-center">
+          <FileText className="h-10 w-10 text-white/50" />
+          <div>
+            <p className="font-semibold">{document.title}</p>
+            <p className="mt-1 text-sm text-white/50">
+              Document uploaded. Add page images to enable magazine flip preview.
+            </p>
+          </div>
+
+          {document.url && (
+            <a
+              href={document.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950"
+            >
+              Open document
+            </a>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 border-t border-white/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-xs text-white/55">
+          {lockedCount > 0
+            ? 'The author locked the remaining pages.'
+            : 'All pages are available.'}
+        </div>
+
+        {canControl && (
+          <div className="flex items-center justify-between gap-2 rounded-full bg-white/10 p-1">
+            <button
+              type="button"
+              onClick={() => updatePreviewPages(previewPages - 1)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/25 text-white disabled:opacity-30"
+              disabled={previewPages <= 1}
+              aria-label="Show fewer pages"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+
+            <span className="min-w-[120px] text-center text-xs text-white/80">
+              Show {previewPages} page{previewPages === 1 ? '' : 's'}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => updatePreviewPages(previewPages + 1)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/25 text-white disabled:opacity-30"
+              disabled={previewPages >= totalPages}
+              aria-label="Show more pages"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function PostCard({ post }: PostCardProps) {
@@ -102,6 +537,7 @@ export default function PostCard({ post }: PostCardProps) {
   const [saved, setSaved] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [mediaRotation, setMediaRotation] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
@@ -111,16 +547,12 @@ export default function PostCard({ post }: PostCardProps) {
   const recordIntervalRef = useRef<number | null>(null);
   const replyInputRef = useRef<HTMLInputElement | null>(null);
 
-  const {
-    addons,
-    id: currentUserId,
-    tier,
-    name: currentUserName,
-    avatar: currentUserAvatar,
-  } = useUserStore();
-
+  const { addons, id: currentUserId, tier } = useUserStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
+
+  const mediaItems = useMemo(() => normalizePostMedia(post), [post]);
+  const documentItems = useMemo(() => normalizePostDocuments(post), [post]);
 
   const myId = String(currentUserId || user?.id || '').trim();
   const isOwner = String(post.userId || '') === myId;
@@ -148,6 +580,16 @@ export default function PostCard({ post }: PostCardProps) {
   useEffect(() => {
     setPostDraft(post.content);
   }, [post.content]);
+
+  useEffect(() => {
+    if (mediaItems.length <= 1) return;
+
+    const id = window.setInterval(() => {
+      setMediaRotation((prev) => (prev + 1) % mediaItems.length);
+    }, 5000);
+
+    return () => window.clearInterval(id);
+  }, [mediaItems.length]);
 
   useEffect(() => {
     try {
@@ -202,8 +644,8 @@ export default function PostCard({ post }: PostCardProps) {
     } catch {}
   };
 
-  const getAudioLimitSeconds = (tier?: string | null) => {
-    const t = (tier || '').toLowerCase();
+  const getAudioLimitSeconds = (tierValue?: string | null) => {
+    const t = (tierValue || '').toLowerCase();
     if (t.startsWith('creator')) return 5 * 60;
     return 30;
   };
@@ -278,9 +720,7 @@ export default function PostCard({ post }: PostCardProps) {
     const used = getVoiceCommentCountToday();
 
     if (Number.isFinite(limit) && used >= limit) {
-      alert(
-        `Daily limit reached. You can send ${limit} voice note comments per day on your plan.`
-      );
+      alert(`Daily limit reached. You can send ${limit} voice note comments per day on your plan.`);
       return;
     }
 
@@ -328,13 +768,6 @@ export default function PostCard({ post }: PostCardProps) {
   const openLightbox = (src: string) => {
     setLightboxSrc(src);
     setLightboxOpen(true);
-  };
-
-  const openCommentsAndFocus = () => {
-    setShowComments(true);
-    window.setTimeout(() => {
-      replyInputRef.current?.focus();
-    }, 0);
   };
 
   const toggleSaved = () => {
@@ -439,101 +872,139 @@ export default function PostCard({ post }: PostCardProps) {
     }, 0);
   };
 
-  const renderImageGrid = (imgs: string[]) => {
-    if (!imgs.length) return null;
+  const getRotatedMedia = () => {
+    if (mediaItems.length <= 1) return mediaItems;
 
-    if (imgs.length === 1) {
+    return mediaItems.map((_, index) => {
+      return mediaItems[(index + mediaRotation) % mediaItems.length];
+    });
+  };
+
+  const renderMediaItem = (
+    item: PostMediaItem,
+    index: number,
+    className = 'h-full w-full object-cover'
+  ) => {
+    if (item.type === 'video') {
       return (
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
-          <img
-            src={imgs[0]}
-            alt="Post image"
-            className="w-full max-h-[650px] object-cover cursor-pointer rounded-3xl"
-            onClick={() => openLightbox(imgs[0])}
-            loading="lazy"
-          />
-        </div>
-      );
-    }
-
-    if (imgs.length === 2) {
-      return (
-        <div className="relative grid h-[260px] sm:h-[420px] grid-cols-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black">
-          {imgs.slice(0, 2).map((src, index) => (
-            <button
-              key={`${post.id}-image-${index}`}
-              type="button"
-              className="relative h-full w-full overflow-hidden bg-black"
-              onClick={() => openLightbox(src)}
-            >
-              <img
-                src={src}
-                alt={`Post image ${index + 1}`}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    if (imgs.length === 3) {
-      return (
-        <div className="relative grid h-[320px] sm:h-[460px] grid-cols-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black">
-          <button
-            type="button"
-            className="relative h-full w-full overflow-hidden bg-black"
-            onClick={() => openLightbox(imgs[0])}
-          >
-            <img
-              src={imgs[0]}
-              alt="Post image 1"
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          </button>
-
-          <div className="grid h-full grid-rows-2 gap-1">
-            {imgs.slice(1, 3).map((src, index) => (
-              <button
-                key={`${post.id}-image-${index + 1}`}
-                type="button"
-                className="relative h-full w-full overflow-hidden bg-black"
-                onClick={() => openLightbox(src)}
-              >
-                <img
-                  src={src}
-                  alt={`Post image ${index + 2}`}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              </button>
-            ))}
-          </div>
-        </div>
+        <video
+          src={item.src}
+          controls
+          playsInline
+          preload="metadata"
+          className={className}
+          controlsList="nodownload"
+          onContextMenu={(e) => e.preventDefault()}
+        />
       );
     }
 
     return (
-      <div className="relative grid h-[340px] sm:h-[480px] grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black">
-        {imgs.slice(0, 4).map((src, index) => {
-          const extraCount = imgs.length - 4;
+      <img
+        src={item.src}
+        alt={`Post media ${index + 1}`}
+        className={className}
+        loading="lazy"
+        onClick={() => openLightbox(item.src)}
+      />
+    );
+  };
+
+  const renderTwitterMediaFrame = () => {
+    const media = getRotatedMedia();
+
+    if (media.length === 0) return null;
+
+    if (media.length === 1) {
+      const item = media[0];
+
+      return (
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
+          {renderMediaItem(
+            item,
+            0,
+            'w-full max-h-[650px] object-cover cursor-pointer rounded-3xl'
+          )}
+        </div>
+      );
+    }
+
+    if (media.length === 2) {
+      return (
+        <motion.div
+          key={`media-2-${mediaRotation}`}
+          initial={{ opacity: 0.92, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35 }}
+          className="relative grid h-[260px] sm:h-[420px] grid-cols-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black"
+        >
+          {media.slice(0, 2).map((item, index) => (
+            <button
+              key={`${item.src}-${index}`}
+              type="button"
+              className="relative h-full w-full overflow-hidden bg-black"
+              onClick={() => item.type === 'image' && openLightbox(item.src)}
+            >
+              {renderMediaItem(item, index)}
+            </button>
+          ))}
+        </motion.div>
+      );
+    }
+
+    if (media.length === 3) {
+      return (
+        <motion.div
+          key={`media-3-${mediaRotation}`}
+          initial={{ opacity: 0.92, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35 }}
+          className="relative grid h-[320px] sm:h-[460px] grid-cols-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black"
+        >
+          <button
+            type="button"
+            className="relative h-full w-full overflow-hidden bg-black"
+            onClick={() => media[0].type === 'image' && openLightbox(media[0].src)}
+          >
+            {renderMediaItem(media[0], 0)}
+          </button>
+
+          <div className="grid h-full grid-rows-2 gap-1">
+            {media.slice(1, 3).map((item, index) => (
+              <button
+                key={`${item.src}-${index + 1}`}
+                type="button"
+                className="relative h-full w-full overflow-hidden bg-black"
+                onClick={() => item.type === 'image' && openLightbox(item.src)}
+              >
+                {renderMediaItem(item, index + 1)}
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      );
+    }
+
+    return (
+      <motion.div
+        key={`media-4-${mediaRotation}`}
+        initial={{ opacity: 0.92, x: 24 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.35 }}
+        className="relative grid h-[340px] sm:h-[480px] grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-3xl border border-white/10 bg-black"
+      >
+        {media.slice(0, 4).map((item, index) => {
+          const extraCount = mediaItems.length - 4;
           const showMore = index === 3 && extraCount > 0;
 
           return (
             <button
-              key={`${post.id}-image-${index}`}
+              key={`${item.src}-${index}`}
               type="button"
               className="relative h-full w-full overflow-hidden bg-black"
-              onClick={() => openLightbox(src)}
+              onClick={() => item.type === 'image' && openLightbox(item.src)}
             >
-              <img
-                src={src}
-                alt={`Post image ${index + 1}`}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
+              {renderMediaItem(item, index)}
 
               {showMore && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-3xl font-bold text-white">
@@ -543,7 +1014,7 @@ export default function PostCard({ post }: PostCardProps) {
             </button>
           );
         })}
-      </div>
+      </motion.div>
     );
   };
 
@@ -578,8 +1049,6 @@ export default function PostCard({ post }: PostCardProps) {
     }
   })();
 
-  const imgs = normalizePostImages(post);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -596,9 +1065,7 @@ export default function PostCard({ post }: PostCardProps) {
             <div className="relative">
               <Avatar>
                 <AvatarImage src={displayAvatar} alt={displayName} />
-                <AvatarFallback>
-                  {displayName ? displayName.charAt(0) : 'U'}
-                </AvatarFallback>
+                <AvatarFallback>{displayName ? displayName.charAt(0) : 'U'}</AvatarFallback>
               </Avatar>
 
               {isAuthorVerified && (
@@ -629,11 +1096,7 @@ export default function PostCard({ post }: PostCardProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              >
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -668,10 +1131,7 @@ export default function PostCard({ post }: PostCardProps) {
                     Invite collaborator
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={handleDeletePost}
-                    className="text-destructive focus:text-destructive"
-                  >
+                  <DropdownMenuItem onClick={handleDeletePost} className="text-destructive focus:text-destructive">
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </DropdownMenuItem>
@@ -691,11 +1151,7 @@ export default function PostCard({ post }: PostCardProps) {
               />
 
               <div className="flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setEditingPost(false)}
-                >
+                <Button size="sm" variant="ghost" onClick={() => setEditingPost(false)}>
                   Cancel
                 </Button>
                 <Button size="sm" onClick={saveEditPost}>
@@ -723,7 +1179,20 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          {renderImageGrid(imgs)}
+          {renderTwitterMediaFrame()}
+
+          {documentItems.length > 0 && (
+            <div className="space-y-3">
+              {documentItems.map((doc) => (
+                <DocumentMagazine
+                  key={doc.id}
+                  document={doc}
+                  postId={post.id}
+                  canControl={isOwner}
+                />
+              ))}
+            </div>
+          )}
 
           <Dialog
             open={lightboxOpen}
@@ -775,9 +1244,7 @@ export default function PostCard({ post }: PostCardProps) {
                     size="sm"
                     aria-label="React"
                     className={reactionClass}
-                    onClick={() =>
-                      likePost(post.id, (post.reaction || 'like') as any)
-                    }
+                    onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
                     <span className="text-sm">React</span>
                     <span className="ml-2 text-xs text-muted-foreground tabular-nums">
@@ -787,76 +1254,42 @@ export default function PostCard({ post }: PostCardProps) {
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent align="start" className="flex gap-1">
-                  <DropdownMenuItem
-                    onClick={() => likePost(post.id, 'love')}
-                    className="px-2"
-                  >
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="px-2">
                     <Heart className="h-4 w-4 text-destructive" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => likePost(post.id, 'like')}
-                    className="px-2"
-                  >
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="px-2">
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => likePost(post.id, 'haha')}
-                    className="px-2"
-                  >
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="px-2">
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => likePost(post.id, 'wow')}
-                    className="px-2"
-                  >
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="px-2">
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => likePost(post.id, 'sad')}
-                    className="px-2"
-                  >
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="px-2">
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => likePost(post.id, 'angry')}
-                    className="px-2"
-                  >
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="px-2">
                     <Angry className="h-4 w-4 text-destructive" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowComments((v) => !v)}
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowComments((v) => !v)}>
                 <span className="text-sm">Reply</span>
                 <span className="ml-2 text-xs text-muted-foreground tabular-nums">
                   {commentCount}
                 </span>
               </Button>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleShare}
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={handleShare}>
                 <span className="text-sm">Share</span>
                 <span className="ml-2 text-xs text-muted-foreground tabular-nums">
                   {post.shares || 0}
                 </span>
               </Button>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={toggleSaved}
-                className={saved ? 'text-foreground' : ''}
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={toggleSaved} className={saved ? 'text-foreground' : ''}>
                 <Bookmark className="h-4 w-4 mr-1" />
                 <span className="text-sm">{saved ? 'Saved' : 'Save'}</span>
               </Button>
@@ -875,11 +1308,7 @@ export default function PostCard({ post }: PostCardProps) {
               className="w-full rounded-full border border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 shadow-[0_0_35px_rgba(168,85,247,0.35)] hover:shadow-[0_0_45px_rgba(34,211,238,0.45)] transition-all"
             >
               <span className="mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20">
-                <AudioLines
-                  className={`h-3.5 w-3.5 text-purple-500 ${
-                    isRecording ? 'animate-pulse' : ''
-                  }`}
-                />
+                <AudioLines className={`h-3.5 w-3.5 text-purple-500 ${isRecording ? 'animate-pulse' : ''}`} />
               </span>
               {isRecording
                 ? `${recordSeconds}s`
@@ -927,10 +1356,9 @@ export default function PostCard({ post }: PostCardProps) {
                 exit={{ opacity: 0, height: 0 }}
                 className="w-full space-y-4 pt-4 border-t border-border/60"
               >
-                {post.comments.map((comment) => {
+                {(post.comments || []).map((comment) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const canDeleteComment =
-                    String(comment.userId || '') === myId || isOwner;
+                  const canDeleteComment = String(comment.userId || '') === myId || isOwner;
 
                   return (
                     <motion.div
@@ -940,10 +1368,7 @@ export default function PostCard({ post }: PostCardProps) {
                       className="flex gap-3"
                     >
                       <Avatar className="h-7 w-7">
-                        <AvatarImage
-                          src={comment.userAvatar}
-                          alt={comment.userName}
-                        />
+                        <AvatarImage src={comment.userAvatar} alt={comment.userName} />
                         <AvatarFallback>
                           {comment.userName ? comment.userName.charAt(0) : 'U'}
                         </AvatarFallback>
@@ -956,9 +1381,7 @@ export default function PostCard({ post }: PostCardProps) {
                           </p>
 
                           <span className="text-[11px] text-muted-foreground">
-                            {formatDistanceToNow(comment.timestamp, {
-                              addSuffix: true,
-                            })}
+                            {formatDistanceToNow(comment.timestamp, { addSuffix: true })}
                           </span>
                         </div>
 
