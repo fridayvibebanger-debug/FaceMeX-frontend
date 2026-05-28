@@ -134,6 +134,23 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
   const addDoc = (raw: any, index: number) => {
     if (!raw) return;
 
+    // Support direct string URL
+    if (typeof raw === 'string') {
+      const cleanUrl = cleanString(raw);
+      if (!cleanUrl) return;
+
+      docs.push({
+        id: `${post.id}-doc-${index}`,
+        title: `Document ${index + 1}`,
+        url: cleanUrl,
+        pages: [],
+        totalPages: 1,
+        previewPages: 1,
+      });
+
+      return;
+    }
+
     const pages = normalizeStringArray(
       raw.pages ||
         raw.documentPages ||
@@ -167,7 +184,10 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         1
     );
 
-    const totalPages = Math.max(1, Number.isFinite(rawTotalPages) ? rawTotalPages : 1);
+    const totalPages = Math.max(
+      1,
+      Number.isFinite(rawTotalPages) ? rawTotalPages : 1
+    );
 
     const rawPreviewPages = Number(
       raw.previewPages ||
@@ -181,7 +201,10 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
 
     const previewPages = Math.max(
       1,
-      Math.min(Number.isFinite(rawPreviewPages) ? rawPreviewPages : 1, totalPages)
+      Math.min(
+        Number.isFinite(rawPreviewPages) ? rawPreviewPages : 1,
+        totalPages
+      )
     );
 
     docs.push({
@@ -201,56 +224,92 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
   } else if (typeof rawDocuments === 'string' && rawDocuments.trim()) {
     try {
       const parsed = JSON.parse(rawDocuments);
+
       if (Array.isArray(parsed)) {
         parsed.forEach((doc, index) => addDoc(doc, index));
+      } else {
+        addDoc(parsed, 0);
       }
     } catch {
-      // ignore invalid document json
+      addDoc(rawDocuments, 0);
     }
   }
 
-  const directDocumentUrl =
-    (post as any).documentUrl ||
-    (post as any).document_url ||
-    (post as any).document ||
-    (post as any).fileUrl ||
-    (post as any).file_url;
+  /*
+    IMPORTANT:
+    Only read the old direct document fields if documents[] did NOT already create a document.
+    This stops one PDF from showing twice.
+  */
+  if (docs.length === 0) {
+    const directDocumentUrl =
+      (post as any).documentUrl ||
+      (post as any).document_url ||
+      (post as any).document ||
+      (post as any).fileUrl ||
+      (post as any).file_url;
 
-  const directPages = normalizeStringArray(
-    (post as any).documentPages ||
-      (post as any).document_pages ||
-      (post as any).pageImages ||
-      (post as any).page_images
-  );
-
-  if (directDocumentUrl || directPages.length) {
-    addDoc(
-      {
-        url: directDocumentUrl,
-        title:
-          (post as any).documentTitle ||
-          (post as any).document_title ||
-          (post as any).fileName ||
-          (post as any).file_name ||
-          'Document',
-        pages: directPages,
-        totalPages:
-          (post as any).documentTotalPages ||
-          (post as any).document_total_pages ||
-          directPages.length ||
-          1,
-        previewPages:
-          (post as any).documentPreviewPages ||
-          (post as any).document_preview_pages ||
-          (post as any).previewPages ||
-          (post as any).preview_pages ||
-          Math.min(1, directPages.length || 1),
-      },
-      docs.length
+    const directPages = normalizeStringArray(
+      (post as any).documentPages ||
+        (post as any).document_pages ||
+        (post as any).pageImages ||
+        (post as any).page_images
     );
+
+    if (directDocumentUrl || directPages.length) {
+      addDoc(
+        {
+          url: directDocumentUrl,
+          title:
+            (post as any).documentTitle ||
+            (post as any).document_title ||
+            (post as any).fileName ||
+            (post as any).file_name ||
+            'Document',
+          pages: directPages,
+          totalPages:
+            (post as any).documentTotalPages ||
+            (post as any).document_total_pages ||
+            directPages.length ||
+            1,
+          previewPages:
+            (post as any).documentPreviewPages ||
+            (post as any).document_preview_pages ||
+            (post as any).previewPages ||
+            (post as any).preview_pages ||
+            Math.min(1, directPages.length || 1),
+        },
+        docs.length
+      );
+    }
   }
 
-  return docs;
+  // Final protection: remove duplicates by URL first, title second
+  const unique = new Map<string, PostDocumentItem>();
+
+  docs.forEach((doc, index) => {
+    const url = cleanString(doc.url);
+    const title = cleanString(doc.title) || `Document ${index + 1}`;
+
+    const key = url || title.toLowerCase();
+
+    if (!unique.has(key)) {
+      unique.set(key, {
+        ...doc,
+        id: doc.id || `${post.id}-doc-${index}`,
+        title,
+        url,
+        pages: Array.isArray(doc.pages) ? doc.pages : [],
+        totalPages: Math.max(1, Number(doc.totalPages) || 1),
+        previewPages: Math.max(
+          1,
+          Math.min(Number(doc.previewPages) || 1, Number(doc.totalPages) || 1)
+        ),
+      });
+    }
+  });
+
+  // Show only one document card per post
+  return Array.from(unique.values()).slice(0, 1);
 }
 
 function playPaperFlipSound() {
