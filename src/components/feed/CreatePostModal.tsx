@@ -770,7 +770,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto rounded-2xl border bg-card">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-[640px] max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-2xl border bg-card p-4 sm:p-6">
         <SafetyWarningDialog
           open={postSafetyDialogOpen}
           onOpenChange={(v) => {
@@ -1140,19 +1140,19 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             </motion.div>
           )}
 
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden pt-4 border-t sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex w-full max-w-full min-w-0 flex-wrap items-center gap-2 overflow-hidden sm:flex-1">
               {hasStarted && (
                 <>
                   <label htmlFor="images-upload">
-                    <Button variant="ghost" size="sm" asChild>
+                    <Button variant="ghost" size="sm" asChild className="h-9 shrink-0">
                       <span className="cursor-pointer">
                         <ImageIcon className="h-4 w-4 mr-2" />
                         Add photos
                       </span>
                     </Button>
                   </label>
-
+          
                   <input
                     id="images-upload"
                     type="file"
@@ -1161,7 +1161,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     multiple
                     onChange={handleImagesUpload}
                   />
-
+          
                   <input
                     ref={videoInputRef}
                     id="videos-upload"
@@ -1171,7 +1171,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     multiple
                     onChange={handleVideosUpload}
                   />
-
+          
                   <input
                     ref={documentInputRef}
                     id="documents-upload"
@@ -1180,47 +1180,39 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     className="hidden"
                     multiple
                     onChange={handleDocumentsUpload}
-                    disabled={!canUseDocumentPost}
                   />
-
+          
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => videoInputRef.current?.click()}
                     disabled={isUploading}
+                    className="h-9 shrink-0"
                   >
                     <Video className="h-4 w-4 mr-2" />
                     Add video
                   </Button>
-
+          
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={openDocumentPicker}
+                    onClick={() => documentInputRef.current?.click()}
                     disabled={isUploading}
-                    title={
-                      canUseDocumentPost
-                        ? 'Add document'
-                        : 'Documents are Creator+ only. Free and Pro users can view documents only.'
-                    }
-                    className={!canUseDocumentPost ? 'text-muted-foreground opacity-70' : ''}
+                    className="h-9 shrink-0"
                   >
-                    {canUseDocumentPost ? (
-                      <FileText className="h-4 w-4 mr-2" />
-                    ) : (
-                      <Lock className="h-4 w-4 mr-2" />
-                    )}
+                    <FileText className="h-4 w-4 mr-2" />
                     Add document
                   </Button>
-
+          
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleVoiceRecording().catch(() => {})}
                     disabled={isUploading || !canUseVoiceNote}
+                    className="h-9 shrink-0"
                   >
                     {canUseVoiceNote ? (
                       <Mic className={`h-4 w-4 mr-2 ${isRecordingVoice ? 'animate-pulse' : ''}`} />
@@ -1232,26 +1224,26 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 </>
               )}
             </div>
-
-            <div className="flex items-center gap-2">
+          
+            <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-end gap-2 overflow-hidden sm:w-auto sm:shrink-0">
               {isUploading && (
-                <span className="text-[11px] text-muted-foreground mr-1 min-w-[60px] text-right">
+                <span className="text-[11px] text-muted-foreground min-w-[48px] text-right">
                   {`${uploadProgress}%`}
                 </span>
               )}
-
+          
               {isUploading && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-[11px]"
+                  className="h-9 max-w-full shrink-0 text-[11px]"
                   onClick={cancelUpload}
                 >
                   Cancel upload
                 </Button>
               )}
-
+          
               <Button
                 onClick={handlePost}
                 disabled={
@@ -1263,6 +1255,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                   isUploading ||
                   isPosting
                 }
+                className="h-9 min-w-[92px] shrink-0"
               >
                 {isPosting ? 'Posting...' : isUploading ? 'Uploading...' : 'Post'}
               </Button>
