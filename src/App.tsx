@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { trackAppOpen, trackEvent } from '@/lib/analytics';
 
 import { useAuthStore } from './store/authStore';
 
@@ -75,6 +76,29 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+function AppAnalyticsTracker() {
+  const location = useLocation();
+  const { isAuthenticated, isInitialized } = useAuthStore();
+
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated) return;
+
+    trackAppOpen();
+  }, [isInitialized, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated) return;
+
+    trackEvent('page_view', location.pathname, {
+      path: location.pathname,
+      search: location.search,
+      fullPath: `${location.pathname}${location.search}`,
+    });
+  }, [isInitialized, isAuthenticated, location.pathname, location.search]);
+
+  return null;
+}
+
 function App() {
   const { restoreSession } = useAuthStore();
 
@@ -86,14 +110,13 @@ function App() {
     <>
       <TierSync />
       <LiveNotificationListener />
+      <AppAnalyticsTracker />
 
       <Routes>
         <Route path="/" element={<PublicAuthRoute />} />
         <Route path="/login" element={<PublicAuthRoute />} />
         <Route path="/signup" element={<PublicAuthRoute />} />
         <Route path="/auth" element={<PublicAuthRoute />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/profile/:id" element={<ProfilePage />} />
 
         <Route path="/prd" element={<PRDPage />} />
         <Route path="/tos" element={<TermsOfService />} />
