@@ -96,7 +96,7 @@ export default function AdminAnalyticsPage() {
       const email = userData.user?.email || '';
 
       // Frontend gate. Real protection is Supabase RLS policy.
-      const allowedEmails = ['fridayvibebanger@gmail.com'];
+      const allowedEmails = ['luckymawasha72@gmail.com'];
 
       if (!allowedEmails.includes(email)) {
         setAdminAllowed(false);
