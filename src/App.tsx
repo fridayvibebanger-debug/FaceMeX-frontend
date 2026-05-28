@@ -5,6 +5,7 @@ import { trackAppOpen, trackEvent } from '@/lib/analytics';
 import { useAuthStore } from './store/authStore';
 
 import AuthPage from './components/auth/AuthPage';
+import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
 import EmotionAIPage from './pages/EmotionAIPage';
 import FeedPage from './pages/FeedPage';
 import WatchPage from './pages/WatchPage';
@@ -162,6 +163,15 @@ function App() {
           }
         />
 
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute>
+              <AdminAnalyticsPage />
+            </ProtectedRoute>
+          }
+        />
+        
         <Route
           path="/watch/:id"
           element={
