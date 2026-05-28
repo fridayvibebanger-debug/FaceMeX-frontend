@@ -38,6 +38,25 @@ type UploadedDocument = {
   previewPages: number;
 };
 
+type PostMode = 'social' | 'professional';
+
+function cleanTier(value: unknown) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isCreatorPlusTier(value: unknown) {
+  const tier = cleanTier(value);
+
+  return (
+    tier === 'creator' ||
+    tier === 'business' ||
+    tier === 'exclusive' ||
+    tier.startsWith('creator') ||
+    tier.startsWith('business') ||
+    tier.startsWith('exclusive')
+  );
+}
+
 export default function CreatePostModal({ open, onOpenChange }: CreatePostModalProps) {
   const [content, setContent] = useState('');
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -57,7 +76,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   const { addPost, getAISuggestions, trendingHashtags } = usePostStore();
   const { mode, tier, addons, hasTier } = useUserStore();
 
-  const [postMode, setPostMode] = useState<'social' | 'professional'>(mode || 'social');
+  const [postMode, setPostMode] = useState<PostMode>(mode || 'social');
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const uploadGenRef = useRef(0);
   const [topic, setTopic] = useState('');
@@ -70,14 +89,31 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
 
+  const userTier = cleanTier(tier || user?.tier || 'free');
+
   const canUseVoiceNote = (() => {
-    const t = String(tier || '').toLowerCase();
+    const t = cleanTier(tier || user?.tier);
+
     return (
       t.startsWith('creator') ||
       t.startsWith('business') ||
       t.startsWith('exclusive') ||
       addons?.verified === true
     );
+  })();
+
+  // Free and Pro users can VIEW documents inside PostCard.
+  // Only Creator, Business and Exclusive users can UPLOAD/POST documents here.
+  const canUseDocumentPost = (() => {
+    if (typeof hasTier === 'function') {
+      try {
+        return hasTier('creator');
+      } catch {
+        return isCreatorPlusTier(userTier);
+      }
+    }
+
+    return isCreatorPlusTier(userTier);
   })();
 
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -90,8 +126,10 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   const readAsDataURL = (file: File) =>
     new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
+
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(reader.error);
+
       reader.readAsDataURL(file);
     });
 
@@ -193,16 +231,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   };
 
   const getMaxVideoSeconds = () => {
-    const t = String(tier || user?.tier || '').toLowerCase();
-
-    if (
-      t.startsWith('creator') ||
-      t.startsWith('business') ||
-      t.startsWith('exclusive')
-    ) {
-      return 60;
-    }
-
+    if (isCreatorPlusTier(tier || user?.tier)) return 60;
     return 30;
   };
 
@@ -260,6 +289,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
           setImagePreviews([]);
           setVideoPreviews([]);
           setDocumentPreviews([]);
+
           finishUploadProgress();
         } catch {
           try {
@@ -275,7 +305,9 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             setImagePreviews([]);
             setVideoPreviews([]);
             setDocumentPreviews([]);
-          } catch {}
+          } catch {
+            // ignore fallback failure
+          }
         } finally {
           setIsUploading(false);
           stream.getTracks().forEach((t) => t.stop());
@@ -448,7 +480,9 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
         if (uploadGenRef.current !== myGen) return;
 
         setImagePreviews((prev) => [...prev, ...local].slice(0, 10));
-      } catch {}
+      } catch {
+        // instant preview failed, continue with upload
+      }
 
       setIsUploading(true);
       startUploadProgress();
@@ -515,6 +549,18 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   };
 
   const handleDocumentsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canUseDocumentPost) {
+      e.currentTarget.value = '';
+
+      toast({
+        title: 'Creator+ required',
+        description: 'Only Creator, Business and Exclusive users can post documents. Free and Pro users can view documents only.',
+        variant: 'destructive',
+      });
+
+      return;
+    }
+
     const files = Array.from(e.target.files || []);
 
     if (files.length === 0) return;
@@ -577,6 +623,20 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     }
   };
 
+  const openDocumentPicker = () => {
+    if (!canUseDocumentPost) {
+      toast({
+        title: 'Creator+ required',
+        description: 'Only Creator, Business and Exclusive users can post documents. Free and Pro users can view documents only.',
+        variant: 'destructive',
+      });
+
+      return;
+    }
+
+    documentInputRef.current?.click();
+  };
+
   const handlePost = async () => {
     const hasMedia =
       imagePreviews.length > 0 ||
@@ -585,6 +645,16 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       !!audioPreview;
 
     if (!(content.trim() || hasMedia)) return;
+
+    if (documentPreviews.length > 0 && !canUseDocumentPost) {
+      toast({
+        title: 'Creator+ required',
+        description: 'Remove the document or upgrade to Creator+ before posting.',
+        variant: 'destructive',
+      });
+
+      return;
+    }
 
     const scan = safetyScanText(content);
 
@@ -655,6 +725,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       setAudioPreview(null);
       setAiSuggestions([]);
       setTopic('');
+
       onOpenChange(false);
     } catch (err) {
       console.error('Failed to create post', err);
@@ -984,6 +1055,14 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                       const value = Math.max(1, Math.min(200, Number(e.target.value) || 1));
                       setDocumentTotalPages(value);
                       setDocumentPreviewPages((prev) => Math.max(1, Math.min(prev, value)));
+
+                      setDocumentPreviews((prev) =>
+                        prev.map((doc) => ({
+                          ...doc,
+                          totalPages: value,
+                          previewPages: Math.max(1, Math.min(doc.previewPages || 1, value)),
+                        }))
+                      );
                     }}
                     className="h-8 w-20"
                   />
@@ -1022,7 +1101,8 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     className="flex items-center justify-between rounded-xl border bg-background px-3 py-2 text-sm"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+
                       <div className="min-w-0">
                         <p className="truncate">{doc.title}</p>
                         <p className="text-[11px] text-muted-foreground">
@@ -1100,6 +1180,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     className="hidden"
                     multiple
                     onChange={handleDocumentsUpload}
+                    disabled={!canUseDocumentPost}
                   />
 
                   <Button
@@ -1117,10 +1198,20 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => documentInputRef.current?.click()}
+                    onClick={openDocumentPicker}
                     disabled={isUploading}
+                    title={
+                      canUseDocumentPost
+                        ? 'Add document'
+                        : 'Documents are Creator+ only. Free and Pro users can view documents only.'
+                    }
+                    className={!canUseDocumentPost ? 'text-muted-foreground opacity-70' : ''}
                   >
-                    <FileText className="h-4 w-4 mr-2" />
+                    {canUseDocumentPost ? (
+                      <FileText className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Lock className="h-4 w-4 mr-2" />
+                    )}
                     Add document
                   </Button>
 
