@@ -1,4 +1,16 @@
 import { useMemo, useState } from 'react';
+import {
+  Copy,
+  Crown,
+  Download,
+  FileText,
+  Loader2,
+  MessageCircle,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+} from 'lucide-react';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,108 +24,225 @@ import Navbar from '@/components/layout/Navbar';
 type FontStyle = 'mono' | 'sans' | 'serif' | 'system' | 'document';
 type LineSpacing = 'tight' | 'normal' | 'relaxed';
 
+type QuickDraft = {
+  title: string;
+  content: string;
+};
+
 function cleanText(value: string) {
   return String(value || '').trim();
 }
 
-function splitList(value: string) {
+function titleCaseWords(text = '') {
+  return cleanText(text)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function splitList(value = '') {
   return String(value || '')
-    .split(/,|\n/)
+    .split(/[,;\n/]+/)
     .map((item) => item.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .slice(0, 10);
 }
 
 function bulletList(items: string[]) {
-  return items.length ? items.map((item) => `• ${item}`).join('\n') : '';
+  return items.length ? items.map((item) => `- ${item}`).join('\n') : '';
 }
 
-function normalizeLines(value: string) {
-  return String(value || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+function normalizeEducation(value = '') {
+  const raw = cleanText(value);
+
+  if (!raw) return '[Qualification] | [Institution] | [Year]';
+
+  return raw
+    .replace(/\bTVT\b/gi, 'TVET')
+    .replace(/\btvt\b/gi, 'TVET')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function formatExperience(experience: string) {
-  const lines = normalizeLines(experience);
+function professionalizeSummary(summary = '') {
+  const raw = cleanText(summary);
+  const lower = raw.toLowerCase();
 
-  if (!lines.length) {
-    return `No formal work experience listed yet.
-• Available to gain practical workplace experience.
-• Willing to learn, follow instructions, and support team goals.`;
+  if (!raw) {
+    return 'Reliable and motivated candidate with strong communication, teamwork, and customer service skills. Able to work under pressure, follow instructions, and complete tasks on time. Eager to contribute positively in a professional environment and grow through practical experience.';
   }
 
-  return lines
-    .map((line) => {
-      if (line.startsWith('•') || line.startsWith('-')) return line.replace('-', '•');
-      return line;
-    })
-    .join('\n');
+  if (lower.includes('media') || lower.includes('team management')) {
+    return 'Experienced media and team management professional with strong communication, coordination, and customer service skills. Skilled in supporting daily operations, managing social media activities, working with teams, and staying productive in busy or high-pressure environments.';
+  }
+
+  if (lower.includes('driver') || lower.includes('code 10')) {
+    return 'Reliable and safety-conscious driver with strong route awareness, time management, and customer service skills. Able to follow instructions, handle responsibilities professionally, and complete transport or delivery duties on time.';
+  }
+
+  return raw
+    .replace(/\benglish fluently\b/gi, 'English: Fluent')
+    .replace(/\bsepedi mothers? tangue\b/gi, 'Sepedi: Mother tongue')
+    .replace(/\bsepedi mothers? tongue\b/gi, 'Sepedi: Mother tongue')
+    .replace(/\bcode 10 drive\b/gi, 'Driver’s licence: Code 10');
 }
 
-function buildAtsCv(input: {
+function professionalizeSkills(skills = '') {
+  const items = splitList(skills);
+
+  if (!items.length) {
+    return [
+      'Customer Service',
+      'Team Collaboration',
+      'Communication',
+      'Time Management',
+      'Problem Solving',
+      'Workplace Discipline',
+    ];
+  }
+
+  return items.map((item) => {
+    const lower = item.toLowerCase();
+
+    if (lower.includes('team management')) return 'Team Management';
+    if (lower.includes('customer')) return 'Customer Service';
+    if (lower.includes('social media')) return 'Social Media Management';
+    if (lower.includes('media')) return 'Media Management';
+    if (lower.includes('communication')) return 'Communication';
+    if (lower.includes('time')) return 'Time Management';
+
+    return titleCaseWords(item);
+  });
+}
+
+function professionalizeExperience(experience = '') {
+  const raw = cleanText(experience);
+  const lower = raw.toLowerCase();
+
+  if (!raw) {
+    return `[Job Title] | [Company Name] | [Year]
+- Supported daily workplace tasks and followed instructions from supervisors.
+- Assisted customers, team members, or management in a professional manner.
+- Completed assigned duties on time and maintained a reliable work ethic.`;
+  }
+
+  if (lower.includes('ceo') && lower.includes('facemex')) {
+    return `Chief Executive Officer | FaceMeX | 2025 – Present
+- Oversee daily operations and support the strategic direction of the platform.
+- Manage and coordinate platform improvement, user feedback, and product testing.
+- Implement social media and user engagement strategies to grow brand awareness.
+- Maintain high standards of customer service, communication, and platform development.`;
+  }
+
+  if (lower.includes('driver') || lower.includes('truck')) {
+    return `Driver | [Company Name] | [Year]
+- Transported goods or passengers safely while following road and company rules.
+- Planned routes, managed time effectively, and completed trips or deliveries on schedule.
+- Communicated professionally with customers, team members, and supervisors.`;
+  }
+
+  if (!raw.includes('-') && !raw.includes('•')) {
+    return `${raw}
+- Supported daily tasks and contributed to smooth operations.
+- Communicated professionally with customers, colleagues, or supervisors.
+- Completed duties on time and showed reliability in the workplace.`;
+  }
+
+  return raw.replace(/•/g, '-');
+}
+
+function extractExtras(extras = '', skills = '') {
+  const raw = cleanText(extras);
+  const combined = `${raw} ${skills}`.toLowerCase();
+
+  const technicalSkills: string[] = [];
+  const languages: string[] = [];
+  const additional: string[] = [];
+
+  if (combined.includes('social media')) technicalSkills.push('Social Media Platforms');
+  if (combined.includes('microsoft') || combined.includes('office') || combined.includes('word') || combined.includes('excel')) {
+    technicalSkills.push('Microsoft Office Suite');
+  }
+  if (combined.includes('computer')) technicalSkills.push('Basic Computer Literacy');
+  if (combined.includes('graphic')) technicalSkills.push('Basic Graphic Design Tools');
+
+  if (!technicalSkills.length) {
+    technicalSkills.push('Basic Computer Literacy');
+    technicalSkills.push('Email Communication');
+  }
+
+  if (combined.includes('english')) languages.push('English: Fluent');
+  if (combined.includes('sepedi')) languages.push('Sepedi: Mother tongue');
+
+  if (!languages.length) {
+    languages.push('English: Fluent');
+  }
+
+  const licenceMatch = raw.match(/code\s*\d+/i);
+  if (licenceMatch) {
+    additional.push(`Driver’s licence: ${licenceMatch[0].replace(/\s+/g, ' ').toUpperCase()}`);
+  }
+
+  return {
+    technicalSkills: Array.from(new Set(technicalSkills)).slice(0, 5),
+    languages: Array.from(new Set(languages)).slice(0, 4),
+    additional,
+  };
+}
+
+function buildClassicCv(input: {
   fullName: string;
   email: string;
   phone: string;
   location: string;
   idNumber: string;
+  showIdOnCv: boolean;
   summary: string;
   experience: string;
   skills: string;
   education: string;
   extras: string;
 }) {
-  const fullName = cleanText(input.fullName).toUpperCase();
-  const contactLine = [
-    cleanText(input.location),
-    cleanText(input.phone),
-    cleanText(input.email),
-    cleanText(input.idNumber) ? `ID / Profile: ${cleanText(input.idNumber)}` : '',
-  ]
-    .filter(Boolean)
-    .join(' | ');
+  const fullName = cleanText(input.fullName).toUpperCase() || '[YOUR NAME]';
+  const email = cleanText(input.email) || 'your.email@example.com';
+  const phone = cleanText(input.phone) || '+27 00 000 0000';
+  const location = cleanText(input.location) || 'Your City, South Africa';
 
-  const skills = splitList(input.skills);
-  const extras = cleanText(input.extras);
-  const education = cleanText(input.education);
-  const summary =
-    cleanText(input.summary) ||
-    `Reliable and detail-oriented candidate with strong communication, teamwork, time management, and willingness to learn. Able to follow instructions, support daily operations, and work well in busy environments.`;
+  const contactLine = input.showIdOnCv && cleanText(input.idNumber)
+    ? `Address: ${location} | Contact: ${phone} | Email: ${email} | Profile ID: ${cleanText(input.idNumber)}`
+    : `Address: ${location} | Contact: ${phone} | Email: ${email}`;
 
-  const coreCompetencies = skills.length
-    ? skills.slice(0, 8)
-    : [
-        'Communication',
-        'Teamwork',
-        'Time Management',
-        'Customer Assistance',
-        'Problem Solving',
-        'Reliability',
-      ];
+  const finalSummary = professionalizeSummary(input.summary);
+  const finalSkills = professionalizeSkills(input.skills);
+  const finalExperience = professionalizeExperience(input.experience);
+  const finalEducation = normalizeEducation(input.education);
+  const extraData = extractExtras(input.extras, input.skills);
 
-  return `${fullName || '[YOUR NAME]'}
-${contactLine || '[Location] | [Phone] | [Email]'}
+  return `${fullName}
+${contactLine}
 
 PROFESSIONAL SUMMARY
-${summary}
+${finalSummary}
 
 CORE COMPETENCIES
-${bulletList(coreCompetencies)}
+${bulletList(finalSkills.slice(0, 7))}
 
 PROFESSIONAL EXPERIENCE
-${formatExperience(input.experience)}
+${finalExperience}
 
 EDUCATION
-${education || 'Highest qualification / School / Institution | Year'}
+${finalEducation}
 
 TECHNICAL SKILLS
-${bulletList(skills.length ? skills : coreCompetencies)}
+${bulletList(extraData.technicalSkills)}
 
-ADDITIONAL INFORMATION
-${extras || 'Languages, driver’s licence, certifications, projects, volunteering, or portfolio links can be added here.'}
+LANGUAGES
+${bulletList(extraData.languages)}
 
-REFERENCES
-Available on request.`;
+${extraData.additional.length ? `ADDITIONAL INFORMATION\n${bulletList(extraData.additional)}\n\n` : ''}REFERENCES
+Available Upon Request`;
 }
 
 function improveToTemplateCv(input: {
@@ -133,39 +262,89 @@ Reliable and motivated candidate with practical experience, strong communication
   }
 
 CORE COMPETENCIES
-• Communication
-• Teamwork
-• Time Management
-• Customer Service
-• Problem Solving
-• Reliability
-• Organisation
-• Workplace Discipline
+- Communication
+- Teamwork
+- Time Management
+- Customer Service
+- Problem Solving
+- Reliability
+- Organisation
+- Workplace Discipline
 
 PROFESSIONAL EXPERIENCE
 ${existing}
 
 EDUCATION
-Add your education section here in this format:
-Qualification - Institution | Year
-Subjects / Modules / Relevant training
+Qualification | Institution | Year
 
 TECHNICAL SKILLS
-• Computer literacy
-• Customer assistance
-• Administration support
-• Planning and organisation
-• Task execution
-• Reporting and communication
+- Computer Literacy
+- Customer Assistance
+- Administration Support
+- Planning and Organisation
+- Reporting and Communication
 
 ADDITIONAL INFORMATION
-${extras || 'Add languages, driver’s licence, certifications, projects, volunteering, achievements, or portfolio links.'}
+${extras || 'Languages, driver’s licence, certifications, projects, volunteering, achievements, or portfolio links can be added here.'}
 
 REFERENCES
-Available on request.
+Available Upon Request`;
+}
 
-NOTE
-Use this as your improved ATS structure. Replace any weak or missing sections with your real details before applying.`;
+function buildCoverLetterFromCv(cv: string) {
+  const firstLine = cv.split('\n').map((x) => x.trim()).find(Boolean) || '[Your Name]';
+
+  return `Dear Hiring Manager,
+
+I would like to apply for the available opportunity at your company.
+
+Please find attached my CV for your consideration. I believe my skills, experience, and willingness to learn make me a strong candidate. I am reliable, professional, and ready to contribute positively to your team.
+
+I would appreciate the opportunity to be considered for an interview.
+
+Kind regards,
+${firstLine}
+[Your Phone Number]`;
+}
+
+function buildApplicationMessageFromCv(cv: string) {
+  const firstLine = cv.split('\n').map((x) => x.trim()).find(Boolean) || '[Your Name]';
+
+  return `Good day. I hope you are well. My name is ${titleCaseWords(firstLine)}. I am interested in applying for an opportunity at your company. Please may I ask where I can send my CV or how I can apply? Thank you.`;
+}
+
+function escapeHtml(value: string) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function CvPreview({
+  content,
+  fontClass,
+  leadingClass,
+}: {
+  content: string;
+  fontClass: string;
+  leadingClass: string;
+}) {
+  return (
+    <div className="w-full max-w-full overflow-x-hidden rounded-[24px] border border-black/5 bg-slate-100/70 p-2 sm:p-4 dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="mx-auto w-full max-w-[794px] overflow-hidden bg-white text-black shadow-[0_16px_45px_rgba(15,23,42,0.12)]">
+        <pre
+          className={`m-0 min-h-0 whitespace-pre-wrap break-words px-6 py-8 text-[12.5px] leading-normal sm:px-10 sm:py-12 sm:text-sm md:min-h-[1123px] md:px-[18mm] md:py-[18mm] ${fontClass} ${leadingClass}`}
+          style={{
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            boxSizing: 'border-box',
+          }}
+        >
+          {content}
+        </pre>
+      </div>
+    </div>
+  );
 }
 
 export default function AIResumePage() {
@@ -174,6 +353,7 @@ export default function AIResumePage() {
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
   const [idNumber, setIdNumber] = useState('');
+  const [showIdOnCv, setShowIdOnCv] = useState(false);
   const [summary, setSummary] = useState('');
   const [experience, setExperience] = useState('');
   const [skills, setSkills] = useState('');
@@ -191,9 +371,17 @@ export default function AIResumePage() {
   const [proOutput, setProOutput] = useState<string | null>(null);
   const [proBusy, setProBusy] = useState(false);
 
+  const [quickDraft, setQuickDraft] = useState<QuickDraft | null>(null);
+
   const { tier, hasTier } = useUserStore();
 
-  const isCreatorPlus = hasTier('creator');
+  const currentTier = String(tier || 'free').toLowerCase();
+  const isCreatorPlus = Boolean(
+    hasTier?.('creator') ||
+      hasTier?.('business') ||
+      hasTier?.('exclusive') ||
+      ['creator', 'creator+', 'business', 'exclusive'].includes(currentTier)
+  );
 
   const outputFontClass =
     fontStyle === 'serif' || fontStyle === 'document'
@@ -209,15 +397,27 @@ export default function AIResumePage() {
         ? 'leading-loose'
         : 'leading-normal';
 
-  const hasBuilderOutput = useMemo(() => !!output, [output]);
-  const hasUpgradeOutput = useMemo(() => !!proOutput, [proOutput]);
+  const hasBuilderOutput = useMemo(() => Boolean(output), [output]);
+  const hasUpgradeOutput = useMemo(() => Boolean(proOutput), [proOutput]);
+
+  const fieldClass =
+    'h-12 w-full max-w-full rounded-2xl border-black/10 bg-white px-4 text-sm shadow-sm placeholder:text-slate-400 focus-visible:ring-1 focus-visible:ring-slate-300 dark:border-white/10 dark:bg-white/[0.06] dark:text-white';
+
+  const textAreaClass =
+    'w-full max-w-full rounded-2xl border-black/10 bg-white px-4 py-3 text-sm shadow-sm placeholder:text-slate-400 focus-visible:ring-1 focus-visible:ring-slate-300 dark:border-white/10 dark:bg-white/[0.06] dark:text-white';
+
+  const darkButton =
+    'h-11 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] hover:bg-slate-800 active:scale-[0.98] dark:bg-white dark:text-black dark:hover:bg-white/90';
+
+  const outlineButton =
+    'h-11 rounded-2xl border-black/10 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-slate-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.1]';
 
   const copyToClipboard = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
       toast({
         title: 'Copied',
-        description: 'Your CV text has been copied.',
+        description: 'Text copied successfully.',
       });
     } catch {
       toast({
@@ -225,6 +425,62 @@ export default function AIResumePage() {
         description: 'Please highlight and copy manually.',
       });
     }
+  };
+
+  const openPrintWindow = (title: string, content: string) => {
+    const win = window.open('', '_blank');
+
+    if (!win) {
+      toast({
+        title: 'Popup blocked',
+        description: 'Allow popups so the CV can open for printing or saving as PDF.',
+      });
+      return;
+    }
+
+    const fontFamily =
+      fontStyle === 'serif' || fontStyle === 'document'
+        ? 'Georgia, "Times New Roman", serif'
+        : fontStyle === 'sans' || fontStyle === 'system'
+          ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+          : 'SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+
+    const lineHeight =
+      lineSpacing === 'tight' ? '1.15' : lineSpacing === 'relaxed' ? '1.65' : '1.35';
+
+    win.document.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charSet="utf-8" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 18mm;
+      }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: ${fontFamily};
+        line-height: ${lineHeight};
+        white-space: pre-wrap;
+        font-size: 12px;
+        color: #000;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>${escapeHtml(content)}</body>
+</html>`);
+
+    win.document.close();
+    win.focus();
+    win.print();
   };
 
   const handleGenerate = async () => {
@@ -237,13 +493,15 @@ export default function AIResumePage() {
     }
 
     setBusy(true);
+    setQuickDraft(null);
 
-    const fallbackCv = buildAtsCv({
+    const fallbackCv = buildClassicCv({
       fullName,
       email,
       phone,
       location,
       idNumber,
+      showIdOnCv,
       summary,
       experience,
       skills,
@@ -252,28 +510,31 @@ export default function AIResumePage() {
     });
 
     try {
-      const res = await api.post('/api/ai/pro/resume-builder', {
+      const res = (await api.post('/api/ai/pro/resume-builder', {
         fullName,
         email,
         phone,
         location,
         idNumber,
+        showIdOnCv,
         summary,
         experience,
         skills,
         education,
         extras,
-        template: 'ats_general_worker_template',
+        tier,
+        creatorPlus: isCreatorPlus,
+        template: 'six-second-cv',
         requiredSections: [
           'PROFESSIONAL SUMMARY',
           'CORE COMPETENCIES',
           'PROFESSIONAL EXPERIENCE',
           'EDUCATION',
           'TECHNICAL SKILLS',
-          'ADDITIONAL INFORMATION',
+          'LANGUAGES',
           'REFERENCES',
         ],
-      });
+      })) as any;
 
       setOutput(res.resumeText || fallbackCv);
     } catch {
@@ -305,6 +566,7 @@ export default function AIResumePage() {
     }
 
     setProBusy(true);
+    setQuickDraft(null);
 
     const fallbackUpgrade = improveToTemplateCv({
       existingCv: proInput,
@@ -313,16 +575,16 @@ export default function AIResumePage() {
     });
 
     try {
-      const res = await api.post('/api/ai/pro/resume-improver', {
+      const res = (await api.post('/api/ai/pro/resume-improver', {
         existingCv: proInput,
         targetLevel: proTargetLevel,
         extras: proExtras,
         tier,
         creatorPlus: isCreatorPlus,
-        template: 'ats_professional_template',
+        template: 'six-second-cv',
         instruction:
-          'Rewrite into a clean ATS CV using these sections: PROFESSIONAL SUMMARY, CORE COMPETENCIES, PROFESSIONAL EXPERIENCE, EDUCATION, TECHNICAL SKILLS, LANGUAGES, REFERENCES. Keep it professional, simple, and recruiter-friendly.',
-      });
+          'Rewrite into a clean one-page A4 ATS CV using these sections: PROFESSIONAL SUMMARY, CORE COMPETENCIES, PROFESSIONAL EXPERIENCE, EDUCATION, TECHNICAL SKILLS, LANGUAGES, REFERENCES. Correct grammar and improve weak input.',
+      })) as any;
 
       setProOutput(res.improvedText || fallbackUpgrade);
     } catch {
@@ -336,313 +598,290 @@ export default function AIResumePage() {
     }
   };
 
-  const openPrintWindow = (title: string, content: string) => {
-    const win = window.open('', '_blank');
-
-    if (!win) {
-      toast({
-        title: 'Popup blocked',
-        description: 'Allow popups so the CV can open for printing or saving as PDF.',
-      });
-      return;
-    }
-
-    const fontFamily =
-      fontStyle === 'serif' || fontStyle === 'document'
-        ? 'Georgia, "Times New Roman", serif'
-        : fontStyle === 'sans' || fontStyle === 'system'
-          ? 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-          : 'SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-
-    const lineHeight =
-      lineSpacing === 'tight' ? '1.15' : lineSpacing === 'relaxed' ? '1.75' : '1.35';
-
-    const safe = (value: string) =>
-      value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    win.document.write(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta charSet="utf-8" />
-    <title>${safe(title)}</title>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-      }
-      body {
-        margin: 18mm;
-        font-family: ${fontFamily};
-        line-height: ${lineHeight};
-        white-space: pre-wrap;
-        font-size: 12px;
-        color: #000;
-      }
-      @page {
-        size: A4;
-        margin: 18mm;
-      }
-    </style>
-  </head>
-  <body>${safe(content)}</body>
-</html>`);
-
-    win.document.close();
-    win.focus();
-    win.print();
+  const createCoverLetter = (content: string) => {
+    const draft = buildCoverLetterFromCv(content);
+    setQuickDraft({
+      title: 'Cover Letter Draft',
+      content: draft,
+    });
+    toast({
+      title: 'Cover letter created',
+      description: 'Your cover letter draft is ready below.',
+    });
   };
 
+  const createApplicationMessage = (content: string) => {
+    const draft = buildApplicationMessageFromCv(content);
+    setQuickDraft({
+      title: 'Application Message Draft',
+      content: draft,
+    });
+    toast({
+      title: 'Application message created',
+      description: 'Your WhatsApp message is ready below.',
+    });
+  };
+
+  const PreviewActions = ({ content, title }: { content: string; title: string }) => (
+    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+      <Button variant="outline" className={outlineButton} onClick={() => copyToClipboard(content)}>
+        <Copy className="mr-2 h-4 w-4" />
+        Copy CV
+      </Button>
+
+      <Button className={darkButton} onClick={() => openPrintWindow(title, content)}>
+        <Download className="mr-2 h-4 w-4" />
+        Download PDF
+      </Button>
+
+      <Button variant="outline" className={outlineButton} onClick={() => createCoverLetter(content)}>
+        <FileText className="mr-2 h-4 w-4" />
+        Cover letter
+      </Button>
+
+      <Button variant="outline" className={outlineButton} onClick={() => createApplicationMessage(content)}>
+        <MessageCircle className="mr-2 h-4 w-4" />
+        Apply message
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-background">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f7f7f5] text-slate-950 dark:bg-background dark:text-white">
       <Navbar />
 
-      <SensitiveContentShield context="cv" className="max-w-6xl mx-auto pt-14 md:pt-16 px-4">
-        <div className="space-y-6">
-          <div className="space-y-1">
-            <h1 className="text-xl md:text-2xl font-semibold">AI CV Studio</h1>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Generate a clean ATS CV using the same professional structure as your uploaded template: summary,
-              competencies, experience, education, skills, and references.
+      <SensitiveContentShield context="cv" className="mx-auto w-full max-w-6xl overflow-x-hidden px-3 pb-44 pt-16 sm:px-4 md:pt-20">
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-black/5 bg-white/75 px-3 py-1.5 text-xs text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white/60">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">FaceMeX AI CV Studio</span>
+            </div>
+
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">AI CV Studio</h1>
+
+            <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-white/55">
+              Create a clean one-page A4 CV, cover letter, and application message using a professional ATS structure.
             </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="rounded-2xl border border-border/60 shadow-none">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-2">
-                  <div>
+          <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-2">
+            <Card className="w-full overflow-hidden rounded-[24px] border border-black/5 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.04]">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <CardTitle className="text-lg md:text-xl">AI CV Builder</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Free ATS layout based on the uploaded CV template.
+                    <p className="mt-1 text-xs text-slate-500 dark:text-white/55">
+                      Free one-page A4 CV based on the uploaded template style.
                     </p>
                   </div>
-                  <span className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+
+                  <span className="shrink-0 rounded-full border border-black/5 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-white/10 dark:bg-white/[0.06]">
                     Free
                   </span>
                 </div>
               </CardHeader>
 
               <CardContent className="space-y-4">
-                <p className="text-xs md:text-sm text-muted-foreground">
-                  Fill in your details. FaceMeX will generate a clean, job-ready CV with strong ATS section headings.
-                </p>
+                <div className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/55">
+                  Fill in your details. FaceMeX will rewrite weak wording into professional CV language.
+                </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Full name</label>
+                    <label className="text-xs font-semibold">Full name</label>
                     <Input
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder="e.g. Ben Moshe Mothibane"
+                      placeholder="e.g. Thabo Mokoena"
+                      className={fieldClass}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">ID / Profile ID</label>
+                    <label className="text-xs font-semibold">Profile ID / Optional ID</label>
                     <Input
                       value={idNumber}
                       onChange={(e) => setIdNumber(e.target.value)}
                       placeholder="Optional: ID number or FaceMeX handle"
+                      className={fieldClass}
                     />
+
+                    <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-500 dark:text-white/50">
+                      <input
+                        type="checkbox"
+                        checked={showIdOnCv}
+                        onChange={(e) => setShowIdOnCv(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      Show this on CV. Avoid adding sensitive ID numbers unless an employer asks.
+                    </label>
                   </div>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Email</label>
+                    <label className="text-xs font-semibold">Email</label>
                     <Input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
+                      className={fieldClass}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Phone</label>
+                    <label className="text-xs font-semibold">Phone</label>
                     <Input
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="e.g. 076 000 0000"
+                      className={fieldClass}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Location</label>
+                    <label className="text-xs font-semibold">Location</label>
                     <Input
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
                       placeholder="Town, Province"
+                      className={fieldClass}
                     />
                   </div>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Professional Summary</label>
+                    <label className="text-xs font-semibold">Professional Summary</label>
                     <Textarea
                       rows={4}
                       value={summary}
                       onChange={(e) => setSummary(e.target.value)}
-                      placeholder="Example: Reliable and detail-oriented candidate with experience in customer service, stock support, teamwork, and busy environments."
+                      placeholder="Example: media management and team management in a busy environment"
+                      className={textAreaClass}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Core Competencies / Skills</label>
+                    <label className="text-xs font-semibold">Core Competencies / Skills</label>
                     <Textarea
                       rows={4}
                       value={skills}
                       onChange={(e) => setSkills(e.target.value)}
-                      placeholder="Shelf packing, Customer service, Queue management, Teamwork, Communication, Time management"
+                      placeholder="Team management, customer service, social media management, communication"
+                      className={textAreaClass}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium">Professional Experience</label>
+                  <label className="text-xs font-semibold">Professional Experience</label>
                   <Textarea
                     rows={5}
                     value={experience}
                     onChange={(e) => setExperience(e.target.value)}
-                    placeholder="Job Title - Company | Dates&#10;• Write achievement or duty&#10;• Write achievement or duty"
+                    placeholder={'Job Title | Company | Year\n- Write responsibility or achievement\n- Write responsibility or achievement'}
+                    className={textAreaClass}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium">Education</label>
+                  <label className="text-xs font-semibold">Education</label>
                   <Textarea
                     rows={3}
                     value={education}
                     onChange={(e) => setEducation(e.target.value)}
-                    placeholder="Qualification - School / Institution | Year&#10;Subjects / certificates / courses"
+                    placeholder="Diploma | TVET College | 2024"
+                    className={textAreaClass}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium">Additional Info</label>
+                  <label className="text-xs font-semibold">Additional Info</label>
                   <Textarea
                     rows={3}
                     value={extras}
                     onChange={(e) => setExtras(e.target.value)}
-                    placeholder="Languages, driver's licence, references, certificates, projects, volunteering."
+                    placeholder="English fluently / Sepedi mothers tangue / Code 10 drive"
+                    className={textAreaClass}
                   />
                 </div>
 
-                <div className="flex justify-end pt-2">
-                  <Button onClick={handleGenerate} disabled={busy} className="text-sm font-medium">
-                    {busy ? 'Generating ATS CV…' : 'Generate ATS CV'}
-                  </Button>
-                </div>
+                <Button onClick={handleGenerate} disabled={busy} className={`${darkButton} w-full`}>
+                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  {busy ? 'Generating CV…' : 'Generate ATS CV'}
+                </Button>
 
                 {hasBuilderOutput && output && (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <div className="mt-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-white/55">
                       <span>Display settings</span>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-1">
-                          <span className="uppercase tracking-wide">Font</span>
-                          <select
-                            className="border bg-background px-1.5 py-0.5 rounded text-[11px]"
-                            value={fontStyle}
-                            onChange={(e) => setFontStyle(e.target.value as FontStyle)}
-                          >
-                            <option value="document">Document serif</option>
-                            <option value="serif">Serif</option>
-                            <option value="sans">Sans</option>
-                            <option value="system">System</option>
-                            <option value="mono">Mono</option>
-                          </select>
-                        </div>
+                        <select
+                          className="rounded-xl border bg-white px-2 py-1 text-[11px] dark:border-white/10 dark:bg-white/[0.06]"
+                          value={fontStyle}
+                          onChange={(e) => setFontStyle(e.target.value as FontStyle)}
+                        >
+                          <option value="document">Document serif</option>
+                          <option value="serif">Serif</option>
+                          <option value="sans">Sans</option>
+                          <option value="system">System</option>
+                          <option value="mono">Mono</option>
+                        </select>
 
-                        <div className="flex items-center gap-1">
-                          <span className="uppercase tracking-wide">Spacing</span>
-                          <select
-                            className="border bg-background px-1.5 py-0.5 rounded text-[11px]"
-                            value={lineSpacing}
-                            onChange={(e) => setLineSpacing(e.target.value as LineSpacing)}
-                          >
-                            <option value="tight">Tight</option>
-                            <option value="normal">Normal</option>
-                            <option value="relaxed">Relaxed</option>
-                          </select>
-                        </div>
+                        <select
+                          className="rounded-xl border bg-white px-2 py-1 text-[11px] dark:border-white/10 dark:bg-white/[0.06]"
+                          value={lineSpacing}
+                          onChange={(e) => setLineSpacing(e.target.value as LineSpacing)}
+                        >
+                          <option value="tight">Tight</option>
+                          <option value="normal">Normal</option>
+                          <option value="relaxed">Relaxed</option>
+                        </select>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 overflow-auto rounded-md border bg-muted/40 p-3">
-                        <div
-                          style={{
-                            width: '210mm',
-                            minHeight: '297mm',
-                            margin: '0 auto',
-                            padding: '18mm',
-                            background: 'white',
-                            color: 'black',
-                            boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
-                            border: '1px solid rgba(0,0,0,0.12)',
-                          }}
-                          className={`whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
-                        >
-                          {output}
-                        </div>
-                      </div>
+                    <PreviewActions content={output} title="FaceMeX ATS CV" />
 
-                      <div className="flex shrink-0 flex-col gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-[11px]"
-                          onClick={() => copyToClipboard(output)}
-                        >
-                          Copy
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-[11px]"
-                          onClick={() => openPrintWindow('FaceMeX ATS CV', output)}
-                        >
-                          Download / Print
-                        </Button>
-                      </div>
-                    </div>
+                    <CvPreview
+                      content={output}
+                      fontClass={outputFontClass}
+                      leadingClass={outputLeadingClass}
+                    />
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card className="rounded-2xl border border-border/60 shadow-none">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-2">
-                  <div>
+            <Card className="w-full overflow-hidden rounded-[24px] border border-black/5 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.04]">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <CardTitle className="text-lg md:text-xl">AI CV Upgrade</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Creator+ rewrite using the uploaded ATS CV structure.
+                    <p className="mt-1 text-xs text-slate-500 dark:text-white/55">
+                      Creator+ rewrite using the same one-page A4 CV template.
                     </p>
                   </div>
 
-                  <span className="rounded-full border px-3 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <span className="inline-flex shrink-0 items-center rounded-full border border-black/5 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-white/10 dark:bg-white/[0.06]">
+                    <Crown className="mr-1 h-3 w-3" />
                     Creator+
                   </span>
                 </div>
               </CardHeader>
 
-              <CardContent className="space-y-3">
-                <p className="text-xs md:text-sm text-muted-foreground">
-                  Paste your current CV. FaceMeX will rewrite it into a sharper ATS CV with stronger wording and the same
-                  clean section structure.
-                </p>
+              <CardContent className="space-y-4">
+                <div className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/55">
+                  Paste your current CV. FaceMeX will improve grammar, structure, bullets, and section layout.
+                </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold">
                     Current CV
-                    <span className="text-[10px] rounded-full border px-2 py-0.5 text-muted-foreground">
-                      Required
-                    </span>
+                    <span className="rounded-full border px-2 py-0.5 text-[10px] text-slate-500">Required</span>
                   </label>
 
                   <Textarea
@@ -650,130 +889,113 @@ export default function AIResumePage() {
                     value={proInput}
                     onChange={(e) => setProInput(e.target.value)}
                     placeholder="Paste your current CV here."
+                    className={textAreaClass}
                   />
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Target role / level</label>
+                    <label className="text-xs font-semibold">Target role / level</label>
                     <Input
                       value={proTargetLevel}
                       onChange={(e) => setProTargetLevel(e.target.value)}
-                      placeholder="e.g. General Worker, Driver, Assistant, Junior Admin"
+                      placeholder="e.g. Driver, General Worker, Junior Admin"
+                      className={fieldClass}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium">Extra notes</label>
+                    <label className="text-xs font-semibold">Extra notes</label>
                     <Textarea
                       rows={3}
                       value={proExtras}
                       onChange={(e) => setProExtras(e.target.value)}
                       placeholder="Add anything you want the AI to highlight."
+                      className={textAreaClass}
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground">
-                  <span>
-                    Creator, Business, and Exclusive users can use the full AI CV Upgrade.
-                  </span>
-                </div>
+                <Button onClick={handleImprove} disabled={proBusy || !isCreatorPlus} className={`${darkButton} w-full`}>
+                  {proBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                  {proBusy ? 'Upgrading CV…' : isCreatorPlus ? 'Upgrade my CV' : 'Creator+ required'}
+                </Button>
 
-                <div className="flex justify-end">
-                  <Button onClick={handleImprove} disabled={proBusy || !isCreatorPlus} className="text-sm font-medium">
-                    {proBusy
-                      ? 'Upgrading CV…'
-                      : isCreatorPlus
-                        ? 'Upgrade my CV'
-                        : 'Creator+ required'}
-                  </Button>
-                </div>
-
-                <p className="text-[11px] text-muted-foreground">
-                  Use the upgraded CV as your base, then adjust it for each job you apply for.
+                <p className="flex gap-2 text-[11px] leading-relaxed text-slate-500 dark:text-white/55">
+                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  Use the upgraded CV as your base, then adjust it for each job before applying.
                 </p>
 
                 {hasUpgradeOutput && proOutput && (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <div className="mt-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-white/55">
                       <span>Display settings</span>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-1">
-                          <span className="uppercase tracking-wide">Font</span>
-                          <select
-                            className="border bg-background px-1.5 py-0.5 rounded text-[11px]"
-                            value={fontStyle}
-                            onChange={(e) => setFontStyle(e.target.value as FontStyle)}
-                          >
-                            <option value="document">Document serif</option>
-                            <option value="serif">Serif</option>
-                            <option value="sans">Sans</option>
-                            <option value="system">System</option>
-                            <option value="mono">Mono</option>
-                          </select>
-                        </div>
+                        <select
+                          className="rounded-xl border bg-white px-2 py-1 text-[11px] dark:border-white/10 dark:bg-white/[0.06]"
+                          value={fontStyle}
+                          onChange={(e) => setFontStyle(e.target.value as FontStyle)}
+                        >
+                          <option value="document">Document serif</option>
+                          <option value="serif">Serif</option>
+                          <option value="sans">Sans</option>
+                          <option value="system">System</option>
+                          <option value="mono">Mono</option>
+                        </select>
 
-                        <div className="flex items-center gap-1">
-                          <span className="uppercase tracking-wide">Spacing</span>
-                          <select
-                            className="border bg-background px-1.5 py-0.5 rounded text-[11px]"
-                            value={lineSpacing}
-                            onChange={(e) => setLineSpacing(e.target.value as LineSpacing)}
-                          >
-                            <option value="tight">Tight</option>
-                            <option value="normal">Normal</option>
-                            <option value="relaxed">Relaxed</option>
-                          </select>
-                        </div>
+                        <select
+                          className="rounded-xl border bg-white px-2 py-1 text-[11px] dark:border-white/10 dark:bg-white/[0.06]"
+                          value={lineSpacing}
+                          onChange={(e) => setLineSpacing(e.target.value as LineSpacing)}
+                        >
+                          <option value="tight">Tight</option>
+                          <option value="normal">Normal</option>
+                          <option value="relaxed">Relaxed</option>
+                        </select>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 overflow-auto rounded-md border bg-muted/40 p-3">
-                        <div
-                          style={{
-                            width: '210mm',
-                            minHeight: '297mm',
-                            margin: '0 auto',
-                            padding: '18mm',
-                            background: 'white',
-                            color: 'black',
-                            boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
-                            border: '1px solid rgba(0,0,0,0.12)',
-                          }}
-                          className={`whitespace-pre-wrap text-xs md:text-sm ${outputFontClass} ${outputLeadingClass}`}
-                        >
-                          {proOutput}
-                        </div>
-                      </div>
+                    <PreviewActions content={proOutput} title="FaceMeX ATS CV Upgrade" />
 
-                      <div className="flex shrink-0 flex-col gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-[11px]"
-                          onClick={() => copyToClipboard(proOutput)}
-                        >
-                          Copy
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-[11px]"
-                          onClick={() => openPrintWindow('FaceMeX ATS CV Upgrade', proOutput)}
-                        >
-                          Download / Print
-                        </Button>
-                      </div>
-                    </div>
+                    <CvPreview
+                      content={proOutput}
+                      fontClass={outputFontClass}
+                      leadingClass={outputLeadingClass}
+                    />
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
+
+          {quickDraft && (
+            <Card className="w-full overflow-hidden rounded-[24px] border border-black/5 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.04]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">{quickDraft.title}</CardTitle>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="rounded-[22px] border border-black/5 bg-slate-50 p-4 text-sm leading-relaxed text-slate-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80">
+                  <pre
+                    className="m-0 whitespace-pre-wrap break-words font-sans"
+                    style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                  >
+                    {quickDraft.content}
+                  </pre>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className={outlineButton}
+                  onClick={() => copyToClipboard(quickDraft.content)}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy draft
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </SensitiveContentShield>
     </div>
