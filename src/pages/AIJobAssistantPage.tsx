@@ -6,17 +6,23 @@ import {
   Briefcase,
   Building2,
   Crown,
+  Edit3,
   ExternalLink,
   FileText,
   Loader2,
   Mail,
   MapPin,
+  MessageCircle,
+  Pin,
+  PinOff,
   RefreshCcw,
+  Save,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react';
 
 import Navbar from '@/components/layout/Navbar';
@@ -35,15 +41,16 @@ type SearchLink = {
   url: string;
   note?: string;
   image?: string;
-  category?: 'jobs' | 'social' | 'government' | 'interview' | 'email' | 'nearby';
+  category?: 'jobs' | 'social' | 'government' | 'nearby';
 };
 
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  links?: SearchLink[];
   createdAt: string;
+  pinned?: boolean;
+  saved?: boolean;
 };
 
 type Reminder = {
@@ -65,14 +72,6 @@ function todayKey() {
 function safeId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function safeTag(value: string) {
-  return encodeURIComponent(
-    String(value || 'jobs')
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .toLowerCase()
-  );
 }
 
 function encodeSearchQuery(parts: string[]) {
@@ -140,8 +139,6 @@ function buildVacancySources(input: {
 
   const query = encodeSearchQuery([role, industry, location, workMode, 'vacancies jobs hiring apply']);
   const recentQuery = encodeSearchQuery([role, industry, location, workMode, 'latest vacancies apply now']);
-  const roleTag = safeTag(role);
-  const locationTag = safeTag(location || 'south africa');
 
   const links: SearchLink[] = [
     {
@@ -192,30 +189,6 @@ function buildVacancySources(input: {
       note: 'Join groups and check pinned posts daily.',
       category: 'social',
     },
-    {
-      label: 'Instagram role hashtag',
-      url: `https://www.instagram.com/explore/tags/${roleTag}/`,
-      note: 'Check business pages and stories for hiring posts.',
-      category: 'social',
-    },
-    {
-      label: 'Instagram local jobs hashtag',
-      url: `https://www.instagram.com/explore/tags/${locationTag}jobs/`,
-      note: 'Useful for local hiring around your area.',
-      category: 'social',
-    },
-    {
-      label: 'X / Twitter live hiring search',
-      url: `https://x.com/search?q=${query}&src=typed_query&f=live`,
-      note: 'Live recruiter posts and company vacancy announcements.',
-      category: 'social',
-    },
-    {
-      label: 'Google jobs near me',
-      url: `https://www.google.com/search?q=${encodeSearchQuery([role, 'jobs near me vacancies hiring'])}`,
-      note: 'Uses browser/location signals to show nearby vacancies.',
-      category: 'nearby',
-    },
   ];
 
   return links.map((link) => ({ ...link, image: faviconFor(link.url) }));
@@ -224,27 +197,13 @@ function buildVacancySources(input: {
 function buildGodfreyPandekaRadar(input: { role: string; location: string }) {
   const role = clean(input.role) || 'jobs';
   const location = clean(input.location) || 'South Africa';
-
   const query = encodeSearchQuery(['Godfrey Pandeka', role, location, 'vacancies jobs hiring apply']);
-  const generalQuery = encodeSearchQuery(['Godfrey Pandeka', 'job vacancies', 'South Africa']);
 
   const links: SearchLink[] = [
     {
       label: 'Godfrey Pandeka vacancy posts',
       url: `https://www.facebook.com/search/posts/?q=${query}`,
       note: 'Facebook search for public vacancy posts linked to Godfrey Pandeka.',
-      category: 'social',
-    },
-    {
-      label: 'Godfrey Pandeka latest job posts',
-      url: `https://www.facebook.com/search/posts/?q=${generalQuery}`,
-      note: 'Check recent public vacancy posts manually.',
-      category: 'social',
-    },
-    {
-      label: 'Facebook local vacancy posts',
-      url: `https://www.facebook.com/search/posts/?q=${encodeSearchQuery([role, location, 'vacancies hiring apply'])}`,
-      note: 'Nearby public vacancy posts on Facebook.',
       category: 'social',
     },
   ];
@@ -269,7 +228,7 @@ function buildInterviewAnswer(input: {
 2. Why do you want this job?
 “I’m interested in this role because it matches my skills and career goals. I also want to work in a place where I can add value, learn quickly, and become reliable for the team.”
 
-3. What are your strengths?
+3. Your strengths
 • Reliable
 • Fast learner
 • Good communication
@@ -277,11 +236,11 @@ function buildInterviewAnswer(input: {
 • Problem-solving
 • Willing to work under pressure
 
-4. What is your weakness?
+4. Your weakness
 “One area I’m improving is confidence in interviews. I’m working on it by preparing better and practicing how to explain my skills clearly.”
 
 5. Why should we hire you?
-“You should hire me because I am serious about the opportunity, I am willing to learn, I respect time, and I will do the work properly. I may still be growing, but I am committed and dependable.”
+“You should hire me because I am serious about the opportunity, I am willing to learn, I respect time, and I will do the work properly.”
 
 Quick rule:
 Do not sound desperate. Sound prepared, respectful, and ready.`;
@@ -316,9 +275,7 @@ I would appreciate any update when available.
 
 Kind regards`;
 
-  const directMessage = `Good day, I saw your vacancy/post for ${role}. I am interested and available to send my CV. Please may I ask where I can apply or who I should contact?`;
-
-  return { apply, followUp, directMessage };
+  return { apply, followUp };
 }
 
 function buildLocalAnswer(input: {
@@ -344,21 +301,14 @@ function buildLocalAnswer(input: {
     });
   }
 
-  if (
-    prompt.includes('email') ||
-    prompt.includes('message') ||
-    prompt.includes('cv') ||
-    prompt.includes('send')
-  ) {
+  if (prompt.includes('email') || prompt.includes('cv') || prompt.includes('send')) {
     const templates = buildEmailTemplates({
       role,
       company: input.company,
       contactPerson: input.contactPerson,
     });
 
-    return `Here are professional messages you can use:
-
-APPLICATION EMAIL
+    return `APPLICATION EMAIL
 
 ${templates.apply}
 
@@ -366,21 +316,17 @@ FOLLOW-UP EMAIL
 
 ${templates.followUp}
 
-WHATSAPP / FACEBOOK DM
-
-${templates.directMessage}
-
 Safety tip:
-Use official company emails or verified pages first. Avoid paying any “registration fee” or “placement fee”.`;
+Use official company emails or verified pages first. Avoid paying any registration fee or placement fee.`;
   }
 
   if (prompt.includes('facebook') || prompt.includes('godfrey') || prompt.includes('pandeka')) {
     return `Facebook vacancy method:
 
-1. Open the vacancy search cards in the Vacancy Radar.
+1. Use the Vacancy Radar.
 2. Search posts, not only pages.
 3. Sort by recent if Facebook allows it.
-4. Look for posts with:
+4. Look for:
 • role title
 • company/branch name
 • location
@@ -389,19 +335,18 @@ Use official company emails or verified pages first. Avoid paying any “registr
 • no upfront payment
 
 Important:
-FaceMeX cannot privately pull Facebook posts without official Facebook API access and permission. The safe method is to open live Facebook search results and verify each vacancy before applying.`;
+FaceMeX cannot privately pull Facebook posts without official Facebook API access and permission. Use live search links and verify every vacancy before applying.`;
   }
 
   return `Job search plan for ${role} in ${location}
 
-1. Search daily using the Vacancy Radar.
+1. Search daily using Vacancy Radar.
 2. Use these keywords:
 • ${role} vacancies ${location}
 • ${role} hiring ${location}
 • ${role} apply now ${location}
 • ${industry} ${role} jobs ${location}
 • no experience ${role} jobs ${location}
-• ${role} email CV ${location}
 
 3. Apply fast:
 When you see a new post, apply within 24 hours.
@@ -434,7 +379,6 @@ export default function AIJobAssistantPage() {
   const navigate = useNavigate();
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const hideComposerTimerRef = useRef<number | null>(null);
 
   const { tier, hasTier } = useUserStore();
 
@@ -464,7 +408,10 @@ export default function AIJobAssistantPage() {
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [geoLabel, setGeoLabel] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [composerVisible, setComposerVisible] = useState(true);
+
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
 
   const remainingUses = useMemo(() => {
     if (dailyLimit === null) return null;
@@ -477,10 +424,14 @@ export default function AIJobAssistantPage() {
     setUsageCount(getUsage(currentTier));
 
     try {
-      const raw = localStorage.getItem('facemex_job_alert_reminders');
-      setReminders(raw ? JSON.parse(raw) : []);
+      const rawAlerts = localStorage.getItem('facemex_job_alert_reminders');
+      setReminders(rawAlerts ? JSON.parse(rawAlerts) : []);
+
+      const rawMessages = localStorage.getItem('facemex_job_assistant_messages');
+      setMessages(rawMessages ? JSON.parse(rawMessages) : []);
     } catch {
       setReminders([]);
+      setMessages([]);
     }
 
     const firstCards = [
@@ -498,17 +449,13 @@ export default function AIJobAssistantPage() {
 
     setRadarCards(firstCards);
     setSourceLinks(firstCards);
-
-    setMessages([
-      {
-        id: safeId(),
-        role: 'assistant',
-        content:
-          'Welcome to FaceMeX Job Assistant. Tell me the job you want, your location, and your experience level. I’ll help you search, prepare, and apply professionally.',
-        createdAt: new Date().toISOString(),
-      },
-    ]);
   }, [currentTier]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('facemex_job_assistant_messages', JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
 
   useEffect(() => {
     if (!radarCards.length) return;
@@ -522,43 +469,7 @@ export default function AIJobAssistantPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    setComposerVisible(true);
-  }, [messages.length, busy]);
-
-  useEffect(() => {
-    return () => {
-      if (hideComposerTimerRef.current) {
-        window.clearTimeout(hideComposerTimerRef.current);
-      }
-    };
-  }, []);
-
-  const handleChatScroll = () => {
-    if (document.activeElement?.id === 'job-assistant-prompt') return;
-
-    setComposerVisible(false);
-
-    if (hideComposerTimerRef.current) {
-      window.clearTimeout(hideComposerTimerRef.current);
-    }
-
-    hideComposerTimerRef.current = window.setTimeout(() => {
-      setComposerVisible(true);
-    }, 850);
-  };
-
-  const revealComposer = () => {
-    if (hideComposerTimerRef.current) {
-      window.clearTimeout(hideComposerTimerRef.current);
-    }
-
-    setComposerVisible(true);
-
-    window.setTimeout(() => {
-      const el = document.getElementById('job-assistant-prompt');
-      el?.focus();
-    }, 80);
-  };
+  }, [messages.length, busy, assistantOpen]);
 
   const saveReminders = (next: Reminder[]) => {
     setReminders(next);
@@ -569,12 +480,11 @@ export default function AIJobAssistantPage() {
   };
 
   const deleteReminder = (id: string) => {
-    const next = reminders.filter((reminder) => reminder.id !== id);
-    saveReminders(next);
+    saveReminders(reminders.filter((item) => item.id !== id));
 
     toast({
       title: 'Alert deleted',
-      description: 'Saved vacancy alert preference removed.',
+      description: 'Saved vacancy alert removed.',
     });
   };
 
@@ -598,7 +508,7 @@ export default function AIJobAssistantPage() {
 
     toast({
       title: 'Vacancy radar refreshed',
-      description: 'Job sources updated based on your role and location.',
+      description: 'Job sources updated.',
     });
   };
 
@@ -634,7 +544,7 @@ export default function AIJobAssistantPage() {
 
         toast({
           title: 'Nearby jobs enabled',
-          description: 'FaceMeX will prioritize vacancy links near your area while this page is open.',
+          description: 'FaceMeX will prioritize vacancy links near your area.',
         });
 
         setGeoBusy(false);
@@ -653,13 +563,11 @@ export default function AIJobAssistantPage() {
   };
 
   const enableVacancyAlerts = async () => {
-    const frequency = 'daily';
-
     const reminder: Reminder = {
       id: safeId(),
       role: role || 'jobs',
       location: location || 'South Africa',
-      frequency,
+      frequency: 'daily',
       createdAt: new Date().toISOString(),
     };
 
@@ -682,25 +590,23 @@ export default function AIJobAssistantPage() {
     await trackEvent('job_alert_enabled', '/ai/job-assistant', {
       role: reminder.role,
       location: reminder.location,
-      frequency,
+      frequency: reminder.frequency,
     });
 
     toast({
       title: 'Vacancy alert saved',
-      description:
-        'Your preference is saved. For real background push alerts, connect this later to a server cron + push notifications.',
+      description: 'Your alert preference has been saved.',
     });
   };
 
-  const sendPrompt = async () => {
-    const cleanPrompt = clean(prompt);
+  const sendPrompt = async (overridePrompt?: string) => {
+    const cleanPrompt = clean(overridePrompt || prompt);
 
     if (!cleanPrompt && !role && !location && !industry) {
       toast({
         title: 'Ask something first',
         description: 'Type your job question or fill in role/location.',
       });
-      revealComposer();
       return;
     }
 
@@ -719,6 +625,8 @@ export default function AIJobAssistantPage() {
     const userQuestion =
       cleanPrompt || `Help me find ${role || 'jobs'} in ${location || 'South Africa'}.`;
 
+    setAssistantOpen(true);
+
     setMessages((prev) => [
       ...prev,
       {
@@ -731,7 +639,6 @@ export default function AIJobAssistantPage() {
 
     setPrompt('');
     setBusy(true);
-    setComposerVisible(false);
 
     const links = [
       ...buildVacancySources({
@@ -763,7 +670,7 @@ export default function AIJobAssistantPage() {
         tier: currentTier,
         dailyLimit,
         instruction:
-          'You are FaceMeX Job Assistant. Answer like ChatGPT but focused only on jobs, CVs, interviews, job search, applications, vacancies, emails, follow-ups, career planning, PNet, Indeed, DPSA government vacancies, LinkedIn, Facebook vacancy search, and South African opportunities. Be practical, safe, and concise. Do not claim you scraped Facebook. If asked about job sources, tell the user to use the Vacancy Radar cards on the page.',
+          'You are FaceMeX Job Assistant. Answer like ChatGPT but focused only on jobs, CVs, interviews, job search, applications, vacancies, emails, follow-ups, career planning, PNet, Indeed, DPSA government vacancies, LinkedIn, Facebook vacancy search, and South African opportunities. Be practical, safe, and concise. Do not show raw links in the answer. If sources are needed, tell users to use Vacancy Radar.',
       })) as any;
 
       const answer =
@@ -831,30 +738,18 @@ export default function AIJobAssistantPage() {
         setUsageCount(increaseUsage(currentTier));
       }
 
-      await trackEvent('ai_job_assistant_used', '/ai/job-assistant', {
-        role,
-        location,
-        industry,
-        workMode,
-        experienceLevel,
-        tier: currentTier,
-        fallback: true,
-        linksGenerated: links.length,
-      });
-
       toast({
         title: 'Assistant used offline planner',
-        description: 'Backend was unavailable, so FaceMeX generated a built-in job plan.',
+        description: 'Backend was unavailable, so FaceMeX generated a built-in answer.',
       });
     } finally {
       setBusy(false);
-      setComposerVisible(true);
     }
   };
 
   const askQuick = (text: string) => {
+    setAssistantOpen(true);
     setPrompt(text);
-    revealComposer();
   };
 
   const copyText = async (text: string) => {
@@ -868,10 +763,57 @@ export default function AIJobAssistantPage() {
     } catch {
       toast({
         title: 'Copy failed',
-        description: 'Please copy the text manually.',
+        description: 'Please copy manually.',
         variant: 'destructive',
       });
     }
+  };
+
+  const togglePin = (id: string) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === id ? { ...message, pinned: !message.pinned } : message
+      )
+    );
+  };
+
+  const toggleSave = (id: string) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === id ? { ...message, saved: !message.saved } : message
+      )
+    );
+
+    toast({
+      title: 'Saved',
+      description: 'Response saved inside this assistant.',
+    });
+  };
+
+  const deleteMessage = (id: string) => {
+    setMessages((prev) => prev.filter((message) => message.id !== id));
+  };
+
+  const startEdit = (message: ChatMessage) => {
+    setEditingMessageId(message.id);
+    setEditText(message.content);
+  };
+
+  const saveEdit = () => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === editingMessageId ? { ...message, content: editText } : message
+      )
+    );
+
+    setEditingMessageId(null);
+    setEditText('');
+  };
+
+  const researchMessage = (message: ChatMessage) => {
+    const researchPrompt = `Research this deeper and give me a better practical answer:\n\n${message.content}`;
+    setPrompt(researchPrompt);
+    setAssistantOpen(true);
   };
 
   const emailTemplates = buildEmailTemplates({
@@ -881,6 +823,8 @@ export default function AIJobAssistantPage() {
   });
 
   const activeRadarCard = radarCards[activeCard];
+  const pinnedMessages = messages.filter((message) => message.pinned);
+  const savedMessages = messages.filter((message) => message.saved);
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0f0f0f] dark:text-white">
@@ -940,27 +884,11 @@ export default function AIJobAssistantPage() {
               </CardHeader>
 
               <CardContent className="space-y-3">
-                <Input
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  placeholder="Driver, Admin, General Worker"
-                  className={premiumInput}
-                />
-
-                <Input
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Tzaneen, Polokwane, Johannesburg"
-                  className={premiumInput}
-                />
+                <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Driver, Admin, General Worker" className={premiumInput} />
+                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Tzaneen, Polokwane, Johannesburg" className={premiumInput} />
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Input
-                    value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                    placeholder="Industry"
-                    className={premiumInput}
-                  />
+                  <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Industry" className={premiumInput} />
 
                   <select value={workMode} onChange={(e) => setWorkMode(e.target.value)} className={premiumSelect}>
                     <option value="">Any work mode</option>
@@ -970,11 +898,7 @@ export default function AIJobAssistantPage() {
                   </select>
                 </div>
 
-                <select
-                  value={experienceLevel}
-                  onChange={(e) => setExperienceLevel(e.target.value)}
-                  className={premiumSelect}
-                >
+                <select value={experienceLevel} onChange={(e) => setExperienceLevel(e.target.value)} className={premiumSelect}>
                   <option value="">Experience level</option>
                   <option value="student / intern">Student / Intern</option>
                   <option value="entry level">Entry level</option>
@@ -1032,11 +956,7 @@ export default function AIJobAssistantPage() {
                     <div className="flex items-start gap-4">
                       <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-slate-100 p-3 dark:bg-white/[0.08]">
                         {activeRadarCard.image ? (
-                          <img
-                            src={activeRadarCard.image}
-                            alt={activeRadarCard.label}
-                            className="h-10 w-10 rounded-xl object-contain"
-                          />
+                          <img src={activeRadarCard.image} alt={activeRadarCard.label} className="h-10 w-10 rounded-xl object-contain" />
                         ) : (
                           <Briefcase className="h-8 w-8 text-slate-400" />
                         )}
@@ -1047,29 +967,11 @@ export default function AIJobAssistantPage() {
                           {activeRadarCard.category || 'jobs'}
                         </div>
 
-                        <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-tight">
-                          {activeRadarCard.label}
-                        </h3>
-
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50">
-                          {activeRadarCard.note}
-                        </p>
+                        <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-tight">{activeRadarCard.label}</h3>
+                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50">{activeRadarCard.note}</p>
                       </div>
 
                       <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
-                    </div>
-
-                    <div className="mt-4 flex gap-1">
-                      {radarCards.slice(0, 8).map((_, index) => (
-                        <span
-                          key={index}
-                          className={`h-1.5 rounded-full transition-all ${
-                            index === activeCard
-                              ? 'w-6 bg-slate-950 dark:bg-white'
-                              : 'w-1.5 bg-slate-300 dark:bg-white/25'
-                          }`}
-                        />
-                      ))}
                     </div>
                   </a>
                 )}
@@ -1086,11 +988,7 @@ export default function AIJobAssistantPage() {
                           : 'border-black/5 bg-white/70 text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60'
                       }`}
                     >
-                      {link.image ? (
-                        <img src={link.image} alt={link.label} className="h-7 w-7 rounded-lg object-contain" />
-                      ) : (
-                        <Briefcase className="h-6 w-6" />
-                      )}
+                      {link.image ? <img src={link.image} alt={link.label} className="h-7 w-7 rounded-lg object-contain" /> : <Briefcase className="h-6 w-6" />}
                       <span className="line-clamp-1 max-w-[60px]">{link.label}</span>
                     </button>
                   ))}
@@ -1123,74 +1021,44 @@ export default function AIJobAssistantPage() {
             </Card>
           </div>
 
-          <Card className={`${premiumCard} flex min-h-[74vh] min-w-0 flex-col`}>
-            <CardHeader className="border-b border-black/5 bg-white/60 pb-3 backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.03]">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                  <Sparkles className="h-4 w-4 text-slate-700 dark:text-white/70" />
-                  Job Assistant
-                </CardTitle>
+          <Card className={`${premiumCard} flex min-h-[74vh] min-w-0 flex-col items-center justify-center p-6 text-center`}>
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-950 text-white shadow-lg dark:bg-white dark:text-black">
+              <MessageCircle className="h-8 w-8" />
+            </div>
 
-                <Badge className="w-fit rounded-full border border-black/5 bg-slate-100 px-3 py-1 text-slate-600 dark:border-white/10 dark:bg-white/[0.07] dark:text-white/70">
-                  {dailyLimit === null ? 'Unlimited' : `${remainingUses} searches left`}
-                </Badge>
-              </div>
-            </CardHeader>
+            <h2 className="mt-5 text-2xl font-semibold tracking-tight">
+              Open Job Assistant
+            </h2>
 
-            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-              <div
-                onScroll={handleChatScroll}
-                onTouchMove={handleChatScroll}
-                className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 pb-8 sm:px-5"
-              >
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {[
-                    ['Latest vacancies', 'Find latest vacancies near me and show the best places to search.'],
-                    ['Interview prep', 'Help me prepare for an interview.'],
-                    ['Email CV', 'Write an email to send my CV for a job.'],
-                    ['Facebook jobs', 'Search Facebook vacancies from Godfrey Pandeka and local job posts.'],
-                  ].map(([label, text]) => (
-                    <Button
-                      key={label}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => askQuick(text)}
-                      className="shrink-0 rounded-full border-black/10 bg-white/80 px-4 text-xs shadow-sm hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.1]"
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500 dark:text-white/55">
+              Launch a clean ChatGPT-style workspace for jobs, CVs, interviews, applications, and career research.
+            </p>
 
-                {messages.map((message) => (
-                  <div key={message.id} className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`max-w-[92%] rounded-[26px] px-4 py-3 text-sm leading-relaxed shadow-sm sm:max-w-[82%] ${
-                        message.role === 'user'
-                          ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
-                          : 'border border-black/5 bg-white text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
-                      }`}
-                    >
-                      <div className="max-h-[420px] overflow-y-auto pr-1">
-                        <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <Button onClick={() => askQuick('Find latest vacancies near me and show the best places to search.')} variant="outline" className="rounded-full">
+                Latest vacancies
+              </Button>
 
-                {busy && (
-                  <div className="flex justify-start">
-                    <div className="rounded-[26px] border border-black/5 bg-white px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
-                      <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                      Building your answer...
-                    </div>
-                  </div>
-                )}
+              <Button onClick={() => askQuick('Help me prepare for an interview.')} variant="outline" className="rounded-full">
+                Interview prep
+              </Button>
 
-                <div ref={bottomRef} />
-              </div>
-            </CardContent>
+              <Button onClick={() => askQuick('Write an email to send my CV for a job.')} variant="outline" className="rounded-full">
+                Email CV
+              </Button>
+
+              <Button onClick={() => askQuick('Search Facebook vacancies and local job posts.')} variant="outline" className="rounded-full">
+                Facebook jobs
+              </Button>
+            </div>
+
+            <Button
+              onClick={() => setAssistantOpen(true)}
+              className="mt-6 h-12 rounded-2xl bg-slate-950 px-6 text-white shadow-lg hover:bg-slate-800 dark:bg-white dark:text-black"
+            >
+              <MessageCircle className="mr-2 h-4 w-4" />
+              Open assistant
+            </Button>
           </Card>
         </div>
 
@@ -1205,26 +1073,36 @@ export default function AIJobAssistantPage() {
 
             <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {reminders.map((reminder) => (
-                <div
-                  key={reminder.id}
-                  className="flex items-start justify-between gap-3 rounded-2xl border border-black/5 bg-white/70 p-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
-                >
+                <div key={reminder.id} className="flex items-start justify-between gap-3 rounded-2xl border border-black/5 bg-white/70 p-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{reminder.role}</div>
                     <div className="text-xs text-slate-500 dark:text-white/45">Location: {reminder.location}</div>
                     <div className="text-xs text-slate-500 dark:text-white/45">Frequency: {reminder.frequency}</div>
                   </div>
 
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => deleteReminder(reminder.id)}
-                    className="h-9 w-9 shrink-0 rounded-full text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
-                    aria-label="Delete alert"
-                  >
+                  <Button type="button" size="icon" variant="ghost" onClick={() => deleteReminder(reminder.id)} className="h-9 w-9 shrink-0 rounded-full text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10">
                     <Trash2 className="h-4 w-4" />
                   </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {(pinnedMessages.length > 0 || savedMessages.length > 0) && (
+          <Card className={`${premiumCard} mt-4`}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold">Pinned & saved responses</CardTitle>
+            </CardHeader>
+
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {pinnedMessages.concat(savedMessages).slice(0, 6).map((message) => (
+                <div key={`${message.id}-saved`} className="rounded-2xl border border-black/5 bg-white/70 p-3 text-sm dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="mb-2 flex gap-1">
+                    {message.pinned && <Badge className="rounded-full">Pinned</Badge>}
+                    {message.saved && <Badge variant="outline" className="rounded-full">Saved</Badge>}
+                  </div>
+                  <p className="line-clamp-4 whitespace-pre-wrap text-slate-600 dark:text-white/60">{message.content}</p>
                 </div>
               ))}
             </CardContent>
@@ -1245,61 +1123,170 @@ export default function AIJobAssistantPage() {
         </Card>
       </main>
 
-      {!composerVisible && (
-        <button
-          type="button"
-          onClick={revealComposer}
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] right-4 z-50 rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-[0_14px_40px_rgba(15,23,42,0.25)] transition active:scale-95 dark:bg-white dark:text-black"
-        >
-          Ask
-        </button>
-      )}
-
-      <div
-        className={`fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-40 px-3 transition-all duration-300 ${
-          composerVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-8 opacity-0'
-        }`}
+      <button
+        type="button"
+        onClick={() => setAssistantOpen(true)}
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] right-4 z-40 rounded-full bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-[0_14px_40px_rgba(15,23,42,0.25)] transition active:scale-95 dark:bg-white dark:text-black"
       >
-        <div className="mx-auto max-w-3xl rounded-[28px] border border-black/10 bg-white/95 p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1a1a1a]/95">
-          {!canAsk && (
-            <div className="mb-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-              Daily search limit reached. Free gets 4/day, Pro gets 20/day, Creator+ gets unlimited.
-            </div>
-          )}
+        <MessageCircle className="mr-2 inline h-4 w-4" />
+        Ask
+      </button>
 
-          <Textarea
-            id="job-assistant-prompt"
-            value={prompt}
-            onFocus={() => setComposerVisible(true)}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Ask FaceMeX about jobs, CVs, interviews, applications, or vacancies..."
-            className="max-h-40 min-h-[56px] resize-none border-0 bg-transparent px-3 py-3 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendPrompt();
-              }
-            }}
-          />
+      {assistantOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f7f7f5] text-slate-950 dark:bg-[#0f0f0f] dark:text-white">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/80 px-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/80 sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-white dark:text-black">
+                <Sparkles className="h-4 w-4" />
+              </div>
 
-          <div className="flex items-center justify-between gap-2 px-2 pb-1">
-            <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-500 dark:text-white/45">
-              <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Verify jobs before sending ID documents or paying anything.</span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">FaceMeX Job Assistant</div>
+                <div className="truncate text-[11px] text-slate-500 dark:text-white/45">
+                  {dailyLimit === null ? 'Unlimited searches' : `${remainingUses} searches left today`}
+                </div>
+              </div>
             </div>
 
-            <Button
-              type="button"
-              onClick={sendPrompt}
-              disabled={busy || !canAsk}
-              className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white shadow-md transition hover:bg-slate-800 active:scale-95 dark:bg-white dark:text-black"
-              aria-label="Send"
-            >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            <Button onClick={() => setAssistantOpen(false)} size="icon" variant="ghost" className="rounded-full">
+              <X className="h-5 w-5" />
             </Button>
           </div>
+
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-5">
+              <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+                {messages.length === 0 && !busy && (
+                  <div className="flex min-h-[55vh] flex-col items-center justify-center text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-950 text-white shadow-lg dark:bg-white dark:text-black">
+                      <Sparkles className="h-8 w-8" />
+                    </div>
+
+                    <h2 className="mt-5 text-2xl font-semibold">How can I help your career today?</h2>
+
+                    <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500 dark:text-white/55">
+                      Ask about jobs, CVs, interviews, application emails, follow-ups, or local vacancies.
+                    </p>
+
+                    <div className="mt-5 flex max-w-lg flex-wrap justify-center gap-2">
+                      {[
+                        ['Latest vacancies', 'Find latest vacancies near me and show the best places to search.'],
+                        ['Interview prep', 'Help me prepare for an interview.'],
+                        ['Email CV', 'Write an email to send my CV for a job.'],
+                        ['Facebook jobs', 'Search Facebook vacancies and local job posts.'],
+                      ].map(([label, text]) => (
+                        <Button key={label} type="button" variant="outline" onClick={() => setPrompt(text)} className="rounded-full">
+                          {label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {messages.map((message) => (
+                  <div key={message.id} className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[92%] rounded-[26px] px-4 py-3 text-sm leading-relaxed shadow-sm sm:max-w-[82%] ${
+                      message.role === 'user'
+                        ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
+                        : 'border border-black/5 bg-white text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
+                    }`}>
+                      {editingMessageId === message.id ? (
+                        <div className="space-y-2">
+                          <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="min-h-[120px] rounded-2xl" />
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => setEditingMessageId(null)}>Cancel</Button>
+                            <Button size="sm" onClick={saveEdit}>Save edit</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="max-h-[420px] overflow-y-auto pr-1">
+                          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                        </div>
+                      )}
+
+                      {message.role === 'assistant' && editingMessageId !== message.id && (
+                        <div className="mt-3 flex flex-wrap gap-1 border-t border-black/5 pt-2 dark:border-white/10">
+                          <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2">
+                            {message.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                          </Button>
+
+                          <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2">
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </Button>
+
+                          <Button size="sm" variant="ghost" onClick={() => toggleSave(message.id)} className="h-8 rounded-full px-2">
+                            <Save className="h-3.5 w-3.5" />
+                          </Button>
+
+                          <Button size="sm" variant="ghost" onClick={() => researchMessage(message)} className="h-8 rounded-full px-2">
+                            <Search className="h-3.5 w-3.5" />
+                          </Button>
+
+                          <Button size="sm" variant="ghost" onClick={() => deleteMessage(message.id)} className="h-8 rounded-full px-2 text-red-500 hover:text-red-600">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {busy && (
+                  <div className="flex justify-start">
+                    <div className="rounded-[26px] border border-black/5 bg-white px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                      <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                      Building your answer...
+                    </div>
+                  </div>
+                )}
+
+                <div ref={bottomRef} />
+              </div>
+            </div>
+
+            <div className="shrink-0 border-t border-black/5 bg-[#f7f7f5]/90 px-3 py-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#0f0f0f]/90">
+              <div className="mx-auto max-w-3xl rounded-[28px] border border-black/10 bg-white/95 p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] dark:border-white/10 dark:bg-[#1a1a1a]/95">
+                {!canAsk && (
+                  <div className="mb-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                    Daily search limit reached. Free gets 4/day, Pro gets 20/day, Creator+ gets unlimited.
+                  </div>
+                )}
+
+                <Textarea
+                  id="job-assistant-prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Ask FaceMeX about jobs, CVs, interviews, applications, or vacancies..."
+                  className="max-h-40 min-h-[56px] resize-none border-0 bg-transparent px-3 py-3 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendPrompt();
+                    }
+                  }}
+                />
+
+                <div className="flex items-center justify-between gap-2 px-2 pb-1">
+                  <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-500 dark:text-white/45">
+                    <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Verify jobs before sending ID documents or paying anything.</span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => sendPrompt()}
+                    disabled={busy || !canAsk}
+                    className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white shadow-md transition hover:bg-slate-800 active:scale-95 dark:bg-white dark:text-black"
+                    aria-label="Send"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
