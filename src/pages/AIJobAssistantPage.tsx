@@ -131,10 +131,10 @@ function isCreatorPlusTier(tier: string, hasTier?: (tier: string) => boolean) {
 }
 
 /**
- * FaceMeX Career Workspace rules:
+ * FaceMeX Career Workspace usage model:
  * Free: 5 email templates + 5 message templates + safe built-in answers.
- * Pro: 10 DeepSeek AI actions per day for research, email, messages, and answers.
- * Creator/Business/Exclusive: unlimited DeepSeek AI actions.
+ * Pro: 10 AI actions per day for research, emails, messages, and answers.
+ * Creator/Business/Exclusive: unlimited AI actions.
  */
 function getDeepSeekDailyLimit(tier: string, hasTier?: (tier: string) => boolean) {
   if (isCreatorPlusTier(tier, hasTier)) return null;
@@ -175,14 +175,31 @@ function faviconFor(url: string) {
   }
 }
 
+function stripMarkdownSymbols(text: string) {
+  return String(text || '')
+    .replace(/\*\*/g, '')
+    .replace(/###/g, '')
+    .replace(/##/g, '')
+    .replace(/#/g, '')
+    .trim();
+}
+
 function detectIntent(text: string) {
   const t = text.toLowerCase();
 
-  if (/(investor|investors|funding|funders|venture|angel|vc|raise capital|capital|network|startup|pitch|fundraise|business growth|partnership)/i.test(t)) {
+  if (
+    /(investor|investors|funding|funder|funders|venture|angel|vc|raise capital|capital|startup|pitch|business opportunity|business opportunities|partnership|network with tech|networking|accelerator|incubator)/i.test(
+      t
+    )
+  ) {
     return 'investors-and-networking';
   }
 
-  if (/(fake|scam|legit|legitimate|verify|safe|pay money|registration fee|upfront|is this real|is it real)/i.test(t)) {
+  if (
+    /(fake|scam|legit|legitimate|verify|safe|pay money|registration fee|upfront|is this real|is it real|risky|check job)/i.test(
+      t
+    )
+  ) {
     return 'verify-opportunity';
   }
 
@@ -202,7 +219,11 @@ function detectIntent(text: string) {
     return 'cv-profile';
   }
 
-  if (/(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work)/i.test(t)) {
+  if (
+    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs)/i.test(
+      t
+    )
+  ) {
     return 'job-search';
   }
 
@@ -458,29 +479,41 @@ function buildAssistantInstruction(intent: string) {
   return `
 You are FaceMeX Career Workspace, a practical AI assistant for South African users.
 
-Your job:
-- Help with jobs, CVs, interviews, applications, WhatsApp messages, email writing, research, business opportunities, investors, networking, startup growth, and opportunity safety.
-- Understand the user's intent before answering.
-- If the user asks about investors, funding, startup networking, business opportunities, partnerships, or business growth, do NOT answer like they are asking for a job.
-- If the user asks for email, write an email.
-- If the user asks for WhatsApp/message, write a short message.
-- If the user asks for "apply message", provide both a short WhatsApp message and a professional email.
-- If the user asks for research, give practical research steps and what to search for.
-- Do not pretend you searched live unless the backend provides live search results.
-- Use simple English. Be direct. Be useful.
-- Focus on South Africa where relevant.
-- Always include a safety warning when money, jobs, documents, or opportunities are involved.
+You help with:
+- jobs
+- CVs
+- interviews
+- applications
+- WhatsApp messages
+- email writing
+- research
+- business opportunities
+- investors
+- funding
+- networking
+- startup growth
+- fake job checks
+- opportunity safety
 
-Required answer format:
-1. Direct answer
-2. Action plan
-3. Copy-ready message/email/script
-4. Safety check where relevant
+Important rules:
+1. First understand the user's intent.
+2. If the user asks about investors, funding, startup networking, business opportunities, partnerships, or business growth, do not answer as if they are asking for a job.
+3. If the user asks for latest jobs, explain where to search and how to apply. Do not invent fake live vacancies.
+4. If the user asks for email, write an email.
+5. If the user asks for WhatsApp/message, write a short message.
+6. If the user asks for apply message, give both a WhatsApp message and an email.
+7. Every answer must include:
+   - Direct answer
+   - Action plan
+   - Copy-ready message/email/script
+   - Safety check when money, jobs, documents, or opportunities are involved
+8. Use simple English.
+9. Focus on South Africa where relevant.
+10. Do not use markdown symbols like **, ###, or tables.
+11. Do not mention ChatGPT, Claude, or DeepSeek.
+12. Do not invent fake jobs, fake investors, fake companies, fake events, or fake contacts.
 
 Current detected intent: ${intent}
-
-Do not mention ChatGPT, Claude, or DeepSeek in the answer.
-Do not invent fake job posts, fake investors, fake contacts, fake companies, or fake events.
 `;
 }
 
@@ -501,12 +534,12 @@ function buildLocalFallbackAnswer(input: {
 
   if (input.intent === 'investors-and-networking') {
     return `Direct answer:
-You can network with tech investors in South Africa through 5 main routes: LinkedIn outreach, startup events, incubators, warm introductions, and online founder communities.
+You can network with tech investors in South Africa through LinkedIn outreach, startup events, accelerators, warm introductions, and online founder communities.
 
 Action plan:
-1. Fix your LinkedIn profile so it clearly says what you are building.
-2. Prepare a one-page startup summary with the problem, solution, traction, market, revenue model, and what help you need.
-3. Search for angel investors, venture capital partners, startup founders, accelerator managers, and innovation hub leaders.
+1. Prepare a one-page startup summary.
+2. Fix your LinkedIn profile so it clearly says what you are building.
+3. Search for angel investors, VC partners, startup founders, accelerator managers, and innovation hub leaders.
 4. Message 10 people per day.
 5. Ask for advice first, not money first.
 
@@ -675,25 +708,27 @@ Always verify opportunities before paying money or sending sensitive documents.`
 }
 
 function ensureActionableAnswer(answer: string, fallbackAnswer: string) {
-  const raw = clean(answer) || fallbackAnswer;
+  const raw = stripMarkdownSymbols(answer) || fallbackAnswer;
   const lower = raw.toLowerCase();
 
-  const hasAction = lower.includes('action plan') || lower.includes('step-by-step') || lower.includes('steps');
+  const hasDirect = lower.includes('direct answer');
+  const hasAction = lower.includes('action plan');
   const hasCopy =
     lower.includes('copy-ready') ||
-    lower.includes('copy this') ||
-    lower.includes('copy and paste') ||
-    lower.includes('message:') ||
-    lower.includes('email:');
+    lower.includes('copy this message') ||
+    lower.includes('copy-ready message') ||
+    lower.includes('copy-ready email');
 
-  if (hasAction && hasCopy) return raw;
+  const isLongEnough = raw.length > 500;
+
+  if ((hasAction && hasCopy) || (hasDirect && isLongEnough)) return raw;
 
   return `${raw}
 
 Action plan:
-1. Save this answer.
-2. Take the first step today.
-3. Send one message or application.
+1. Take one clear action today.
+2. Save the useful information.
+3. Contact the right person or company.
 4. Track who you contacted.
 5. Follow up in 3 to 5 working days.
 
@@ -1095,8 +1130,8 @@ export default function AIJobAssistantPage() {
     try {
       const instruction =
         kind === 'email'
-          ? 'Write a professional South African job/career email. Include "Subject:" on the first line, then the email body. Keep it clear, polite, and copy-ready.'
-          : 'Write a short professional WhatsApp/message for South African job/career communication. Do not include a subject line. Keep it copy-ready.';
+          ? 'Write a professional South African job/career email. Include "Subject:" on the first line, then the email body. Keep it clear, polite, and copy-ready. Do not use markdown.'
+          : 'Write a short professional WhatsApp/message for South African job/career communication. Do not include a subject line. Keep it copy-ready. Do not use markdown.';
 
       const res = (await api.post('/api/ai/pro/job-assistant', {
         prompt: `Create a ${kind} for this purpose: ${purpose}. Role/opportunity: ${role || '[role]'}. Company: ${company || '[company]'}. Contact person: ${contactPerson || '[contact person]'}. Location: ${location || '[location]'}. Industry: ${industry || '[industry]'}. Experience level: ${experienceLevel || '[experience level]'}.`,
@@ -1119,8 +1154,10 @@ export default function AIJobAssistantPage() {
         (Array.isArray(res?.suggestions) ? res.suggestions.join('\n\n') : '') ||
         template.body;
 
+      const cleanAnswer = stripMarkdownSymbols(answer);
+
       if (kind === 'email') {
-        const parsed = extractEmailParts(answer);
+        const parsed = extractEmailParts(cleanAnswer);
 
         setApplyPreview({
           kind,
@@ -1133,7 +1170,7 @@ export default function AIJobAssistantPage() {
         setApplyPreview({
           kind,
           title: template.title,
-          body: answer,
+          body: cleanAnswer,
           source: 'ai',
         });
       }
@@ -1302,7 +1339,7 @@ export default function AIJobAssistantPage() {
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0f0f0f] dark:text-white">
       <Navbar />
 
-      <main className="mx-auto w-full max-w-6xl overflow-x-hidden px-3 pb-28 pt-14 sm:px-4 md:pt-20">
+      <main className="mx-auto w-full max-w-6xl overflow-x-hidden px-3 pb-44 pt-14 sm:px-4 md:pt-20">
         <div className="mb-4 flex w-full flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-black/5 bg-white/75 px-3 py-1.5 text-xs text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white/60">
@@ -1600,10 +1637,7 @@ export default function AIJobAssistantPage() {
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => {
-                          setWorkspaceOpen(true);
-                          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-                        }}
+                        onClick={() => setWorkspaceOpen(true)}
                         className="block w-full rounded-2xl border border-black/5 bg-white p-3 text-left text-xs dark:border-white/10 dark:bg-white/[0.05]"
                       >
                         <div className="mb-1 font-semibold">
@@ -1717,7 +1751,7 @@ export default function AIJobAssistantPage() {
         <button
           type="button"
           onClick={() => setWorkspaceOpen(true)}
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] right-3 z-40 rounded-full bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-[0_14px_40px_rgba(15,23,42,0.25)] dark:bg-white dark:text-black"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] right-3 z-40 rounded-full bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-[0_14px_40px_rgba(15,23,42,0.25)] dark:bg-white dark:text-black"
         >
           <MessageCircle className="mr-2 inline h-4 w-4" />
           Ask
@@ -1802,7 +1836,7 @@ export default function AIJobAssistantPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="max-h-[54vh] overflow-y-auto pr-1">
+                      <div className="max-h-[48vh] overflow-y-auto pr-1">
                         <p className="whitespace-pre-wrap break-words">{message.content}</p>
                       </div>
                     )}
