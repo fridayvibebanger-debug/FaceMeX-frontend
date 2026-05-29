@@ -208,27 +208,34 @@ function buildEmailTemplates(input: {
 
 I hope you are well.
 
-I am interested in the ${role} opportunity at ${company}. I would like to apply or send my CV for consideration.
+I am interested in the ${role} opportunity at ${company}. I would like to apply or submit my CV for consideration.
 
-Please may you advise where I should send my CV, or who the correct person/department is for this application?
+Please may you advise where I can send my CV or who the correct contact person is for this opportunity.
 
 Kind regards`;
 
-const followUpEmail = `Good day${person ? ` ${person}` : ''},
+  const followUpEmail = `Good day${person ? ` ${person}` : ''},
 
 I hope you are well.
 
-I am following up on my application for the ${role} opportunity at ${company}.
+I am following up regarding my application for the ${role} opportunity at ${company}.
 
-I would appreciate any update when available.
+I would appreciate any update regarding the recruitment process when available.
+
+Thank you for your time and consideration.
 
 Kind regards`;
 
-const whatsappApply = `Good day${person ? ` ${person}` : ''}. I hope you are well. I am interested in the ${role} opportunity at ${company}. Please may I ask where I can send my CV or who I should contact for the application?`;
+  const whatsappApply = `Good day${person ? ` ${person}` : ''}. I hope you are well. I am interested in the ${role} opportunity at ${company}. Please may I ask where I can send my CV or who I should contact regarding the application? Thank you.`;
 
-const whatsappFollowUp = `Good day${person ? ` ${person}` : ''}. I hope you are well. I am following up on my application for the ${role} opportunity at ${company}. I would appreciate any update when available.`;
+  const whatsappFollowUp = `Good day${person ? ` ${person}` : ''}. I hope you are well. I am following up on my application for the ${role} opportunity at ${company}. I would appreciate any update when available. Thank you for your time.`;
 
-return { applyEmail, followUpEmail, whatsappApply, whatsappFollowUp };
+  return {
+    applyEmail,
+    followUpEmail,
+    whatsappApply,
+    whatsappFollowUp,
+  };
 }
 
 const premiumCard =
@@ -501,7 +508,7 @@ export default function AIJobAssistantPage() {
         tier: currentTier,
         dailyLimit,
         instruction:
-          'You are FaceMeX Workspace for Jobseekers. Help with latest vacancies, interview prep, CV emails, research, applications, career planning, job search strategy, company research, follow-ups, and any practical jobseeker question. Always call DeepSeek to respond. Be practical, clear, and useful. Do not show raw links unless the user asks for links. If researching jobs, suggest using Vacancy Radar and explain what to search.',
+          'You are FaceMeX Workspace for Jobseekers. Help with latest vacancies, interview prep, CV emails, WhatsApp job messages, research, applications, career planning, job search strategy, company research, follow-ups, and any practical jobseeker question. Always call DeepSeek to respond. Be practical, clear, and useful. Do not show raw links unless the user asks for links. If researching jobs, suggest using Vacancy Radar and explain what to search.',
       })) as any;
 
       const answer =
@@ -638,7 +645,7 @@ export default function AIJobAssistantPage() {
             </h1>
 
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-white/55">
-              Latest vacancies, interview prep, email CV, research, applications, and more.
+              Latest vacancies, interview prep, email CV, WhatsApp messages, research, applications, and more.
             </p>
           </div>
 
@@ -779,7 +786,7 @@ export default function AIJobAssistantPage() {
                   Copy application email
                 </Button>
 
-                <Button variant="outline" className={`${premiumOutlineButton} w-full justify-start`} onClick={() => copyText(emailTemplates.followUp)}>
+                <Button variant="outline" className={`${premiumOutlineButton} w-full justify-start`} onClick={() => copyText(emailTemplates.followUpEmail)}>
                   <Mail className="mr-2 h-4 w-4" />
                   Copy follow-up email
                 </Button>
@@ -807,7 +814,7 @@ export default function AIJobAssistantPage() {
             </h2>
 
             <p className="mt-2 max-w-md text-sm text-slate-500 dark:text-white/55">
-              Latest vacancies, interview prep, email CV, research, applications, and more.
+              Latest vacancies, interview prep, email CV, WhatsApp messages, research, applications, and more.
             </p>
 
             <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -819,7 +826,7 @@ export default function AIJobAssistantPage() {
                 Interview prep
               </Button>
 
-              <Button onClick={() => quickAsk('Write an email to send my CV for a job.')} variant="outline" className="rounded-full">
+              <Button onClick={() => quickAsk('Write an email and WhatsApp message to send my CV for a job.')} variant="outline" className="rounded-full">
                 Email CV
               </Button>
 
@@ -896,7 +903,7 @@ export default function AIJobAssistantPage() {
               <div>
                 <div className="text-sm font-semibold">FaceMeX Workspace for Jobseekers</div>
                 <div className="text-[11px] text-slate-500 dark:text-white/45">
-                  Latest vacancies, interview prep, email CV, and more
+                  Latest vacancies, interview prep, email CV, WhatsApp messages, and more
                 </div>
               </div>
             </div>
@@ -919,14 +926,14 @@ export default function AIJobAssistantPage() {
                   </h2>
 
                   <p className="mt-2 max-w-md text-sm text-slate-500 dark:text-white/55">
-                    Latest vacancies, interview prep, email CV, research, applications, and more.
+                    Latest vacancies, interview prep, email CV, WhatsApp messages, research, applications, and more.
                   </p>
 
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {[
                       ['Latest vacancies', 'Find latest vacancies near me and help me apply smart.'],
                       ['Interview prep', 'Help me prepare for an interview.'],
-                      ['Email CV', 'Write an email to send my CV for a job.'],
+                      ['Email CV', 'Write an email and WhatsApp message to send my CV for a job.'],
                       ['Research', 'Help me research jobs, companies, and opportunities.'],
                     ].map(([label, text]) => (
                       <Button key={label} variant="outline" onClick={() => setPrompt(text)} className="rounded-full">
