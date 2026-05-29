@@ -5,7 +5,6 @@ import {
   BellRing,
   Briefcase,
   Building2,
-  ChevronRight,
   Crown,
   ExternalLink,
   FileText,
@@ -17,6 +16,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 
 import Navbar from '@/components/layout/Navbar';
@@ -34,6 +34,7 @@ type SearchLink = {
   label: string;
   url: string;
   note?: string;
+  image?: string;
   category?: 'jobs' | 'social' | 'government' | 'interview' | 'email' | 'nearby';
 };
 
@@ -84,12 +85,7 @@ function normalizeTier(tier?: string | null) {
 }
 
 function isCreatorPlusTier(tier: string, hasTier?: (tier: string) => boolean) {
-  return (
-    hasTier?.('creator') ||
-    tier === 'creator' ||
-    tier === 'business' ||
-    tier === 'exclusive'
-  );
+  return hasTier?.('creator') || tier === 'creator' || tier === 'business' || tier === 'exclusive';
 }
 
 function getDailyLimit(tier: string, hasTier?: (tier: string) => boolean) {
@@ -122,6 +118,15 @@ function increaseUsage(tier: string) {
   }
 }
 
+function faviconFor(url: string) {
+  try {
+    const domain = new URL(url).origin;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+  } catch {
+    return '';
+  }
+}
+
 function buildVacancySources(input: {
   role: string;
   location: string;
@@ -133,26 +138,12 @@ function buildVacancySources(input: {
   const industry = clean(input.industry);
   const workMode = clean(input.workMode);
 
-  const query = encodeSearchQuery([
-    role,
-    industry,
-    location,
-    workMode,
-    'vacancies jobs hiring apply',
-  ]);
-
-  const recentQuery = encodeSearchQuery([
-    role,
-    industry,
-    location,
-    workMode,
-    'latest vacancies apply now',
-  ]);
-
+  const query = encodeSearchQuery([role, industry, location, workMode, 'vacancies jobs hiring apply']);
+  const recentQuery = encodeSearchQuery([role, industry, location, workMode, 'latest vacancies apply now']);
   const roleTag = safeTag(role);
   const locationTag = safeTag(location || 'south africa');
 
-  return [
+  const links: SearchLink[] = [
     {
       label: 'Indeed South Africa',
       url: `https://za.indeed.com/jobs?q=${query}`,
@@ -225,27 +216,19 @@ function buildVacancySources(input: {
       note: 'Uses browser/location signals to show nearby vacancies.',
       category: 'nearby',
     },
-  ] as SearchLink[];
+  ];
+
+  return links.map((link) => ({ ...link, image: faviconFor(link.url) }));
 }
 
 function buildGodfreyPandekaRadar(input: { role: string; location: string }) {
   const role = clean(input.role) || 'jobs';
   const location = clean(input.location) || 'South Africa';
 
-  const query = encodeSearchQuery([
-    'Godfrey Pandeka',
-    role,
-    location,
-    'vacancies jobs hiring apply',
-  ]);
+  const query = encodeSearchQuery(['Godfrey Pandeka', role, location, 'vacancies jobs hiring apply']);
+  const generalQuery = encodeSearchQuery(['Godfrey Pandeka', 'job vacancies', 'South Africa']);
 
-  const generalQuery = encodeSearchQuery([
-    'Godfrey Pandeka',
-    'job vacancies',
-    'South Africa',
-  ]);
-
-  return [
+  const links: SearchLink[] = [
     {
       label: 'Godfrey Pandeka vacancy posts',
       url: `https://www.facebook.com/search/posts/?q=${query}`,
@@ -264,7 +247,9 @@ function buildGodfreyPandekaRadar(input: { role: string; location: string }) {
       note: 'Nearby public vacancy posts on Facebook.',
       category: 'social',
     },
-  ] as SearchLink[];
+  ];
+
+  return links.map((link) => ({ ...link, image: faviconFor(link.url) }));
 }
 
 function buildInterviewAnswer(input: {
@@ -297,12 +282,6 @@ function buildInterviewAnswer(input: {
 
 5. Why should we hire you?
 “You should hire me because I am serious about the opportunity, I am willing to learn, I respect time, and I will do the work properly. I may still be growing, but I am committed and dependable.”
-
-6. Questions to ask the employer:
-• What does success look like in this role?
-• What are the working hours?
-• Is there training for new employees?
-• When can I expect feedback?
 
 Quick rule:
 Do not sound desperate. Sound prepared, respectful, and ready.`;
@@ -395,14 +374,10 @@ Safety tip:
 Use official company emails or verified pages first. Avoid paying any “registration fee” or “placement fee”.`;
   }
 
-  if (
-    prompt.includes('facebook') ||
-    prompt.includes('godfrey') ||
-    prompt.includes('pandeka')
-  ) {
+  if (prompt.includes('facebook') || prompt.includes('godfrey') || prompt.includes('pandeka')) {
     return `Facebook vacancy method:
 
-1. Open the Godfrey Pandeka vacancy search cards below.
+1. Open the vacancy search cards in the Vacancy Radar.
 2. Search posts, not only pages.
 3. Sort by recent if Facebook allows it.
 4. Look for posts with:
@@ -419,16 +394,7 @@ FaceMeX cannot privately pull Facebook posts without official Facebook API acces
 
   return `Job search plan for ${role} in ${location}
 
-1. Search daily using the vacancy cards below:
-• Indeed South Africa
-• PNet
-• DPSA government vacancies
-• Careers24
-• LinkedIn
-• Google recent vacancies
-• Facebook vacancy posts
-• Facebook job groups
-
+1. Search daily using the Vacancy Radar.
 2. Use these keywords:
 • ${role} vacancies ${location}
 • ${role} hiring ${location}
@@ -466,7 +432,9 @@ const premiumOutlineButton =
 
 export default function AIJobAssistantPage() {
   const navigate = useNavigate();
+
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const hideComposerTimerRef = useRef<number | null>(null);
 
   const { tier, hasTier } = useUserStore();
 
@@ -496,6 +464,7 @@ export default function AIJobAssistantPage() {
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [geoLabel, setGeoLabel] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [composerVisible, setComposerVisible] = useState(true);
 
   const remainingUses = useMemo(() => {
     if (dailyLimit === null) return null;
@@ -536,7 +505,6 @@ export default function AIJobAssistantPage() {
         role: 'assistant',
         content:
           'Welcome to FaceMeX Job Assistant. Tell me the job you want, your location, and your experience level. I’ll help you search, prepare, and apply professionally.',
-        links: firstCards.slice(0, 6),
         createdAt: new Date().toISOString(),
       },
     ]);
@@ -554,7 +522,43 @@ export default function AIJobAssistantPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    setComposerVisible(true);
   }, [messages.length, busy]);
+
+  useEffect(() => {
+    return () => {
+      if (hideComposerTimerRef.current) {
+        window.clearTimeout(hideComposerTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleChatScroll = () => {
+    if (document.activeElement?.id === 'job-assistant-prompt') return;
+
+    setComposerVisible(false);
+
+    if (hideComposerTimerRef.current) {
+      window.clearTimeout(hideComposerTimerRef.current);
+    }
+
+    hideComposerTimerRef.current = window.setTimeout(() => {
+      setComposerVisible(true);
+    }, 850);
+  };
+
+  const revealComposer = () => {
+    if (hideComposerTimerRef.current) {
+      window.clearTimeout(hideComposerTimerRef.current);
+    }
+
+    setComposerVisible(true);
+
+    window.setTimeout(() => {
+      const el = document.getElementById('job-assistant-prompt');
+      el?.focus();
+    }, 80);
+  };
 
   const saveReminders = (next: Reminder[]) => {
     setReminders(next);
@@ -562,6 +566,16 @@ export default function AIJobAssistantPage() {
     try {
       localStorage.setItem('facemex_job_alert_reminders', JSON.stringify(next));
     } catch {}
+  };
+
+  const deleteReminder = (id: string) => {
+    const next = reminders.filter((reminder) => reminder.id !== id);
+    saveReminders(next);
+
+    toast({
+      title: 'Alert deleted',
+      description: 'Saved vacancy alert preference removed.',
+    });
   };
 
   const refreshSources = () => {
@@ -686,6 +700,7 @@ export default function AIJobAssistantPage() {
         title: 'Ask something first',
         description: 'Type your job question or fill in role/location.',
       });
+      revealComposer();
       return;
     }
 
@@ -702,19 +717,21 @@ export default function AIJobAssistantPage() {
     }
 
     const userQuestion =
-      cleanPrompt ||
-      `Help me find ${role || 'jobs'} in ${location || 'South Africa'}.`;
+      cleanPrompt || `Help me find ${role || 'jobs'} in ${location || 'South Africa'}.`;
 
-    const userMessage: ChatMessage = {
-      id: safeId(),
-      role: 'user',
-      content: userQuestion,
-      createdAt: new Date().toISOString(),
-    };
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: safeId(),
+        role: 'user',
+        content: userQuestion,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
 
-    setMessages((prev) => [...prev, userMessage]);
     setPrompt('');
     setBusy(true);
+    setComposerVisible(false);
 
     const links = [
       ...buildVacancySources({
@@ -746,7 +763,7 @@ export default function AIJobAssistantPage() {
         tier: currentTier,
         dailyLimit,
         instruction:
-          'You are FaceMeX Job Assistant. Answer like ChatGPT but focused only on jobs, CVs, interviews, job search, applications, vacancies, emails, follow-ups, career planning, PNet, Indeed, DPSA government vacancies, LinkedIn, Facebook vacancy search, and South African opportunities. Be practical, safe, and concise. Do not claim you scraped Facebook. If asked about Godfrey Pandeka vacancies, explain that you can open live Facebook search links and help verify posts.',
+          'You are FaceMeX Job Assistant. Answer like ChatGPT but focused only on jobs, CVs, interviews, job search, applications, vacancies, emails, follow-ups, career planning, PNet, Indeed, DPSA government vacancies, LinkedIn, Facebook vacancy search, and South African opportunities. Be practical, safe, and concise. Do not claim you scraped Facebook. If asked about job sources, tell the user to use the Vacancy Radar cards on the page.',
       })) as any;
 
       const answer =
@@ -764,15 +781,15 @@ export default function AIJobAssistantPage() {
           contactPerson,
         });
 
-      const assistantMessage: ChatMessage = {
-        id: safeId(),
-        role: 'assistant',
-        content: answer,
-        links,
-        createdAt: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: safeId(),
+          role: 'assistant',
+          content: answer,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
 
       if (dailyLimit !== null) {
         setUsageCount(increaseUsage(currentTier));
@@ -806,7 +823,6 @@ export default function AIJobAssistantPage() {
           id: safeId(),
           role: 'assistant',
           content: answer,
-          links,
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -832,15 +848,13 @@ export default function AIJobAssistantPage() {
       });
     } finally {
       setBusy(false);
+      setComposerVisible(true);
     }
   };
 
   const askQuick = (text: string) => {
     setPrompt(text);
-    window.setTimeout(() => {
-      const el = document.getElementById('job-assistant-prompt');
-      el?.focus();
-    }, 0);
+    revealComposer();
   };
 
   const copyText = async (text: string) => {
@@ -872,7 +886,7 @@ export default function AIJobAssistantPage() {
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0f0f0f] dark:text-white">
       <Navbar />
 
-      <main className="mx-auto w-full max-w-6xl overflow-x-hidden px-3 pb-[calc(env(safe-area-inset-bottom)+8rem)] pt-16 sm:px-5 md:pt-20">
+      <main className="mx-auto w-full max-w-6xl overflow-x-hidden px-3 pb-24 pt-16 sm:px-5 md:pt-20">
         <div className="mb-5 flex w-full flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-black/5 bg-white/75 px-3 py-1.5 text-xs text-slate-500 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.05] dark:text-white/60">
@@ -926,106 +940,58 @@ export default function AIJobAssistantPage() {
               </CardHeader>
 
               <CardContent className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500 dark:text-white/55">
-                    Target role
-                  </label>
+                <Input
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="Driver, Admin, General Worker"
+                  className={premiumInput}
+                />
+
+                <Input
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="Tzaneen, Polokwane, Johannesburg"
+                  className={premiumInput}
+                />
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Input
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    placeholder="Driver, Admin, General Worker"
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    placeholder="Industry"
                     className={premiumInput}
                   />
-                </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500 dark:text-white/55">
-                    Location
-                  </label>
-                  <Input
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="Tzaneen, Polokwane, Johannesburg"
-                    className={premiumInput}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-500 dark:text-white/55">
-                      Industry
-                    </label>
-                    <Input
-                      value={industry}
-                      onChange={(e) => setIndustry(e.target.value)}
-                      placeholder="Retail"
-                      className={premiumInput}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-500 dark:text-white/55">
-                      Work mode
-                    </label>
-                    <select
-                      value={workMode}
-                      onChange={(e) => setWorkMode(e.target.value)}
-                      className={premiumSelect}
-                    >
-                      <option value="">Any</option>
-                      <option value="on-site">On-site</option>
-                      <option value="remote">Remote</option>
-                      <option value="hybrid">Hybrid</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-500 dark:text-white/55">
-                    Experience level
-                  </label>
-                  <select
-                    value={experienceLevel}
-                    onChange={(e) => setExperienceLevel(e.target.value)}
-                    className={premiumSelect}
-                  >
-                    <option value="">Not specified</option>
-                    <option value="student / intern">Student / Intern</option>
-                    <option value="entry level">Entry level</option>
-                    <option value="junior">Junior</option>
-                    <option value="mid">Mid</option>
-                    <option value="senior">Senior</option>
-                    <option value="manager">Manager</option>
+                  <select value={workMode} onChange={(e) => setWorkMode(e.target.value)} className={premiumSelect}>
+                    <option value="">Any work mode</option>
+                    <option value="on-site">On-site</option>
+                    <option value="remote">Remote</option>
+                    <option value="hybrid">Hybrid</option>
                   </select>
                 </div>
 
+                <select
+                  value={experienceLevel}
+                  onChange={(e) => setExperienceLevel(e.target.value)}
+                  className={premiumSelect}
+                >
+                  <option value="">Experience level</option>
+                  <option value="student / intern">Student / Intern</option>
+                  <option value="entry level">Entry level</option>
+                  <option value="junior">Junior</option>
+                  <option value="mid">Mid</option>
+                  <option value="senior">Senior</option>
+                  <option value="manager">Manager</option>
+                </select>
+
                 <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={enableNearbyJobs}
-                    disabled={geoBusy}
-                    className={premiumOutlineButton}
-                  >
-                    {geoBusy ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <MapPin className="mr-2 h-4 w-4" />
-                    )}
+                  <Button type="button" variant="outline" onClick={enableNearbyJobs} disabled={geoBusy} className={premiumOutlineButton}>
+                    {geoBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
                     Nearby
                   </Button>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={enableVacancyAlerts}
-                    className={premiumOutlineButton}
-                  >
-                    {alertEnabled ? (
-                      <BellRing className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Bell className="mr-2 h-4 w-4" />
-                    )}
+                  <Button type="button" variant="outline" onClick={enableVacancyAlerts} className={premiumOutlineButton}>
+                    {alertEnabled ? <BellRing className="mr-2 h-4 w-4" /> : <Bell className="mr-2 h-4 w-4" />}
                     Alerts
                   </Button>
                 </div>
@@ -1056,29 +1022,41 @@ export default function AIJobAssistantPage() {
               </CardHeader>
 
               <CardContent className="space-y-3">
-                {activeRadarCard ? (
+                {activeRadarCard && (
                   <a
                     href={activeRadarCard.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="block rounded-[26px] border border-white/10 bg-gradient-to-br from-slate-950 via-slate-900 to-black p-4 text-white shadow-[0_18px_50px_rgba(15,23,42,0.25)] transition active:scale-[0.99]"
+                    className="block rounded-[28px] border border-black/5 bg-white p-4 shadow-sm transition hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.06]"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="inline-flex rounded-full bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide text-white/60">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-slate-100 p-3 dark:bg-white/[0.08]">
+                        {activeRadarCard.image ? (
+                          <img
+                            src={activeRadarCard.image}
+                            alt={activeRadarCard.label}
+                            className="h-10 w-10 rounded-xl object-contain"
+                          />
+                        ) : (
+                          <Briefcase className="h-8 w-8 text-slate-400" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500 dark:bg-white/[0.08] dark:text-white/50">
                           {activeRadarCard.category || 'jobs'}
                         </div>
 
-                        <h3 className="mt-3 text-lg font-semibold leading-tight">
+                        <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-tight">
                           {activeRadarCard.label}
                         </h3>
 
-                        <p className="mt-2 text-xs leading-relaxed text-white/60">
+                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50">
                           {activeRadarCard.note}
                         </p>
                       </div>
 
-                      <ExternalLink className="h-4 w-4 shrink-0 text-white/60" />
+                      <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
                     </div>
 
                     <div className="mt-4 flex gap-1">
@@ -1086,34 +1064,35 @@ export default function AIJobAssistantPage() {
                         <span
                           key={index}
                           className={`h-1.5 rounded-full transition-all ${
-                            index === activeCard ? 'w-6 bg-white' : 'w-1.5 bg-white/25'
+                            index === activeCard
+                              ? 'w-6 bg-slate-950 dark:bg-white'
+                              : 'w-1.5 bg-slate-300 dark:bg-white/25'
                           }`}
                         />
                       ))}
                     </div>
                   </a>
-                ) : (
-                  <p className="text-sm text-slate-500">No vacancy cards yet.</p>
                 )}
 
-                <div className="grid gap-2">
-                  {sourceLinks.slice(0, 5).map((link) => (
-                    <a
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {sourceLinks.slice(0, 8).map((link, index) => (
+                    <button
                       key={link.url}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white/70 px-3 py-2 text-sm shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
+                      type="button"
+                      onClick={() => setActiveCard(index)}
+                      className={`flex min-w-[76px] flex-col items-center gap-2 rounded-2xl border px-3 py-3 text-xs transition ${
+                        activeCard === index
+                          ? 'border-slate-950 bg-slate-950 text-white dark:border-white dark:bg-white dark:text-black'
+                          : 'border-black/5 bg-white/70 text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60'
+                      }`}
                     >
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{link.label}</div>
-                        <div className="truncate text-[11px] text-slate-500 dark:text-white/45">
-                          {link.note}
-                        </div>
-                      </div>
-
-                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
-                    </a>
+                      {link.image ? (
+                        <img src={link.image} alt={link.label} className="h-7 w-7 rounded-lg object-contain" />
+                      ) : (
+                        <Briefcase className="h-6 w-6" />
+                      )}
+                      <span className="line-clamp-1 max-w-[60px]">{link.label}</span>
+                    </button>
                   ))}
                 </div>
               </CardContent>
@@ -1128,36 +1107,15 @@ export default function AIJobAssistantPage() {
               </CardHeader>
 
               <CardContent className="space-y-3">
-                <Input
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                  placeholder="Company name"
-                  className={premiumInput}
-                />
+                <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company name" className={premiumInput} />
+                <Input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} placeholder="Contact person, optional" className={premiumInput} />
 
-                <Input
-                  value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)}
-                  placeholder="Contact person, optional"
-                  className={premiumInput}
-                />
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={`${premiumOutlineButton} w-full justify-start`}
-                  onClick={() => copyText(emailTemplates.apply)}
-                >
+                <Button type="button" variant="outline" className={`${premiumOutlineButton} w-full justify-start`} onClick={() => copyText(emailTemplates.apply)}>
                   <FileText className="mr-2 h-4 w-4" />
                   Copy application email
                 </Button>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={`${premiumOutlineButton} w-full justify-start`}
-                  onClick={() => copyText(emailTemplates.followUp)}
-                >
+                <Button type="button" variant="outline" className={`${premiumOutlineButton} w-full justify-start`} onClick={() => copyText(emailTemplates.followUp)}>
                   <Mail className="mr-2 h-4 w-4" />
                   Copy follow-up email
                 </Button>
@@ -1180,8 +1138,12 @@ export default function AIJobAssistantPage() {
             </CardHeader>
 
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-5">
-                <div className="flex flex-wrap gap-2">
+              <div
+                onScroll={handleChatScroll}
+                onTouchMove={handleChatScroll}
+                className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 pb-8 sm:px-5"
+              >
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {[
                     ['Latest vacancies', 'Find latest vacancies near me and show the best places to search.'],
                     ['Interview prep', 'Help me prepare for an interview.'],
@@ -1194,7 +1156,7 @@ export default function AIJobAssistantPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => askQuick(text)}
-                      className="rounded-full border-black/10 bg-white/80 px-4 text-xs shadow-sm hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.1]"
+                      className="shrink-0 rounded-full border-black/10 bg-white/80 px-4 text-xs shadow-sm hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.05] dark:hover:bg-white/[0.1]"
                     >
                       {label}
                     </Button>
@@ -1202,10 +1164,7 @@ export default function AIJobAssistantPage() {
                 </div>
 
                 {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
+                  <div key={message.id} className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
                       className={`max-w-[92%] rounded-[26px] px-4 py-3 text-sm leading-relaxed shadow-sm sm:max-w-[82%] ${
                         message.role === 'user'
@@ -1213,32 +1172,9 @@ export default function AIJobAssistantPage() {
                           : 'border border-black/5 bg-white text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
-
-                      {message.links && message.links.length > 0 && (
-                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                          {message.links.slice(0, 6).map((link) => (
-                            <a
-                              key={link.url}
-                              href={link.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="rounded-2xl border border-black/5 bg-slate-50 px-3 py-2 text-xs transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"
-                            >
-                              <div className="flex items-center justify-between gap-2 font-semibold">
-                                <span className="truncate">{link.label}</span>
-                                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                              </div>
-
-                              {link.note && (
-                                <div className="mt-1 text-slate-500 dark:text-white/45">
-                                  {link.note}
-                                </div>
-                              )}
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                      <div className="max-h-[420px] overflow-y-auto pr-1">
+                        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1271,15 +1207,24 @@ export default function AIJobAssistantPage() {
               {reminders.map((reminder) => (
                 <div
                   key={reminder.id}
-                  className="rounded-2xl border border-black/5 bg-white/70 p-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+                  className="flex items-start justify-between gap-3 rounded-2xl border border-black/5 bg-white/70 p-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
                 >
-                  <div className="font-semibold">{reminder.role}</div>
-                  <div className="text-xs text-slate-500 dark:text-white/45">
-                    Location: {reminder.location}
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{reminder.role}</div>
+                    <div className="text-xs text-slate-500 dark:text-white/45">Location: {reminder.location}</div>
+                    <div className="text-xs text-slate-500 dark:text-white/45">Frequency: {reminder.frequency}</div>
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-white/45">
-                    Frequency: {reminder.frequency}
-                  </div>
+
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => deleteReminder(reminder.id)}
+                    className="h-9 w-9 shrink-0 rounded-full text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                    aria-label="Delete alert"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </CardContent>
@@ -1290,25 +1235,32 @@ export default function AIJobAssistantPage() {
           <CardContent className="flex flex-col gap-2 p-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between dark:text-white/45">
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 shrink-0" />
-              <span>
-                Real background vacancy notifications can be added later with server cron and push notifications.
-              </span>
+              <span>Real background vacancy notifications can be added later with server cron and push notifications.</span>
             </div>
 
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => navigate('/pricing')}
-              className="w-full rounded-full sm:w-auto"
-            >
+            <Button size="sm" variant="ghost" onClick={() => navigate('/pricing')} className="w-full rounded-full sm:w-auto">
               View tiers
             </Button>
           </CardContent>
         </Card>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-[#f7f7f5]/90 px-3 py-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#0f0f0f]/90">
-        <div className="mx-auto max-w-3xl rounded-[28px] border border-black/10 bg-white p-2 shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#1a1a1a]">
+      {!composerVisible && (
+        <button
+          type="button"
+          onClick={revealComposer}
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] right-4 z-50 rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-[0_14px_40px_rgba(15,23,42,0.25)] transition active:scale-95 dark:bg-white dark:text-black"
+        >
+          Ask
+        </button>
+      )}
+
+      <div
+        className={`fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-40 px-3 transition-all duration-300 ${
+          composerVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-8 opacity-0'
+        }`}
+      >
+        <div className="mx-auto max-w-3xl rounded-[28px] border border-black/10 bg-white/95 p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1a1a1a]/95">
           {!canAsk && (
             <div className="mb-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
               Daily search limit reached. Free gets 4/day, Pro gets 20/day, Creator+ gets unlimited.
@@ -1318,6 +1270,7 @@ export default function AIJobAssistantPage() {
           <Textarea
             id="job-assistant-prompt"
             value={prompt}
+            onFocus={() => setComposerVisible(true)}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Ask FaceMeX about jobs, CVs, interviews, applications, or vacancies..."
             className="max-h-40 min-h-[56px] resize-none border-0 bg-transparent px-3 py-3 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
