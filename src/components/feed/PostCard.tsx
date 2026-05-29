@@ -20,12 +20,12 @@ import {
   MessageCircle,
   FileText,
   Lock,
+  Unlock,
   ChevronLeft,
   ChevronRight,
-  CalendarDays,
   ShieldCheck,
   Wand2,
-  Briefcase,
+  Download,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -60,6 +60,9 @@ type PostDocumentItem = {
   previewPages: number;
 };
 
+const CV_BUILDER_ROUTE = '/ai-resume';
+const CAREER_WORKSPACE_ROUTE = '/career-workspace';
+
 function cleanString(value: unknown) {
   if (typeof value !== 'string') return '';
   return value.trim();
@@ -78,7 +81,7 @@ function normalizeStringArray(value: unknown): string[] {
         return parsed.map((item) => cleanString(item)).filter(Boolean);
       }
     } catch {
-      // fall back below
+      // continue
     }
 
     if (value.includes(',')) {
@@ -317,15 +320,58 @@ function clampStyle(lines: number): CSSProperties {
   };
 }
 
+function safeFileName(name: string) {
+  return String(name || 'facemex-image')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 70);
+}
+
 function DocumentPreview({
   document,
+  locked,
+  canControl,
+  onToggleLock,
   onOpenPages,
+  onSaveImage,
 }: {
   document: PostDocumentItem;
+  locked: boolean;
+  canControl: boolean;
+  onToggleLock: () => void;
   onOpenPages: (pages: string[], startIndex: number) => void;
+  onSaveImage: (src: string, name?: string) => void;
 }) {
   const totalPages = Math.max(1, document.totalPages || document.pages.length || 1);
   const firstPage = document.pages[0] || '';
+
+  if (locked && !canControl) {
+    return (
+      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background">
+        <div className="relative h-[210px] bg-muted/40 sm:h-[300px]">
+          {firstPage ? (
+            <img
+              src={firstPage}
+              alt={`${document.title} preview`}
+              className="h-full w-full object-contain blur-md"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <FileText className="h-8 w-8 text-muted-foreground" />
+            </div>
+          )}
+
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
+            <Lock className="mb-2 h-7 w-7" />
+            <p className="text-sm font-semibold">Images locked by author</p>
+            <p className="mt-1 text-xs text-white/70">This post can be viewed, but images are protected.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background">
@@ -350,26 +396,53 @@ function DocumentPreview({
         </div>
       )}
 
-      {document.pages.length > 1 ? (
+      <div className="grid grid-cols-2 border-t border-border/70">
+        {document.pages.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => onOpenPages(document.pages, 0)}
+            className="flex h-10 items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white"
+          >
+            <FileText className="h-4 w-4" />
+            View {document.pages.length} images
+          </button>
+        ) : document.url ? (
+          <a
+            href={document.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-10 items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white"
+          >
+            <FileText className="h-4 w-4" />
+            Open document
+          </a>
+        ) : (
+          <div className="flex h-10 items-center justify-center bg-slate-950 text-[13px] font-semibold text-white">
+            Document
+          </div>
+        )}
+
         <button
           type="button"
-          onClick={() => onOpenPages(document.pages, 0)}
-          className="flex h-10 w-full items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white"
+          onClick={() => firstPage && onSaveImage(firstPage, document.title)}
+          disabled={!firstPage}
+          className="flex h-10 items-center justify-center gap-2 bg-background text-[13px] font-semibold text-foreground disabled:opacity-40"
         >
-          <FileText className="h-4 w-4" />
-          View {document.pages.length} document images
+          <Download className="h-4 w-4" />
+          Save image
         </button>
-      ) : document.url ? (
-        <a
-          href={document.url}
-          target="_blank"
-          rel="noreferrer"
-          className="flex h-10 w-full items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white"
+      </div>
+
+      {canControl && (
+        <button
+          type="button"
+          onClick={onToggleLock}
+          className="flex h-9 w-full items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground"
         >
-          <FileText className="h-4 w-4" />
-          Open document
-        </a>
-      ) : null}
+          {locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+          {locked ? 'Unlock images' : 'Lock images'}
+        </button>
+      )}
 
       {totalPages > document.previewPages && (
         <div className="flex items-center gap-1 px-3 py-2 text-[11px] text-muted-foreground">
@@ -410,6 +483,8 @@ export default function PostCard({ post }: PostCardProps) {
   const [lightboxItems, setLightboxItems] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
+  const [imagesLocked, setImagesLocked] = useState(false);
+
   const audioStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -426,7 +501,6 @@ export default function PostCard({ post }: PostCardProps) {
   const cleanPostContent = useMemo(() => getCleanPostContent(post.content), [post.content]);
 
   const hasMediaOrDocs = mediaItems.length > 0 || documentItems.length > 0;
-
   const collapseLines = hasMediaOrDocs ? 2 : 10;
 
   const shouldCollapsePost = hasMediaOrDocs
@@ -475,7 +549,136 @@ export default function PostCard({ post }: PostCardProps) {
     }
   }, [post.id]);
 
+  useEffect(() => {
+    try {
+      const serverLocked =
+        (post as any).imagesLocked === true ||
+        (post as any).images_locked === true ||
+        (post as any).mediaLocked === true ||
+        (post as any).media_locked === true;
+
+      const raw = localStorage.getItem(`facemex:post_images_locked:${post.id}`);
+      const localLocked = raw === 'true';
+
+      setImagesLocked(serverLocked || localLocked);
+    } catch {
+      setImagesLocked(false);
+    }
+  }, [post.id, post]);
+
+  const toggleImagesLocked = () => {
+    if (!isOwner) return;
+
+    setImagesLocked((prev) => {
+      const next = !prev;
+
+      try {
+        localStorage.setItem(`facemex:post_images_locked:${post.id}`, String(next));
+      } catch {}
+
+      return next;
+    });
+  };
+
+  const saveImageToDevice = async (src: string, name = 'facemex-image') => {
+    if (!src) return;
+
+    try {
+      const response = await fetch(src);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${safeFileName(name)}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch {
+      window.open(src, '_blank', 'noopener,noreferrer');
+      alert('Image opened. Long press the image and choose “Download image” or “Save image”.');
+    }
+  };
+
+  const saveCurrentLightboxImage = () => {
+    if (!lightboxSrc) return;
+    saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
+  };
+
+  const goCreateCv = () => {
+    try {
+      localStorage.setItem(
+        'facemex:post_action_context',
+        JSON.stringify({
+          action: 'create-cv',
+          postId: post.id,
+          content: cleanPostContent,
+          createdAt: new Date().toISOString(),
+        })
+      );
+    } catch {}
+
+    navigate(CV_BUILDER_ROUTE, {
+      state: {
+        fromPost: post.id,
+        content: cleanPostContent,
+      },
+    });
+  };
+
+  const goApplyMessage = () => {
+    const prompt = `Write a short email and WhatsApp message to apply for this opportunity:\n\n${cleanPostContent}`;
+
+    try {
+      localStorage.setItem(
+        'facemex:career_workspace_prompt',
+        JSON.stringify({
+          type: 'apply-message',
+          postId: post.id,
+          prompt,
+          createdAt: new Date().toISOString(),
+        })
+      );
+    } catch {}
+
+    navigate(CAREER_WORKSPACE_ROUTE, {
+      state: {
+        prompt,
+        mode: 'apply-message',
+        postId: post.id,
+      },
+    });
+  };
+
+  const goCheckJob = () => {
+    const prompt = `Check if this job or opportunity looks safe or suspicious. Give me a simple safety checklist:\n\n${cleanPostContent}`;
+
+    try {
+      localStorage.setItem(
+        'facemex:career_workspace_prompt',
+        JSON.stringify({
+          type: 'check-job',
+          postId: post.id,
+          prompt,
+          createdAt: new Date().toISOString(),
+        })
+      );
+    } catch {}
+
+    navigate(CAREER_WORKSPACE_ROUTE, {
+      state: {
+        prompt,
+        mode: 'check-job',
+        postId: post.id,
+      },
+    });
+  };
+
   const openLightbox = (items: string[] | string, startIndex = 0) => {
+    if (imagesLocked && !isOwner) return;
+
     const gallery = Array.isArray(items)
       ? items.filter(Boolean)
       : [items].filter(Boolean);
@@ -504,6 +707,8 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const openMediaLightbox = (src: string) => {
+    if (imagesLocked && !isOwner) return;
+
     const imageGallery = mediaItems
       .filter((item) => item.type === 'image')
       .map((item) => item.src);
@@ -798,9 +1003,61 @@ export default function PostCard({ post }: PostCardProps) {
       <img
         src={item.src}
         alt={`Post media ${index + 1}`}
-        className="h-full w-full object-contain bg-white"
+        className={`h-full w-full object-contain bg-white ${imagesLocked && !isOwner ? 'blur-md' : ''}`}
         loading="lazy"
       />
+    );
+  };
+
+  const MediaLockOverlay = () => {
+    if (!imagesLocked || isOwner) return null;
+
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
+        <Lock className="mb-2 h-7 w-7" />
+        <p className="text-sm font-semibold">Images locked by author</p>
+        <p className="mt-1 text-xs text-white/70">Image saving and full view are disabled.</p>
+      </div>
+    );
+  };
+
+  const renderMediaFooter = (imageItems: PostMediaItem[]) => {
+    const firstImage = imageItems[0]?.src || '';
+    const imageCount = imageItems.length;
+
+    return (
+      <div className="grid grid-cols-2 border-t border-border/70">
+        <button
+          type="button"
+          disabled={imagesLocked && !isOwner}
+          onClick={() => openLightbox(imageItems.map((item) => item.src), 0)}
+          className="flex h-10 items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white disabled:opacity-60"
+        >
+          <FileText className="h-4 w-4" />
+          View {imageCount} image{imageCount === 1 ? '' : 's'}
+        </button>
+
+        <button
+          type="button"
+          disabled={(imagesLocked && !isOwner) || !firstImage}
+          onClick={() => saveImageToDevice(firstImage, `facemex-post-${post.id}`)}
+          className="flex h-10 items-center justify-center gap-2 bg-background text-[13px] font-semibold text-foreground disabled:opacity-40"
+        >
+          <Download className="h-4 w-4" />
+          Save image
+        </button>
+
+        {isOwner && (
+          <button
+            type="button"
+            onClick={toggleImagesLocked}
+            className="col-span-2 flex h-9 items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground"
+          >
+            {imagesLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+            {imagesLocked ? 'Unlock images' : 'Lock images'}
+          </button>
+        )}
+      </div>
     );
   };
 
@@ -815,24 +1072,29 @@ export default function PostCard({ post }: PostCardProps) {
       if (item.type === 'video') {
         return (
           <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black">
-            <div className="h-[260px] sm:h-[360px]">{renderMediaItem(item, 0)}</div>
+            <div className="h-[250px] sm:h-[340px]">{renderMediaItem(item, 0)}</div>
           </div>
         );
       }
 
       return (
-        <button
-          type="button"
-          onClick={() => openMediaLightbox(item.src)}
-          className="block w-full overflow-hidden rounded-[22px] border border-border/70 bg-white"
-        >
-          <img
-            src={item.src}
-            alt="Post media"
-            className="h-[270px] w-full object-contain sm:h-[360px]"
-            loading="lazy"
-          />
-        </button>
+        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white">
+          <button
+            type="button"
+            onClick={() => openMediaLightbox(item.src)}
+            className="relative block w-full"
+          >
+            <img
+              src={item.src}
+              alt="Post media"
+              className={`h-[250px] w-full object-contain sm:h-[340px] ${imagesLocked && !isOwner ? 'blur-md' : ''}`}
+              loading="lazy"
+            />
+            <MediaLockOverlay />
+          </button>
+
+          {renderMediaFooter([{ type: 'image', src: item.src }])}
+        </div>
       );
     }
 
@@ -844,51 +1106,51 @@ export default function PostCard({ post }: PostCardProps) {
           <button
             type="button"
             onClick={() => openMediaLightbox(firstImage.src)}
-            className="block w-full"
+            className="relative block w-full"
           >
             <img
               src={firstImage.src}
               alt="Post media preview"
-              className="h-[270px] w-full object-contain sm:h-[360px]"
+              className={`h-[250px] w-full object-contain sm:h-[340px] ${imagesLocked && !isOwner ? 'blur-md' : ''}`}
               loading="lazy"
             />
+            <MediaLockOverlay />
           </button>
 
-          <button
-            type="button"
-            onClick={() => openLightbox(imageItems.map((item) => item.src), 0)}
-            className="flex h-10 w-full items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white"
-          >
-            <FileText className="h-4 w-4" />
-            View {imageItems.length} images
-          </button>
+          {renderMediaFooter(imageItems)}
         </div>
       );
     }
 
     return (
-      <div className="grid h-[260px] grid-cols-2 gap-1 overflow-hidden rounded-[22px] border border-border/70 bg-black sm:h-[360px]">
-        {mediaItems.slice(0, 4).map((item, index) => {
-          const extraCount = mediaItems.length - 4;
-          const showMore = index === 3 && extraCount > 0;
+      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black">
+        <div className="grid h-[250px] grid-cols-2 gap-1 bg-black sm:h-[340px]">
+          {mediaItems.slice(0, 4).map((item, index) => {
+            const extraCount = mediaItems.length - 4;
+            const showMore = index === 3 && extraCount > 0;
 
-          return (
-            <button
-              key={`${item.src}-${index}`}
-              type="button"
-              className="relative h-full w-full overflow-hidden bg-black"
-              onClick={() => item.type === 'image' && openMediaLightbox(item.src)}
-            >
-              {renderMediaItem(item, index)}
+            return (
+              <button
+                key={`${item.src}-${index}`}
+                type="button"
+                className="relative h-full w-full overflow-hidden bg-black"
+                onClick={() => item.type === 'image' && openMediaLightbox(item.src)}
+              >
+                {renderMediaItem(item, index)}
 
-              {showMore && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
-                  +{extraCount}
-                </div>
-              )}
-            </button>
-          );
-        })}
+                {showMore && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+                    +{extraCount}
+                  </div>
+                )}
+
+                <MediaLockOverlay />
+              </button>
+            );
+          })}
+        </div>
+
+        {imageItems.length > 0 && renderMediaFooter(imageItems)}
       </div>
     );
   };
@@ -992,6 +1254,13 @@ export default function PostCard({ post }: PostCardProps) {
                 </DropdownMenuItem>
               )}
 
+              {isOwner && hasMediaOrDocs && (
+                <DropdownMenuItem onClick={toggleImagesLocked}>
+                  {imagesLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                  {imagesLocked ? 'Unlock images' : 'Lock images'}
+                </DropdownMenuItem>
+              )}
+
               {hasInvite && (
                 <>
                   <DropdownMenuSeparator />
@@ -1090,7 +1359,11 @@ export default function PostCard({ post }: PostCardProps) {
                 <DocumentPreview
                   key={doc.id}
                   document={doc}
+                  locked={imagesLocked}
+                  canControl={isOwner}
+                  onToggleLock={toggleImagesLocked}
                   onOpenPages={(pages, startIndex) => openLightbox(pages, startIndex)}
+                  onSaveImage={saveImageToDevice}
                 />
               ))}
             </div>
@@ -1098,36 +1371,19 @@ export default function PostCard({ post }: PostCardProps) {
 
           {isOpportunityPost && (
             <div className="flex gap-2 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <button
-                type="button"
-                onClick={() => navigate('/ai-resume')}
-                className={pillButton}
-              >
+              <button type="button" onClick={goCreateCv} className={pillButton}>
                 <FileText className="h-3.5 w-3.5" />
                 Create CV
               </button>
 
-              <button
-                type="button"
-                onClick={() => navigate('/career-workspace')}
-                className={pillButton}
-              >
+              <button type="button" onClick={goApplyMessage} className={pillButton}>
                 <Wand2 className="h-3.5 w-3.5" />
                 Apply msg
               </button>
 
-              <button
-                type="button"
-                onClick={() => navigate('/career-workspace')}
-                className={pillButton}
-              >
+              <button type="button" onClick={goCheckJob} className={pillButton}>
                 <ShieldCheck className="h-3.5 w-3.5" />
                 Check job
-              </button>
-
-              <button type="button" onClick={toggleSaved} className={pillButton}>
-                <CalendarDays className="h-3.5 w-3.5" />
-                Save
               </button>
             </div>
           )}
@@ -1167,6 +1423,17 @@ export default function PostCard({ post }: PostCardProps) {
                     alt={`Image ${lightboxIndex + 1}`}
                     className="max-h-[92vh] max-w-[96vw] object-contain"
                   />
+                )}
+
+                {lightboxSrc && (
+                  <button
+                    type="button"
+                    onClick={saveCurrentLightboxImage}
+                    className="absolute right-3 top-3 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25"
+                  >
+                    <Download className="h-4 w-4" />
+                    Save
+                  </button>
                 )}
 
                 {lightboxItems.length > 1 && (
