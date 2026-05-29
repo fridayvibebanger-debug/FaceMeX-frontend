@@ -26,6 +26,10 @@ import {
   ShieldCheck,
   Wand2,
   Download,
+  ArrowLeft,
+  ZoomIn,
+  ZoomOut,
+  X,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -60,8 +64,16 @@ type PostDocumentItem = {
   previewPages: number;
 };
 
+/*
+  IMPORTANT ROUTES
+  Your GitHub screenshot shows:
+  - AIResumePage.tsx
+  - AIJobAssistantPage.tsx
+
+  If your real route is different, only change these two lines.
+*/
 const CV_BUILDER_ROUTE = '/ai-resume';
-const CAREER_WORKSPACE_ROUTE = '/career-workspace';
+const CAREER_WORKSPACE_ROUTE = '/ai-job-assistant';
 
 function cleanString(value: unknown) {
   if (typeof value !== 'string') return '';
@@ -348,7 +360,7 @@ function DocumentPreview({
 
   if (locked && !canControl) {
     return (
-      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background">
+      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
         <div className="relative h-[210px] bg-muted/40 sm:h-[300px]">
           {firstPage ? (
             <img
@@ -366,7 +378,7 @@ function DocumentPreview({
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
             <Lock className="mb-2 h-7 w-7" />
             <p className="text-sm font-semibold">Images locked by author</p>
-            <p className="mt-1 text-xs text-white/70">This post can be viewed, but images are protected.</p>
+            <p className="mt-1 text-xs text-white/70">Full view and saving are disabled.</p>
           </div>
         </div>
       </div>
@@ -374,7 +386,7 @@ function DocumentPreview({
   }
 
   return (
-    <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background">
+    <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
       {firstPage ? (
         <button
           type="button"
@@ -482,6 +494,7 @@ export default function PostCard({ post }: PostCardProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxItems, setLightboxItems] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxZoom, setLightboxZoom] = useState(1);
 
   const [imagesLocked, setImagesLocked] = useState(false);
 
@@ -607,71 +620,75 @@ export default function PostCard({ post }: PostCardProps) {
     saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
   };
 
-  const goCreateCv = () => {
+  const storePostActionContext = (type: string, prompt: string) => {
     try {
       localStorage.setItem(
         'facemex:post_action_context',
         JSON.stringify({
-          action: 'create-cv',
+          type,
           postId: post.id,
           content: cleanPostContent,
+          prompt,
           createdAt: new Date().toISOString(),
         })
       );
-    } catch {}
+
+      sessionStorage.setItem(
+        'facemex:post_action_context',
+        JSON.stringify({
+          type,
+          postId: post.id,
+          content: cleanPostContent,
+          prompt,
+          createdAt: new Date().toISOString(),
+        })
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const goCreateCv = () => {
+    const prompt = `Create a CV for this opportunity:\n\n${cleanPostContent}`;
+
+    storePostActionContext('create-cv', prompt);
 
     navigate(CV_BUILDER_ROUTE, {
       state: {
         fromPost: post.id,
+        mode: 'create-cv',
         content: cleanPostContent,
+        prompt,
       },
     });
   };
 
   const goApplyMessage = () => {
-    const prompt = `Write a short email and WhatsApp message to apply for this opportunity:\n\n${cleanPostContent}`;
+    const prompt = `Write a professional email and WhatsApp message to apply for this opportunity:\n\n${cleanPostContent}`;
 
-    try {
-      localStorage.setItem(
-        'facemex:career_workspace_prompt',
-        JSON.stringify({
-          type: 'apply-message',
-          postId: post.id,
-          prompt,
-          createdAt: new Date().toISOString(),
-        })
-      );
-    } catch {}
+    storePostActionContext('apply-message', prompt);
 
     navigate(CAREER_WORKSPACE_ROUTE, {
       state: {
-        prompt,
+        fromPost: post.id,
         mode: 'apply-message',
-        postId: post.id,
+        content: cleanPostContent,
+        prompt,
       },
     });
   };
 
   const goCheckJob = () => {
-    const prompt = `Check if this job or opportunity looks safe or suspicious. Give me a simple safety checklist:\n\n${cleanPostContent}`;
+    const prompt = `Check if this job or opportunity looks safe or suspicious. Give a simple safety checklist and what the applicant must verify before applying:\n\n${cleanPostContent}`;
 
-    try {
-      localStorage.setItem(
-        'facemex:career_workspace_prompt',
-        JSON.stringify({
-          type: 'check-job',
-          postId: post.id,
-          prompt,
-          createdAt: new Date().toISOString(),
-        })
-      );
-    } catch {}
+    storePostActionContext('check-job', prompt);
 
     navigate(CAREER_WORKSPACE_ROUTE, {
       state: {
-        prompt,
+        fromPost: post.id,
         mode: 'check-job',
-        postId: post.id,
+        content: cleanPostContent,
+        prompt,
       },
     });
   };
@@ -689,6 +706,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     setLightboxItems(gallery);
     setLightboxIndex(safeIndex);
+    setLightboxZoom(1);
     setLightboxOpen(true);
   };
 
@@ -696,14 +714,25 @@ export default function PostCard({ post }: PostCardProps) {
     setLightboxOpen(false);
     setLightboxItems([]);
     setLightboxIndex(0);
+    setLightboxZoom(1);
   };
 
   const goPrevLightbox = () => {
+    setLightboxZoom(1);
     setLightboxIndex((prev) => (prev <= 0 ? lightboxItems.length - 1 : prev - 1));
   };
 
   const goNextLightbox = () => {
+    setLightboxZoom(1);
     setLightboxIndex((prev) => (prev >= lightboxItems.length - 1 ? 0 : prev + 1));
+  };
+
+  const zoomIn = () => {
+    setLightboxZoom((prev) => Math.min(prev + 0.35, 3));
+  };
+
+  const zoomOut = () => {
+    setLightboxZoom((prev) => Math.max(prev - 0.35, 1));
   };
 
   const openMediaLightbox = (src: string) => {
@@ -1016,7 +1045,7 @@ export default function PostCard({ post }: PostCardProps) {
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
         <Lock className="mb-2 h-7 w-7" />
         <p className="text-sm font-semibold">Images locked by author</p>
-        <p className="mt-1 text-xs text-white/70">Image saving and full view are disabled.</p>
+        <p className="mt-1 text-xs text-white/70">Full view and saving are disabled.</p>
       </div>
     );
   };
@@ -1071,14 +1100,14 @@ export default function PostCard({ post }: PostCardProps) {
 
       if (item.type === 'video') {
         return (
-          <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black">
+          <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
             <div className="h-[250px] sm:h-[340px]">{renderMediaItem(item, 0)}</div>
           </div>
         );
       }
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white">
+        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
           <button
             type="button"
             onClick={() => openMediaLightbox(item.src)}
@@ -1102,7 +1131,7 @@ export default function PostCard({ post }: PostCardProps) {
       const firstImage = imageItems[0];
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white">
+        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
           <button
             type="button"
             onClick={() => openMediaLightbox(firstImage.src)}
@@ -1123,7 +1152,7 @@ export default function PostCard({ post }: PostCardProps) {
     }
 
     return (
-      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black">
+      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
         <div className="grid h-[250px] grid-cols-2 gap-1 bg-black sm:h-[340px]">
           {mediaItems.slice(0, 4).map((item, index) => {
             const extraCount = mediaItems.length - 4;
@@ -1187,7 +1216,7 @@ export default function PostCard({ post }: PostCardProps) {
   })();
 
   const smallActionButton =
-    'h-8 rounded-full px-2.5 text-[12px] font-semibold text-muted-foreground hover:text-foreground';
+    'h-8 rounded-full px-2 text-[12px] font-semibold text-muted-foreground hover:text-foreground';
 
   const pillButton =
     'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 text-[11px] font-semibold shadow-sm hover:bg-muted/50';
@@ -1415,58 +1444,105 @@ export default function PostCard({ post }: PostCardProps) {
               else setLightboxOpen(true);
             }}
           >
-            <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] border border-white/10 bg-black/95 p-0">
-              <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
-                {lightboxSrc && (
-                  <img
-                    src={lightboxSrc}
-                    alt={`Image ${lightboxIndex + 1}`}
-                    className="max-h-[92vh] max-w-[96vw] object-contain"
-                  />
-                )}
+            <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] overflow-hidden border border-white/10 bg-black/95 p-0">
+              <div className="relative flex h-full w-full flex-col overflow-hidden">
+                <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between gap-2 bg-gradient-to-b from-black/85 to-transparent px-3 py-3">
+                  <button
+                    type="button"
+                    onClick={closeLightbox}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-3 text-sm font-semibold text-white backdrop-blur hover:bg-white/25"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </button>
 
-                {lightboxSrc && (
+                  <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-semibold text-white backdrop-blur">
+                    {lightboxItems.length > 0 ? `${lightboxIndex + 1} / ${lightboxItems.length}` : 'Image'}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeLightbox}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                    aria-label="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="relative flex h-full w-full items-center justify-center overflow-auto px-2 py-16">
+                  {lightboxSrc && (
+                    <img
+                      src={lightboxSrc}
+                      alt={`Image ${lightboxIndex + 1}`}
+                      className="max-h-full max-w-full object-contain transition-transform duration-200"
+                      style={{
+                        transform: `scale(${lightboxZoom})`,
+                        transformOrigin: 'center center',
+                      }}
+                    />
+                  )}
+
+                  {lightboxItems.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={goPrevLightbox}
+                        className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                        aria-label="Previous image"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={goNextLightbox}
+                        className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                        aria-label="Next image"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-center gap-2 bg-gradient-to-t from-black/85 to-transparent px-3 py-4">
+                  <button
+                    type="button"
+                    onClick={zoomOut}
+                    disabled={lightboxZoom <= 1}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                    Out
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={zoomIn}
+                    disabled={lightboxZoom >= 3}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                    Zoom
+                  </button>
+
                   <button
                     type="button"
                     onClick={saveCurrentLightboxImage}
-                    className="absolute right-3 top-3 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25"
+                    disabled={!lightboxSrc}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
                   >
                     <Download className="h-4 w-4" />
                     Save
                   </button>
-                )}
-
-                {lightboxItems.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={goPrevLightbox}
-                      className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
-                      aria-label="Previous image"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={goNextLightbox}
-                      className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
-                      aria-label="Next image"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white backdrop-blur">
-                      {lightboxIndex + 1} / {lightboxItems.length}
-                    </div>
-                  </>
-                )}
+                </div>
               </div>
             </DialogContent>
           </Dialog>
 
           <div className="flex items-center justify-between border-t border-border/60 pt-2">
-            <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -1477,10 +1553,8 @@ export default function PostCard({ post }: PostCardProps) {
                     className={`${smallActionButton} ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
-                    React
-                    <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
-                      {post.likes || 0}
-                    </span>
+                    <Heart className="mr-1 h-3.5 w-3.5" />
+                    {post.likes || 0}
                   </Button>
                 </DropdownMenuTrigger>
 
@@ -1517,10 +1591,8 @@ export default function PostCard({ post }: PostCardProps) {
                   window.setTimeout(() => replyInputRef.current?.focus(), 50);
                 }}
               >
-                Reply
-                <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
-                  {commentCount}
-                </span>
+                <MessageCircle className="mr-1 h-3.5 w-3.5" />
+                {commentCount}
               </Button>
 
               <Button
@@ -1557,7 +1629,7 @@ export default function PostCard({ post }: PostCardProps) {
                   if (!Number.isFinite(limit)) return false;
                   return getVoiceCommentCountToday() >= limit;
                 })()}
-                className="h-8 shrink-0 rounded-full px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
+                className="h-8 shrink-0 rounded-full px-2 text-[12px] text-muted-foreground hover:text-foreground"
               >
                 <AudioLines
                   className={`mr-1 h-3.5 w-3.5 ${isRecording ? 'animate-pulse text-red-500' : ''}`}
