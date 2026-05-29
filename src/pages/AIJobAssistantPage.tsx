@@ -1,47 +1,105 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Bell,
+  BellRing,
+  Briefcase,
+  Building2,
+  ChevronRight,
+  Crown,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Mail,
+  MapPin,
+  RefreshCcw,
+  Search,
+  Send,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react';
+
+import Navbar from '@/components/layout/Navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { useUserStore } from '@/store/userStore';
-import Navbar from '@/components/layout/Navbar';
+import { trackEvent } from '@/lib/analytics';
 
 type SearchLink = {
   label: string;
   url: string;
   note?: string;
+  category?: 'jobs' | 'social' | 'government' | 'interview' | 'email' | 'nearby';
+};
+
+type ChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  links?: SearchLink[];
+  createdAt: string;
 };
 
 type Reminder = {
   id: string;
-  company: string;
   role: string;
-  contact: string;
-  dueDate: string;
-  notes: string;
+  location: string;
+  frequency: string;
   createdAt: string;
 };
 
-const labels = [
-  'Best places to search',
-  'Social media vacancy method',
-  'Google search strategy',
-  'CV and profile improvements',
-  'Application strategy',
-  'Networking and outreach',
-  'Scam safety checklist',
-  'Weekly routine',
-];
+function clean(value: string) {
+  return String(value || '').trim();
+}
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function safeId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function safeTag(value: string) {
+  return encodeURIComponent(
+    String(value || 'jobs')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase()
+  );
+}
+
+function encodeSearchQuery(parts: string[]) {
+  const text = parts.filter(Boolean).join(' ').trim();
+  return encodeURIComponent(text || 'jobs vacancies near me');
+}
+
+function normalizeTier(tier?: string | null) {
+  return String(tier || 'free').toLowerCase();
+}
+
+function isCreatorPlusTier(tier: string, hasTier?: (tier: string) => boolean) {
+  return (
+    hasTier?.('creator') ||
+    tier === 'creator' ||
+    tier === 'business' ||
+    tier === 'exclusive'
+  );
+}
+
+function getDailyLimit(tier: string, hasTier?: (tier: string) => boolean) {
+  if (isCreatorPlusTier(tier, hasTier)) return null;
+  if (tier === 'pro') return 20;
+  return 4;
+}
+
 function getUsageKey(tier: string) {
-  return `facemex_job_assistant_usage_${tier || 'free'}_${todayKey()}`;
+  return `facemex_job_assistant_ai_usage_${tier || 'free'}_${todayKey()}`;
 }
 
 function getUsage(tier: string) {
@@ -56,44 +114,22 @@ function increaseUsage(tier: string) {
   try {
     const key = getUsageKey(tier);
     const current = Number(localStorage.getItem(key) || 0);
-    localStorage.setItem(key, String(current + 1));
-    return current + 1;
+    const next = current + 1;
+    localStorage.setItem(key, String(next));
+    return next;
   } catch {
     return 0;
   }
 }
 
-function clean(value: string) {
-  return String(value || '').trim();
-}
-
-function encodeSearchQuery(parts: string[]) {
-  const text = parts.filter(Boolean).join(' ').trim();
-  return encodeURIComponent(text || 'jobs vacancies near me');
-}
-
-function safeTag(value: string) {
-  return encodeURIComponent(
-    String(value || 'jobs')
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .toLowerCase()
-  );
-}
-
-function addDays(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function buildSearchLinks(input: {
+function buildVacancySources(input: {
   role: string;
   location: string;
   industry: string;
   workMode: string;
 }) {
   const role = clean(input.role) || 'jobs';
-  const location = clean(input.location);
+  const location = clean(input.location) || 'South Africa';
   const industry = clean(input.industry);
   const workMode = clean(input.workMode);
 
@@ -105,588 +141,835 @@ function buildSearchLinks(input: {
     'vacancies jobs hiring apply',
   ]);
 
+  const recentQuery = encodeSearchQuery([
+    role,
+    industry,
+    location,
+    workMode,
+    'latest vacancies apply now',
+  ]);
+
   const roleTag = safeTag(role);
   const locationTag = safeTag(location || 'south africa');
 
   const links: SearchLink[] = [
     {
-      label: 'Google vacancies search',
-      url: `https://www.google.com/search?q=${query}`,
-      note: 'Use this to find live job posts, company career pages, and vacancy PDFs.',
-    },
-    {
-      label: 'Google recent vacancies',
-      url: `https://www.google.com/search?q=${query}&tbs=qdr:w`,
-      note: 'Shows newer results from the last week.',
-    },
-    {
-      label: 'Facebook vacancy posts',
-      url: `https://www.facebook.com/search/posts/?q=${query}`,
-      note: 'Good for local businesses, community groups, stores, schools, and shops.',
-    },
-    {
-      label: 'Facebook job groups',
-      url: `https://www.facebook.com/search/groups/?q=${query}`,
-      note: 'Join local job groups and check pinned posts.',
-    },
-    {
-      label: 'Instagram hashtag search',
-      url: `https://www.instagram.com/explore/tags/${roleTag}/`,
-      note: 'Check business pages posting vacancies in stories/posts.',
-    },
-    {
-      label: 'Instagram local jobs hashtag',
-      url: `https://www.instagram.com/explore/tags/${locationTag}jobs/`,
-      note: 'Useful for local area hiring posts.',
-    },
-    {
-      label: 'X / Twitter live search',
-      url: `https://x.com/search?q=${query}&src=typed_query&f=live`,
-      note: 'Search latest recruiter and company vacancy posts.',
-    },
-    {
-      label: 'LinkedIn jobs',
-      url: `https://www.linkedin.com/jobs/search/?keywords=${query}`,
-      note: 'Best for professional roles, internships, admin, tech, sales, and office jobs.',
-    },
-    {
       label: 'Indeed South Africa',
       url: `https://za.indeed.com/jobs?q=${query}`,
-      note: 'Good for entry-level and general vacancies.',
+      note: 'Good for general jobs, admin, retail, driver, office, and entry-level posts.',
+      category: 'jobs',
     },
     {
       label: 'PNet jobs',
       url: `https://www.pnet.co.za/jobs/${query}`,
-      note: 'Good for formal company vacancies.',
-    },
-    {
-      label: 'Careers24 jobs',
-      url: `https://www.careers24.com/jobs/?query=${query}`,
-      note: 'Good for South African job listings.',
+      note: 'Good for formal company vacancies and professional roles.',
+      category: 'jobs',
     },
     {
       label: 'DPSA government vacancies',
       url: 'https://www.dpsa.gov.za/newsroom/psvc/',
-      note: 'Official public service vacancy circular.',
+      note: 'Official South African government vacancy circular.',
+      category: 'government',
+    },
+    {
+      label: 'Careers24 jobs',
+      url: `https://www.careers24.com/jobs/?query=${query}`,
+      note: 'Useful for South African job listings across different provinces.',
+      category: 'jobs',
+    },
+    {
+      label: 'LinkedIn jobs',
+      url: `https://www.linkedin.com/jobs/search/?keywords=${query}`,
+      note: 'Best for office, tech, sales, internships, admin, and professional roles.',
+      category: 'jobs',
+    },
+    {
+      label: 'Google latest vacancies',
+      url: `https://www.google.com/search?q=${recentQuery}&tbs=qdr:w`,
+      note: 'Find recent jobs from the last week, company pages, PDFs, and agency posts.',
+      category: 'jobs',
+    },
+    {
+      label: 'Facebook vacancy posts',
+      url: `https://www.facebook.com/search/posts/?q=${query}`,
+      note: 'Good for local shops, community vacancies, small businesses, and urgent posts.',
+      category: 'social',
+    },
+    {
+      label: 'Facebook job groups',
+      url: `https://www.facebook.com/search/groups/?q=${query}`,
+      note: 'Join groups and check pinned posts daily.',
+      category: 'social',
+    },
+    {
+      label: 'Instagram role hashtag',
+      url: `https://www.instagram.com/explore/tags/${roleTag}/`,
+      note: 'Check business pages and stories for hiring posts.',
+      category: 'social',
+    },
+    {
+      label: 'Instagram local jobs hashtag',
+      url: `https://www.instagram.com/explore/tags/${locationTag}jobs/`,
+      note: 'Useful for local hiring around your area.',
+      category: 'social',
+    },
+    {
+      label: 'X / Twitter live hiring search',
+      url: `https://x.com/search?q=${query}&src=typed_query&f=live`,
+      note: 'Find live recruiter posts and company vacancy announcements.',
+      category: 'social',
+    },
+    {
+      label: 'Google jobs near me',
+      url: `https://www.google.com/search?q=${encodeSearchQuery([role, 'jobs near me vacancies hiring'])}`,
+      note: 'Uses your browser/location signals to show nearby vacancies.',
+      category: 'nearby',
     },
   ];
 
   return links;
 }
 
-function buildCompanyContactLinks(input: {
-  company: string;
-  role: string;
-  location: string;
-}) {
-  const company = clean(input.company);
-  const role = clean(input.role) || 'vacancy';
-  const location = clean(input.location);
+function buildGodfreyPandekaRadar(input: { role: string; location: string }) {
+  const role = clean(input.role) || 'jobs';
+  const location = clean(input.location) || 'South Africa';
 
-  const base = company || `${role} ${location}`.trim() || 'company vacancy';
-
-  const contactQuery = encodeSearchQuery([
-    base,
-    'careers contact HR email send CV',
-  ]);
-
-  const vacancyQuery = encodeSearchQuery([
-    base,
+  const query = encodeSearchQuery([
+    'Godfrey Pandeka',
     role,
     location,
-    'vacancy apply email CV',
+    'vacancies jobs hiring apply',
+  ]);
+
+  const generalQuery = encodeSearchQuery([
+    'Godfrey Pandeka',
+    'job vacancies',
+    'South Africa',
   ]);
 
   const links: SearchLink[] = [
     {
-      label: 'Company careers/contact search',
-      url: `https://www.google.com/search?q=${contactQuery}`,
-      note: 'Find official careers page, HR email, or contact form.',
+      label: 'Godfrey Pandeka vacancy posts',
+      url: `https://www.facebook.com/search/posts/?q=${query}`,
+      note: 'Opens Facebook search for public vacancy posts linked to Godfrey Pandeka.',
+      category: 'social',
     },
     {
-      label: 'Company vacancy search',
-      url: `https://www.google.com/search?q=${vacancyQuery}`,
-      note: 'Find current vacancy posts linked to this company/department.',
+      label: 'Godfrey Pandeka latest job posts',
+      url: `https://www.facebook.com/search/posts/?q=${generalQuery}`,
+      note: 'Use this to check recent public vacancy posts manually.',
+      category: 'social',
     },
     {
-      label: 'LinkedIn company/jobs search',
-      url: `https://www.linkedin.com/search/results/all/?keywords=${contactQuery}`,
-      note: 'Find company page, recruiters, HR people, and open jobs.',
-    },
-    {
-      label: 'Facebook company search',
-      url: `https://www.facebook.com/search/pages/?q=${contactQuery}`,
-      note: 'Find the company page and message/contact details.',
-    },
-    {
-      label: 'Facebook vacancy posts for company',
-      url: `https://www.facebook.com/search/posts/?q=${vacancyQuery}`,
-      note: 'Find public vacancy posts and comments from the company.',
-    },
-    {
-      label: 'X / Twitter company hiring search',
-      url: `https://x.com/search?q=${vacancyQuery}&src=typed_query&f=live`,
-      note: 'Find recent hiring posts and recruiter mentions.',
+      label: 'Facebook local vacancy posts',
+      url: `https://www.facebook.com/search/posts/?q=${encodeSearchQuery([role, location, 'vacancies hiring apply'])}`,
+      note: 'Shows nearby public vacancy posts on Facebook.',
+      category: 'social',
     },
   ];
 
   return links;
 }
 
-function buildSearchPhrases(input: {
+function buildInterviewAnswer(input: {
   role: string;
-  location: string;
-  industry: string;
-  workMode: string;
   experienceLevel: string;
+  industry: string;
 }) {
-  const role = clean(input.role) || 'job';
-  const location = clean(input.location) || 'South Africa';
-  const industry = clean(input.industry);
-  const workMode = clean(input.workMode);
-  const level = clean(input.experienceLevel);
+  const role = clean(input.role) || 'the role';
+  const level = clean(input.experienceLevel) || 'your experience level';
+  const industry = clean(input.industry) || 'the industry';
 
-  return [
-    `${role} vacancies ${location}`,
-    `${level} ${role} jobs ${location}`.trim(),
-    `${industry} ${role} hiring ${location}`.trim(),
-    `${role} ${workMode} jobs ${location}`.trim(),
-    `"${role}" "apply now" "${location}"`,
-    `"${role}" "vacancy" "email CV" "${location}"`,
-    `site:facebook.com ${role} vacancies ${location}`,
-    `site:instagram.com ${role} jobs ${location}`,
-    `site:x.com ${role} hiring ${location}`,
-  ].filter((item, index, arr) => item.trim() && arr.indexOf(item) === index);
+  return `Interview preparation for ${role}
+
+1. Tell me about yourself
+Answer structure:
+“I am a ${level} candidate interested in ${role}. I have skills and experience related to ${industry}. I am reliable, willing to learn, and I am looking for an opportunity where I can contribute and grow.”
+
+2. Why do you want this job?
+Say:
+“I’m interested in this role because it matches my skills and career goals. I also want to work in a place where I can add value, learn quickly, and become reliable for the team.”
+
+3. What are your strengths?
+Use real strengths:
+• Reliable
+• Fast learner
+• Good communication
+• Teamwork
+• Problem-solving
+• Willing to work under pressure
+
+4. What is your weakness?
+Say:
+“One area I’m improving is confidence in interviews. I’m working on it by preparing better and practicing how to explain my skills clearly.”
+
+5. Why should we hire you?
+Say:
+“You should hire me because I am serious about the opportunity, I am willing to learn, I respect time, and I will do the work properly. I may still be growing, but I am committed and dependable.”
+
+6. Questions to ask the employer:
+• What does success look like in this role?
+• What are the working hours?
+• Is there training for new employees?
+• When can I expect feedback?
+
+Quick rule:
+Do not sound desperate. Sound prepared, respectful, and ready.`;
 }
 
-function buildTemplatePlan(input: {
+function buildEmailTemplates(input: {
+  role: string;
+  company: string;
+  contactPerson: string;
+}) {
+  const role = clean(input.role) || '[role]';
+  const company = clean(input.company) || '[company]';
+  const person = clean(input.contactPerson);
+
+  const apply = `Good day${person ? ` ${person}` : ''},
+
+I hope you are well.
+
+I am interested in the ${role} opportunity at ${company}. I would like to apply or send my CV for consideration.
+
+Please may you advise where I should send my CV, or who the correct person/department is for this application?
+
+Kind regards`;
+
+  const followUp = `Good day${person ? ` ${person}` : ''},
+
+I hope you are well.
+
+I am following up on my application for the ${role} opportunity at ${company}.
+
+I would appreciate any update when available.
+
+Kind regards`;
+
+  const directMessage = `Good day, I saw your vacancy/post for ${role}. I am interested and available to send my CV. Please may I ask where I can apply or who I should contact?`;
+
+  return { apply, followUp, directMessage };
+}
+
+function buildLocalAnswer(input: {
+  prompt: string;
   role: string;
   location: string;
-  preferences: string;
-  experienceLevel: string;
   industry: string;
   workMode: string;
-  hoursPerWeek: string;
+  experienceLevel: string;
+  company: string;
+  contactPerson: string;
 }) {
+  const prompt = input.prompt.toLowerCase();
   const role = clean(input.role) || 'your target role';
-  const location = clean(input.location) || 'your area';
-  const preferences = clean(input.preferences);
-  const experienceLevel = clean(input.experienceLevel) || 'your level';
+  const location = clean(input.location) || 'South Africa';
   const industry = clean(input.industry) || 'your preferred industry';
-  const workMode = clean(input.workMode) || 'any work mode';
-  const hours = clean(input.hoursPerWeek) || '5';
 
-  const phrases = buildSearchPhrases({
-    role,
-    location,
-    industry,
-    workMode,
-    experienceLevel,
-  });
+  if (prompt.includes('interview') || prompt.includes('prepare')) {
+    return buildInterviewAnswer({
+      role,
+      experienceLevel: input.experienceLevel,
+      industry,
+    });
+  }
 
-  return [
-    `Focus your search on ${role} roles in ${location}. Start with Google, Facebook job groups, company career pages, LinkedIn, Indeed, PNet, Careers24, and DPSA vacancies if you want government jobs.`,
+  if (
+    prompt.includes('email') ||
+    prompt.includes('message') ||
+    prompt.includes('cv') ||
+    prompt.includes('send')
+  ) {
+    const templates = buildEmailTemplates({
+      role,
+      company: input.company,
+      contactPerson: input.contactPerson,
+    });
 
-    `Use social media like a job hunter, not like a normal scroller.\n\nFacebook:\n• Search: ${role} vacancies ${location}\n• Join local job groups and community groups.\n• Search group posts using “hiring”, “vacancy”, “CV”, “apply”, and your location.\n\nInstagram:\n• Search hashtags like #${role.replace(/\s+/g, '')}, #${location.replace(/\s+/g, '')}jobs, #hiring, #vacancies.\n• Check business pages, hotels, shops, agencies, schools, restaurants, and local brands.\n\nX / Twitter:\n• Search live posts for hiring keywords.\n• Follow recruiters, companies, local business pages, and government vacancy accounts.`,
+    return `Here are professional messages you can use:
 
-    `Use these Google searches and save the best results:\n\n${phrases
-      .map((phrase) => `• ${phrase}`)
-      .join('\n')}\n\nTip: Add words like “latest”, “2026”, “apply now”, “email CV”, “no experience”, or “entry level” depending on your situation.`,
+APPLICATION EMAIL
 
-    `Improve your CV and profile before applying:\n\n• Put your target role clearly at the top of your CV.\n• Use keywords from the job post.\n• Add measurable duties or achievements.\n• Keep your CV clean, ATS-friendly, and easy to scan.\n• Your FaceMeX/LinkedIn profile should match the same role focus: ${role}.\n• If you are targeting ${industry}, make your summary and skills speak to that industry.`,
+${templates.apply}
 
-    `Application strategy:\n\n• Apply within 24 hours of finding a vacancy.\n• Send 5 to 10 quality applications per day if you are actively searching.\n• Track each job: company, role, platform, date applied, contact person, and follow-up date.\n• Follow up after 3 to 5 working days.\n• Do not use one CV for every job. Adjust your summary and skills for each role.\n• Preferences to consider: ${preferences || 'salary, transport distance, work schedule, growth opportunity, and company reputation'}.`,
+FOLLOW-UP EMAIL
 
-    `Networking and outreach:\n\nMessage template:\n“Good day, I saw your vacancy/post for ${role}. I am based in/near ${location} and I am interested. I have experience/skills related to this role and I can send my CV immediately. Please may I ask where I can apply or who I should send my CV to?”\n\nFollow-up template:\n“Good day, I am following up on my application for ${role}. I would appreciate any update when available. Thank you.”`,
+${templates.followUp}
 
-    `Avoid job scams:\n\n• Never pay money to get a job interview.\n• Be careful if they ask for “registration fee”, “uniform fee”, “training fee”, or “placement fee”.\n• Check if the company has a real website, real address, and real contact details.\n• Do not send ID copies too early before verifying the employer.\n• Be careful with WhatsApp-only recruiters who refuse to share company details.\n• Search the company name + “scam” on Google.\n• If salary sounds too high for no experience, verify before sending documents.\n• Real companies usually use official email, website forms, or known recruitment platforms.`,
+WHATSAPP / FACEBOOK DM
 
-    `Weekly routine using ${hours} hours/week:\n\nMonday: Search Google, Facebook groups, and job sites.\nTuesday: Apply to the best roles and adjust CV keywords.\nWednesday: Search Instagram/X and message businesses directly.\nThursday: Follow up on applications.\nFriday: Improve CV, profile, and save new vacancies.\nSaturday/Sunday: Prepare interview answers and plan next week.`,
-  ];
+${templates.directMessage}
+
+Safety tip:
+Use official company emails or verified pages first. Avoid paying any “registration fee” or “placement fee”.`;
+  }
+
+  if (
+    prompt.includes('facebook') ||
+    prompt.includes('godfrey') ||
+    prompt.includes('pandeka')
+  ) {
+    return `Facebook vacancy method:
+
+1. Open the Godfrey Pandeka vacancy search cards below.
+2. Search posts, not only pages.
+3. Sort by recent if Facebook allows it.
+4. Look for posts with:
+• role title
+• company/branch name
+• location
+• closing date
+• official contact
+• no upfront payment
+
+Important:
+FaceMeX cannot privately pull Facebook posts without official Facebook API access and permission. The safe method is to open live Facebook search results and verify each vacancy before applying.`;
+  }
+
+  return `Job search plan for ${role} in ${location}
+
+1. Search daily using the vacancy cards below:
+• Indeed South Africa
+• PNet
+• DPSA government vacancies
+• Careers24
+• LinkedIn
+• Google recent vacancies
+• Facebook vacancy posts
+• Facebook job groups
+
+2. Use these keywords:
+• ${role} vacancies ${location}
+• ${role} hiring ${location}
+• ${role} apply now ${location}
+• ${industry} ${role} jobs ${location}
+• no experience ${role} jobs ${location}
+• ${role} email CV ${location}
+
+3. Apply fast:
+When you see a new post, apply within 24 hours. Do not wait.
+
+4. Track every application:
+Company | Role | Date applied | Platform | Contact | Follow-up date
+
+5. Follow up after 3–5 working days.
+
+6. Avoid scams:
+Never pay money to get an interview. Verify the company before sending ID documents.
+
+7. Return daily:
+Use FaceMeX Job Assistant every day to search, prepare, and follow up.`;
 }
 
 export default function AIJobAssistantPage() {
   const navigate = useNavigate();
-
-  const [role, setRole] = useState('');
-  const [location, setLocation] = useState('');
-  const [preferences, setPreferences] = useState('');
-  const [experienceLevel, setExperienceLevel] = useState('');
-  const [industry, setIndustry] = useState('');
-  const [workMode, setWorkMode] = useState('');
-  const [hoursPerWeek, setHoursPerWeek] = useState('');
-
-  const [companyName, setCompanyName] = useState('');
-  const [department, setDepartment] = useState('');
-  const [contactPerson, setContactPerson] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
-  const [followUpDays, setFollowUpDays] = useState('5');
-
-  const [output, setOutput] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [searchLinks, setSearchLinks] = useState<SearchLink[]>([]);
-  const [companyLinks, setCompanyLinks] = useState<SearchLink[]>([]);
-  const [savedPlan, setSavedPlan] = useState<string | null>(null);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [usageCount, setUsageCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<'strategy' | 'apply'>('strategy');
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const { tier, hasTier } = useUserStore();
 
-  const isCreatorPlus = hasTier('creator');
-  const currentTier = String(tier || 'free').toLowerCase();
+  const currentTier = normalizeTier(tier);
+  const creatorPlus = isCreatorPlusTier(currentTier, hasTier);
+  const dailyLimit = getDailyLimit(currentTier, hasTier);
 
-  const dailyLimit = useMemo(() => {
-    if (isCreatorPlus) return null;
-    if (currentTier === 'pro') return 10;
-    return 3;
-  }, [isCreatorPlus, currentTier]);
+  const [usageCount, setUsageCount] = useState(0);
+  const [prompt, setPrompt] = useState('');
+
+  const [role, setRole] = useState('');
+  const [location, setLocation] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [workMode, setWorkMode] = useState('');
+  const [experienceLevel, setExperienceLevel] = useState('');
+  const [company, setCompany] = useState('');
+  const [contactPerson, setContactPerson] = useState('');
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sourceLinks, setSourceLinks] = useState<SearchLink[]>([]);
+  const [radarCards, setRadarCards] = useState<SearchLink[]>([]);
+  const [activeCard, setActiveCard] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [nearbyEnabled, setNearbyEnabled] = useState(false);
+  const [alertEnabled, setAlertEnabled] = useState(false);
+  const [geoLabel, setGeoLabel] = useState('');
+  const [reminders, setReminders] = useState<Reminder[]>([]);
 
   const remainingUses = useMemo(() => {
     if (dailyLimit === null) return null;
     return Math.max(0, dailyLimit - usageCount);
   }, [dailyLimit, usageCount]);
 
+  const canAsk = dailyLimit === null || usageCount < dailyLimit;
+
   useEffect(() => {
     setUsageCount(getUsage(currentTier));
 
     try {
-      const raw = localStorage.getItem('facemex_job_followup_reminders');
+      const raw = localStorage.getItem('facemex_job_alert_reminders');
       setReminders(raw ? JSON.parse(raw) : []);
     } catch {
       setReminders([]);
     }
+
+    const firstCards = [
+      ...buildVacancySources({
+        role: 'jobs',
+        location: 'South Africa',
+        industry: '',
+        workMode: '',
+      }),
+      ...buildGodfreyPandekaRadar({
+        role: 'jobs',
+        location: 'South Africa',
+      }),
+    ];
+
+    setRadarCards(firstCards);
+    setSourceLinks(firstCards);
+
+    setMessages([
+      {
+        id: safeId(),
+        role: 'assistant',
+        content:
+          'Hi, I’m your FaceMeX Job Assistant. Ask me anything about jobs, CVs, interviews, vacancies, application emails, follow-ups, government jobs, PNet, Indeed, Facebook vacancy searches, or nearby opportunities in South Africa.',
+        links: firstCards.slice(0, 6),
+        createdAt: new Date().toISOString(),
+      },
+    ]);
   }, [currentTier]);
+
+  useEffect(() => {
+    if (!radarCards.length) return;
+
+    const timer = window.setInterval(() => {
+      setActiveCard((prev) => (prev + 1) % radarCards.length);
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [radarCards.length]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages.length, busy]);
 
   const saveReminders = (next: Reminder[]) => {
     setReminders(next);
 
     try {
-      localStorage.setItem('facemex_job_followup_reminders', JSON.stringify(next));
-    } catch {
-      // ignore localStorage errors
-    }
+      localStorage.setItem('facemex_job_alert_reminders', JSON.stringify(next));
+    } catch {}
   };
 
-  const handleGenerate = async () => {
-    if (!role.trim() && !location.trim() && !preferences.trim()) {
+  const refreshSources = () => {
+    const links = [
+      ...buildVacancySources({
+        role,
+        location,
+        industry,
+        workMode,
+      }),
+      ...buildGodfreyPandekaRadar({
+        role,
+        location,
+      }),
+    ];
+
+    setSourceLinks(links);
+    setRadarCards(links);
+    setActiveCard(0);
+
+    toast({
+      title: 'Vacancy radar refreshed',
+      description: 'Job sources updated based on your role and location.',
+    });
+  };
+
+  const enableNearbyJobs = async () => {
+    if (!navigator.geolocation) {
       toast({
-        title: 'Add job search details',
-        description: 'Provide at least a role, location, or preference.',
+        title: 'Location not supported',
+        description: 'Your browser does not support location tracking.',
+        variant: 'destructive',
       });
       return;
     }
 
-    if (dailyLimit !== null && usageCount >= dailyLimit) {
+    setGeoBusy(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        setNearbyEnabled(true);
+        setGeoLabel(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+
+        const nextLocation = location || 'near me';
+        setLocation(nextLocation);
+
+        await trackEvent('job_location_enabled', '/ai/job-assistant', {
+          lat,
+          lng,
+          role,
+          location: nextLocation,
+        });
+
+        toast({
+          title: 'Nearby jobs enabled',
+          description: 'FaceMeX will prioritize vacancy links near your area while this page is open.',
+        });
+
+        setGeoBusy(false);
+      },
+      () => {
+        toast({
+          title: 'Location permission denied',
+          description: 'You can still type your town or city manually.',
+          variant: 'destructive',
+        });
+
+        setGeoBusy(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const enableVacancyAlerts = async () => {
+    const frequency = 'daily';
+
+    const reminder: Reminder = {
+      id: safeId(),
+      role: role || 'jobs',
+      location: location || 'South Africa',
+      frequency,
+      createdAt: new Date().toISOString(),
+    };
+
+    saveReminders([reminder, ...reminders]);
+
+    if ('Notification' in window) {
+      try {
+        const permission = await Notification.requestPermission();
+
+        if (permission === 'granted') {
+          new Notification('FaceMeX vacancy alerts enabled', {
+            body: `We’ll prioritize ${reminder.role} vacancies around ${reminder.location}.`,
+          });
+
+          setAlertEnabled(true);
+        }
+      } catch {}
+    }
+
+    await trackEvent('job_alert_enabled', '/ai/job-assistant', {
+      role: reminder.role,
+      location: reminder.location,
+      frequency,
+    });
+
+    toast({
+      title: 'Vacancy alert saved',
+      description:
+        'Your preference is saved. For real background push alerts, connect this later to a server cron + push notifications.',
+    });
+  };
+
+  const sendPrompt = async () => {
+    const cleanPrompt = clean(prompt);
+
+    if (!cleanPrompt && !role && !location && !industry) {
+      toast({
+        title: 'Ask something first',
+        description: 'Type your job question or fill in role/location.',
+      });
+      return;
+    }
+
+    if (!canAsk) {
       toast({
         title: 'Daily limit reached',
         description:
-          'You have used today’s job assistant limit. Upgrade to Creator or higher for unlimited strategies.',
+          currentTier === 'pro'
+            ? 'You have used your 20 job searches today. Upgrade to Creator+ for unlimited.'
+            : 'Free users get 4 job searches per day. Upgrade to Pro for 20 or Creator+ for unlimited.',
+        variant: 'destructive',
       });
       return;
     }
 
+    const userQuestion =
+      cleanPrompt ||
+      `Help me find ${role || 'jobs'} in ${location || 'South Africa'}.`;
+
+    const userMessage: ChatMessage = {
+      id: safeId(),
+      role: 'user',
+      content: userQuestion,
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setPrompt('');
     setBusy(true);
 
-    const links = buildSearchLinks({
-      role,
-      location,
-      industry,
-      workMode,
-    });
-
-    const templatePlan = buildTemplatePlan({
-      role,
-      location,
-      preferences,
-      experienceLevel,
-      industry,
-      workMode,
-      hoursPerWeek,
-    });
-
-    try {
-      const res = await api.post('/api/ai/pro/job-assistant', {
+    const links = [
+      ...buildVacancySources({
         role,
         location,
-        preferences,
-        experienceLevel,
         industry,
         workMode,
-        hoursPerWeek,
-        tier,
-        creatorPlus: isCreatorPlus,
+      }),
+      ...buildGodfreyPandekaRadar({
+        role,
+        location,
+      }),
+    ];
+
+    setSourceLinks(links);
+    setRadarCards(links);
+    setActiveCard(0);
+
+    try {
+      const res = (await api.post('/api/ai/pro/job-assistant', {
+        prompt: userQuestion,
+        role,
+        location,
+        industry,
+        workMode,
+        experienceLevel,
+        company,
+        contactPerson,
+        tier: currentTier,
         dailyLimit,
-        searchLinks: links,
         instruction:
-          'Create a practical job search plan. Include where to find vacancies from Google, Facebook, Instagram, X/Twitter, job websites, company websites, and local communities. Include scam warning tips. Do not mention internal model names.',
+          'You are FaceMeX Job Assistant. Answer like ChatGPT but focused only on jobs, CVs, interviews, job search, applications, vacancies, emails, follow-ups, career planning, PNet, Indeed, DPSA government vacancies, LinkedIn, Facebook vacancy search, and South African opportunities. Be practical, safe, and concise. Do not claim you scraped Facebook. If asked about Godfrey Pandeka vacancies, explain that you can open live Facebook search links and help verify posts.',
+      })) as any;
+
+      const answer =
+        res?.answer ||
+        res?.message ||
+        (Array.isArray(res?.suggestions) ? res.suggestions.join('\n\n') : '') ||
+        buildLocalAnswer({
+          prompt: userQuestion,
+          role,
+          location,
+          industry,
+          workMode,
+          experienceLevel,
+          company,
+          contactPerson,
+        });
+
+      const assistantMessage: ChatMessage = {
+        id: safeId(),
+        role: 'assistant',
+        content: answer,
+        links,
+        createdAt: new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      if (dailyLimit !== null) {
+        setUsageCount(increaseUsage(currentTier));
+      }
+
+      await trackEvent('ai_job_assistant_used', '/ai/job-assistant', {
+        role,
+        location,
+        industry,
+        workMode,
+        experienceLevel,
+        hasCompany: !!company,
+        tier: currentTier,
+        linksGenerated: links.length,
+      });
+    } catch (error) {
+      const answer = buildLocalAnswer({
+        prompt: userQuestion,
+        role,
+        location,
+        industry,
+        workMode,
+        experienceLevel,
+        company,
+        contactPerson,
       });
 
-      const list =
-        Array.isArray(res.suggestions) && res.suggestions.length
-          ? (res.suggestions as string[])
-          : templatePlan;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: safeId(),
+          role: 'assistant',
+          content: answer,
+          links,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
 
-      setSearchLinks(links);
-      setSuggestions(list);
-      setOutput(list.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n\n'));
-
-      if (!isCreatorPlus) {
-        const next = increaseUsage(currentTier);
-        setUsageCount(next);
+      if (dailyLimit !== null) {
+        setUsageCount(increaseUsage(currentTier));
       }
-    } catch {
-      setSearchLinks(links);
-      setSuggestions(templatePlan);
-      setOutput(templatePlan.map((item, i) => `${i + 1}. ${item}`).join('\n\n'));
 
-      if (!isCreatorPlus) {
-        const next = increaseUsage(currentTier);
-        setUsageCount(next);
-      }
+      await trackEvent('ai_job_assistant_used', '/ai/job-assistant', {
+        role,
+        location,
+        industry,
+        workMode,
+        experienceLevel,
+        tier: currentTier,
+        fallback: true,
+        linksGenerated: links.length,
+      });
 
       toast({
-        title: 'Plan generated',
-        description: 'The live assistant was unavailable, so FaceMeX used the built-in job strategy planner.',
+        title: 'Assistant used offline planner',
+        description: 'DeepSeek/backend was unavailable, so FaceMeX generated a built-in job plan.',
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const handleOpenApplyHelp = () => {
-    if (!isCreatorPlus) {
-      toast({
-        title: 'Creator+ required',
-        description: 'Upgrade to Creator or higher to unlock application help, contact finder, and follow-up reminders.',
-      });
-      navigate('/pricing');
-      return;
-    }
-
-    setActiveTab('apply');
-
-    const links = buildCompanyContactLinks({
-      company: companyName,
-      role,
-      location,
-    });
-
-    setCompanyLinks(links);
+  const askQuick = (text: string) => {
+    setPrompt(text);
+    window.setTimeout(() => {
+      const el = document.getElementById('job-assistant-prompt');
+      el?.focus();
+    }, 0);
   };
 
-  const handleRefreshCompanyLinks = () => {
-    if (!isCreatorPlus) {
-      navigate('/pricing');
-      return;
-    }
-
-    const links = buildCompanyContactLinks({
-      company: companyName,
-      role,
-      location,
-    });
-
-    setCompanyLinks(links);
-
-    toast({
-      title: 'Contact links prepared',
-      description: 'Open the links to find the correct company, department, HR contact, or CV email.',
-    });
-  };
-
-  const handleSaveReminder = () => {
-    if (!isCreatorPlus) {
-      navigate('/pricing');
-      return;
-    }
-
-    const company = clean(companyName);
-    const targetRole = clean(role);
-    const days = Math.max(1, Number(followUpDays || 5));
-
-    if (!company || !targetRole) {
-      toast({
-        title: 'Add company and role',
-        description: 'Enter the company/department and role before saving a follow-up reminder.',
-      });
-      return;
-    }
-
-    const reminder: Reminder = {
-      id: `${Date.now()}`,
-      company,
-      role: targetRole,
-      contact: clean(contactEmail || contactPerson || department || 'Check official contact page'),
-      dueDate: addDays(days),
-      notes: `Follow up after ${days} day(s) if there is no reply. Department: ${department || 'Not specified'}. Contact person: ${contactPerson || 'Not specified'}.`,
-      createdAt: new Date().toISOString(),
-    };
-
-    saveReminders([reminder, ...reminders]);
-
-    toast({
-      title: 'Follow-up reminder saved',
-      description: `Reminder set for ${reminder.dueDate}.`,
-    });
-  };
-
-  const handleSavePlan = () => {
-    const text =
-      suggestions && suggestions.length
-        ? suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n\n')
-        : (output || '').toString();
-
-    if (!text.trim()) {
-      toast({
-        title: 'Nothing to save',
-        description: 'Generate strategies first, then save them.',
-      });
-      return;
-    }
-
-    setSavedPlan(text);
-
-    toast({
-      title: 'Plan saved for this session',
-      description: 'Scroll down to view your saved job search plan.',
-    });
-  };
-
-  const handleCopyAll = async () => {
-    const text =
-      suggestions && suggestions.length
-        ? suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n\n')
-        : (output || '').toString();
-
-    if (!text.trim()) {
-      toast({
-        title: 'Nothing to copy',
-        description: 'Generate strategies first, then copy them.',
-      });
-      return;
-    }
-
+  const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
 
       toast({
-        title: 'Copied to clipboard',
-        description: 'Job search strategies are ready to paste into your notes.',
+        title: 'Copied',
+        description: 'Text copied to clipboard.',
       });
-    } catch (err) {
-      console.error('copy strategies failed', err);
-
+    } catch {
       toast({
         title: 'Copy failed',
-        description: 'Select the text manually and copy it instead.',
+        description: 'Please copy the text manually.',
+        variant: 'destructive',
       });
     }
   };
 
-  const applicationMessage = `Good day${contactPerson ? ` ${contactPerson}` : ''},
+  const emailTemplates = buildEmailTemplates({
+    role,
+    company,
+    contactPerson,
+  });
 
-I hope you are well. I am interested in the ${role || '[role]'} opportunity at ${companyName || '[company]'}. I would like to apply or send my CV for consideration.
-
-Please may you advise where I should send my CV, or who the correct person/department is for this application?
-
-Kind regards`;
-
-  const followUpMessage = `Good day${contactPerson ? ` ${contactPerson}` : ''},
-
-I hope you are well. I am following up on my application for the ${role || '[role]'} opportunity at ${companyName || '[company]'}.
-
-I would appreciate any update when available.
-
-Kind regards`;
+  const activeRadarCard = radarCards[activeCard];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-background">
       <Navbar />
 
-      <div className="max-w-4xl mx-auto pt-14 md:pt-16 px-4">
-        <div className="mb-6">
-          <h1 className="text-xl md:text-2xl font-semibold">AI Job Assistant</h1>
-
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Build a practical job search plan, find vacancy sources, search social media, and avoid job scams.
-          </p>
-        </div>
-
-        <Card className="rounded-2xl border border-border/60 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Job search strategy</CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Enter your target role and area. FaceMeX will show you where to search, what keywords to use, and how to apply safely.
-              {dailyLimit === null
-                ? ' You have unlimited job assistant access.'
-                : ` Daily limit: ${usageCount}/${dailyLimit} used. ${remainingUses} remaining today.`}
-            </p>
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={activeTab === 'strategy' ? 'default' : 'outline'}
-                size="sm"
-                className="text-xs"
-                onClick={() => setActiveTab('strategy')}
-              >
-                Strategy
-              </Button>
-
-              <Button
-                type="button"
-                variant={activeTab === 'apply' ? 'default' : 'outline'}
-                size="sm"
-                className="text-xs"
-                onClick={handleOpenApplyHelp}
-              >
-                {isCreatorPlus ? 'Apply Help' : 'Apply Help (Creator+)'}
-              </Button>
+      <main className="mx-auto max-w-7xl px-3 pb-24 pt-16 sm:px-4 md:pt-20">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5" />
+              DeepSeek-powered career assistant
             </div>
 
-            {activeTab === 'strategy' && (
-              <>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="space-y-2">
+            <h1 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">
+              FaceMeX Job Assistant
+            </h1>
+
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Ask for jobs, interview prep, CV tips, application emails, PNet, Indeed, DPSA government vacancies,
+              Facebook vacancy search, and nearby South African opportunities.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="rounded-full px-3 py-1">
+              {creatorPlus ? (
+                <>
+                  <Crown className="mr-1 h-3.5 w-3.5" />
+                  Unlimited
+                </>
+              ) : currentTier === 'pro' ? (
+                `Pro: ${usageCount}/20 today`
+              ) : (
+                `Free: ${usageCount}/4 today`
+              )}
+            </Badge>
+
+            {!creatorPlus && (
+              <Button size="sm" variant="outline" onClick={() => navigate('/pricing')}>
+                Upgrade
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <Card className="rounded-3xl border-border/60 shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Search className="h-4 w-4" />
+                  Job search profile
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="grid gap-3">
+                  <div className="space-y-1">
                     <label className="text-xs font-medium">Target role</label>
                     <Input
                       value={role}
                       onChange={(e) => setRole(e.target.value)}
-                      placeholder="e.g. General Worker, Driver, Admin Assistant"
+                      placeholder="e.g. Driver, Admin, General Worker"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Preferred location</label>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Location</label>
                     <Input
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
-                      placeholder="e.g. Tzaneen, Polokwane, Remote"
+                      placeholder="e.g. Tzaneen, Polokwane, Johannesburg"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Preferences (optional)</label>
-                    <Input
-                      value={preferences}
-                      onChange={(e) => setPreferences(e.target.value)}
-                      placeholder="e.g. no experience, transport available, retail"
-                    />
-                  </div>
-                </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Industry</label>
+                      <Input
+                        value={industry}
+                        onChange={(e) => setIndustry(e.target.value)}
+                        placeholder="Retail"
+                      />
+                    </div>
 
-                <div className="grid gap-3 md:grid-cols-4">
-                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Work mode</label>
+                      <select
+                        value={workMode}
+                        onChange={(e) => setWorkMode(e.target.value)}
+                        className="h-10 w-full rounded-md border bg-background px-2 text-sm"
+                      >
+                        <option value="">Any</option>
+                        <option value="on-site">On-site</option>
+                        <option value="remote">Remote</option>
+                        <option value="hybrid">Hybrid</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
                     <label className="text-xs font-medium">Experience level</label>
                     <select
-                      className="w-full border bg-background px-2 py-1 rounded text-xs"
                       value={experienceLevel}
                       onChange={(e) => setExperienceLevel(e.target.value)}
+                      className="h-10 w-full rounded-md border bg-background px-2 text-sm"
                     >
                       <option value="">Not specified</option>
                       <option value="student / intern">Student / Intern</option>
@@ -694,331 +977,370 @@ Kind regards`;
                       <option value="junior">Junior</option>
                       <option value="mid">Mid</option>
                       <option value="senior">Senior</option>
-                      <option value="lead / manager">Lead / Manager</option>
+                      <option value="manager">Manager</option>
                     </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Industry focus (optional)</label>
-                    <Input
-                      value={industry}
-                      onChange={(e) => setIndustry(e.target.value)}
-                      placeholder="e.g. Retail, Security, Hospitality, Tech"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Work mode</label>
-                    <select
-                      className="w-full border bg-background px-2 py-1 rounded text-xs"
-                      value={workMode}
-                      onChange={(e) => setWorkMode(e.target.value)}
-                    >
-                      <option value="">Any</option>
-                      <option value="remote">Remote</option>
-                      <option value="hybrid">Hybrid</option>
-                      <option value="on-site">On-site</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Hours per week</label>
-                    <Input
-                      value={hoursPerWeek}
-                      onChange={(e) => setHoursPerWeek(e.target.value)}
-                      placeholder="e.g. 5, 10, 20"
-                    />
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2">
-                  {dailyLimit !== null && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => navigate('/pricing')}
-                      className="text-sm font-medium"
-                    >
-                      Upgrade for unlimited
-                    </Button>
-                  )}
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={enableNearbyJobs}
+                    disabled={geoBusy}
+                    className="justify-start"
+                  >
+                    {geoBusy ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <MapPin className="mr-2 h-4 w-4" />
+                    )}
+                    Nearby
+                  </Button>
 
-                  <Button onClick={handleGenerate} disabled={busy} className="text-sm font-medium">
-                    {busy ? 'Building strategy…' : 'Build job strategy'}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={enableVacancyAlerts}
+                    className="justify-start"
+                  >
+                    {alertEnabled ? (
+                      <BellRing className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Bell className="mr-2 h-4 w-4" />
+                    )}
+                    Alerts
                   </Button>
                 </div>
 
-                {searchLinks.length > 0 && (
-                  <div className="mt-4 space-y-2 p-3 border border-border/60 rounded-xl bg-muted/30 text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Clickable vacancy search links
-                    </div>
-
-                    <div className="grid gap-2 md:grid-cols-2">
-                      {searchLinks.map((link) => (
-                        <a
-                          key={link.url}
-                          href={link.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors"
-                        >
-                          <div className="text-sm font-semibold">{link.label}</div>
-                          {link.note && (
-                            <div className="mt-1 text-xs text-muted-foreground">{link.note}</div>
-                          )}
-                        </a>
-                      ))}
-                    </div>
+                {nearbyEnabled && (
+                  <div className="rounded-2xl border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    Nearby search enabled while page is open. Location: {geoLabel}
                   </div>
                 )}
 
-                {suggestions && suggestions.length > 0 && (
-                  <div className="mt-4 space-y-3 p-3 border border-border/60 rounded-xl bg-card text-sm">
-                    {suggestions.map((s, i) => (
-                      <div key={i} className="space-y-1">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {labels[i] || `Strategy ${i + 1}`}
+                <Button type="button" className="w-full" onClick={refreshSources}>
+                  <RefreshCcw className="mr-2 h-4 w-4" />
+                  Refresh vacancy radar
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-border/60 shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Briefcase className="h-4 w-4" />
+                  Vacancy radar
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                {activeRadarCard ? (
+                  <a
+                    href={activeRadarCard.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block overflow-hidden rounded-3xl border bg-gradient-to-br from-slate-950 to-slate-800 p-4 text-white shadow-lg"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="inline-flex rounded-full bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide text-white/70">
+                          {activeRadarCard.category || 'jobs'}
                         </div>
 
-                        <p className="whitespace-pre-wrap">{s}</p>
+                        <h3 className="mt-3 text-lg font-semibold leading-tight">
+                          {activeRadarCard.label}
+                        </h3>
+
+                        <p className="mt-2 text-xs leading-relaxed text-white/70">
+                          {activeRadarCard.note}
+                        </p>
                       </div>
-                    ))}
 
-                    <div className="flex justify-end pt-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-[11px] mr-2"
-                        onClick={handleCopyAll}
-                      >
-                        Copy all to notes
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-[11px]"
-                        onClick={handleSavePlan}
-                      >
-                        Save plan (this session)
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {savedPlan && (
-                  <div className="mt-4 space-y-2 p-3 border border-border/60 rounded-xl bg-muted/30 text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Saved job search plan (session only)
+                      <ExternalLink className="h-4 w-4 shrink-0 text-white/70" />
                     </div>
 
-                    <p className="whitespace-pre-wrap">{savedPlan}</p>
-                  </div>
+                    <div className="mt-4 flex items-center gap-1">
+                      {radarCards.slice(0, 8).map((_, index) => (
+                        <span
+                          key={index}
+                          className={`h-1.5 rounded-full transition-all ${
+                            index === activeCard ? 'w-6 bg-white' : 'w-1.5 bg-white/30'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No vacancy cards yet.</p>
                 )}
-              </>
-            )}
 
-            {activeTab === 'apply' && (
-              <div className="space-y-4">
-                {!isCreatorPlus && (
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-                    Apply Help is available on Creator, Business, and Exclusive tiers.
-                  </div>
-                )}
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Company / Department</label>
-                    <Input
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="e.g. Shoprite, Hospital, Municipality"
-                      disabled={!isCreatorPlus}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Department / Branch</label>
-                    <Input
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                      placeholder="e.g. HR, Store Manager, Admin"
-                      disabled={!isCreatorPlus}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Known contact person</label>
-                    <Input
-                      value={contactPerson}
-                      onChange={(e) => setContactPerson(e.target.value)}
-                      placeholder="Optional"
-                      disabled={!isCreatorPlus}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">CV email / contact found</label>
-                    <Input
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      placeholder="Paste email, phone, or contact page"
-                      disabled={!isCreatorPlus}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Follow-up after days</label>
-                    <Input
-                      value={followUpDays}
-                      onChange={(e) => setFollowUpDays(e.target.value)}
-                      placeholder="e.g. 3, 5, 7"
-                      disabled={!isCreatorPlus}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium">Action</label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full text-sm"
-                      onClick={handleRefreshCompanyLinks}
-                      disabled={!isCreatorPlus}
+                <div className="grid gap-2">
+                  {sourceLinks.slice(0, 5).map((link) => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between gap-3 rounded-2xl border bg-background px-3 py-2 text-sm hover:bg-muted/40"
                     >
-                      Find contact links
-                    </Button>
-                  </div>
-                </div>
-
-                {companyLinks.length > 0 && (
-                  <div className="space-y-2 p-3 border border-border/60 rounded-xl bg-muted/30 text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Contact finder links
-                    </div>
-
-                    <div className="grid gap-2 md:grid-cols-2">
-                      {companyLinks.map((link) => (
-                        <a
-                          key={link.url}
-                          href={link.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors"
-                        >
-                          <div className="text-sm font-semibold">{link.label}</div>
-                          {link.note && (
-                            <div className="mt-1 text-xs text-muted-foreground">{link.note}</div>
-                          )}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-2 p-3 border border-border/60 rounded-xl bg-card text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Where to send your CV
-                    </div>
-
-                    <p className="text-sm text-muted-foreground">
-                      First choice: official company careers page. Second choice: official HR email. Third choice:
-                      verified company social page inbox. Avoid sending documents to random personal accounts unless verified.
-                    </p>
-
-                    <div className="pt-2 text-xs text-muted-foreground">
-                      Who to contact:
-                    </div>
-
-                    <ul className="list-disc pl-5 text-sm">
-                      <li>HR department for formal companies.</li>
-                      <li>Store manager or branch manager for retail/shop jobs.</li>
-                      <li>School admin or principal for school posts.</li>
-                      <li>Municipal HR or registry office for public sector posts.</li>
-                      <li>Recruiter or hiring manager for LinkedIn vacancies.</li>
-                    </ul>
-                  </div>
-
-                  <div className="space-y-2 p-3 border border-border/60 rounded-xl bg-card text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Message templates
-                    </div>
-
-                    <Textarea value={applicationMessage} readOnly rows={7} className="text-xs" />
-
-                    <Textarea value={followUpMessage} readOnly rows={6} className="text-xs" />
-
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-[11px]"
-                        disabled={!isCreatorPlus}
-                        onClick={() => navigator.clipboard.writeText(applicationMessage)}
-                      >
-                        Copy apply message
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-[11px]"
-                        disabled={!isCreatorPlus}
-                        onClick={() => navigator.clipboard.writeText(followUpMessage)}
-                      >
-                        Copy follow-up
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  {!isCreatorPlus && (
-                    <Button type="button" variant="outline" onClick={() => navigate('/pricing')}>
-                      Upgrade to Creator+
-                    </Button>
-                  )}
-
-                  <Button type="button" onClick={handleSaveReminder} disabled={!isCreatorPlus}>
-                    Save follow-up reminder
-                  </Button>
-                </div>
-
-                {reminders.length > 0 && (
-                  <div className="space-y-2 p-3 border border-border/60 rounded-xl bg-muted/30 text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Follow-up reminders
-                    </div>
-
-                    {reminders.map((reminder) => (
-                      <div key={reminder.id} className="rounded-xl border bg-background p-3">
-                        <div className="font-semibold">
-                          {reminder.company} — {reminder.role}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Follow up on: {reminder.dueDate}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Contact: {reminder.contact}
-                        </div>
-                        <p className="mt-1 text-xs">{reminder.notes}</p>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{link.label}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">{link.note}</div>
                       </div>
-                    ))}
-                  </div>
-                )}
+
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </a>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-border/60 shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Mail className="h-4 w-4" />
+                  Apply messages
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="grid gap-2">
+                  <Input
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    placeholder="Company name"
+                  />
+
+                  <Input
+                    value={contactPerson}
+                    onChange={(e) => setContactPerson(e.target.value)}
+                    placeholder="Contact person, optional"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => copyText(emailTemplates.apply)}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Copy application email
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => copyText(emailTemplates.followUp)}
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Copy follow-up email
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="flex min-h-[72vh] flex-col overflow-hidden rounded-3xl border-border/60 shadow-none">
+            <CardHeader className="border-b bg-background/80 pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Job Assistant Chat
+                </CardTitle>
+
+                <Badge variant="secondary" className="rounded-full">
+                  {dailyLimit === null
+                    ? 'Unlimited'
+                    : `${remainingUses} searches left`}
+                </Badge>
               </div>
-            )}
+            </CardHeader>
+
+            <CardContent className="flex flex-1 flex-col p-0">
+              <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-5">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => askQuick('Find latest vacancies near me and show the best places to search.')}
+                  >
+                    Latest vacancies
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => askQuick('Help me prepare for an interview.')}
+                  >
+                    Interview prep
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => askQuick('Write an email to send my CV for a job.')}
+                  >
+                    Email to send CV
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => askQuick('Search Facebook vacancies from Godfrey Pandeka and local job posts.')}
+                  >
+                    Facebook vacancies
+                  </Button>
+                </div>
+
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${
+                      message.role === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[88%] rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                        message.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'border bg-background'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{message.content}</p>
+
+                      {message.links && message.links.length > 0 && (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {message.links.slice(0, 6).map((link) => (
+                            <a
+                              key={link.url}
+                              href={link.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-2xl border bg-muted/30 px-3 py-2 text-xs hover:bg-muted/50"
+                            >
+                              <div className="flex items-center justify-between gap-2 font-semibold">
+                                <span>{link.label}</span>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </div>
+
+                              {link.note && (
+                                <div className="mt-1 text-muted-foreground">
+                                  {link.note}
+                                </div>
+                              )}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {busy && (
+                  <div className="flex justify-start">
+                    <div className="rounded-3xl border bg-background px-4 py-3 text-sm">
+                      <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                      Building your job answer...
+                    </div>
+                  </div>
+                )}
+
+                <div ref={bottomRef} />
+              </div>
+
+              <div className="border-t bg-background p-3 sm:p-4">
+                {!canAsk && (
+                  <div className="mb-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                    Daily search limit reached. Free gets 4/day, Pro gets 20/day, Creator+ gets unlimited.
+                  </div>
+                )}
+
+                <div className="rounded-3xl border bg-muted/20 p-2">
+                  <Textarea
+                    id="job-assistant-prompt"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Ask anything about jobs, vacancies, CVs, interviews, emails, Facebook job posts, PNet, Indeed, DPSA, or nearby opportunities..."
+                    className="min-h-[80px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendPrompt();
+                      }
+                    }}
+                  />
+
+                  <div className="flex items-center justify-between gap-2 px-2 pb-1">
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Verify jobs before sending ID documents or paying anything.
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={sendPrompt}
+                      disabled={busy || !canAsk}
+                      className="rounded-full"
+                    >
+                      {busy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {reminders.length > 0 && (
+          <Card className="mt-4 rounded-3xl border-border/60 shadow-none">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <BellRing className="h-4 w-4" />
+                Saved vacancy alert preferences
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {reminders.map((reminder) => (
+                <div key={reminder.id} className="rounded-2xl border bg-background p-3 text-sm">
+                  <div className="font-semibold">{reminder.role}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Location: {reminder.location}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Frequency: {reminder.frequency}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="mt-4 rounded-3xl border-border/60 shadow-none">
+          <CardContent className="flex flex-col gap-2 p-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              For real background vacancy notifications, connect this later to a server cron job + push notifications.
+            </div>
+
+            <Button size="sm" variant="ghost" onClick={() => navigate('/pricing')}>
+              View tiers
+            </Button>
           </CardContent>
         </Card>
-      </div>
+      </main>
     </div>
   );
 }
