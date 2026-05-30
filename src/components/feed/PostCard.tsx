@@ -111,7 +111,8 @@ function getSafeDate(value: unknown) {
 }
 
 function getPostDate(post: Post) {
-  return getSafeDate((post as any).timestamp || (post as any).createdAt || (post as any).created_at);
+  const p = post as any;
+  return getSafeDate(p.timestamp || p.createdAt || p.created_at);
 }
 
 function getCommentDate(comment: any) {
@@ -125,6 +126,7 @@ function getCommentText(comment: any) {
 }
 
 function normalizePostMedia(post: Post): PostMediaItem[] {
+  const p = post as any;
   const media: PostMediaItem[] = [];
   const seen = new Set<string>();
 
@@ -143,21 +145,22 @@ function normalizePostMedia(post: Post): PostMediaItem[] {
     normalizeStringArray(value).forEach((src) => add(type, src));
   };
 
-  addMany('image', (post as any).images);
-  addMany('image', (post as any).image);
+  addMany('image', p.images);
+  addMany('image', p.image);
 
-  addMany('video', (post as any).videos);
-  addMany('video', (post as any).video);
-  addMany('video', (post as any).videoUrl);
+  addMany('video', p.videos);
+  addMany('video', p.video);
+  addMany('video', p.videoUrl);
 
-  if ((post as any).mediaType === 'video' || (post as any).media_type === 'video') {
-    add('video', (post as any).mediaUrl || (post as any).media_url);
+  if (p.mediaType === 'video' || p.media_type === 'video') {
+    add('video', p.mediaUrl || p.media_url);
   }
 
   return media;
 }
 
 function normalizePostDocuments(post: Post): PostDocumentItem[] {
+  const p = post as any;
   const docs: PostDocumentItem[] = [];
 
   const addDoc = (raw: any, index: number) => {
@@ -239,7 +242,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
     });
   };
 
-  const rawDocuments = (post as any).documents;
+  const rawDocuments = p.documents;
 
   if (Array.isArray(rawDocuments)) {
     rawDocuments.forEach((doc, index) => addDoc(doc, index));
@@ -259,17 +262,17 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
 
   if (docs.length === 0) {
     const directDocumentUrl =
-      (post as any).documentUrl ||
-      (post as any).document_url ||
-      (post as any).document ||
-      (post as any).fileUrl ||
-      (post as any).file_url;
+      p.documentUrl ||
+      p.document_url ||
+      p.document ||
+      p.fileUrl ||
+      p.file_url;
 
     const directPages = normalizeStringArray(
-      (post as any).documentPages ||
-        (post as any).document_pages ||
-        (post as any).pageImages ||
-        (post as any).page_images
+      p.documentPages ||
+        p.document_pages ||
+        p.pageImages ||
+        p.page_images
     );
 
     if (directDocumentUrl || directPages.length) {
@@ -277,22 +280,22 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         {
           url: directDocumentUrl,
           title:
-            (post as any).documentTitle ||
-            (post as any).document_title ||
-            (post as any).fileName ||
-            (post as any).file_name ||
+            p.documentTitle ||
+            p.document_title ||
+            p.fileName ||
+            p.file_name ||
             'Document',
           pages: directPages,
           totalPages:
-            (post as any).documentTotalPages ||
-            (post as any).document_total_pages ||
+            p.documentTotalPages ||
+            p.document_total_pages ||
             directPages.length ||
             1,
           previewPages:
-            (post as any).documentPreviewPages ||
-            (post as any).document_preview_pages ||
-            (post as any).previewPages ||
-            (post as any).preview_pages ||
+            p.documentPreviewPages ||
+            p.document_preview_pages ||
+            p.previewPages ||
+            p.preview_pages ||
             Math.min(1, directPages.length || 1),
         },
         docs.length
@@ -379,7 +382,8 @@ function normalizeProfile(raw: any, fallbackId: string, index: number): Collabor
     raw?.verified === true ||
     raw?.userVerified === true ||
     raw?.isVerified === true ||
-    raw?.is_verified === true;
+    raw?.is_verified === true ||
+    raw?.addons?.verified === true;
 
   return {
     id,
@@ -390,14 +394,16 @@ function normalizeProfile(raw: any, fallbackId: string, index: number): Collabor
 }
 
 function normalizeCollaboratorProfiles(post: Post): CollaboratorProfile[] {
+  const p = post as any;
+
   const rawProfiles =
-    (post as any).collaboratorProfiles ||
-    (post as any).collaborator_profiles ||
-    (post as any).collabProfiles ||
-    (post as any).collab_profiles ||
+    p.collaboratorProfiles ||
+    p.collaborator_profiles ||
+    p.collabProfiles ||
+    p.collab_profiles ||
     [];
 
-  const rawCollaborators = (post as any).collaborators || [];
+  const rawCollaborators = p.collaborators || [];
 
   const source =
     Array.isArray(rawProfiles) && rawProfiles.length
@@ -420,11 +426,13 @@ function normalizeCollaboratorProfiles(post: Post): CollaboratorProfile[] {
 }
 
 function normalizePendingCollabRequests(post: Post): CollaboratorProfile[] {
+  const p = post as any;
+
   const raw =
-    (post as any).collabInvites ||
-    (post as any).collab_invites ||
-    (post as any).collaborationRequests ||
-    (post as any).collaboration_requests ||
+    p.collabInvites ||
+    p.collab_invites ||
+    p.collaborationRequests ||
+    p.collaboration_requests ||
     [];
 
   if (!Array.isArray(raw)) return [];
@@ -472,6 +480,37 @@ function getMyCollabCode(name: string, id: string) {
   return `${shortName}${last4}`;
 }
 
+function userIsVerifiedFromPost(post: Post, isOwner: boolean, localVerified: boolean) {
+  const p = post as any;
+
+  return (
+    p.verified === true ||
+    p.userVerified === true ||
+    p.isVerified === true ||
+    p.is_verified === true ||
+    p.authorVerified === true ||
+    p.author_verified === true ||
+    p.profileVerified === true ||
+    p.profile_verified === true ||
+    p.user?.verified === true ||
+    p.user?.userVerified === true ||
+    p.user?.isVerified === true ||
+    p.user?.is_verified === true ||
+    p.user?.addons?.verified === true ||
+    p.author?.verified === true ||
+    p.author?.userVerified === true ||
+    p.author?.isVerified === true ||
+    p.author?.is_verified === true ||
+    p.author?.addons?.verified === true ||
+    p.profile?.verified === true ||
+    p.profile?.userVerified === true ||
+    p.profile?.isVerified === true ||
+    p.profile?.is_verified === true ||
+    p.profile?.addons?.verified === true ||
+    (isOwner && localVerified)
+  );
+}
+
 function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) {
   if (!profiles.length) return null;
 
@@ -495,7 +534,7 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
         ))}
       </div>
 
-      <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
         <UsersRound className="h-3 w-3" />
         Collab
       </span>
@@ -520,7 +559,7 @@ function DocumentPreview({
   const imageCount = document.pages.filter(Boolean).length;
 
   return (
-    <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
+    <div className="overflow-hidden rounded-[26px] border border-border/60 bg-card shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
       {firstPage ? (
         <button
           type="button"
@@ -533,26 +572,26 @@ function DocumentPreview({
           <img
             src={firstPage}
             alt={`${document.title} preview`}
-            className="h-[250px] w-full object-contain sm:h-[340px]"
+            className="h-[245px] w-full object-contain sm:h-[340px]"
             loading="lazy"
             draggable={!downloadsLocked}
           />
 
           {imageCount > 1 && (
-            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+            <span className="absolute bottom-3 right-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs font-bold text-white shadow-lg backdrop-blur">
               {imageCount} images
             </span>
           )}
 
           {downloadsLocked && (
-            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">
+            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-950/85 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
               <Lock className="h-3 w-3" />
-              Downloads locked
+              Locked
             </span>
           )}
         </button>
       ) : (
-        <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
+        <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/30 px-4 text-center">
           <FileText className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm font-semibold">{document.title}</p>
           <p className="text-xs text-muted-foreground">Document uploaded</p>
@@ -563,7 +602,7 @@ function DocumentPreview({
         <button
           type="button"
           onClick={onToggleLock}
-          className="flex h-9 w-full items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+          className="flex h-10 w-full items-center justify-center gap-2 border-t border-border/60 bg-background text-[12px] font-bold text-muted-foreground hover:bg-muted/40 hover:text-foreground"
         >
           {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
           {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
@@ -588,6 +627,7 @@ export default function PostCard({ post }: PostCardProps) {
   } = usePostStore();
 
   const [showComments, setShowComments] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [editingPost, setEditingPost] = useState(false);
   const [postDraft, setPostDraft] = useState(post.content);
@@ -613,18 +653,22 @@ export default function PostCard({ post }: PostCardProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
+  const p = post as any;
+
   const myIds = useMemo(() => getMyIdentityCodes(user, currentUserId || ''), [user, currentUserId]);
 
   const ownerIds = useMemo(
     () => [
       cleanString(post.userId),
-      cleanString((post as any).authorId),
-      cleanString((post as any).ownerId),
-      cleanString((post as any).user?._id),
-      cleanString((post as any).user?.id),
-      cleanString((post as any).externalId),
+      cleanString(p.authorId),
+      cleanString(p.ownerId),
+      cleanString(p.user?._id),
+      cleanString(p.user?.id),
+      cleanString(p.author?._id),
+      cleanString(p.author?.id),
+      cleanString(p.externalId),
     ].filter(Boolean),
-    [post]
+    [post, p]
   );
 
   const isOwner = useMemo(() => {
@@ -647,17 +691,17 @@ export default function PostCard({ post }: PostCardProps) {
 
   const lightboxSrc = lightboxItems[lightboxIndex] || null;
 
-  const collaborators = Array.isArray((post as any).collaborators)
-    ? ((post as any).collaborators as any[]).map((x) =>
-        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId)
+  const collaborators = Array.isArray(p.collaborators)
+    ? (p.collaborators as any[]).map((x) =>
+        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId || x?.externalId)
       )
     : [];
 
   const isCollaborator = myIds.some((myId) => collaborators.some((id) => idsMatch(id, myId)));
 
-  const collabInvites = Array.isArray((post as any).collabInvites)
-    ? ((post as any).collabInvites as any[]).map((x) =>
-        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId)
+  const collabInvites = Array.isArray(p.collabInvites)
+    ? (p.collabInvites as any[]).map((x) =>
+        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId || x?.externalId)
       )
     : [];
 
@@ -665,19 +709,23 @@ export default function PostCard({ post }: PostCardProps) {
 
   const canEdit = isOwner || isCollaborator;
 
-  const displayName = post.userName || (post as any).name || 'FaceMeX Member';
-  const displayAvatar = post.userAvatar || (post as any).avatar || (post as any).userAvatar || '';
+  const displayName = post.userName || p.name || p.user?.name || p.author?.name || 'FaceMeX Member';
+  const displayAvatar =
+    p.userAvatar ||
+    p.avatar ||
+    p.user?.avatar ||
+    p.author?.avatar ||
+    p.avatar_url ||
+    '';
 
-  const isAuthorVerified =
-    (post as any)?.verified === true ||
-    (post as any)?.userVerified === true ||
-    (post as any)?.authorVerified === true ||
-    (post as any)?.accountVerified === true ||
-    (post as any)?.isVerified === true ||
-    (post as any)?.is_verified === true ||
-    (post as any)?.user?.verified === true ||
-    (post as any)?.user?.userVerified === true ||
-    (isOwner && (addons?.verified === true || (user as any)?.isVerified === true || (user as any)?.verified === true));
+  const localVerified =
+    addons?.verified === true ||
+    (user as any)?.verified === true ||
+    (user as any)?.userVerified === true ||
+    (user as any)?.isVerified === true ||
+    (user as any)?.addons?.verified === true;
+
+  const isAuthorVerified = userIsVerifiedFromPost(post, isOwner, localVerified);
 
   useEffect(() => {
     setPostDraft(post.content);
@@ -696,12 +744,12 @@ export default function PostCard({ post }: PostCardProps) {
   useEffect(() => {
     try {
       const serverLocked =
-        (post as any).downloadsLocked === true ||
-        (post as any).downloads_locked === true ||
-        (post as any).imagesLocked === true ||
-        (post as any).images_locked === true ||
-        (post as any).mediaLocked === true ||
-        (post as any).media_locked === true;
+        p.downloadsLocked === true ||
+        p.downloads_locked === true ||
+        p.imagesLocked === true ||
+        p.images_locked === true ||
+        p.mediaLocked === true ||
+        p.media_locked === true;
 
       const raw = localStorage.getItem(`facemex:post_downloads_locked:${post.id}`);
       const localLocked = raw === 'true';
@@ -710,7 +758,7 @@ export default function PostCard({ post }: PostCardProps) {
     } catch {
       setDownloadsLocked(false);
     }
-  }, [post.id, post]);
+  }, [post.id, p]);
 
   const toggleDownloadsLocked = () => {
     if (!isOwner) return;
@@ -746,7 +794,7 @@ export default function PostCard({ post }: PostCardProps) {
       alert(`Collaboration request sent. Your code: ${myCode}`);
     } catch (err) {
       console.error(err);
-      alert('Could not send collaboration request. Check backend route /api/posts/:id/collab/invite.');
+      alert('Collaboration request could not be sent.');
     }
   };
 
@@ -762,7 +810,7 @@ export default function PostCard({ post }: PostCardProps) {
       await (inviteCollaborator as any)(post.id, value);
     } catch (err) {
       console.error(err);
-      alert('Could not invite collaborator. Check backend/store collaborator route.');
+      alert('Could not invite collaborator.');
     }
   };
 
@@ -773,7 +821,7 @@ export default function PostCard({ post }: PostCardProps) {
       await (acceptCollabInvite as any)(post.id, profile.id);
     } catch (err) {
       console.error(err);
-      alert('Could not accept collaborator. Backend/store may need author-accept support.');
+      alert('Could not accept collaborator.');
     }
   };
 
@@ -820,17 +868,9 @@ export default function PostCard({ post }: PostCardProps) {
     setLightboxIndex((prev) => (prev >= lightboxItems.length - 1 ? 0 : prev + 1));
   };
 
-  const zoomIn = () => {
-    setLightboxZoom((prev) => Math.min(prev + 0.4, 4));
-  };
-
-  const zoomOut = () => {
-    setLightboxZoom((prev) => Math.max(prev - 0.4, 1));
-  };
-
-  const resetZoom = () => {
-    setLightboxZoom(1);
-  };
+  const zoomIn = () => setLightboxZoom((prev) => Math.min(prev + 0.4, 4));
+  const zoomOut = () => setLightboxZoom((prev) => Math.max(prev - 0.4, 1));
+  const resetZoom = () => setLightboxZoom(1);
 
   const openMediaLightbox = (src: string) => {
     const imageGallery = mediaItems
@@ -1099,6 +1139,7 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const handleReplyToComment = (commentUserName: string) => {
+    setReplyOpen(true);
     setShowComments(true);
     setCommentText(`@${commentUserName} `);
 
@@ -1114,7 +1155,7 @@ export default function PostCard({ post }: PostCardProps) {
       <button
         type="button"
         onClick={toggleDownloadsLocked}
-        className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[12px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
+        className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-full border border-border/60 bg-background text-[12px] font-bold text-muted-foreground shadow-sm transition-all hover:bg-muted/40 hover:text-foreground"
       >
         {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
         {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
@@ -1126,9 +1167,9 @@ export default function PostCard({ post }: PostCardProps) {
     if (!downloadsLocked) return null;
 
     return (
-      <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">
+      <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-950/85 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
         <Lock className="h-3 w-3" />
-        Downloads locked
+        Locked
       </span>
     );
   };
@@ -1141,7 +1182,7 @@ export default function PostCard({ post }: PostCardProps) {
           controls
           playsInline
           preload="metadata"
-          className="h-full w-full object-contain bg-black"
+          className="h-full w-full bg-black object-contain"
           controlsList={downloadsLocked ? 'nodownload' : undefined}
           onContextMenu={(e) => {
             if (downloadsLocked) e.preventDefault();
@@ -1154,7 +1195,7 @@ export default function PostCard({ post }: PostCardProps) {
       <img
         src={item.src}
         alt={`Post media ${index + 1}`}
-        className="h-full w-full object-contain bg-white"
+        className="h-full w-full bg-white object-contain"
         loading="lazy"
         draggable={!downloadsLocked}
         onContextMenu={(e) => {
@@ -1174,8 +1215,8 @@ export default function PostCard({ post }: PostCardProps) {
 
       if (item.type === 'video') {
         return (
-          <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-            <div className="relative h-[250px] sm:h-[340px]">
+          <div className="overflow-hidden rounded-[26px] border border-border/60 bg-black shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
+            <div className="relative h-[245px] sm:h-[340px]">
               {renderMediaItem(item, 0)}
               <DownloadLockChip />
             </div>
@@ -1184,7 +1225,7 @@ export default function PostCard({ post }: PostCardProps) {
       }
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-[26px] border border-border/60 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
           <button
             type="button"
             onClick={() => openMediaLightbox(item.src)}
@@ -1196,7 +1237,7 @@ export default function PostCard({ post }: PostCardProps) {
             <img
               src={item.src}
               alt="Post media"
-              className="h-[250px] w-full object-contain sm:h-[340px]"
+              className="h-[245px] w-full object-contain sm:h-[340px]"
               loading="lazy"
               draggable={!downloadsLocked}
             />
@@ -1211,7 +1252,7 @@ export default function PostCard({ post }: PostCardProps) {
       const imageCount = imageItems.length;
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-[26px] border border-border/60 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
           <button
             type="button"
             onClick={() => openMediaLightbox(firstImage.src)}
@@ -1223,13 +1264,13 @@ export default function PostCard({ post }: PostCardProps) {
             <img
               src={firstImage.src}
               alt="Post media preview"
-              className="h-[250px] w-full object-contain sm:h-[340px]"
+              className="h-[245px] w-full object-contain sm:h-[340px]"
               loading="lazy"
               draggable={!downloadsLocked}
             />
 
             {imageCount > 1 && (
-              <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+              <span className="absolute bottom-3 right-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs font-bold text-white shadow-lg backdrop-blur">
                 {imageCount} images
               </span>
             )}
@@ -1241,8 +1282,8 @@ export default function PostCard({ post }: PostCardProps) {
     }
 
     return (
-      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-        <div className="grid h-[250px] grid-cols-2 gap-1 bg-black sm:h-[340px]">
+      <div className="overflow-hidden rounded-[26px] border border-border/60 bg-black shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
+        <div className="grid h-[245px] grid-cols-2 gap-1 bg-black sm:h-[340px]">
           {mediaItems.slice(0, 4).map((item, index) => {
             const extraCount = mediaItems.length - 4;
             const showMore = index === 3 && extraCount > 0;
@@ -1274,20 +1315,15 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
-  const commentCount = post.comments?.length || 0;
+  const comments = Array.isArray(p.comments) ? p.comments : [];
+  const commentCount = comments.length;
 
-  const reactionType = post.isLiked
-    ? ((post.reaction || 'like') as
-        | 'love'
-        | 'like'
-        | 'haha'
-        | 'wow'
-        | 'sad'
-        | 'angry')
+  const reactionType = p.isLiked
+    ? ((p.reaction || 'like') as 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry')
     : undefined;
 
   const reactionClass = (() => {
-    if (!post.isLiked) return '';
+    if (!p.isLiked) return '';
 
     switch (reactionType) {
       case 'love':
@@ -1305,11 +1341,8 @@ export default function PostCard({ post }: PostCardProps) {
     }
   })();
 
-  const topActionButton =
-    'h-8 rounded-full px-1.5 text-[13px] font-semibold text-foreground hover:bg-muted/40 hover:text-foreground';
-
-  const topActionCount =
-    'ml-1.5 text-[11px] font-semibold text-muted-foreground tabular-nums';
+  const premiumActionButton =
+    'h-10 min-w-0 flex-1 rounded-full px-2 text-[12px] font-bold text-muted-foreground transition-all hover:bg-background hover:text-foreground';
 
   return (
     <motion.div
@@ -1317,15 +1350,15 @@ export default function PostCard({ post }: PostCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
     >
-      <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_8px_26px_rgba(15,23,42,0.06)]">
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
+      <Card className="mb-4 overflow-hidden rounded-[32px] border border-border/60 bg-card shadow-[0_18px_55px_rgba(15,23,42,0.08)]">
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pb-2 pt-4">
           <button
             type="button"
-            className="flex min-w-0 items-center space-x-2 text-left"
+            className="flex min-w-0 items-center space-x-3 text-left"
             onClick={() => navigate(`/profile/${post.userId}`)}
           >
             <div className="relative shrink-0">
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-11 w-11 ring-1 ring-border/60">
                 <AvatarImage src={displayAvatar} alt={displayName} />
                 <AvatarFallback>{getInitial(displayName)}</AvatarFallback>
               </Avatar>
@@ -1338,12 +1371,12 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
 
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold hover:underline md:text-[15px]">
+              <p className="truncate text-[15px] font-bold leading-tight hover:underline">
                 {displayName}
               </p>
 
-              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                <p className="text-[11px] text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <p className="text-[11px] font-medium text-muted-foreground">
                   {formatDistanceToNow(getPostDate(post), { addSuffix: true })}
                 </p>
 
@@ -1362,13 +1395,13 @@ export default function PostCard({ post }: PostCardProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 shrink-0 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="end" className="w-64 rounded-2xl">
+            <DropdownMenuContent align="end" className="w-64 rounded-2xl border-border/60 shadow-xl">
               {canEdit && (
                 <DropdownMenuItem onClick={startEditPost}>
                   <PencilLine className="mr-2 h-4 w-4" />
@@ -1400,7 +1433,7 @@ export default function PostCard({ post }: PostCardProps) {
               {isOwner && pendingCollabRequests.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                     Collaboration requests
                   </div>
 
@@ -1421,15 +1454,14 @@ export default function PostCard({ post }: PostCardProps) {
                         <button
                           type="button"
                           onClick={() => acceptCollaborationRequest(profile)}
-                          className="rounded-full bg-slate-950 px-2 py-1 text-[11px] font-semibold text-white"
+                          className="rounded-full bg-slate-950 px-2 py-1 text-[11px] font-bold text-white"
                         >
                           Accept
                         </button>
-
                         <button
                           type="button"
                           onClick={() => rejectCollaborationRequest(profile)}
-                          className="rounded-full border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground"
+                          className="rounded-full border border-border px-2 py-1 text-[11px] font-bold text-muted-foreground"
                         >
                           Decline
                         </button>
@@ -1455,7 +1487,7 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="space-y-3 px-3 pb-3">
+        <CardContent className="space-y-3 px-4 pb-4">
           {editingPost ? (
             <div className="space-y-2">
               <textarea
@@ -1468,7 +1500,6 @@ export default function PostCard({ post }: PostCardProps) {
                 <Button size="sm" variant="ghost" onClick={() => setEditingPost(false)}>
                   Cancel
                 </Button>
-
                 <Button size="sm" onClick={saveEditPost}>
                   Save
                 </Button>
@@ -1488,7 +1519,7 @@ export default function PostCard({ post }: PostCardProps) {
                   <button
                     type="button"
                     onClick={() => setExpandedPost((v) => !v)}
-                    className="text-[13px] font-semibold text-muted-foreground hover:text-foreground"
+                    className="text-[13px] font-bold text-muted-foreground hover:text-foreground"
                   >
                     {expandedPost ? 'Show less' : 'Show more'}
                   </button>
@@ -1497,12 +1528,12 @@ export default function PostCard({ post }: PostCardProps) {
             )
           )}
 
-          {post.hashtags && post.hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {post.hashtags.map((tag, index) => (
+          {Array.isArray(p.hashtags) && p.hashtags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {p.hashtags.map((tag: string, index: number) => (
                 <span
                   key={index}
-                  className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                  className="cursor-pointer rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 transition-all hover:bg-slate-200 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
                   onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
                   {tag.startsWith('#') ? tag : `#${tag}`}
@@ -1530,20 +1561,20 @@ export default function PostCard({ post }: PostCardProps) {
 
           <AuthorDownloadLockButton />
 
-          {post.audio && (
-            <div className="rounded-2xl border bg-background p-3">
+          {p.audio && (
+            <div className="rounded-[24px] border border-border/60 bg-background p-3 shadow-sm">
               <div className="mb-2 flex items-center gap-2">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                  <AudioLines className="h-3.5 w-3.5" />
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white">
+                  <AudioLines className="h-4 w-4" />
                 </span>
-                <div className="text-sm font-medium">Voice note</div>
+                <div className="text-sm font-bold">Voice note</div>
               </div>
 
               <audio
                 controls
                 controlsList="nodownload noplaybackrate"
                 className="w-full"
-                src={post.audio}
+                src={p.audio}
                 preload="metadata"
                 onContextMenu={(e) => e.preventDefault()}
               />
@@ -1562,7 +1593,7 @@ export default function PostCard({ post }: PostCardProps) {
                 <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between gap-2 bg-gradient-to-b from-black/85 to-transparent px-3 py-3">
                   <div className="w-10" />
 
-                  <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-semibold text-white backdrop-blur">
+                  <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-bold text-white backdrop-blur">
                     {lightboxItems.length > 0 ? `${lightboxIndex + 1} / ${lightboxItems.length}` : 'Image'}
                   </div>
 
@@ -1631,7 +1662,7 @@ export default function PostCard({ post }: PostCardProps) {
                     type="button"
                     onClick={zoomOut}
                     disabled={lightboxZoom <= 1}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-bold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
                   >
                     <ZoomOut className="h-4 w-4" />
                     Out
@@ -1641,7 +1672,7 @@ export default function PostCard({ post }: PostCardProps) {
                     type="button"
                     onClick={zoomIn}
                     disabled={lightboxZoom >= 4}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-bold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
                   >
                     <ZoomIn className="h-4 w-4" />
                     Zoom
@@ -1651,7 +1682,7 @@ export default function PostCard({ post }: PostCardProps) {
                     type="button"
                     onClick={resetZoom}
                     disabled={lightboxZoom <= 1}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Reset
@@ -1661,8 +1692,8 @@ export default function PostCard({ post }: PostCardProps) {
             </DialogContent>
           </Dialog>
 
-          <div className="space-y-2 pt-1.5">
-            <div className="flex items-center justify-between gap-1 px-0.5">
+          <div className="rounded-[24px] border border-border/60 bg-slate-50 p-1.5 shadow-inner dark:bg-white/5">
+            <div className="flex items-center justify-between gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -1670,11 +1701,11 @@ export default function PostCard({ post }: PostCardProps) {
                     variant="ghost"
                     size="sm"
                     aria-label="React"
-                    className={`${topActionButton} ${reactionClass}`}
-                    onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                    className={`${premiumActionButton} ${reactionClass}`}
+                    onClick={() => likePost(post.id, (p.reaction || 'like') as any)}
                   >
-                    <span>React</span>
-                    <span className={topActionCount}>{post.likes || 0}</span>
+                    <Heart className="mr-1 h-3.5 w-3.5" />
+                    {p.likes || 0}
                   </Button>
                 </DropdownMenuTrigger>
 
@@ -1682,23 +1713,18 @@ export default function PostCard({ post }: PostCardProps) {
                   <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="rounded-full px-2">
                     <Heart className="h-4 w-4 text-rose-500" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="rounded-full px-2">
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="rounded-full px-2">
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="rounded-full px-2">
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="rounded-full px-2">
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="rounded-full px-2">
                     <Angry className="h-4 w-4 text-red-500" />
                   </DropdownMenuItem>
@@ -1709,96 +1735,73 @@ export default function PostCard({ post }: PostCardProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={topActionButton}
+                className={premiumActionButton}
                 onClick={() => {
-                  setShowComments((v) => !v);
+                  setReplyOpen((v) => !v);
+                  setShowComments(true);
                   window.setTimeout(() => replyInputRef.current?.focus(), 50);
                 }}
               >
-                <span>Reply</span>
-                <span className={topActionCount}>{commentCount}</span>
+                <MessageCircle className="mr-1 h-3.5 w-3.5" />
+                {commentCount}
               </Button>
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={topActionButton}
+                className={premiumActionButton}
                 onClick={handleShare}
               >
-                <span>Share</span>
-                <span className={topActionCount}>{post.shares || 0}</span>
+                Share
+                <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
+                  {p.shares || 0}
+                </span>
               </Button>
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={`${topActionButton} ${saved ? 'text-foreground' : ''}`}
+                className={`${premiumActionButton} ${saved ? 'text-foreground' : ''}`}
                 onClick={toggleSaved}
               >
-                <Bookmark className="mr-1 h-4 w-4" />
-                <span>{saved ? 'Saved' : 'Save'}</span>
+                <Bookmark className="mr-1 h-3.5 w-3.5" />
+                {saved ? 'Saved' : 'Save'}
               </Button>
-            </div>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={toggleVoiceRecording}
-              disabled={(() => {
-                const limit = getVoiceCommentDailyLimit();
-                if (!Number.isFinite(limit)) return false;
-                return getVoiceCommentCountToday() >= limit;
-              })()}
-              className={`h-8 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground shadow-[0_0_24px_rgba(168,85,247,0.16)] transition-all hover:shadow-[0_0_30px_rgba(34,211,238,0.22)] ${
-                isRecording ? 'border-red-400/40 bg-red-500/10 text-red-500' : ''
-              }`}
-            >
-              <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/20">
-                <AudioLines className={`h-3.5 w-3.5 text-purple-600 ${isRecording ? 'animate-pulse text-red-500' : ''}`} />
-              </span>
-              {isRecording ? `${recordSeconds}s` : 'Voice'}
-            </Button>
-
-            <div className="flex items-center gap-2">
-              <Input
-                ref={replyInputRef}
-                placeholder="Reply..."
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleComment();
-                  }
-                }}
-                className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
 
               <Button
-                size="icon"
+                type="button"
+                size="sm"
                 variant="ghost"
-                onClick={handleComment}
-                aria-label="Send reply"
-                className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                onClick={toggleVoiceRecording}
+                disabled={(() => {
+                  const limit = getVoiceCommentDailyLimit();
+                  if (!Number.isFinite(limit)) return false;
+                  return getVoiceCommentCountToday() >= limit;
+                })()}
+                className={`h-10 min-w-[78px] shrink-0 rounded-full px-3 text-[12px] font-bold transition-all ${
+                  isRecording
+                    ? 'bg-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.35)] hover:bg-red-600'
+                    : 'bg-gradient-to-r from-slate-950 to-slate-800 text-white shadow-lg hover:from-slate-900 hover:to-slate-700'
+                }`}
               >
-                <Send className="h-4 w-4" />
+                <AudioLines className={`mr-1 h-3.5 w-3.5 ${isRecording ? 'animate-pulse' : ''}`} />
+                {isRecording ? `${recordSeconds}s` : 'Voice'}
               </Button>
             </div>
           </div>
 
           {isRecording && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+            <div className="rounded-[24px] border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]">
                     <AudioLines className="h-4 w-4 animate-pulse" />
                   </span>
-
                   <div>
-                    <p className="text-sm font-semibold">Recording voice reply</p>
-                    <p className="text-xs opacity-80">Tap stop when you are done.</p>
+                    <p className="text-sm font-bold">Recording voice reply</p>
+                    <p className="text-xs opacity-80">Tap stop when done.</p>
                   </div>
                 </div>
 
@@ -1814,6 +1817,33 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
+          {replyOpen && (
+            <div className="flex items-center gap-2 pt-1">
+              <Input
+                ref={replyInputRef}
+                placeholder="Post your reply"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleComment();
+                  }
+                }}
+                className="h-11 rounded-full border-border/60 bg-muted/30 px-4 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleComment}
+                aria-label="Send reply"
+                className="h-11 w-11 rounded-full bg-slate-950 text-white hover:bg-slate-800 hover:text-white"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           <AnimatePresence>
             {showComments && commentCount > 0 && (
               <motion.div
@@ -1822,7 +1852,7 @@ export default function PostCard({ post }: PostCardProps) {
                 exit={{ opacity: 0, height: 0 }}
                 className="w-full space-y-3 border-t border-border/60 pt-3"
               >
-                {(post.comments || []).map((comment: any) => {
+                {comments.map((comment: any) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
                   const commentUserId = cleanString(comment.userId);
                   const canDeleteComment =
@@ -1839,14 +1869,14 @@ export default function PostCard({ post }: PostCardProps) {
                       animate={{ opacity: 1, x: 0 }}
                       className="flex gap-2"
                     >
-                      <Avatar className="h-7 w-7">
+                      <Avatar className="h-8 w-8">
                         <AvatarImage src={commentAvatar} alt={commentName} />
                         <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
                       </Avatar>
 
-                      <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
+                      <div className="min-w-0 flex-1 rounded-[22px] bg-slate-50 px-3 py-2 dark:bg-white/5">
                         <div className="flex items-baseline gap-2">
-                          <p className="text-sm font-medium text-foreground">
+                          <p className="text-sm font-bold text-foreground">
                             {commentName}
                           </p>
 
@@ -1863,10 +1893,9 @@ export default function PostCard({ post }: PostCardProps) {
                               </div>
 
                               <div className="min-w-0 flex-1">
-                                <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                <p className="mb-1 text-xs font-bold text-muted-foreground">
                                   Voice reply
                                 </p>
-
                                 <audio
                                   controls
                                   controlsList="nodownload noplaybackrate"
@@ -1887,7 +1916,7 @@ export default function PostCard({ post }: PostCardProps) {
                           <button
                             type="button"
                             onClick={() => handleReplyToComment(commentName)}
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
                           >
                             <MessageCircle className="h-3 w-3" />
                             Reply
@@ -1897,7 +1926,7 @@ export default function PostCard({ post }: PostCardProps) {
                             <button
                               type="button"
                               onClick={() => handleDeleteComment(comment.id)}
-                              className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:underline"
                             >
                               <Trash2 className="h-3 w-3" />
                               Delete
