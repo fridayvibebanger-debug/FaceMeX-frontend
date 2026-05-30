@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 import Navbar from '@/components/layout/Navbar';
 import LeftSidebar from '@/components/layout/LeftSidebar';
@@ -11,93 +11,71 @@ import { usePostStore } from '@/store/postStore';
 export default function FeedPage() {
   const { loadPosts } = usePostStore();
 
-  const isLoadingRef = useRef(false);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
+  useEffect(() => {
+    let mounted = true;
 
-  const safeLoadPosts = useCallback(
-    async (label = 'Feed load') => {
-      if (isLoadingRef.current) return;
-
-      isLoadingRef.current = true;
-
+    const load = async () => {
       try {
+        if (!mounted) return;
         await loadPosts();
       } catch (error) {
-        console.log(`${label} failed:`, error);
-      } finally {
-        isLoadingRef.current = false;
-      }
-    },
-    [loadPosts]
-  );
-
-  const scheduleFeedRefresh = useCallback(() => {
-    if (typeof document !== 'undefined' && document.hidden) return;
-
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
-
-    refreshTimerRef.current = setTimeout(() => {
-      if (!mountedRef.current) return;
-      safeLoadPosts('Live feed refresh');
-    }, 900);
-  }, [safeLoadPosts]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    safeLoadPosts('Initial feed load');
-
-    return () => {
-      mountedRef.current = false;
-
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
+        console.log('Initial feed load failed:', error);
       }
     };
-  }, [safeLoadPosts]);
+
+    load();
+
+    return () => {
+      mounted = false;
+    };
+  }, [loadPosts]);
 
   useEffect(() => {
+    let refreshTimer: number | null = null;
+
+    const refreshPostsOnly = () => {
+      if (refreshTimer) {
+        window.clearTimeout(refreshTimer);
+      }
+
+      refreshTimer = window.setTimeout(() => {
+        loadPosts().catch((error) => {
+          console.log('New post refresh failed:', error);
+        });
+      }, 1200);
+    };
+
     const channel = supabase
-      .channel('facemex-feed-actions-refresh-v2')
+      .channel('facemex-feed-posts-refresh')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_comments' },
-        scheduleFeedRefresh
+        { event: 'INSERT', schema: 'public', table: 'posts' },
+        refreshPostsOnly
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_reactions' },
-        scheduleFeedRefresh
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_shares' },
-        scheduleFeedRefresh
+        { event: 'DELETE', schema: 'public', table: 'posts' },
+        refreshPostsOnly
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
-
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
+      if (refreshTimer) {
+        window.clearTimeout(refreshTimer);
       }
+
+      supabase.removeChannel(channel);
     };
-  }, [scheduleFeedRefresh]);
+  }, [loadPosts]);
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      <div className="flex pt-14 pb-16 md:pt-16 md:pb-0">
+      <div className="flex pt-14 md:pt-16 pb-16 md:pb-0">
         <LeftSidebar />
 
-        <main className="min-w-0 flex-1 lg:ml-64 xl:mr-80">
+        <main className="flex-1 lg:ml-64 xl:mr-80">
           <NewsFeed />
         </main>
 
