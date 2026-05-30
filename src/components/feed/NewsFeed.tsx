@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, TrendingUp, Clock, Filter } from 'lucide-react';
@@ -38,6 +38,14 @@ interface BusinessPromotion {
 type FeedFilter = 'ai-curated' | 'recent' | 'trending';
 
 const STORAGE_KEY_PROMOTIONS = 'faceme_business_promotions_v1';
+
+const StablePostCard = memo(PostCard);
+
+function safePostTime(post: any) {
+  const raw = post?.timestamp || post?.createdAt || post?.created_at || Date.now();
+  const date = raw instanceof Date ? raw : new Date(raw);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
 
 function BusinessPromotionsStrip() {
   const [items, setItems] = useState<BusinessPromotion[]>([]);
@@ -133,14 +141,14 @@ function BusinessPromotionsStrip() {
 
   return (
     <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-semibold">Sponsored</span>
         <span className="text-[11px] text-muted-foreground">
           Businesses on the feed slide
         </span>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/90 px-3 py-2">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2 dark:border-slate-800/70 dark:bg-slate-900/90">
         <div className="relative h-24 sm:h-28">
           <motion.div
             className="absolute inset-y-0 left-0 flex items-center gap-3 pr-8"
@@ -155,27 +163,28 @@ function BusinessPromotionsStrip() {
             {[...displayItems, ...displayItems].map((item, index) => (
               <div
                 key={`${item.id}-${index}`}
-                className="flex items-center gap-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/90 dark:bg-slate-900/90 px-3 py-2 min-w-[240px] shadow-sm"
+                className="flex min-w-[240px] items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/90"
               >
-                <div className="h-12 w-12 rounded-lg bg-slate-200/80 dark:bg-slate-800/80 overflow-hidden flex items-center justify-center">
+                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-slate-200/80 dark:bg-slate-800/80">
                   {item.imageUrl ? (
                     <img
                       src={item.imageUrl}
                       alt={item.businessName}
                       className="h-full w-full object-cover"
+                      loading="lazy"
                     />
                   ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 flex items-center justify-center text-white text-xs font-bold">
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 text-xs font-bold text-white">
                       {item.businessName.charAt(0)}
                     </div>
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold truncate">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-semibold">
                     {item.headline}
                   </div>
-                  <div className="text-[11px] text-muted-foreground truncate">
+                  <div className="truncate text-[11px] text-muted-foreground">
                     {item.businessName}
                   </div>
                 </div>
@@ -185,7 +194,7 @@ function BusinessPromotionsStrip() {
                     href={item.ctaUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[11px] px-2 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300 whitespace-nowrap"
+                    className="whitespace-nowrap rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-600 dark:text-blue-300"
                   >
                     {item.ctaLabel}
                   </a>
@@ -197,7 +206,7 @@ function BusinessPromotionsStrip() {
           <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent" />
 
           <motion.div
-            className="pointer-events-none absolute top-2 bottom-2 right-4 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
+            className="pointer-events-none absolute bottom-2 right-4 top-2 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
             initial={{ opacity: 0.4, y: 0 }}
             animate={{ opacity: [0.2, 0.8, 0.2], y: [0, 4, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
@@ -213,7 +222,6 @@ export default function NewsFeed() {
   const [filter, setFilter] = useState<FeedFilter>('ai-curated');
   const { posts, trendingHashtags, loadPosts } = usePostStore();
 
-  const [displayPosts, setDisplayPosts] = useState(posts);
   const [newPostsAvailable, setNewPostsAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(5);
@@ -225,8 +233,11 @@ export default function NewsFeed() {
   const navigate = useNavigate();
 
   const latestKnownPostIdRef = useRef<string | null>(null);
+  const didInitialLoadRef = useRef(false);
+  const visibleCountRef = useRef(5);
+
   const [hiddenNewPostIds, setHiddenNewPostIds] = useState<Set<string>>(
-    new Set()
+    () => new Set()
   );
 
   const activeSkill = mode === 'professional' ? skillQuery.trim() : '';
@@ -238,6 +249,10 @@ export default function NewsFeed() {
   const [openToCollabUsers, setOpenToCollabUsers] = useState<
     Array<{ id: string; name: string; avatar?: string; openToCollab?: boolean }>
   >([]);
+
+  useEffect(() => {
+    visibleCountRef.current = visibleCount;
+  }, [visibleCount]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -255,15 +270,42 @@ export default function NewsFeed() {
   }, [location.search, mode, setMode]);
 
   useEffect(() => {
-    setLoading(true);
+    if (didInitialLoadRef.current) return;
 
-    Promise.all([
-      loadPosts().catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 400)),
-    ]).finally(() => {
+    didInitialLoadRef.current = true;
+
+    let cancelled = false;
+
+    async function runInitialLoad() {
+      if (posts.length === 0) {
+        setLoading(true);
+      }
+
+      try {
+        await loadPosts();
+      } catch (error) {
+        console.log('NewsFeed initial load failed:', error);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    runInitialLoad();
+
+    return () => {
+      cancelled = true;
+    };
+    // Run once only. Filtering must not reload/remount the whole feed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (posts.length > 0) {
       setLoading(false);
-    });
-  }, [mode, skillQuery, loadPosts]);
+    }
+  }, [posts.length]);
 
   useEffect(() => {
     if (posts[0]?.id && !newPostsAvailable) {
@@ -295,7 +337,7 @@ export default function NewsFeed() {
     setInitialLatestPost();
 
     const channel = supabase
-      .channel('facemex-new-post-banner')
+      .channel('facemex-new-post-banner-stable-v2')
       .on(
         'postgres_changes',
         {
@@ -325,11 +367,11 @@ export default function NewsFeed() {
           }
         }
       )
-      .subscribe((status) => {
-        console.log('FaceMeX new post banner:', status);
-      });
+      .subscribe();
 
     pollTimer = window.setInterval(async () => {
+      if (document.hidden) return;
+
       const { data, error } = await supabase
         .from('posts')
         .select('id')
@@ -360,7 +402,7 @@ export default function NewsFeed() {
 
         setNewPostsAvailable(true);
       }
-    }, 5000);
+    }, 15000);
 
     return () => {
       cancelled = true;
@@ -373,7 +415,7 @@ export default function NewsFeed() {
     };
   }, []);
 
-  useEffect(() => {
+  const displayPosts = useMemo(() => {
     let filtered = [...posts];
 
     if (mode) {
@@ -404,11 +446,15 @@ export default function NewsFeed() {
 
     switch (filter) {
       case 'ai-curated':
-        filtered.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
+        filtered.sort((a, b) => {
+          const bScore = b.aiScore || safePostTime(b);
+          const aScore = a.aiScore || safePostTime(a);
+          return bScore - aScore;
+        });
         break;
 
       case 'recent':
-        filtered.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        filtered.sort((a, b) => safePostTime(b) - safePostTime(a));
         break;
 
       case 'trending':
@@ -421,9 +467,12 @@ export default function NewsFeed() {
         break;
     }
 
-    setDisplayPosts(filtered);
-    setVisibleCount(5);
+    return filtered;
   }, [posts, filter, mode, activeSkill, hiddenNewPostIds]);
+
+  useEffect(() => {
+    setVisibleCount(5);
+  }, [filter, mode, activeSkill]);
 
   useEffect(() => {
     if (!observerNode) return;
@@ -431,32 +480,47 @@ export default function NewsFeed() {
     const onIntersect: IntersectionObserverCallback = (entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          setVisibleCount((count) => count + 5);
+          setVisibleCount((count) => {
+            const next = Math.min(count + 5, displayPosts.length);
+            return next === count ? count : next;
+          });
         }
       });
     };
 
-    const io = new IntersectionObserver(onIntersect, { rootMargin: '200px' });
+    const io = new IntersectionObserver(onIntersect, {
+      rootMargin: '300px',
+      threshold: 0.01,
+    });
+
     io.observe(observerNode);
 
     return () => io.disconnect();
-  }, [observerNode]);
+  }, [observerNode, displayPosts.length]);
 
   const loadNewPosts = async () => {
-    await loadPosts().catch(() => {});
+    setLoading(true);
 
-    const { data } = await supabase
-      .from('posts')
-      .select('id')
-      .order('created_at', { ascending: false })
-      .limit(1);
+    try {
+      await loadPosts();
 
-    if (data?.[0]?.id) {
-      latestKnownPostIdRef.current = data[0].id;
+      const { data } = await supabase
+        .from('posts')
+        .select('id')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (data?.[0]?.id) {
+        latestKnownPostIdRef.current = data[0].id;
+      }
+
+      setHiddenNewPostIds(new Set());
+      setNewPostsAvailable(false);
+    } catch (error) {
+      console.log('Load new posts failed:', error);
+    } finally {
+      setLoading(false);
     }
-
-    setHiddenNewPostIds(new Set());
-    setNewPostsAvailable(false);
   };
 
   useEffect(() => {
@@ -525,7 +589,7 @@ export default function NewsFeed() {
   }, []);
 
   return (
-    <div className="relative max-w-3xl mx-auto py-4 md:py-8 px-2 sm:px-4 lg:px-6 pb-24 space-y-4 md:space-y-6">
+    <div className="relative mx-auto max-w-3xl space-y-4 px-2 py-4 pb-24 sm:px-4 md:space-y-6 md:py-8 lg:px-6">
       <AnimatePresence>
         {newPostsAvailable && (
           <motion.div
@@ -536,7 +600,7 @@ export default function NewsFeed() {
           >
             <Button
               onClick={loadNewPosts}
-              className="w-full h-9 rounded-full text-xs font-medium"
+              className="h-9 w-full rounded-full text-xs font-medium"
             >
               New posts available. Refresh
             </Button>
@@ -547,9 +611,9 @@ export default function NewsFeed() {
       <button
         type="button"
         onClick={() => setIsCreateModalOpen(true)}
-        className="w-full text-left rounded-2xl border bg-card px-4 py-4 md:px-5 md:py-5 focus:outline-none focus:ring-2 focus:ring-ring"
+        className="w-full rounded-2xl border bg-card px-4 py-4 text-left focus:outline-none focus:ring-2 focus:ring-ring md:px-5 md:py-5"
       >
-        <div className="text-sm md:text-base text-muted-foreground">
+        <div className="text-sm text-muted-foreground md:text-base">
           Write a post, ask for ideas, or plan your next move…
         </div>
       </button>
@@ -562,7 +626,7 @@ export default function NewsFeed() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
+                <Filter className="mr-2 h-4 w-4" />
                 {filter === 'ai-curated' && 'AI Curated'}
                 {filter === 'recent' && 'Recent'}
                 {filter === 'trending' && 'Trending'}
@@ -571,17 +635,17 @@ export default function NewsFeed() {
 
             <DropdownMenuContent align="start">
               <DropdownMenuItem onClick={() => setFilter('ai-curated')}>
-                <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+                <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
                 AI Curated
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => setFilter('recent')}>
-                <Clock className="h-4 w-4 mr-2 text-blue-500" />
+                <Clock className="mr-2 h-4 w-4 text-blue-500" />
                 Recent
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => setFilter('trending')}>
-                <TrendingUp className="h-4 w-4 mr-2 text-orange-500" />
+                <TrendingUp className="mr-2 h-4 w-4 text-orange-500" />
                 Trending
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -601,25 +665,25 @@ export default function NewsFeed() {
         </div>
 
         {mode === 'professional' && (
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <input
               value={skillQuery}
               onChange={(event) => setSkillQuery(event.target.value)}
-              placeholder="Search by skill or #tag (e.g. react)"
-              className="flex-1 sm:w-64 px-3 py-2 border rounded-md bg-background text-sm"
+              placeholder="Search by skill or #tag"
+              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm sm:w-64"
             />
           </div>
         )}
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        className="p-3 sm:p-4 rounded-2xl border bg-card space-y-3 sm:space-y-4"
+        className="space-y-3 rounded-2xl border bg-card p-3 sm:space-y-4 sm:p-4"
       >
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
-          <span className="text-xs sm:text-sm font-semibold">Trending Now</span>
+          <TrendingUp className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
+          <span className="text-xs font-semibold sm:text-sm">Trending Now</span>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -627,7 +691,7 @@ export default function NewsFeed() {
             <Badge
               key={tag}
               variant="secondary"
-              className="cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
               onClick={() => {
                 const params = new URLSearchParams(location.search);
                 params.set('skill', tag);
@@ -656,7 +720,7 @@ export default function NewsFeed() {
         </div>
 
         {openToCollabUsers.length > 0 && (
-          <div className="border-t pt-3 space-y-2">
+          <div className="space-y-2 border-t pt-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">
                 Open to collaborate
@@ -671,18 +735,19 @@ export default function NewsFeed() {
               {openToCollabUsers.slice(0, 6).map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
+                  className="flex cursor-pointer items-center gap-2 rounded-full border px-2 py-1 text-xs hover:bg-accent/40"
                   onClick={() => navigate('/profile')}
                 >
-                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
+                  <div className="h-6 w-6 overflow-hidden rounded-full bg-muted">
                     {p.avatar ? (
                       <img
                         src={p.avatar}
                         alt={p.name}
                         className="h-full w-full object-cover"
+                        loading="lazy"
                       />
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
+                      <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
                         {p.name?.charAt(0) || '?'}
                       </div>
                     )}
@@ -690,7 +755,7 @@ export default function NewsFeed() {
 
                   <span className="max-w-[120px] truncate">{p.name}</span>
 
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
                     Open to collabs
                   </span>
                 </div>
@@ -728,7 +793,7 @@ export default function NewsFeed() {
         )}
 
         {activeSkill && (
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-[11px] sm:text-xs bg-muted/40 rounded-md px-3 py-2">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-[11px] sm:text-xs">
             <span className="text-muted-foreground">
               Explore how creators are using{' '}
               <span className="font-semibold">#{activeSkill}</span> in social
@@ -758,7 +823,7 @@ export default function NewsFeed() {
         )}
 
         {activeSkill && peopleForSkill.length > 0 && (
-          <div className="mt-3 border-t pt-3 space-y-2">
+          <div className="mt-3 space-y-2 border-t pt-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">
                 People with this skill
@@ -773,18 +838,19 @@ export default function NewsFeed() {
               {peopleForSkill.slice(0, 6).map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
+                  className="flex cursor-pointer items-center gap-2 rounded-full border px-2 py-1 text-xs hover:bg-accent/40"
                   onClick={() => navigate('/profile')}
                 >
-                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
+                  <div className="h-6 w-6 overflow-hidden rounded-full bg-muted">
                     {p.avatar ? (
                       <img
                         src={p.avatar}
                         alt={p.name}
                         className="h-full w-full object-cover"
+                        loading="lazy"
                       />
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
+                      <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
                         {p.name?.charAt(0) || '?'}
                       </div>
                     )}
@@ -793,7 +859,7 @@ export default function NewsFeed() {
                   <span>{p.name}</span>
 
                   {p.openToCollab && (
-                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
                       Open to collabs
                     </span>
                   )}
@@ -804,27 +870,27 @@ export default function NewsFeed() {
         )}
       </motion.div>
 
-      {loading ? (
+      {loading && posts.length === 0 ? (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={index}
-              className="p-4 rounded-2xl border bg-card animate-pulse space-y-3"
+              className="space-y-3 rounded-2xl border bg-card p-4 animate-pulse"
             >
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-muted" />
-                <div className="h-4 w-40 bg-muted rounded" />
+                <div className="h-4 w-40 rounded bg-muted" />
               </div>
 
-              <div className="h-4 w-3/4 bg-muted rounded" />
-              <div className="h-48 w-full bg-muted rounded" />
+              <div className="h-4 w-3/4 rounded bg-muted" />
+              <div className="h-48 w-full rounded bg-muted" />
             </div>
           ))}
         </div>
       ) : displayPosts.length === 0 ? (
-        <div className="p-8 text-center rounded-2xl border bg-card">
-          <div className="text-lg font-semibold mb-2">No posts yet</div>
-          <div className="text-sm text-muted-foreground mb-4">
+        <div className="rounded-2xl border bg-card p-8 text-center">
+          <div className="mb-2 text-lg font-semibold">No posts yet</div>
+          <div className="mb-4 text-sm text-muted-foreground">
             Be the first to share something.
           </div>
 
@@ -834,19 +900,18 @@ export default function NewsFeed() {
         </div>
       ) : (
         <div className="space-y-4">
-          <AnimatePresence mode="popLayout">
-            {displayPosts.slice(0, visibleCount).map((post, index) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: index * 0.03 }}
-              >
-                <PostCard post={post} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
+          {displayPosts.slice(0, visibleCount).map((post) => (
+            <motion.div
+              key={post.id}
+              layout="position"
+              initial={false}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="will-change-transform"
+            >
+              <StablePostCard post={post} />
+            </motion.div>
+          ))}
 
           {visibleCount < displayPosts.length && (
             <div className="flex flex-col items-center gap-3">
