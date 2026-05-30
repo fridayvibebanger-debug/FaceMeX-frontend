@@ -23,17 +23,12 @@ import {
   Unlock,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
-  Wand2,
-  Download,
-  ArrowLeft,
+  UserPlus,
+  UsersRound,
+  X,
   ZoomIn,
   ZoomOut,
-  X,
-  Users,
-  Copy,
-  UserPlus,
-  Clock,
+  RotateCcw,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -71,28 +66,13 @@ type PostDocumentItem = {
 type CollaboratorProfile = {
   id: string;
   name: string;
-  avatar?: string;
+  avatar: string;
   verified?: boolean;
-  inviteCode?: string;
 };
-
-type InviteItem = {
-  id: string;
-  code?: string;
-  name?: string;
-  createdAt?: string;
-};
-
-const CV_BUILDER_ROUTE = '/ai-resume';
-const CAREER_WORKSPACE_ROUTE = '/career-ai';
 
 function cleanString(value: unknown) {
   if (typeof value !== 'string') return '';
   return value.trim();
-}
-
-function safeLower(value: unknown) {
-  return cleanString(value).toLowerCase();
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -108,7 +88,7 @@ function normalizeStringArray(value: unknown): string[] {
         return parsed.map((item) => cleanString(item)).filter(Boolean);
       }
     } catch {
-      // continue
+      // continue below
     }
 
     if (value.includes(',')) {
@@ -124,58 +104,29 @@ function normalizeStringArray(value: unknown): string[] {
   return [];
 }
 
-function getAnyUserId(user: any) {
-  return cleanString(
-    user?._id ||
-      user?.id ||
-      user?.externalId ||
-      user?.userId ||
-      user?.sub ||
-      ''
-  );
+function getSafeDate(value: unknown) {
+  const raw = value || new Date().toISOString();
+  const date = raw instanceof Date ? raw : new Date(String(raw));
+  return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-function getPossibleCurrentUserIds(input: {
-  currentUserId?: string;
-  authUser?: any;
-}) {
-  const ids = [
-    input.currentUserId,
-    input.authUser?._id,
-    input.authUser?.id,
-    input.authUser?.externalId,
-    input.authUser?.userId,
-    input.authUser?.sub,
-  ]
-    .map((x) => cleanString(x))
-    .filter(Boolean);
-
-  try {
-    const localIds = [
-      localStorage.getItem('faceme_user_id'),
-      localStorage.getItem('facemex_user_id'),
-      localStorage.getItem('userId'),
-      localStorage.getItem('uid'),
-    ]
-      .map((x) => cleanString(x))
-      .filter(Boolean);
-
-    ids.push(...localIds);
-  } catch {
-    // ignore
-  }
-
-  return Array.from(new Set(ids));
+function getPostDate(post: Post) {
+  const p = post as any;
+  return getSafeDate(p.timestamp || p.createdAt || p.created_at);
 }
 
-function isSameUserId(a: unknown, possibleIds: string[]) {
-  const x = cleanString(a);
-  if (!x) return false;
+function getCommentDate(comment: any) {
+  return getSafeDate(comment?.timestamp || comment?.createdAt || comment?.created_at);
+}
 
-  return possibleIds.some((id) => cleanString(id) === x);
+function getCommentText(comment: any) {
+  return String(comment?.content || comment?.text || '')
+    .replace(/\[(REAL_LIFE|PRO COLLAB|PRO COLLAB INVITE|CREATOR_CONTENT)\s*/g, '')
+    .trim();
 }
 
 function normalizePostMedia(post: Post): PostMediaItem[] {
+  const p = post as any;
   const media: PostMediaItem[] = [];
   const seen = new Set<string>();
 
@@ -194,21 +145,22 @@ function normalizePostMedia(post: Post): PostMediaItem[] {
     normalizeStringArray(value).forEach((src) => add(type, src));
   };
 
-  addMany('image', (post as any).images);
-  addMany('image', (post as any).image);
+  addMany('image', p.images);
+  addMany('image', p.image);
 
-  addMany('video', (post as any).videos);
-  addMany('video', (post as any).video);
-  addMany('video', (post as any).videoUrl);
+  addMany('video', p.videos);
+  addMany('video', p.video);
+  addMany('video', p.videoUrl);
 
-  if ((post as any).mediaType === 'video' || (post as any).media_type === 'video') {
-    add('video', (post as any).mediaUrl || (post as any).media_url);
+  if (p.mediaType === 'video' || p.media_type === 'video') {
+    add('video', p.mediaUrl || p.media_url);
   }
 
   return media;
 }
 
 function normalizePostDocuments(post: Post): PostDocumentItem[] {
+  const p = post as any;
   const docs: PostDocumentItem[] = [];
 
   const addDoc = (raw: any, index: number) => {
@@ -290,7 +242,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
     });
   };
 
-  const rawDocuments = (post as any).documents;
+  const rawDocuments = p.documents;
 
   if (Array.isArray(rawDocuments)) {
     rawDocuments.forEach((doc, index) => addDoc(doc, index));
@@ -310,17 +262,17 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
 
   if (docs.length === 0) {
     const directDocumentUrl =
-      (post as any).documentUrl ||
-      (post as any).document_url ||
-      (post as any).document ||
-      (post as any).fileUrl ||
-      (post as any).file_url;
+      p.documentUrl ||
+      p.document_url ||
+      p.document ||
+      p.fileUrl ||
+      p.file_url;
 
     const directPages = normalizeStringArray(
-      (post as any).documentPages ||
-        (post as any).document_pages ||
-        (post as any).pageImages ||
-        (post as any).page_images
+      p.documentPages ||
+        p.document_pages ||
+        p.pageImages ||
+        p.page_images
     );
 
     if (directDocumentUrl || directPages.length) {
@@ -328,22 +280,22 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         {
           url: directDocumentUrl,
           title:
-            (post as any).documentTitle ||
-            (post as any).document_title ||
-            (post as any).fileName ||
-            (post as any).file_name ||
+            p.documentTitle ||
+            p.document_title ||
+            p.fileName ||
+            p.file_name ||
             'Document',
           pages: directPages,
           totalPages:
-            (post as any).documentTotalPages ||
-            (post as any).document_total_pages ||
+            p.documentTotalPages ||
+            p.document_total_pages ||
             directPages.length ||
             1,
           previewPages:
-            (post as any).documentPreviewPages ||
-            (post as any).document_preview_pages ||
-            (post as any).previewPages ||
-            (post as any).preview_pages ||
+            p.documentPreviewPages ||
+            p.document_preview_pages ||
+            p.previewPages ||
+            p.preview_pages ||
             Math.min(1, directPages.length || 1),
         },
         docs.length
@@ -364,7 +316,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         id: doc.id || `${post.id}-doc-${index}`,
         title,
         url,
-        pages: Array.isArray(doc.pages) ? doc.pages : [],
+        pages: Array.isArray(doc.pages) ? doc.pages.filter(Boolean) : [],
         totalPages: Math.max(1, Number(doc.totalPages) || 1),
         previewPages: Math.max(
           1,
@@ -377,106 +329,10 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
   return Array.from(unique.values()).slice(0, 1);
 }
 
-function normalizeCollaborators(post: Post): CollaboratorProfile[] {
-  const output: CollaboratorProfile[] = [];
-  const seen = new Set<string>();
-
-  const add = (raw: any, index: number) => {
-    if (!raw) return;
-
-    if (typeof raw === 'string') {
-      const id = cleanString(raw);
-      if (!id || seen.has(id)) return;
-
-      seen.add(id);
-      output.push({
-        id,
-        name: id.length > 18 ? `Collaborator ${index + 1}` : id,
-      });
-
-      return;
-    }
-
-    const id = cleanString(raw.id || raw.userId || raw._id || raw.externalId || raw.code);
-    const name =
-      cleanString(raw.name || raw.userName || raw.fullName || raw.username || raw.displayName) ||
-      (id ? id : `Collaborator ${index + 1}`);
-
-    const key = id || name.toLowerCase();
-    if (!key || seen.has(key)) return;
-
-    seen.add(key);
-
-    output.push({
-      id: id || key,
-      name,
-      avatar: cleanString(raw.avatar || raw.userAvatar || raw.avatarUrl || raw.avatar_url),
-      verified:
-        raw.verified === true ||
-        raw.userVerified === true ||
-        raw.isVerified === true ||
-        raw.is_verified === true,
-      inviteCode: cleanString(raw.inviteCode || raw.code),
-    });
-  };
-
-  const possibleSources = [
-    (post as any).collaboratorProfiles,
-    (post as any).collaboratorsProfiles,
-    (post as any).collabProfiles,
-    (post as any).collaborators,
-  ];
-
-  possibleSources.forEach((source) => {
-    if (Array.isArray(source)) {
-      source.forEach((item, index) => add(item, index));
-    } else if (typeof source === 'string' && source.trim()) {
-      try {
-        const parsed = JSON.parse(source);
-        if (Array.isArray(parsed)) parsed.forEach((item, index) => add(item, index));
-        else add(parsed, 0);
-      } catch {
-        add(source, 0);
-      }
-    }
-  });
-
-  return output.slice(0, 4);
-}
-
-function normalizeInviteItems(post: Post): InviteItem[] {
-  const raw = (post as any).collabInvites || (post as any).collaborationInvites || [];
-  const list = Array.isArray(raw) ? raw : normalizeStringArray(raw);
-
-  return list
-    .map((item: any, index) => {
-      if (typeof item === 'string') {
-        return {
-          id: item,
-          code: item,
-        };
-      }
-
-      return {
-        id: cleanString(item.userId || item.id || item.inviteeId || item.code || `invite-${index}`),
-        code: cleanString(item.code || item.inviteCode),
-        name: cleanString(item.name || item.userName || item.displayName),
-        createdAt: cleanString(item.createdAt),
-      };
-    })
-    .filter((item) => item.id || item.code);
-}
-
 function getCleanPostContent(content: string) {
   return String(content || '')
     .replace(/\[CREATOR_CONTENT\]/g, '')
     .trim();
-}
-
-function isOpportunityContent(content: string) {
-  return /(job|jobs|vacancy|vacancies|learnership|internship|opportunity|apply|cv|closing date|assessment|hiring|bursary|programme|programmes|requirements|salary)/i.test(
-    content
-  );
 }
 
 function clampStyle(lines: number): CSSProperties {
@@ -488,108 +344,198 @@ function clampStyle(lines: number): CSSProperties {
   };
 }
 
-function safeFileName(name: string) {
-  return String(name || 'facemex-image')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 70);
+function getInitial(value: string) {
+  return cleanString(value).charAt(0).toUpperCase() || 'U';
 }
 
-function createInviteCode(inputName: string) {
-  const cleanName =
-    String(inputName || 'Collab')
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .slice(0, 12) || 'Collab';
-
-  const number = Math.floor(1000 + Math.random() * 9000);
-
-  return `${cleanName}${number}`;
-}
-
-async function copyText(value: string) {
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch {
-    return false;
+function normalizeProfile(raw: any, fallbackId: string, index: number): CollaboratorProfile {
+  if (typeof raw === 'string') {
+    return {
+      id: raw,
+      name: raw.length > 18 ? `Collaborator ${index + 1}` : raw,
+      avatar: '',
+      verified: false,
+    };
   }
+
+  const id =
+    cleanString(raw?.id) ||
+    cleanString(raw?._id) ||
+    cleanString(raw?.userId) ||
+    cleanString(raw?.externalId) ||
+    fallbackId;
+
+  const name =
+    cleanString(raw?.name) ||
+    cleanString(raw?.userName) ||
+    cleanString(raw?.fullName) ||
+    cleanString(raw?.username) ||
+    `Collaborator ${index + 1}`;
+
+  const avatar =
+    cleanString(raw?.avatar) ||
+    cleanString(raw?.userAvatar) ||
+    cleanString(raw?.avatar_url) ||
+    '';
+
+  const verified =
+    raw?.verified === true ||
+    raw?.userVerified === true ||
+    raw?.isVerified === true ||
+    raw?.is_verified === true ||
+    raw?.addons?.verified === true;
+
+  return {
+    id,
+    name,
+    avatar,
+    verified,
+  };
 }
 
-function VerifiedMiniBadge() {
+function normalizeCollaboratorProfiles(post: Post): CollaboratorProfile[] {
+  const p = post as any;
+
+  const rawProfiles =
+    p.collaboratorProfiles ||
+    p.collaborator_profiles ||
+    p.collabProfiles ||
+    p.collab_profiles ||
+    [];
+
+  const rawCollaborators = p.collaborators || [];
+
+  const source =
+    Array.isArray(rawProfiles) && rawProfiles.length
+      ? rawProfiles
+      : Array.isArray(rawCollaborators)
+        ? rawCollaborators
+        : [];
+
+  const seen = new Set<string>();
+
+  return source
+    .map((item: any, index: number) => normalizeProfile(item, `${post.id}-collab-${index}`, index))
+    .filter((profile: CollaboratorProfile) => {
+      if (!profile.id) return false;
+      if (seen.has(profile.id)) return false;
+      seen.add(profile.id);
+      return true;
+    })
+    .slice(0, 4);
+}
+
+function normalizePendingCollabRequests(post: Post): CollaboratorProfile[] {
+  const p = post as any;
+
+  const raw =
+    p.collabInvites ||
+    p.collab_invites ||
+    p.collaborationRequests ||
+    p.collaboration_requests ||
+    [];
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item: any, index: number) => normalizeProfile(item, `request-${index}`, index))
+    .slice(0, 10);
+}
+
+function getMyIdentityCodes(user: any, userStoreId: string) {
+  const ids = new Set<string>();
+
+  const push = (value: unknown) => {
+    const v = cleanString(value);
+    if (v) ids.add(v);
+  };
+
+  push(userStoreId);
+  push(user?.id);
+  push(user?._id);
+  push(user?.externalId);
+
+  if (typeof window !== 'undefined') {
+    push(window.localStorage.getItem('faceme_user_id'));
+    push(window.localStorage.getItem('facemex_user_id'));
+  }
+
+  return Array.from(ids);
+}
+
+function idsMatch(a: unknown, b: unknown) {
+  const aa = cleanString(a);
+  const bb = cleanString(b);
+  if (!aa || !bb) return false;
+  return aa === bb;
+}
+
+function getMyCollabCode(name: string, id: string) {
+  const cleanName = cleanString(name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+  const shortName = cleanName || 'User';
+  const last4 =
+    cleanString(id).replace(/[^a-zA-Z0-9]/g, '').slice(-4) ||
+    String(Math.floor(1000 + Math.random() * 9000));
+
+  return `${shortName}${last4}`;
+}
+
+function userIsVerifiedFromPost(post: Post, isOwner: boolean, localVerified: boolean) {
+  const p = post as any;
+
   return (
-    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-background">
-      <CheckCircle className="h-2.5 w-2.5" />
-    </span>
+    p.verified === true ||
+    p.userVerified === true ||
+    p.isVerified === true ||
+    p.is_verified === true ||
+    p.authorVerified === true ||
+    p.author_verified === true ||
+    p.profileVerified === true ||
+    p.profile_verified === true ||
+    p.user?.verified === true ||
+    p.user?.userVerified === true ||
+    p.user?.isVerified === true ||
+    p.user?.is_verified === true ||
+    p.user?.addons?.verified === true ||
+    p.author?.verified === true ||
+    p.author?.userVerified === true ||
+    p.author?.isVerified === true ||
+    p.author?.is_verified === true ||
+    p.author?.addons?.verified === true ||
+    p.profile?.verified === true ||
+    p.profile?.userVerified === true ||
+    p.profile?.isVerified === true ||
+    p.profile?.is_verified === true ||
+    p.profile?.addons?.verified === true ||
+    (isOwner && localVerified)
   );
 }
 
-function CollaboratorStack({
-  ownerName,
-  ownerAvatar,
-  ownerVerified,
-  collaborators,
-  onProfileClick,
-}: {
-  ownerName: string;
-  ownerAvatar: string;
-  ownerVerified: boolean;
-  collaborators: CollaboratorProfile[];
-  onProfileClick: (id: string) => void;
-}) {
-  if (collaborators.length === 0) return null;
-
-  const visible = collaborators.slice(0, 4);
-  const first = visible[0];
+function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) {
+  if (!profiles.length) return null;
 
   return (
-    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/25 px-2.5 py-2">
-      <div className="flex shrink-0 items-center -space-x-2">
-        <div className="relative">
-          <Avatar className="h-7 w-7 border-2 border-background">
-            <AvatarImage src={ownerAvatar} alt={ownerName} />
-            <AvatarFallback>{ownerName ? ownerName.charAt(0) : 'U'}</AvatarFallback>
-          </Avatar>
-          {ownerVerified && (
-            <span className="absolute -bottom-1 -right-1">
-              <VerifiedMiniBadge />
-            </span>
-          )}
-        </div>
-
-        {visible.map((collab) => (
-          <button
-            key={collab.id}
-            type="button"
-            className="relative"
-            onClick={() => onProfileClick(collab.id)}
+    <div className="flex items-center gap-1.5">
+      <div className="flex -space-x-1.5">
+        {profiles.slice(0, 4).map((profile) => (
+          <div
+            key={profile.id}
+            className="relative h-5 w-5 overflow-hidden rounded-full border border-background bg-muted shadow-sm"
+            title={profile.name}
           >
-            <Avatar className="h-7 w-7 border-2 border-background">
-              <AvatarImage src={collab.avatar} alt={collab.name} />
-              <AvatarFallback>{collab.name ? collab.name.charAt(0) : 'C'}</AvatarFallback>
-            </Avatar>
-
-            {collab.verified && (
-              <span className="absolute -bottom-1 -right-1">
-                <VerifiedMiniBadge />
-              </span>
+            {profile.avatar ? (
+              <img src={profile.avatar} alt={profile.name} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[9px] font-bold text-muted-foreground">
+                {getInitial(profile.name)}
+              </div>
             )}
-          </button>
+          </div>
         ))}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[11px] font-bold text-foreground">
-          Collaboration
-        </p>
-        <p className="truncate text-[11px] text-muted-foreground">
-          {ownerName} with {first?.name}
-          {visible.length > 1 ? ` +${visible.length - 1}` : ''}
-        </p>
-      </div>
-
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">
-        <Users className="h-3 w-3" />
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+        <UsersRound className="h-3 w-3" />
         Collab
       </span>
     </div>
@@ -598,56 +544,54 @@ function CollaboratorStack({
 
 function DocumentPreview({
   document,
-  locked,
+  downloadsLocked,
   canControl,
   onToggleLock,
   onOpenPages,
 }: {
   document: PostDocumentItem;
-  locked: boolean;
+  downloadsLocked: boolean;
   canControl: boolean;
   onToggleLock: () => void;
   onOpenPages: (pages: string[], startIndex: number) => void;
 }) {
   const firstPage = document.pages[0] || '';
+  const imageCount = document.pages.filter(Boolean).length;
 
   return (
-    <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
+    <div className="overflow-hidden rounded-[26px] border border-border/60 bg-card shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
       {firstPage ? (
         <button
           type="button"
-          onClick={() => {
-            if (!locked || canControl) onOpenPages(document.pages, 0);
-          }}
+          onClick={() => onOpenPages(document.pages, 0)}
           className="relative block w-full bg-white"
+          onContextMenu={(e) => {
+            if (downloadsLocked) e.preventDefault();
+          }}
         >
           <img
             src={firstPage}
             alt={`${document.title} preview`}
-            className="h-[250px] w-full select-none object-contain sm:h-[340px]"
+            className="h-[245px] w-full object-contain sm:h-[340px]"
             loading="lazy"
-            draggable={false}
-            onContextMenu={(e) => {
-              if (locked && !canControl) e.preventDefault();
-            }}
+            draggable={!downloadsLocked}
           />
 
-          {document.pages.length > 1 && (!locked || canControl) && (
-            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-              {document.pages.length} images
+          {imageCount > 1 && (
+            <span className="absolute bottom-3 right-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs font-bold text-white shadow-lg backdrop-blur">
+              {imageCount} images
             </span>
           )}
 
-          {locked && !canControl && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 px-5 text-center text-white">
-              <Lock className="mb-2 h-7 w-7 drop-shadow" />
-              <p className="text-sm font-semibold drop-shadow">Images locked</p>
-              <p className="mt-1 text-xs text-white/85 drop-shadow">Download disabled by author.</p>
-            </div>
+          {downloadsLocked && (
+            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-950/85 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
+              <Lock className="h-3 w-3" />
+              Locked
+            </span>
           )}
         </button>
       ) : (
-        <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
+        <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/30 px-4 text-center">
           <FileText className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm font-semibold">{document.title}</p>
           <p className="text-xs text-muted-foreground">Document uploaded</p>
@@ -658,10 +602,10 @@ function DocumentPreview({
         <button
           type="button"
           onClick={onToggleLock}
-          className="flex h-9 w-full items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+          className="flex h-10 w-full items-center justify-center gap-2 border-t border-border/60 bg-background text-[12px] font-bold text-muted-foreground hover:bg-muted/40 hover:text-foreground"
         >
-          {locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-          {locked ? 'Unlock images' : 'Lock images'}
+          {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+          {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
         </button>
       )}
     </div>
@@ -691,14 +635,13 @@ export default function PostCard({ post }: PostCardProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [expandedPost, setExpandedPost] = useState(false);
-  const [lastInviteCode, setLastInviteCode] = useState('');
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxItems, setLightboxItems] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxZoom, setLightboxZoom] = useState(1);
 
-  const [imagesLocked, setImagesLocked] = useState(false);
+  const [downloadsLocked, setDownloadsLocked] = useState(false);
 
   const audioStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -710,15 +653,32 @@ export default function PostCard({ post }: PostCardProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  const possibleUserIds = useMemo(
-    () => getPossibleCurrentUserIds({ currentUserId, authUser: user }),
-    [currentUserId, user]
+  const p = post as any;
+
+  const myIds = useMemo(() => getMyIdentityCodes(user, currentUserId || ''), [user, currentUserId]);
+
+  const ownerIds = useMemo(
+    () => [
+      cleanString(post.userId),
+      cleanString(p.authorId),
+      cleanString(p.ownerId),
+      cleanString(p.user?._id),
+      cleanString(p.user?.id),
+      cleanString(p.author?._id),
+      cleanString(p.author?.id),
+      cleanString(p.externalId),
+    ].filter(Boolean),
+    [post, p]
   );
+
+  const isOwner = useMemo(() => {
+    return ownerIds.some((ownerId) => myIds.some((myId) => idsMatch(ownerId, myId)));
+  }, [ownerIds, myIds]);
 
   const mediaItems = useMemo(() => normalizePostMedia(post), [post]);
   const documentItems = useMemo(() => normalizePostDocuments(post), [post]);
-  const collaborators = useMemo(() => normalizeCollaborators(post), [post]);
-  const inviteItems = useMemo(() => normalizeInviteItems(post), [post]);
+  const collaboratorProfiles = useMemo(() => normalizeCollaboratorProfiles(post), [post]);
+  const pendingCollabRequests = useMemo(() => normalizePendingCollabRequests(post), [post]);
 
   const cleanPostContent = useMemo(() => getCleanPostContent(post.content), [post.content]);
 
@@ -729,48 +689,43 @@ export default function PostCard({ post }: PostCardProps) {
     ? cleanPostContent.length > 95 || cleanPostContent.split('\n').length > 2
     : cleanPostContent.length > 650 || cleanPostContent.split('\n').length > 10;
 
-  const isOpportunityPost =
-    isOpportunityContent(cleanPostContent) || documentItems.length > 0;
-
   const lightboxSrc = lightboxItems[lightboxIndex] || null;
 
-  const myId = possibleUserIds[0] || '';
+  const collaborators = Array.isArray(p.collaborators)
+    ? (p.collaborators as any[]).map((x) =>
+        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId || x?.externalId)
+      )
+    : [];
 
-  const postOwnerId = cleanString((post as any).userId || (post as any).authorId || '');
-  const isOwner = isSameUserId(postOwnerId, possibleUserIds);
+  const isCollaborator = myIds.some((myId) => collaborators.some((id) => idsMatch(id, myId)));
 
-  const collaboratorIds = collaborators.map((x) => x.id);
-  const isCollaborator = collaboratorIds.some((id) => isSameUserId(id, possibleUserIds));
+  const collabInvites = Array.isArray(p.collabInvites)
+    ? (p.collabInvites as any[]).map((x) =>
+        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId || x?.externalId)
+      )
+    : [];
 
-  const hasInvite = inviteItems.some((invite) => {
-    if (isSameUserId(invite.id, possibleUserIds)) return true;
-    if (isSameUserId(invite.code, possibleUserIds)) return true;
-
-    try {
-      const myInviteCode = localStorage.getItem('facemex_my_collab_code');
-      return !!myInviteCode && myInviteCode === invite.code;
-    } catch {
-      return false;
-    }
-  });
+  const hasInvite = myIds.some((myId) => collabInvites.some((id) => idsMatch(id, myId)));
 
   const canEdit = isOwner || isCollaborator;
 
-  const displayName = (post as any).userName || 'FaceMeX Member';
-  const displayAvatar = (post as any).userAvatar || (post as any).avatar || '';
+  const displayName = post.userName || p.name || p.user?.name || p.author?.name || 'FaceMeX Member';
+  const displayAvatar =
+    p.userAvatar ||
+    p.avatar ||
+    p.user?.avatar ||
+    p.author?.avatar ||
+    p.avatar_url ||
+    '';
 
-  const isAuthorVerified =
-    (post as any)?.verified === true ||
-    (post as any)?.userVerified === true ||
-    (post as any)?.isVerified === true ||
-    (post as any)?.is_verified === true ||
-    (!!addons?.verified && isOwner);
+  const localVerified =
+    addons?.verified === true ||
+    (user as any)?.verified === true ||
+    (user as any)?.userVerified === true ||
+    (user as any)?.isVerified === true ||
+    (user as any)?.addons?.verified === true;
 
-  const postTime = useMemo(() => {
-    const raw = (post as any).createdAt || (post as any).timestamp || (post as any).date || null;
-    const d = raw ? new Date(raw) : new Date();
-    return Number.isNaN(d.getTime()) ? new Date() : d;
-  }, [post]);
+  const isAuthorVerified = userIsVerifiedFromPost(post, isOwner, localVerified);
 
   useEffect(() => {
     setPostDraft(post.content);
@@ -789,135 +744,100 @@ export default function PostCard({ post }: PostCardProps) {
   useEffect(() => {
     try {
       const serverLocked =
-        (post as any).imagesLocked === true ||
-        (post as any).images_locked === true ||
-        (post as any).mediaLocked === true ||
-        (post as any).media_locked === true;
+        p.downloadsLocked === true ||
+        p.downloads_locked === true ||
+        p.imagesLocked === true ||
+        p.images_locked === true ||
+        p.mediaLocked === true ||
+        p.media_locked === true;
 
-      const raw = localStorage.getItem(`facemex:post_images_locked:${post.id}`);
+      const raw = localStorage.getItem(`facemex:post_downloads_locked:${post.id}`);
       const localLocked = raw === 'true';
 
-      setImagesLocked(serverLocked || localLocked);
+      setDownloadsLocked(serverLocked || localLocked);
     } catch {
-      setImagesLocked(false);
+      setDownloadsLocked(false);
     }
-  }, [post.id, post]);
+  }, [post.id, p]);
 
-  const toggleImagesLocked = () => {
+  const toggleDownloadsLocked = () => {
     if (!isOwner) return;
 
-    setImagesLocked((prev) => {
+    setDownloadsLocked((prev) => {
       const next = !prev;
 
       try {
-        localStorage.setItem(`facemex:post_images_locked:${post.id}`, String(next));
+        localStorage.setItem(`facemex:post_downloads_locked:${post.id}`, String(next));
       } catch {}
 
       return next;
     });
   };
 
-  const saveImageToDevice = async (src: string, name = 'facemex-image') => {
-    if (!src) return;
-    if (imagesLocked && !isOwner) {
-      alert('This author locked image downloads.');
+  const requestCollaboration = async () => {
+    const myId = myIds[0] || '';
+    const myName = user?.name || 'FaceMeX user';
+    const myCode = getMyCollabCode(myName, myId);
+
+    if (!myId) {
+      alert('Please log in before requesting collaboration.');
       return;
     }
 
     try {
-      const response = await fetch(src);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `${safeFileName(name)}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    } catch {
-      window.open(src, '_blank', 'noopener,noreferrer');
-      alert('Image opened. Long press the image and choose “Download image” or “Save image”.');
-    }
-  };
-
-  const saveCurrentLightboxImage = () => {
-    if (!lightboxSrc) return;
-    saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
-  };
-
-  const storePostActionContext = (type: string, prompt: string) => {
-    try {
-      const payload = JSON.stringify({
-        type,
-        postId: post.id,
-        content: cleanPostContent,
-        prompt,
-        createdAt: new Date().toISOString(),
+      await (inviteCollaborator as any)(post.id, myId, {
+        code: myCode,
+        name: myName,
+        avatar: user?.avatar || '',
       });
 
-      localStorage.setItem('facemex:post_action_context', payload);
-      localStorage.setItem('facemex:career_workspace_prompt', payload);
-      sessionStorage.setItem('facemex:post_action_context', payload);
-      sessionStorage.setItem('facemex:career_workspace_prompt', payload);
-    } catch {
-      // ignore
+      alert(`Collaboration request sent. Your code: ${myCode}`);
+    } catch (err) {
+      console.error(err);
+      alert('Collaboration request could not be sent.');
     }
   };
 
-  const goCreateCv = () => {
-    const prompt = `Create a CV for this opportunity:\n\n${cleanPostContent}`;
+  const inviteCollaboratorByCode = async () => {
+    if (!isOwner) return;
 
-    storePostActionContext('create-cv', prompt);
+    const invitee = window.prompt('Enter collaborator user ID or unique code, example: Thabo4040');
+    const value = cleanString(invitee);
 
-    navigate(CV_BUILDER_ROUTE, {
-      state: {
-        fromPost: post.id,
-        mode: 'create-cv',
-        content: cleanPostContent,
-        prompt,
-      },
-    });
+    if (!value) return;
+
+    try {
+      await (inviteCollaborator as any)(post.id, value);
+    } catch (err) {
+      console.error(err);
+      alert('Could not invite collaborator.');
+    }
   };
 
-  const goApplyMessage = () => {
-    const prompt = `Write a professional email and WhatsApp message to apply for this opportunity:\n\n${cleanPostContent}`;
+  const acceptCollaborationRequest = async (profile: CollaboratorProfile) => {
+    if (!isOwner) return;
 
-    storePostActionContext('apply-message', prompt);
-
-    navigate(CAREER_WORKSPACE_ROUTE, {
-      state: {
-        fromPost: post.id,
-        mode: 'apply-message',
-        content: cleanPostContent,
-        prompt,
-      },
-    });
+    try {
+      await (acceptCollabInvite as any)(post.id, profile.id);
+    } catch (err) {
+      console.error(err);
+      alert('Could not accept collaborator.');
+    }
   };
 
-  const goCheckJob = () => {
-    const prompt = `Check if this job or opportunity looks safe or suspicious. Give a simple safety checklist and what the applicant must verify before applying:\n\n${cleanPostContent}`;
+  const rejectCollaborationRequest = async (profile: CollaboratorProfile) => {
+    if (!isOwner) return;
 
-    storePostActionContext('check-job', prompt);
-
-    navigate(CAREER_WORKSPACE_ROUTE, {
-      state: {
-        fromPost: post.id,
-        mode: 'check-job',
-        content: cleanPostContent,
-        prompt,
-      },
-    });
+    try {
+      await (rejectCollabInvite as any)(post.id, profile.id);
+    } catch (err) {
+      console.error(err);
+      alert('Could not decline collaborator request.');
+    }
   };
 
   const openLightbox = (items: string[] | string, startIndex = 0) => {
-    if (imagesLocked && !isOwner) return;
-
-    const gallery = Array.isArray(items)
-      ? items.filter(Boolean)
-      : [items].filter(Boolean);
+    const gallery = Array.isArray(items) ? items.filter(Boolean) : [items].filter(Boolean);
 
     if (!gallery.length) return;
 
@@ -937,26 +857,22 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const goPrevLightbox = () => {
+    if (!lightboxItems.length) return;
     setLightboxZoom(1);
     setLightboxIndex((prev) => (prev <= 0 ? lightboxItems.length - 1 : prev - 1));
   };
 
   const goNextLightbox = () => {
+    if (!lightboxItems.length) return;
     setLightboxZoom(1);
     setLightboxIndex((prev) => (prev >= lightboxItems.length - 1 ? 0 : prev + 1));
   };
 
-  const zoomIn = () => {
-    setLightboxZoom((prev) => Math.min(prev + 0.35, 3));
-  };
-
-  const zoomOut = () => {
-    setLightboxZoom((prev) => Math.max(prev - 0.35, 1));
-  };
+  const zoomIn = () => setLightboxZoom((prev) => Math.min(prev + 0.4, 4));
+  const zoomOut = () => setLightboxZoom((prev) => Math.max(prev - 0.4, 1));
+  const resetZoom = () => setLightboxZoom(1);
 
   const openMediaLightbox = (src: string) => {
-    if (imagesLocked && !isOwner) return;
-
     const imageGallery = mediaItems
       .filter((item) => item.type === 'image')
       .map((item) => item.src);
@@ -969,11 +885,7 @@ export default function PostCard({ post }: PostCardProps) {
   const getVoiceCommentDailyLimit = () => {
     const t = String((tier || user?.tier || '')).toLowerCase();
 
-    if (
-      t.startsWith('creator') ||
-      t.startsWith('business') ||
-      t.startsWith('exclusive')
-    ) {
+    if (t.startsWith('creator') || t.startsWith('business') || t.startsWith('exclusive')) {
       return Infinity;
     }
 
@@ -1170,11 +1082,7 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const startEditPost = () => {
-    if (!canEdit) {
-      alert('Only the author or accepted collaborators can edit this post.');
-      return;
-    }
-
+    if (!canEdit) return;
     setPostDraft(post.content);
     setEditingPost(true);
   };
@@ -1184,96 +1092,28 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!next || !canEdit) return;
 
-    await editPost(post.id, next);
-    setEditingPost(false);
+    try {
+      await editPost(post.id, next);
+      setEditingPost(false);
+    } catch (err) {
+      console.error(err);
+      alert('Could not edit post.');
+    }
   };
 
   const handleDeletePost = async () => {
-    if (!isOwner) {
-      alert('Only the author can delete this post.');
-      return;
-    }
+    if (!isOwner) return;
 
     const ok = window.confirm('Delete this post?');
 
     if (!ok) return;
 
-    await deletePost(post.id);
-  };
-
-  const handleInviteCollaborator = async () => {
-    if (!isOwner) {
-      alert('Only the author can invite collaborators.');
-      return;
-    }
-
-    if (collaborators.length >= 4) {
-      alert('You can collaborate with up to 4 profiles on one post.');
-      return;
-    }
-
-    const collaboratorName = window.prompt(
-      'Enter collaborator name or FaceMeX username. Example: Thabo'
-    );
-
-    const name = cleanString(collaboratorName);
-
-    if (!name) return;
-
-    const inviteCode = createInviteCode(name);
-    setLastInviteCode(inviteCode);
-
     try {
-      localStorage.setItem(`facemex:collab_invite:${post.id}`, inviteCode);
-    } catch {
-      // ignore
+      await deletePost(post.id);
+    } catch (err) {
+      console.error(err);
+      alert('Could not delete post.');
     }
-
-    try {
-      await inviteCollaborator(post.id, inviteCode);
-    } catch (error) {
-      console.error('Invite collaborator failed:', error);
-      alert(
-        'Invite code was generated, but backend invite failed. Update postStore.ts and backend routes/posts.js to support code invites.'
-      );
-    }
-
-    const copied = await copyText(inviteCode);
-
-    alert(
-      copied
-        ? `Invite code generated and copied:\n${inviteCode}\n\nSend this code to ${name}.`
-        : `Invite code generated:\n${inviteCode}\n\nSend this code to ${name}.`
-    );
-  };
-
-  const handleCopyInviteCode = async () => {
-    const code = lastInviteCode || cleanString(inviteItems[0]?.code || inviteItems[0]?.id);
-
-    if (!code) {
-      alert('No invite code available yet.');
-      return;
-    }
-
-    const copied = await copyText(code);
-
-    alert(copied ? `Invite code copied: ${code}` : `Invite code: ${code}`);
-  };
-
-  const handleAcceptInvite = async () => {
-    const ok = window.confirm('Accept collaboration invite?');
-
-    if (!ok) return;
-
-    await acceptCollabInvite(post.id);
-  };
-
-  const handleRejectInvite = async () => {
-    const ok = window.confirm('Decline collaboration invite?');
-
-    if (!ok) return;
-
-    await rejectCollabInvite(post.id);
   };
 
   const handleComment = async () => {
@@ -1290,7 +1130,12 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!ok) return;
 
-    await deleteComment(post.id, commentId);
+    try {
+      await deleteComment(post.id, commentId);
+    } catch (err) {
+      console.error(err);
+      alert('Could not delete comment.');
+    }
   };
 
   const handleReplyToComment = (commentUserName: string) => {
@@ -1303,15 +1148,29 @@ export default function PostCard({ post }: PostCardProps) {
     }, 0);
   };
 
-  const MediaLockOverlay = () => {
-    if (!imagesLocked || isOwner) return null;
+  const AuthorDownloadLockButton = () => {
+    if (!isOwner || !hasMediaOrDocs) return null;
 
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 px-5 text-center text-white">
-        <Lock className="mb-2 h-7 w-7 drop-shadow" />
-        <p className="text-sm font-semibold drop-shadow">Images locked</p>
-        <p className="mt-1 text-xs text-white/85 drop-shadow">Download disabled by author.</p>
-      </div>
+      <button
+        type="button"
+        onClick={toggleDownloadsLocked}
+        className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-full border border-border/60 bg-background text-[12px] font-bold text-muted-foreground shadow-sm transition-all hover:bg-muted/40 hover:text-foreground"
+      >
+        {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+        {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
+      </button>
+    );
+  };
+
+  const DownloadLockChip = () => {
+    if (!downloadsLocked) return null;
+
+    return (
+      <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-950/85 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
+        <Lock className="h-3 w-3" />
+        Locked
+      </span>
     );
   };
 
@@ -1324,9 +1183,9 @@ export default function PostCard({ post }: PostCardProps) {
           playsInline
           preload="metadata"
           className="h-full w-full bg-black object-contain"
-          controlsList={imagesLocked && !isOwner ? 'nodownload noplaybackrate' : 'noplaybackrate'}
+          controlsList={downloadsLocked ? 'nodownload' : undefined}
           onContextMenu={(e) => {
-            if (imagesLocked && !isOwner) e.preventDefault();
+            if (downloadsLocked) e.preventDefault();
           }}
         />
       );
@@ -1336,28 +1195,13 @@ export default function PostCard({ post }: PostCardProps) {
       <img
         src={item.src}
         alt={`Post media ${index + 1}`}
-        className="h-full w-full select-none bg-white object-contain"
+        className="h-full w-full bg-white object-contain"
         loading="lazy"
-        draggable={false}
+        draggable={!downloadsLocked}
         onContextMenu={(e) => {
-          if (imagesLocked && !isOwner) e.preventDefault();
+          if (downloadsLocked) e.preventDefault();
         }}
       />
-    );
-  };
-
-  const AuthorLockButton = () => {
-    if (!isOwner || !hasMediaOrDocs) return null;
-
-    return (
-      <button
-        type="button"
-        onClick={toggleImagesLocked}
-        className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[12px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
-      >
-        {imagesLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-        {imagesLocked ? 'Unlock image downloads' : 'Lock image downloads'}
-      </button>
     );
   };
 
@@ -1371,30 +1215,33 @@ export default function PostCard({ post }: PostCardProps) {
 
       if (item.type === 'video') {
         return (
-          <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-            <div className="h-[250px] sm:h-[340px]">{renderMediaItem(item, 0)}</div>
+          <div className="overflow-hidden rounded-[26px] border border-border/60 bg-black shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
+            <div className="relative h-[245px] sm:h-[340px]">
+              {renderMediaItem(item, 0)}
+              <DownloadLockChip />
+            </div>
           </div>
         );
       }
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-[26px] border border-border/60 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
           <button
             type="button"
             onClick={() => openMediaLightbox(item.src)}
             className="relative block w-full"
+            onContextMenu={(e) => {
+              if (downloadsLocked) e.preventDefault();
+            }}
           >
             <img
               src={item.src}
               alt="Post media"
-              className="h-[250px] w-full select-none object-contain sm:h-[340px]"
+              className="h-[245px] w-full object-contain sm:h-[340px]"
               loading="lazy"
-              draggable={false}
-              onContextMenu={(e) => {
-                if (imagesLocked && !isOwner) e.preventDefault();
-              }}
+              draggable={!downloadsLocked}
             />
-            <MediaLockOverlay />
+            <DownloadLockChip />
           </button>
         </div>
       );
@@ -1402,40 +1249,41 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (imageItems.length === mediaItems.length) {
       const firstImage = imageItems[0];
+      const imageCount = imageItems.length;
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-[26px] border border-border/60 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
           <button
             type="button"
             onClick={() => openMediaLightbox(firstImage.src)}
             className="relative block w-full"
+            onContextMenu={(e) => {
+              if (downloadsLocked) e.preventDefault();
+            }}
           >
             <img
               src={firstImage.src}
               alt="Post media preview"
-              className="h-[250px] w-full select-none object-contain sm:h-[340px]"
+              className="h-[245px] w-full object-contain sm:h-[340px]"
               loading="lazy"
-              draggable={false}
-              onContextMenu={(e) => {
-                if (imagesLocked && !isOwner) e.preventDefault();
-              }}
+              draggable={!downloadsLocked}
             />
 
-            {!imagesLocked || isOwner ? (
-              <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-                {imageItems.length} images
+            {imageCount > 1 && (
+              <span className="absolute bottom-3 right-3 rounded-full bg-slate-950/85 px-3 py-1 text-xs font-bold text-white shadow-lg backdrop-blur">
+                {imageCount} images
               </span>
-            ) : null}
+            )}
 
-            <MediaLockOverlay />
+            <DownloadLockChip />
           </button>
         </div>
       );
     }
 
     return (
-      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-        <div className="grid h-[250px] grid-cols-2 gap-1 bg-black sm:h-[340px]">
+      <div className="overflow-hidden rounded-[26px] border border-border/60 bg-black shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
+        <div className="grid h-[245px] grid-cols-2 gap-1 bg-black sm:h-[340px]">
           {mediaItems.slice(0, 4).map((item, index) => {
             const extraCount = mediaItems.length - 4;
             const showMore = index === 3 && extraCount > 0;
@@ -1446,16 +1294,19 @@ export default function PostCard({ post }: PostCardProps) {
                 type="button"
                 className="relative h-full w-full overflow-hidden bg-black"
                 onClick={() => item.type === 'image' && openMediaLightbox(item.src)}
+                onContextMenu={(e) => {
+                  if (downloadsLocked) e.preventDefault();
+                }}
               >
                 {renderMediaItem(item, index)}
 
-                {showMore && (!imagesLocked || isOwner) && (
+                {showMore && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
                     +{extraCount}
                   </div>
                 )}
 
-                <MediaLockOverlay />
+                <DownloadLockChip />
               </button>
             );
           })}
@@ -1464,20 +1315,15 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
-  const commentCount = post.comments?.length || 0;
+  const comments = Array.isArray(p.comments) ? p.comments : [];
+  const commentCount = comments.length;
 
-  const reactionType = post.isLiked
-    ? ((post.reaction || 'like') as
-        | 'love'
-        | 'like'
-        | 'haha'
-        | 'wow'
-        | 'sad'
-        | 'angry')
+  const reactionType = p.isLiked
+    ? ((p.reaction || 'like') as 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry')
     : undefined;
 
   const reactionClass = (() => {
-    if (!post.isLiked) return '';
+    if (!p.isLiked) return '';
 
     switch (reactionType) {
       case 'love':
@@ -1496,10 +1342,7 @@ export default function PostCard({ post }: PostCardProps) {
   })();
 
   const premiumActionButton =
-    'h-9 min-w-0 flex-1 rounded-full px-2 text-[12px] font-semibold text-muted-foreground hover:bg-muted/50 hover:text-foreground';
-
-  const pillButton =
-    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 text-[11px] font-semibold shadow-sm hover:bg-muted/50';
+    'h-10 min-w-0 flex-1 rounded-full px-2 text-[12px] font-bold text-muted-foreground transition-all hover:bg-background hover:text-foreground';
 
   return (
     <motion.div
@@ -1507,47 +1350,43 @@ export default function PostCard({ post }: PostCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
     >
-      <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_8px_26px_rgba(15,23,42,0.06)]">
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
+      <Card className="mb-4 overflow-hidden rounded-[32px] border border-border/60 bg-card shadow-[0_18px_55px_rgba(15,23,42,0.08)]">
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pb-2 pt-4">
           <button
             type="button"
-            className="flex min-w-0 items-center space-x-2 text-left"
+            className="flex min-w-0 items-center space-x-3 text-left"
             onClick={() => navigate(`/profile/${post.userId}`)}
           >
             <div className="relative shrink-0">
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-11 w-11 ring-1 ring-border/60">
                 <AvatarImage src={displayAvatar} alt={displayName} />
-                <AvatarFallback>{displayName ? displayName.charAt(0) : 'U'}</AvatarFallback>
+                <AvatarFallback>{getInitial(displayName)}</AvatarFallback>
               </Avatar>
 
               {isAuthorVerified && (
-                <span className="absolute -bottom-1 -right-1">
-                  <VerifiedMiniBadge />
+                <span className="absolute -bottom-1 -right-1 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-slate-950 ring-2 ring-background">
+                  <CheckCircle className="h-3.5 w-3.5 text-white" />
                 </span>
               )}
             </div>
 
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-sm font-semibold hover:underline md:text-[15px]">
-                  {displayName}
+              <p className="truncate text-[15px] font-bold leading-tight hover:underline">
+                {displayName}
+              </p>
+
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  {formatDistanceToNow(getPostDate(post), { addSuffix: true })}
                 </p>
 
-                {isAuthorVerified && (
-                  <CheckCircle className="h-3.5 w-3.5 shrink-0 text-primary" />
-                )}
-
-                {collaborators.length > 0 && (
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
-                    <Users className="h-2.5 w-2.5" />
-                    Collab
-                  </span>
+                {collaboratorProfiles.length > 0 && (
+                  <>
+                    <span className="text-[11px] text-muted-foreground">•</span>
+                    <CollaboratorCluster profiles={collaboratorProfiles} />
+                  </>
                 )}
               </div>
-
-              <p className="text-[11px] text-muted-foreground">
-                {formatDistanceToNow(postTime, { addSuffix: true })}
-              </p>
             </div>
           </button>
 
@@ -1556,13 +1395,13 @@ export default function PostCard({ post }: PostCardProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 shrink-0 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-64 rounded-2xl border-border/60 shadow-xl">
               {canEdit && (
                 <DropdownMenuItem onClick={startEditPost}>
                   <PencilLine className="mr-2 h-4 w-4" />
@@ -1571,40 +1410,64 @@ export default function PostCard({ post }: PostCardProps) {
               )}
 
               {isOwner && (
-                <DropdownMenuItem onClick={handleInviteCollaborator}>
+                <DropdownMenuItem onClick={inviteCollaboratorByCode}>
                   <UserPlus className="mr-2 h-4 w-4" />
                   Invite collaborator
                 </DropdownMenuItem>
               )}
 
-              {isOwner && lastInviteCode && (
-                <DropdownMenuItem onClick={handleCopyInviteCode}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy invite code
+              {!isOwner && !isCollaborator && !hasInvite && (
+                <DropdownMenuItem onClick={requestCollaboration}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Request collaboration
                 </DropdownMenuItem>
               )}
 
               {isOwner && hasMediaOrDocs && (
-                <DropdownMenuItem onClick={toggleImagesLocked}>
-                  {imagesLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
-                  {imagesLocked ? 'Unlock downloads' : 'Lock downloads'}
+                <DropdownMenuItem onClick={toggleDownloadsLocked}>
+                  {downloadsLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                  {downloadsLocked ? 'Unlock downloads' : 'Lock downloads'}
                 </DropdownMenuItem>
               )}
 
-              {hasInvite && (
+              {isOwner && pendingCollabRequests.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleAcceptInvite}>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Accept collaboration
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={handleRejectInvite}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <X className="mr-2 h-4 w-4" />
-                    Decline collaboration
-                  </DropdownMenuItem>
+                  <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    Collaboration requests
+                  </div>
+
+                  {pendingCollabRequests.slice(0, 4).map((profile) => (
+                    <div key={profile.id} className="px-2 py-1">
+                      <div className="mb-1 flex items-center gap-2">
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={profile.avatar} alt={profile.name} />
+                          <AvatarFallback>{getInitial(profile.name)}</AvatarFallback>
+                        </Avatar>
+
+                        <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+                          {profile.name}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => acceptCollaborationRequest(profile)}
+                          className="rounded-full bg-slate-950 px-2 py-1 text-[11px] font-bold text-white"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => rejectCollaborationRequest(profile)}
+                          className="rounded-full border border-border px-2 py-1 text-[11px] font-bold text-muted-foreground"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </>
               )}
 
@@ -1624,59 +1487,7 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="space-y-2.5 px-3 pb-3">
-          <CollaboratorStack
-            ownerName={displayName}
-            ownerAvatar={displayAvatar}
-            ownerVerified={isAuthorVerified}
-            collaborators={collaborators}
-            onProfileClick={(id) => navigate(`/profile/${id}`)}
-          />
-
-          {lastInviteCode && isOwner && (
-            <div className="flex items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2">
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-primary">Invite code ready</p>
-                <p className="truncate text-xs text-muted-foreground">{lastInviteCode}</p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCopyInviteCode}
-                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-primary px-3 text-[11px] font-bold text-primary-foreground"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copy
-              </button>
-            </div>
-          )}
-
-          {hasInvite && (
-            <div className="rounded-2xl border border-primary/20 bg-primary/5 px-3 py-3">
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                  <Users className="h-4 w-4" />
-                </span>
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold">Collaboration invite</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    You were invited to collaborate on this post.
-                  </p>
-
-                  <div className="mt-3 flex gap-2">
-                    <Button size="sm" className="h-8 rounded-full text-xs" onClick={handleAcceptInvite}>
-                      Accept
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-8 rounded-full text-xs" onClick={handleRejectInvite}>
-                      Decline
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
+        <CardContent className="space-y-3 px-4 pb-4">
           {editingPost ? (
             <div className="space-y-2">
               <textarea
@@ -1708,7 +1519,7 @@ export default function PostCard({ post }: PostCardProps) {
                   <button
                     type="button"
                     onClick={() => setExpandedPost((v) => !v)}
-                    className="text-[13px] font-semibold text-muted-foreground hover:text-foreground"
+                    className="text-[13px] font-bold text-muted-foreground hover:text-foreground"
                   >
                     {expandedPost ? 'Show less' : 'Show more'}
                   </button>
@@ -1717,12 +1528,12 @@ export default function PostCard({ post }: PostCardProps) {
             )
           )}
 
-          {post.hashtags && post.hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {post.hashtags.map((tag, index) => (
+          {Array.isArray(p.hashtags) && p.hashtags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {p.hashtags.map((tag: string, index: number) => (
                 <span
                   key={index}
-                  className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                  className="cursor-pointer rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 transition-all hover:bg-slate-200 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
                   onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
                   {tag.startsWith('#') ? tag : `#${tag}`}
@@ -1739,50 +1550,31 @@ export default function PostCard({ post }: PostCardProps) {
                 <DocumentPreview
                   key={doc.id}
                   document={doc}
-                  locked={imagesLocked}
+                  downloadsLocked={downloadsLocked}
                   canControl={isOwner}
-                  onToggleLock={toggleImagesLocked}
+                  onToggleLock={toggleDownloadsLocked}
                   onOpenPages={(pages, startIndex) => openLightbox(pages, startIndex)}
                 />
               ))}
             </div>
           )}
 
-          <AuthorLockButton />
+          <AuthorDownloadLockButton />
 
-          {isOpportunityPost && (
-            <div className="flex gap-2 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <button type="button" onClick={goCreateCv} className={pillButton}>
-                <FileText className="h-3.5 w-3.5" />
-                Create CV
-              </button>
-
-              <button type="button" onClick={goApplyMessage} className={pillButton}>
-                <Wand2 className="h-3.5 w-3.5" />
-                Apply msg
-              </button>
-
-              <button type="button" onClick={goCheckJob} className={pillButton}>
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Check job
-              </button>
-            </div>
-          )}
-
-          {post.audio && (
-            <div className="rounded-2xl border bg-background p-3">
+          {p.audio && (
+            <div className="rounded-[24px] border border-border/60 bg-background p-3 shadow-sm">
               <div className="mb-2 flex items-center gap-2">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                  <AudioLines className="h-3.5 w-3.5" />
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white">
+                  <AudioLines className="h-4 w-4" />
                 </span>
-                <div className="text-sm font-medium">Voice note</div>
+                <div className="text-sm font-bold">Voice note</div>
               </div>
 
               <audio
                 controls
                 controlsList="nodownload noplaybackrate"
                 className="w-full"
-                src={post.audio}
+                src={p.audio}
                 preload="metadata"
                 onContextMenu={(e) => e.preventDefault()}
               />
@@ -1799,16 +1591,9 @@ export default function PostCard({ post }: PostCardProps) {
             <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] overflow-hidden border border-white/10 bg-black/95 p-0">
               <div className="relative flex h-full w-full flex-col overflow-hidden">
                 <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between gap-2 bg-gradient-to-b from-black/85 to-transparent px-3 py-3">
-                  <button
-                    type="button"
-                    onClick={closeLightbox}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-3 text-sm font-semibold text-white backdrop-blur hover:bg-white/25"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </button>
+                  <div className="w-10" />
 
-                  <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-semibold text-white backdrop-blur">
+                  <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-bold text-white backdrop-blur">
                     {lightboxItems.length > 0 ? `${lightboxIndex + 1} / ${lightboxItems.length}` : 'Image'}
                   </div>
 
@@ -1822,29 +1607,39 @@ export default function PostCard({ post }: PostCardProps) {
                   </button>
                 </div>
 
-                <div className="relative flex h-full w-full items-center justify-center overflow-auto px-2 py-16">
-                  {lightboxSrc && (
-                    <img
-                      src={lightboxSrc}
-                      alt={`Image ${lightboxIndex + 1}`}
-                      className="max-h-full max-w-full select-none object-contain transition-transform duration-200"
-                      draggable={false}
-                      onContextMenu={(e) => {
-                        if (imagesLocked && !isOwner) e.preventDefault();
-                      }}
-                      style={{
-                        transform: `scale(${lightboxZoom})`,
-                        transformOrigin: 'center center',
-                      }}
-                    />
-                  )}
+                <div className="relative h-full w-full overflow-auto px-2 py-16 touch-pan-x touch-pan-y">
+                  <div className="flex min-h-full min-w-full items-center justify-center">
+                    {lightboxSrc && (
+                      <img
+                        src={lightboxSrc}
+                        alt={`Image ${lightboxIndex + 1}`}
+                        className="object-contain transition-all duration-200"
+                        style={
+                          lightboxZoom <= 1
+                            ? {
+                                maxWidth: '100%',
+                                maxHeight: '100%',
+                              }
+                            : {
+                                width: `${100 * lightboxZoom}%`,
+                                maxWidth: 'none',
+                                maxHeight: 'none',
+                              }
+                        }
+                        draggable={!downloadsLocked}
+                        onContextMenu={(e) => {
+                          if (downloadsLocked) e.preventDefault();
+                        }}
+                      />
+                    )}
+                  </div>
 
                   {lightboxItems.length > 1 && (
                     <>
                       <button
                         type="button"
                         onClick={goPrevLightbox}
-                        className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                        className="fixed left-4 top-1/2 z-30 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
                         aria-label="Previous image"
                       >
                         <ChevronLeft className="h-5 w-5" />
@@ -1853,7 +1648,7 @@ export default function PostCard({ post }: PostCardProps) {
                       <button
                         type="button"
                         onClick={goNextLightbox}
-                        className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                        className="fixed right-4 top-1/2 z-30 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
                         aria-label="Next image"
                       >
                         <ChevronRight className="h-5 w-5" />
@@ -1867,7 +1662,7 @@ export default function PostCard({ post }: PostCardProps) {
                     type="button"
                     onClick={zoomOut}
                     disabled={lightboxZoom <= 1}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-bold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
                   >
                     <ZoomOut className="h-4 w-4" />
                     Out
@@ -1876,30 +1671,28 @@ export default function PostCard({ post }: PostCardProps) {
                   <button
                     type="button"
                     onClick={zoomIn}
-                    disabled={lightboxZoom >= 3}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                    disabled={lightboxZoom >= 4}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-bold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
                   >
                     <ZoomIn className="h-4 w-4" />
                     Zoom
                   </button>
 
-                  {(!imagesLocked || isOwner) && (
-                    <button
-                      type="button"
-                      onClick={saveCurrentLightboxImage}
-                      disabled={!lightboxSrc}
-                      className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
-                    >
-                      <Download className="h-4 w-4" />
-                      Save
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={resetZoom}
+                    disabled={lightboxZoom <= 1}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
+                  </button>
                 </div>
               </div>
             </DialogContent>
           </Dialog>
 
-          <div className="rounded-2xl border border-border/70 bg-muted/20 px-1.5 py-1.5 shadow-inner">
+          <div className="rounded-[24px] border border-border/60 bg-slate-50 p-1.5 shadow-inner dark:bg-white/5">
             <div className="flex items-center justify-between gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1909,10 +1702,10 @@ export default function PostCard({ post }: PostCardProps) {
                     size="sm"
                     aria-label="React"
                     className={`${premiumActionButton} ${reactionClass}`}
-                    onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                    onClick={() => likePost(post.id, (p.reaction || 'like') as any)}
                   >
                     <Heart className="mr-1 h-3.5 w-3.5" />
-                    {post.likes || 0}
+                    {p.likes || 0}
                   </Button>
                 </DropdownMenuTrigger>
 
@@ -1962,7 +1755,7 @@ export default function PostCard({ post }: PostCardProps) {
               >
                 Share
                 <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
-                  {(post as any).shares || 0}
+                  {p.shares || 0}
                 </span>
               </Button>
 
@@ -1987,10 +1780,10 @@ export default function PostCard({ post }: PostCardProps) {
                   if (!Number.isFinite(limit)) return false;
                   return getVoiceCommentCountToday() >= limit;
                 })()}
-                className={`h-9 min-w-[74px] shrink-0 rounded-full px-2 text-[12px] font-semibold transition-all ${
+                className={`h-10 min-w-[78px] shrink-0 rounded-full px-3 text-[12px] font-bold transition-all ${
                   isRecording
                     ? 'bg-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.35)] hover:bg-red-600'
-                    : 'bg-gradient-to-r from-slate-950 to-slate-800 text-white shadow-sm hover:from-slate-900 hover:to-slate-700'
+                    : 'bg-gradient-to-r from-slate-950 to-slate-800 text-white shadow-lg hover:from-slate-900 hover:to-slate-700'
                 }`}
               >
                 <AudioLines className={`mr-1 h-3.5 w-3.5 ${isRecording ? 'animate-pulse' : ''}`} />
@@ -2000,15 +1793,15 @@ export default function PostCard({ post }: PostCardProps) {
           </div>
 
           {isRecording && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+            <div className="rounded-[24px] border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]">
                     <AudioLines className="h-4 w-4 animate-pulse" />
                   </span>
                   <div>
-                    <p className="text-sm font-semibold">Recording voice reply</p>
-                    <p className="text-xs opacity-80">Tap stop when you are done.</p>
+                    <p className="text-sm font-bold">Recording voice reply</p>
+                    <p className="text-xs opacity-80">Tap stop when done.</p>
                   </div>
                 </div>
 
@@ -2036,7 +1829,7 @@ export default function PostCard({ post }: PostCardProps) {
                     handleComment();
                   }
                 }}
-                className="h-10 rounded-full border-border/60 bg-muted/30 focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="h-11 rounded-full border-border/60 bg-muted/30 px-4 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
 
               <Button
@@ -2044,7 +1837,7 @@ export default function PostCard({ post }: PostCardProps) {
                 variant="ghost"
                 onClick={handleComment}
                 aria-label="Send reply"
-                className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="h-11 w-11 rounded-full bg-slate-950 text-white hover:bg-slate-800 hover:text-white"
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -2059,41 +1852,36 @@ export default function PostCard({ post }: PostCardProps) {
                 exit={{ opacity: 0, height: 0 }}
                 className="w-full space-y-3 border-t border-border/60 pt-3"
               >
-                {(post.comments || []).map((comment: any) => {
+                {comments.map((comment: any) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const commentUserId = cleanString(comment.userId || comment.authorId || '');
-                  const commentId = cleanString(comment.id || comment._id || '');
-                  const commentUserName = cleanString(comment.userName || comment.name || 'User');
-                  const commentAvatar = cleanString(comment.userAvatar || comment.avatar || '');
-                  const commentTextValue = cleanString(comment.content || comment.text || '');
-                  const canDeleteComment = isSameUserId(commentUserId, possibleUserIds) || isOwner;
+                  const commentUserId = cleanString(comment.userId);
+                  const canDeleteComment =
+                    isOwner || myIds.some((myId) => idsMatch(myId, commentUserId));
 
-                  const rawCommentTime = comment.createdAt || comment.timestamp || comment.date || null;
-                  const commentTime = rawCommentTime ? new Date(rawCommentTime) : new Date();
-                  const safeCommentTime = Number.isNaN(commentTime.getTime()) ? new Date() : commentTime;
+                  const commentTextSafe = getCommentText(comment);
+                  const commentName = comment.userName || comment.name || 'User';
+                  const commentAvatar = comment.userAvatar || comment.avatar || '';
 
                   return (
                     <motion.div
-                      key={commentId || `${commentUserId}-${commentTextValue}`}
+                      key={comment.id}
                       initial={{ opacity: 0, x: -12 }}
                       animate={{ opacity: 1, x: 0 }}
                       className="flex gap-2"
                     >
-                      <Avatar className="h-7 w-7">
-                        <AvatarImage src={commentAvatar} alt={commentUserName} />
-                        <AvatarFallback>
-                          {commentUserName ? commentUserName.charAt(0) : 'U'}
-                        </AvatarFallback>
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={commentAvatar} alt={commentName} />
+                        <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
                       </Avatar>
 
-                      <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
+                      <div className="min-w-0 flex-1 rounded-[22px] bg-slate-50 px-3 py-2 dark:bg-white/5">
                         <div className="flex items-baseline gap-2">
-                          <p className="text-sm font-medium text-foreground">
-                            {commentUserName}
+                          <p className="text-sm font-bold text-foreground">
+                            {commentName}
                           </p>
 
                           <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(safeCommentTime, { addSuffix: true })}
+                            {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
                           </span>
                         </div>
 
@@ -2105,7 +1893,7 @@ export default function PostCard({ post }: PostCardProps) {
                               </div>
 
                               <div className="min-w-0 flex-1">
-                                <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                <p className="mb-1 text-xs font-bold text-muted-foreground">
                                   Voice reply
                                 </p>
                                 <audio
@@ -2120,30 +1908,25 @@ export default function PostCard({ post }: PostCardProps) {
                               </div>
                             </div>
                           ) : (
-                            <p className="break-words">
-                              {commentTextValue.replace(
-                                /\[(REAL_LIFE|PRO COLLAB|PRO COLLAB INVITE|CREATOR_CONTENT)\s*/g,
-                                ''
-                              )}
-                            </p>
+                            <p className="break-words">{commentTextSafe}</p>
                           )}
                         </div>
 
                         <div className="mt-2 flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => handleReplyToComment(commentUserName)}
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => handleReplyToComment(commentName)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
                           >
                             <MessageCircle className="h-3 w-3" />
                             Reply
                           </button>
 
-                          {canDeleteComment && commentId && (
+                          {canDeleteComment && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteComment(commentId)}
-                              className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:underline"
                             >
                               <Trash2 className="h-3 w-3" />
                               Delete
@@ -2157,13 +1940,6 @@ export default function PostCard({ post }: PostCardProps) {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {isOwner && inviteItems.length > 0 && (
-            <div className="flex items-center gap-2 rounded-2xl bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              {inviteItems.length} pending collaboration invite{inviteItems.length === 1 ? '' : 's'}
-            </div>
-          )}
         </CardContent>
       </Card>
     </motion.div>
