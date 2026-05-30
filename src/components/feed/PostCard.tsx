@@ -65,8 +65,8 @@ type PostDocumentItem = {
 };
 
 /*
-  If Create CV still does not open after this update,
-  change only CV_BUILDER_ROUTE to the exact route used in your App.tsx.
+  If Create CV still does not open, your route name is different.
+  Change only this constant to match your App.tsx route.
 */
 const CV_BUILDER_ROUTE = '/ai-resume';
 const CAREER_WORKSPACE_ROUTE = '/career-ai';
@@ -76,10 +76,32 @@ function cleanString(value: unknown) {
   return value.trim();
 }
 
-function sameText(a: unknown, b: unknown) {
-  const x = cleanString(a).toLowerCase();
-  const y = cleanString(b).toLowerCase();
-  return Boolean(x && y && x === y);
+function getPostDate(post: Post) {
+  const raw =
+    (post as any).timestamp ||
+    (post as any).createdAt ||
+    (post as any).created_at ||
+    new Date();
+
+  const date = raw instanceof Date ? raw : new Date(raw);
+
+  if (Number.isNaN(date.getTime())) return new Date();
+
+  return date;
+}
+
+function getCommentDate(comment: any) {
+  const raw =
+    comment?.timestamp ||
+    comment?.createdAt ||
+    comment?.created_at ||
+    new Date();
+
+  const date = raw instanceof Date ? raw : new Date(raw);
+
+  if (Number.isNaN(date.getTime())) return new Date();
+
+  return date;
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -155,7 +177,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
       if (!cleanUrl) return;
 
       docs.push({
-        id: `${post.id}-doc-${index}`,
+        id: `${(post as any).id}-doc-${index}`,
         title: `Document ${index + 1}`,
         url: cleanUrl,
         pages: [],
@@ -217,7 +239,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
     );
 
     docs.push({
-      id: cleanString(raw.id) || `${post.id}-doc-${index}`,
+      id: cleanString(raw.id) || `${(post as any).id}-doc-${index}`,
       title,
       url,
       pages,
@@ -297,7 +319,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
     if (!unique.has(key)) {
       unique.set(key, {
         ...doc,
-        id: doc.id || `${post.id}-doc-${index}`,
+        id: doc.id || `${(post as any).id}-doc-${index}`,
         title,
         url,
         pages: Array.isArray(doc.pages) ? doc.pages : [],
@@ -342,73 +364,21 @@ function safeFileName(name: string) {
     .slice(0, 70);
 }
 
-function getPostVerified(post: Post) {
-  return Boolean(
-    (post as any)?.verified === true ||
-      (post as any)?.userVerified === true ||
-      (post as any)?.authorVerified === true ||
-      (post as any)?.accountVerified === true ||
-      (post as any)?.isVerified === true ||
-      (post as any)?.is_verified === true ||
-      (post as any)?.author?.verified === true ||
-      (post as any)?.author?.userVerified === true ||
-      (post as any)?.author?.addons?.verified === true ||
-      (post as any)?.user?.verified === true ||
-      (post as any)?.user?.userVerified === true ||
-      (post as any)?.user?.addons?.verified === true
-  );
-}
+function getAuthorVerified(post: Post, currentUserId: string, addons: any) {
+  const p: any = post;
 
-function ProtectedImage({
-  src,
-  alt,
-  className,
-  locked,
-  onClick,
-}: {
-  src: string;
-  alt: string;
-  className: string;
-  locked: boolean;
-  onClick?: () => void;
-}) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative block h-full w-full overflow-hidden"
-      onContextMenu={(e) => {
-        if (locked) e.preventDefault();
-      }}
-    >
-      <img
-        src={src}
-        alt={alt}
-        className={className}
-        loading="lazy"
-        draggable={!locked}
-        onContextMenu={(e) => {
-          if (locked) e.preventDefault();
-        }}
-        style={{
-          WebkitUserSelect: locked ? 'none' : undefined,
-          userSelect: locked ? 'none' : undefined,
-          WebkitTouchCallout: locked ? 'none' : undefined,
-        } as CSSProperties}
-      />
-
-      {locked && (
-        <div
-          className="absolute inset-0 z-10"
-          onContextMenu={(e) => e.preventDefault()}
-          style={{
-            WebkitTouchCallout: 'none',
-            WebkitUserSelect: 'none',
-            userSelect: 'none',
-          } as CSSProperties}
-        />
-      )}
-    </button>
+    p.verified === true ||
+    p.userVerified === true ||
+    p.isVerified === true ||
+    p.is_verified === true ||
+    p.authorVerified === true ||
+    p.author_verified === true ||
+    p.user?.verified === true ||
+    p.user?.userVerified === true ||
+    p.author?.verified === true ||
+    p.author?.userVerified === true ||
+    (!!addons?.verified && String(p.userId || '') === String(currentUserId || ''))
   );
 }
 
@@ -430,13 +400,22 @@ function DocumentPreview({
   return (
     <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
       {firstPage ? (
-        <div className="relative block w-full bg-white">
-          <ProtectedImage
+        <button
+          type="button"
+          onClick={() => {
+            if (!locked || canControl) onOpenPages(document.pages, 0);
+          }}
+          className="relative block w-full bg-white"
+        >
+          <img
             src={firstPage}
             alt={`${document.title} preview`}
-            locked={locked && !canControl}
             className="h-[250px] w-full object-contain sm:h-[340px]"
-            onClick={() => onOpenPages(document.pages, 0)}
+            loading="lazy"
+            draggable={false}
+            onContextMenu={(e) => {
+              if (locked && !canControl) e.preventDefault();
+            }}
           />
 
           {document.pages.length > 1 && (
@@ -445,13 +424,12 @@ function DocumentPreview({
             </span>
           )}
 
-          {locked && (
-            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur">
-              <Lock className="h-3 w-3" />
+          {locked && !canControl && (
+            <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
               Locked
-            </span>
+            </div>
           )}
-        </div>
+        </button>
       ) : (
         <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
           <FileText className="h-8 w-8 text-muted-foreground" />
@@ -492,7 +470,7 @@ export default function PostCard({ post }: PostCardProps) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [editingPost, setEditingPost] = useState(false);
-  const [postDraft, setPostDraft] = useState(post.content);
+  const [postDraft, setPostDraft] = useState(String((post as any).content || ''));
   const [saved, setSaved] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
@@ -511,21 +489,22 @@ export default function PostCard({ post }: PostCardProps) {
   const recordIntervalRef = useRef<number | null>(null);
   const replyInputRef = useRef<HTMLInputElement | null>(null);
 
-  const {
-    addons,
-    id: currentUserId,
-    tier,
-    name: storeName,
-    avatar: storeAvatar,
-  } = useUserStore() as any;
-
+  const { addons, id: currentUserId, tier } = useUserStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
   const mediaItems = useMemo(() => normalizePostMedia(post), [post]);
   const documentItems = useMemo(() => normalizePostDocuments(post), [post]);
 
-  const cleanPostContent = useMemo(() => getCleanPostContent(post.content), [post.content]);
+  const cleanPostContent = useMemo(
+    () => getCleanPostContent(String((post as any).content || '')),
+    [post]
+  );
+
+  const hashtags = useMemo(() => {
+    const tags = (post as any).hashtags;
+    return Array.isArray(tags) ? tags.filter(Boolean) : [];
+  }, [post]);
 
   const hasMediaOrDocs = mediaItems.length > 0 || documentItems.length > 0;
   const collapseLines = hasMediaOrDocs ? 2 : 10;
@@ -539,51 +518,8 @@ export default function PostCard({ post }: PostCardProps) {
 
   const lightboxSrc = lightboxItems[lightboxIndex] || null;
 
-  const possibleCurrentIds = useMemo(() => {
-    const ids = [
-      currentUserId,
-      user?.id,
-      (user as any)?._id,
-      (user as any)?.externalId,
-      (user as any)?.supabaseId,
-      typeof window !== 'undefined' ? localStorage.getItem('faceme_user_id') : '',
-      typeof window !== 'undefined' ? localStorage.getItem('facemex_user_id') : '',
-    ]
-      .map((x) => cleanString(x))
-      .filter(Boolean);
-
-    return Array.from(new Set(ids));
-  }, [currentUserId, user]);
-
-  const possibleCurrentNames = useMemo(() => {
-    const names = [
-      storeName,
-      user?.name,
-      (user as any)?.fullName,
-      (user as any)?.full_name,
-      user?.email,
-      typeof window !== 'undefined' ? localStorage.getItem('faceme_user_name') : '',
-      typeof window !== 'undefined' ? localStorage.getItem('facemex_user_name') : '',
-    ]
-      .map((x) => cleanString(x))
-      .filter(Boolean);
-
-    return Array.from(new Set(names));
-  }, [storeName, user]);
-
-  const postUserId = cleanString((post as any).userId || (post as any).authorId || (post as any).user?._id);
-  const displayName = cleanString((post as any).userName) || 'FaceMeX Member';
-  const displayAvatar = cleanString((post as any).userAvatar || (post as any).avatar) || '';
-
-  const isOwner = useMemo(() => {
-    if (postUserId && possibleCurrentIds.includes(postUserId)) return true;
-
-    if (possibleCurrentNames.some((name) => sameText(name, displayName))) {
-      return true;
-    }
-
-    return false;
-  }, [postUserId, possibleCurrentIds, possibleCurrentNames, displayName]);
+  const myId = String(currentUserId || user?.id || '').trim();
+  const isOwner = String((post as any).userId || '') === myId;
 
   const collaborators = Array.isArray((post as any).collaborators)
     ? ((post as any).collaborators as any[]).map(String)
@@ -593,34 +529,37 @@ export default function PostCard({ post }: PostCardProps) {
     ? ((post as any).collabInvites as any[]).map(String)
     : [];
 
-  const isCollaborator = possibleCurrentIds.some((id) => collaborators.includes(id));
-  const hasInvite = possibleCurrentIds.some((id) => collabInvites.includes(id));
+  const isCollaborator = !!myId && collaborators.includes(myId);
+  const hasInvite = !!myId && collabInvites.includes(myId);
   const canEdit = isOwner || isCollaborator;
 
-  const isAuthorVerified =
-    getPostVerified(post) ||
-    (isOwner &&
-      Boolean(
-        addons?.verified ||
-          user?.addons?.verified ||
-          (user as any)?.verified ||
-          (user as any)?.userVerified ||
-          (user as any)?.isVerified
-      ));
+  const displayName =
+    (post as any).userName ||
+    (post as any).name ||
+    (post as any).author?.name ||
+    'FaceMeX Member';
+
+  const displayAvatar =
+    (post as any).userAvatar ||
+    (post as any).avatar ||
+    (post as any).author?.avatar ||
+    '';
+
+  const isAuthorVerified = getAuthorVerified(post, currentUserId || '', addons);
 
   useEffect(() => {
-    setPostDraft(post.content);
-  }, [post.content]);
+    setPostDraft(String((post as any).content || ''));
+  }, [post]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem('faceme_saved_posts_v1');
       const ids = raw ? (JSON.parse(raw) as string[]) : [];
-      setSaved(Array.isArray(ids) ? ids.includes(post.id) : false);
+      setSaved(Array.isArray(ids) ? ids.includes((post as any).id) : false);
     } catch {
       setSaved(false);
     }
-  }, [post.id]);
+  }, [post]);
 
   useEffect(() => {
     try {
@@ -630,23 +569,23 @@ export default function PostCard({ post }: PostCardProps) {
         (post as any).mediaLocked === true ||
         (post as any).media_locked === true;
 
-      const raw = localStorage.getItem(`facemex:post_images_locked:${post.id}`);
+      const raw = localStorage.getItem(`facemex:post_images_locked:${(post as any).id}`);
       const localLocked = raw === 'true';
 
       setImagesLocked(serverLocked || localLocked);
     } catch {
       setImagesLocked(false);
     }
-  }, [post.id, post]);
+  }, [post]);
 
-  const toggleImagesLocked = async () => {
+  const toggleImagesLocked = () => {
     if (!isOwner) return;
 
     setImagesLocked((prev) => {
       const next = !prev;
 
       try {
-        localStorage.setItem(`facemex:post_images_locked:${post.id}`, String(next));
+        localStorage.setItem(`facemex:post_images_locked:${(post as any).id}`, String(next));
       } catch {}
 
       return next;
@@ -679,14 +618,14 @@ export default function PostCard({ post }: PostCardProps) {
     if (!lightboxSrc) return;
     if (imagesLocked && !isOwner) return;
 
-    saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
+    saveImageToDevice(lightboxSrc, `facemex-post-${(post as any).id}-${lightboxIndex + 1}`);
   };
 
   const storePostActionContext = (type: string, prompt: string) => {
     try {
       const payload = JSON.stringify({
         type,
-        postId: post.id,
+        postId: (post as any).id,
         content: cleanPostContent,
         prompt,
         createdAt: new Date().toISOString(),
@@ -704,13 +643,13 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const goCreateCv = () => {
-    const prompt = `Create a professional CV for this opportunity:\n\n${cleanPostContent}`;
+    const prompt = `Create a professional ATS CV for this opportunity:\n\n${cleanPostContent}`;
 
     storePostActionContext('create-cv', prompt);
 
     navigate(CV_BUILDER_ROUTE, {
       state: {
-        fromPost: post.id,
+        fromPost: (post as any).id,
         mode: 'create-cv',
         content: cleanPostContent,
         prompt,
@@ -725,7 +664,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     navigate(CAREER_WORKSPACE_ROUTE, {
       state: {
-        fromPost: post.id,
+        fromPost: (post as any).id,
         mode: 'apply-message',
         content: cleanPostContent,
         prompt,
@@ -740,7 +679,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     navigate(CAREER_WORKSPACE_ROUTE, {
       state: {
-        fromPost: post.id,
+        fromPost: (post as any).id,
         mode: 'check-job',
         content: cleanPostContent,
         prompt,
@@ -885,7 +824,7 @@ export default function PostCard({ post }: PostCardProps) {
 
           const voiceUrl = await uploadVoiceComment(audioBlob);
 
-          await addVoiceComment(post.id, voiceUrl);
+          await addVoiceComment((post as any).id, voiceUrl);
 
           incrementVoiceCommentCountToday();
           setShowComments(true);
@@ -971,8 +910,8 @@ export default function PostCard({ post }: PostCardProps) {
         const ids = raw ? (JSON.parse(raw) as string[]) : [];
         const safe = Array.isArray(ids) ? ids : [];
         const updated = next
-          ? Array.from(new Set([...safe, post.id]))
-          : safe.filter((id) => id !== post.id);
+          ? Array.from(new Set([...safe, (post as any).id]))
+          : safe.filter((id) => id !== (post as any).id);
 
         localStorage.setItem('faceme_saved_posts_v1', JSON.stringify(updated));
       } catch {}
@@ -983,7 +922,7 @@ export default function PostCard({ post }: PostCardProps) {
 
   const handleShare = async () => {
     try {
-      const url = `${window.location.origin}/post/${post.id}`;
+      const url = `${window.location.origin}/post/${(post as any).id}`;
       const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
 
       if (navAny && typeof navAny.share === 'function') {
@@ -998,12 +937,12 @@ export default function PostCard({ post }: PostCardProps) {
       console.log(error);
     }
 
-    sharePost(post.id);
+    sharePost((post as any).id);
   };
 
   const startEditPost = () => {
     if (!canEdit) return;
-    setPostDraft(post.content);
+    setPostDraft(String((post as any).content || ''));
     setEditingPost(true);
   };
 
@@ -1012,7 +951,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!next || !canEdit) return;
 
-    await editPost(post.id, next);
+    await editPost((post as any).id, next);
     setEditingPost(false);
   };
 
@@ -1023,7 +962,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!ok) return;
 
-    await deletePost(post.id);
+    await deletePost((post as any).id);
   };
 
   const handleInviteCollaborator = async () => {
@@ -1034,13 +973,13 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!next) return;
 
-    await inviteCollaborator(post.id, next);
+    await inviteCollaborator((post as any).id, next);
   };
 
   const handleComment = async () => {
     if (!commentText.trim()) return;
 
-    await addComment(post.id, commentText.trim());
+    await addComment((post as any).id, commentText.trim());
 
     setCommentText('');
     setShowComments(true);
@@ -1051,7 +990,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!ok) return;
 
-    await deleteComment(post.id, commentId);
+    await deleteComment((post as any).id, commentId);
   };
 
   const handleReplyToComment = (commentUserName: string) => {
@@ -1073,21 +1012,22 @@ export default function PostCard({ post }: PostCardProps) {
           playsInline
           preload="metadata"
           className="h-full w-full object-contain bg-black"
-          controlsList={imagesLocked && !isOwner ? 'nodownload noplaybackrate' : 'noplaybackrate'}
-          onContextMenu={(e) => {
-            if (imagesLocked && !isOwner) e.preventDefault();
-          }}
+          controlsList="nodownload"
+          onContextMenu={(e) => e.preventDefault()}
         />
       );
     }
 
     return (
-      <ProtectedImage
+      <img
         src={item.src}
         alt={`Post media ${index + 1}`}
         className="h-full w-full object-contain bg-white"
-        locked={imagesLocked && !isOwner}
-        onClick={() => openMediaLightbox(item.src)}
+        loading="lazy"
+        draggable={false}
+        onContextMenu={(e) => {
+          if (imagesLocked && !isOwner) e.preventDefault();
+        }}
       />
     );
   };
@@ -1107,11 +1047,11 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
-  const LockedBadge = () => {
+  const LockedLabel = () => {
     if (!imagesLocked) return null;
 
     return (
-      <span className="absolute left-3 top-3 z-20 inline-flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur">
+      <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
         <Lock className="h-3 w-3" />
         Locked
       </span>
@@ -1129,20 +1069,31 @@ export default function PostCard({ post }: PostCardProps) {
       if (item.type === 'video') {
         return (
           <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-            <div className="relative h-[250px] sm:h-[340px]">
-              {renderMediaItem(item, 0)}
-              <LockedBadge />
-            </div>
+            <div className="h-[250px] sm:h-[340px]">{renderMediaItem(item, 0)}</div>
           </div>
         );
       }
 
       return (
         <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
-          <div className="relative h-[250px] w-full sm:h-[340px]">
-            {renderMediaItem(item, 0)}
-            <LockedBadge />
-          </div>
+          <button
+            type="button"
+            onClick={() => openMediaLightbox(item.src)}
+            className="relative block w-full"
+          >
+            <img
+              src={item.src}
+              alt="Post media"
+              className="h-[250px] w-full object-contain sm:h-[340px]"
+              loading="lazy"
+              draggable={false}
+              onContextMenu={(e) => {
+                if (imagesLocked && !isOwner) e.preventDefault();
+              }}
+            />
+
+            <LockedLabel />
+          </button>
         </div>
       );
     }
@@ -1152,21 +1103,28 @@ export default function PostCard({ post }: PostCardProps) {
 
       return (
         <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
-          <div className="relative h-[250px] w-full sm:h-[340px]">
-            <ProtectedImage
+          <button
+            type="button"
+            onClick={() => openMediaLightbox(firstImage.src)}
+            className="relative block w-full"
+          >
+            <img
               src={firstImage.src}
               alt="Post media preview"
-              locked={imagesLocked && !isOwner}
-              className="h-[250px] w-full object-contain bg-white sm:h-[340px]"
-              onClick={() => openMediaLightbox(firstImage.src)}
+              className="h-[250px] w-full object-contain sm:h-[340px]"
+              loading="lazy"
+              draggable={false}
+              onContextMenu={(e) => {
+                if (imagesLocked && !isOwner) e.preventDefault();
+              }}
             />
 
             <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
               {imageItems.length} images
             </span>
 
-            <LockedBadge />
-          </div>
+            <LockedLabel />
+          </button>
         </div>
       );
     }
@@ -1179,9 +1137,11 @@ export default function PostCard({ post }: PostCardProps) {
             const showMore = index === 3 && extraCount > 0;
 
             return (
-              <div
+              <button
                 key={`${item.src}-${index}`}
+                type="button"
                 className="relative h-full w-full overflow-hidden bg-black"
+                onClick={() => item.type === 'image' && openMediaLightbox(item.src)}
               >
                 {renderMediaItem(item, index)}
 
@@ -1191,8 +1151,8 @@ export default function PostCard({ post }: PostCardProps) {
                   </div>
                 )}
 
-                <LockedBadge />
-              </div>
+                <LockedLabel />
+              </button>
             );
           })}
         </div>
@@ -1200,10 +1160,12 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
-  const commentCount = post.comments?.length || 0;
+  const commentCount = Array.isArray((post as any).comments)
+    ? (post as any).comments.length
+    : 0;
 
-  const reactionType = post.isLiked
-    ? ((post.reaction || 'like') as
+  const reactionType = (post as any).isLiked
+    ? (((post as any).reaction || 'like') as
         | 'love'
         | 'like'
         | 'haha'
@@ -1213,7 +1175,7 @@ export default function PostCard({ post }: PostCardProps) {
     : undefined;
 
   const reactionClass = (() => {
-    if (!post.isLiked) return '';
+    if (!(post as any).isLiked) return '';
 
     switch (reactionType) {
       case 'love':
@@ -1248,17 +1210,17 @@ export default function PostCard({ post }: PostCardProps) {
           <button
             type="button"
             className="flex min-w-0 items-center space-x-2 text-left"
-            onClick={() => navigate(`/profile/${post.userId}`)}
+            onClick={() => navigate(`/profile/${(post as any).userId}`)}
           >
             <div className="relative shrink-0">
               <Avatar className="h-10 w-10">
-                <AvatarImage src={displayAvatar || storeAvatar} alt={displayName} />
+                <AvatarImage src={displayAvatar} alt={displayName} />
                 <AvatarFallback>{displayName ? displayName.charAt(0) : 'U'}</AvatarFallback>
               </Avatar>
 
               {isAuthorVerified && (
-                <span className="absolute -bottom-1 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white ring-2 ring-background shadow-sm">
-                  <CheckCircle className="h-3.5 w-3.5" />
+                <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-1 ring-border">
+                  <CheckCircle className="h-2.5 w-2.5 text-primary" />
                 </span>
               )}
             </div>
@@ -1270,15 +1232,12 @@ export default function PostCard({ post }: PostCardProps) {
                 </p>
 
                 {isAuthorVerified && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-                    <ShieldCheck className="h-3 w-3" />
-                    Verified
-                  </span>
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0 text-primary" />
                 )}
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                {formatDistanceToNow(post.timestamp || post.createdAt || new Date(), { addSuffix: true })}
+                {formatDistanceToNow(getPostDate(post), { addSuffix: true })}
               </p>
             </div>
           </button>
@@ -1312,11 +1271,11 @@ export default function PostCard({ post }: PostCardProps) {
               {hasInvite && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => acceptCollabInvite(post.id)}>
+                  <DropdownMenuItem onClick={() => acceptCollabInvite((post as any).id)}>
                     Accept invite
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => rejectCollabInvite(post.id)}
+                    onClick={() => rejectCollabInvite((post as any).id)}
                     className="text-destructive focus:text-destructive"
                   >
                     Reject invite
@@ -1385,15 +1344,15 @@ export default function PostCard({ post }: PostCardProps) {
             )
           )}
 
-          {post.hashtags && post.hashtags.length > 0 && (
+          {hashtags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {post.hashtags.map((tag, index) => (
+              {hashtags.map((tag: string, index: number) => (
                 <span
                   key={index}
                   className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                  onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
+                  onClick={() => navigate(`/hashtag/${String(tag).replace('#', '')}`)}
                 >
-                  {tag.startsWith('#') ? tag : `#${tag}`}
+                  {String(tag).startsWith('#') ? tag : `#${tag}`}
                 </span>
               ))}
             </div>
@@ -1437,7 +1396,7 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          {post.audio && (
+          {(post as any).audio && (
             <div className="rounded-2xl border bg-background p-3">
               <div className="mb-2 flex items-center gap-2">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
@@ -1450,7 +1409,7 @@ export default function PostCard({ post }: PostCardProps) {
                 controls
                 controlsList="nodownload noplaybackrate"
                 className="w-full"
-                src={post.audio}
+                src={(post as any).audio}
                 preload="metadata"
                 onContextMenu={(e) => e.preventDefault()}
               />
@@ -1495,25 +1454,16 @@ export default function PostCard({ post }: PostCardProps) {
                     <img
                       src={lightboxSrc}
                       alt={`Image ${lightboxIndex + 1}`}
-                      draggable={!(imagesLocked && !isOwner)}
+                      className="max-h-full max-w-full object-contain transition-transform duration-200"
+                      draggable={false}
                       onContextMenu={(e) => {
                         if (imagesLocked && !isOwner) e.preventDefault();
                       }}
-                      className="max-h-full max-w-full object-contain transition-transform duration-200"
                       style={{
                         transform: `scale(${lightboxZoom})`,
                         transformOrigin: 'center center',
-                        WebkitTouchCallout: imagesLocked && !isOwner ? 'none' : undefined,
-                        WebkitUserSelect: imagesLocked && !isOwner ? 'none' : undefined,
-                        userSelect: imagesLocked && !isOwner ? 'none' : undefined,
-                      } as CSSProperties}
+                      }}
                     />
-                  )}
-
-                  {imagesLocked && !isOwner && (
-                    <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold text-white backdrop-blur">
-                      Downloads locked by author
-                    </div>
                   )}
 
                   {lightboxItems.length > 1 && (
@@ -1586,30 +1536,30 @@ export default function PostCard({ post }: PostCardProps) {
                     size="sm"
                     aria-label="React"
                     className={`${premiumActionButton} ${reactionClass}`}
-                    onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                    onClick={() => likePost((post as any).id, ((post as any).reaction || 'like') as any)}
                   >
                     <Heart className="mr-1 h-3.5 w-3.5" />
-                    {post.likes || 0}
+                    {(post as any).likes || 0}
                   </Button>
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent align="start" className="flex gap-1 rounded-full px-2 py-2">
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'love')} className="rounded-full px-2">
                     <Heart className="h-4 w-4 text-rose-500" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'like')} className="rounded-full px-2">
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'haha')} className="rounded-full px-2">
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'wow')} className="rounded-full px-2">
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'sad')} className="rounded-full px-2">
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'angry')} className="rounded-full px-2">
                     <Angry className="h-4 w-4 text-red-500" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -1639,7 +1589,7 @@ export default function PostCard({ post }: PostCardProps) {
               >
                 Share
                 <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
-                  {post.shares || 0}
+                  {(post as any).shares || 0}
                 </span>
               </Button>
 
@@ -1736,17 +1686,14 @@ export default function PostCard({ post }: PostCardProps) {
                 exit={{ opacity: 0, height: 0 }}
                 className="w-full space-y-3 border-t border-border/60 pt-3"
               >
-                {(post.comments || []).map((comment: any) => {
+                {(((post as any).comments || []) as any[]).map((comment) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
+                  const commentUserId = String(comment.userId || '').trim();
+                  const canDeleteComment = commentUserId === myId || isOwner;
 
-                  const commentUserId = cleanString(comment.userId || comment.authorId || comment.user?._id);
-                  const commentUserName = cleanString(comment.userName || comment.name);
-
-                  const isCommentOwner =
-                    (commentUserId && possibleCurrentIds.includes(commentUserId)) ||
-                    possibleCurrentNames.some((name) => sameText(name, commentUserName));
-
-                  const canDeleteComment = isOwner || isCommentOwner;
+                  const commentName = comment.userName || comment.name || 'User';
+                  const commentAvatar = comment.userAvatar || comment.avatar || '';
+                  const commentTextValue = comment.content || comment.text || '';
 
                   return (
                     <motion.div
@@ -1756,20 +1703,20 @@ export default function PostCard({ post }: PostCardProps) {
                       className="flex gap-2"
                     >
                       <Avatar className="h-7 w-7">
-                        <AvatarImage src={comment.userAvatar || comment.avatar} alt={commentUserName} />
+                        <AvatarImage src={commentAvatar} alt={commentName} />
                         <AvatarFallback>
-                          {commentUserName ? commentUserName.charAt(0) : 'U'}
+                          {commentName ? commentName.charAt(0) : 'U'}
                         </AvatarFallback>
                       </Avatar>
 
                       <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
                         <div className="flex items-baseline gap-2">
                           <p className="text-sm font-medium text-foreground">
-                            {commentUserName || 'FaceMeX Member'}
+                            {commentName}
                           </p>
 
                           <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(comment.timestamp || comment.createdAt || new Date(), { addSuffix: true })}
+                            {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
                           </span>
                         </div>
 
@@ -1797,7 +1744,7 @@ export default function PostCard({ post }: PostCardProps) {
                             </div>
                           ) : (
                             <p className="break-words">
-                              {String(comment.content || comment.text || '').replace(
+                              {String(commentTextValue).replace(
                                 /\[(REAL_LIFE|PRO COLLAB|PRO COLLAB INVITE|CREATOR_CONTENT)\s*/g,
                                 ''
                               )}
@@ -1808,7 +1755,7 @@ export default function PostCard({ post }: PostCardProps) {
                         <div className="mt-2 flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => handleReplyToComment(commentUserName)}
+                            onClick={() => handleReplyToComment(commentName)}
                             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                           >
                             <MessageCircle className="h-3 w-3" />
@@ -1818,7 +1765,7 @@ export default function PostCard({ post }: PostCardProps) {
                           {canDeleteComment && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteComment(comment.id)}
+                              onClick={() => handleDeleteComment(String(comment.id))}
                               className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
                             >
                               <Trash2 className="h-3 w-3" />
