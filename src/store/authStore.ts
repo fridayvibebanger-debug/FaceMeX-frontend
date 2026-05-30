@@ -41,6 +41,10 @@ interface AuthState {
   unfollowUser: (userId: string) => void;
 }
 
+function clean(value: any) {
+  return String(value || '').trim();
+}
+
 async function getProfileFromSupabase(userId: string) {
   const { data } = await supabase
     .from('profiles')
@@ -71,30 +75,147 @@ function buildUserFromSupabaseUser(supaUser: any, profile?: any): User {
     supaUser.user_metadata?.avatar_url ||
     '';
 
+  const tier =
+    supaUser.user_metadata?.tier ||
+    supaUser.user_metadata?.plan ||
+    'free';
+
   return {
     id: supaUser.id,
     email,
     name: realName,
-    phone: supaUser.user_metadata?.phone,
+    phone: supaUser.user_metadata?.phone || '',
     avatar: realAvatar,
     bio: profile?.bio || '',
     coverPhoto: profile?.cover_photo || '',
     location: profile?.location || '',
     website: profile?.website || '',
+    tier,
+    addons: {
+      verified: Boolean(
+        supaUser.user_metadata?.verified ||
+          supaUser.user_metadata?.userVerified ||
+          supaUser.user_metadata?.addons?.verified
+      ),
+    },
     followers: 0,
     following: 0,
-    joinedDate: new Date(supaUser.created_at),
+    joinedDate: supaUser.created_at ? new Date(supaUser.created_at) : new Date(),
   };
 }
 
-async function saveLocalProfileCache(profile: User) {
+async function saveAuthCache(profile: User, accessToken?: string) {
   try {
-    localStorage.setItem('faceme_user_id', String(profile.id));
+    if (accessToken) {
+      localStorage.setItem('faceme_token', accessToken);
+      localStorage.setItem('facemex_token', accessToken);
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('authToken', accessToken);
+      localStorage.setItem('token', accessToken);
+    }
+
+    localStorage.setItem('faceme_user_id', String(profile.id || ''));
+    localStorage.setItem('facemex_user_id', String(profile.id || ''));
+
     localStorage.setItem('faceme_user_name', String(profile.name || ''));
+    localStorage.setItem('facemex_user_name', String(profile.name || ''));
+
+    localStorage.setItem('faceme_user_email', String(profile.email || ''));
+    localStorage.setItem('facemex_user_email', String(profile.email || ''));
+
     localStorage.setItem('faceme_user_avatar', String(profile.avatar || ''));
+    localStorage.setItem('facemex_user_avatar', String(profile.avatar || ''));
+
+    localStorage.setItem('faceme_user_tier', String(profile.tier || 'free'));
+    localStorage.setItem('facemex_user_tier', String(profile.tier || 'free'));
   } catch {
     // ignore localStorage errors
   }
+}
+
+function clearAuthCache() {
+  try {
+    [
+      'faceme_token',
+      'facemex_token',
+      'accessToken',
+      'authToken',
+      'token',
+      'jwt',
+      'faceme_user_id',
+      'facemex_user_id',
+      'faceme_user_name',
+      'facemex_user_name',
+      'faceme_user_email',
+      'facemex_user_email',
+      'faceme_user_avatar',
+      'facemex_user_avatar',
+      'faceme_user_tier',
+      'facemex_user_tier',
+    ].forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // ignore localStorage errors
+  }
+}
+
+async function syncUserStoreFallback(profile: User) {
+  try {
+    useUserStore.setState({
+      id: profile.id,
+      name: profile.name,
+      avatar: profile.avatar || '',
+      tier: profile.tier || 'free',
+      addons: profile.addons || { verified: false },
+      loading: false,
+    } as any);
+  } catch {
+    // ignore user store fallback error
+  }
+}
+
+async function loadBackendUserAndMerge(
+  set: any,
+  profile: User
+) {
+  try {
+    await syncUserStoreFallback(profile);
+  } catch {}
+
+  try {
+    await useUserStore.getState().loadMe();
+  } catch {
+    // ignore user store sync error
+  }
+
+  try {
+    const me = await api.get('/api/users/me');
+
+    set((state: AuthState) => ({
+      user: state.user
+        ? {
+            ...state.user,
+            ...me,
+            id: profile.id || me.id || state.user.id,
+            avatar: profile.avatar || me.avatar || state.user.avatar || '',
+            name: profile.name || me.name || state.user.name || 'FaceMeX user',
+            email: profile.email || me.email || state.user.email || '',
+            tier: me.tier || profile.tier || state.user.tier || 'free',
+            addons: me.addons || profile.addons || state.user.addons || { verified: false },
+          }
+        : state.user,
+    }));
+  } catch {
+    // Supabase profile is still enough for login session
+  }
+}
+
+async function createSessionUser(supaUser: any, accessToken?: string) {
+  const profileData = await getProfileFromSupabase(supaUser.id);
+  const profile = buildUserFromSupabaseUser(supaUser, profileData);
+
+  await saveAuthCache(profile, accessToken);
+
+  return profile;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -130,13 +251,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const supaUser = data.user;
+    const accessToken = data.session?.access_token || '';
 
     if (!supaUser) {
       throw new Error('login_failed');
     }
 
-    const profileData = await getProfileFromSupabase(supaUser.id);
-    const profile = buildUserFromSupabaseUser(supaUser, profileData);
+    const profile = await createSessionUser(supaUser, accessToken);
 
     set({
       user: profile,
@@ -144,38 +265,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isInitialized: true,
     });
 
-    await saveLocalProfileCache(profile);
-
-    try {
-      await useUserStore.getState().loadMe();
-    } catch {
-      // ignore user store sync error
-    }
-
-    try {
-      const me = await api.get('/api/users/me');
-
-      set((state) => ({
-        user: state.user
-          ? {
-              ...state.user,
-              ...me,
-              avatar:
-                profile.avatar ||
-                me.avatar ||
-                state.user.avatar ||
-                '',
-              name:
-                profile.name ||
-                me.name ||
-                state.user.name ||
-                'FaceMeX user',
-            }
-          : state.user,
-      }));
-    } catch {
-      // Supabase profile is source of truth
-    }
+    await loadBackendUserAndMerge(set, profile);
   },
 
   register: async (name: string, email: string, password: string) => {
@@ -194,6 +284,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           full_name: name,
           name,
           username: name,
+          tier: 'free',
         },
         emailRedirectTo,
       },
@@ -213,6 +304,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const supaUser = data.user;
+    const accessToken = data.session?.access_token || '';
 
     if (!supaUser) {
       throw new Error('register_failed');
@@ -230,8 +322,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       updated_at: new Date().toISOString(),
     });
 
-    const profileData = await getProfileFromSupabase(supaUser.id);
-    const profile = buildUserFromSupabaseUser(supaUser, profileData);
+    const profile = await createSessionUser(supaUser, accessToken);
 
     set({
       user: profile,
@@ -239,42 +330,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isInitialized: true,
     });
 
-    await saveLocalProfileCache(profile);
-
-    try {
-      await useUserStore.getState().loadMe();
-    } catch {
-      // ignore user store sync error
-    }
-
-    try {
-      const me = await api.get('/api/users/me');
-
-      set((state) => ({
-        user: state.user
-          ? {
-              ...state.user,
-              ...me,
-              avatar:
-                profile.avatar ||
-                me.avatar ||
-                state.user.avatar ||
-                '',
-              name:
-                profile.name ||
-                me.name ||
-                state.user.name ||
-                'FaceMeX user',
-            }
-          : state.user,
-      }));
-    } catch {
-      // Supabase profile is source of truth
-    }
+    await loadBackendUserAndMerge(set, profile);
   },
 
   logout: () => {
-    supabase.auth.signOut();
+    try {
+      supabase.auth.signOut();
+    } catch {
+      // ignore logout error
+    }
 
     set({
       user: null,
@@ -303,14 +367,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // ignore user store reset error
     }
 
-    try {
-      localStorage.removeItem('faceme_user_id');
-      localStorage.removeItem('faceme_user_name');
-      localStorage.removeItem('faceme_user_avatar');
-      localStorage.removeItem('faceme_token');
-    } catch {
-      // ignore localStorage errors
-    }
+    clearAuthCache();
   },
 
   restoreSession: async () => {
@@ -330,6 +387,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       supabase.auth.onAuthStateChange((_event, session) => {
         const supaUser = session?.user;
+        const accessToken = session?.access_token || '';
 
         if (!supaUser) {
           set({
@@ -337,12 +395,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isAuthenticated: false,
             isInitialized: true,
           });
+
+          clearAuthCache();
           return;
         }
 
         (async () => {
-          const profileData = await getProfileFromSupabase(supaUser.id);
-          const profile = buildUserFromSupabaseUser(supaUser, profileData);
+          const profile = await createSessionUser(supaUser, accessToken);
 
           set({
             user: profile,
@@ -350,38 +409,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isInitialized: true,
           });
 
-          await saveLocalProfileCache(profile);
-
-          try {
-            await useUserStore.getState().loadMe();
-          } catch {
-            // ignore user store sync error
-          }
-
-          try {
-            const me = await api.get('/api/users/me');
-
-            set((state) => ({
-              user: state.user
-                ? {
-                    ...state.user,
-                    ...me,
-                    avatar:
-                      profile.avatar ||
-                      me.avatar ||
-                      state.user.avatar ||
-                      '',
-                    name:
-                      profile.name ||
-                      me.name ||
-                      state.user.name ||
-                      'FaceMeX user',
-                  }
-                : state.user,
-            }));
-          } catch {
-            // Supabase profile is source of truth
-          }
+          await loadBackendUserAndMerge(set, profile);
         })();
       });
     }
@@ -389,6 +417,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { data, error } = await supabase.auth.getSession();
     const session = data?.session;
     const supaUser = session?.user;
+    const accessToken = session?.access_token || '';
 
     if (error || !supaUser) {
       set({
@@ -396,11 +425,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: false,
         isInitialized: true,
       });
+
+      clearAuthCache();
       return;
     }
 
-    const profileData = await getProfileFromSupabase(supaUser.id);
-    const profile = buildUserFromSupabaseUser(supaUser, profileData);
+    const profile = await createSessionUser(supaUser, accessToken);
 
     set({
       user: profile,
@@ -408,38 +438,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isInitialized: true,
     });
 
-    await saveLocalProfileCache(profile);
-
-    try {
-      await useUserStore.getState().loadMe();
-    } catch {
-      // ignore user store sync error
-    }
-
-    try {
-      const me = await api.get('/api/users/me');
-
-      set((state) => ({
-        user: state.user
-          ? {
-              ...state.user,
-              ...me,
-              avatar:
-                profile.avatar ||
-                me.avatar ||
-                state.user.avatar ||
-                '',
-              name:
-                profile.name ||
-                me.name ||
-                state.user.name ||
-                'FaceMeX user',
-            }
-          : state.user,
-      }));
-    } catch {
-      // Supabase profile is source of truth
-    }
+    await loadBackendUserAndMerge(set, profile);
   },
 
   updateProfile: (updates: Partial<User>) => {
@@ -497,7 +496,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const latestUser = get().user;
 
         if (latestUser) {
-          await saveLocalProfileCache(latestUser);
+          const { data } = await supabase.auth.getSession();
+          await saveAuthCache(latestUser, data.session?.access_token || '');
+          await syncUserStoreFallback(latestUser);
         }
 
         try {
