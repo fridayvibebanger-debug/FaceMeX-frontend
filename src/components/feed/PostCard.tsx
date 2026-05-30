@@ -64,17 +64,31 @@ type PostDocumentItem = {
   previewPages: number;
 };
 
-/*
-  IMPORTANT:
-  Your GitHub shows AIResumePage.tsx and CareerAIPage.tsx.
-  If these buttons still do not open, only change these route constants.
-*/
 const CV_BUILDER_ROUTE = '/ai-resume';
 const CAREER_WORKSPACE_ROUTE = '/career-ai';
 
 function cleanString(value: unknown) {
   if (typeof value !== 'string') return '';
   return value.trim();
+}
+
+function toBool(value: unknown) {
+  if (value === true) return true;
+  if (value === false) return false;
+
+  const text = String(value || '').trim().toLowerCase();
+
+  return text === 'true' || text === '1' || text === 'yes' || text === 'verified';
+}
+
+function safeDate(value: unknown) {
+  if (value instanceof Date) return value;
+
+  const date = new Date(value as any);
+
+  if (Number.isNaN(date.getTime())) return new Date();
+
+  return date;
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -337,6 +351,70 @@ function safeFileName(name: string) {
     .slice(0, 70);
 }
 
+function getAuthorVerified(post: Post, currentUserId?: string, currentUserVerified?: boolean) {
+  const p = post as any;
+
+  const direct =
+    toBool(p.verified) ||
+    toBool(p.userVerified) ||
+    toBool(p.isVerified) ||
+    toBool(p.authorVerified) ||
+    toBool(p.accountVerified);
+
+  const nested =
+    toBool(p.addons?.verified) ||
+    toBool(p.userAddons?.verified) ||
+    toBool(p.authorAddons?.verified) ||
+    toBool(p.user?.verified) ||
+    toBool(p.user?.isVerified) ||
+    toBool(p.user?.userVerified) ||
+    toBool(p.user?.addons?.verified) ||
+    toBool(p.author?.verified) ||
+    toBool(p.author?.isVerified) ||
+    toBool(p.author?.userVerified) ||
+    toBool(p.author?.addons?.verified);
+
+  const currentUserOwnVerified =
+    String(post.userId || '') === String(currentUserId || '') && Boolean(currentUserVerified);
+
+  return direct || nested || currentUserOwnVerified;
+}
+
+function getAuthorName(post: Post) {
+  const p = post as any;
+
+  return (
+    cleanString(p.userName) ||
+    cleanString(p.authorName) ||
+    cleanString(p.name) ||
+    cleanString(p.user?.name) ||
+    cleanString(p.user?.full_name) ||
+    cleanString(p.user?.fullName) ||
+    cleanString(p.author?.name) ||
+    cleanString(p.author?.full_name) ||
+    cleanString(p.author?.fullName) ||
+    'FaceMeX Member'
+  );
+}
+
+function getAuthorAvatar(post: Post) {
+  const p = post as any;
+
+  return (
+    cleanString(p.userAvatar) ||
+    cleanString(p.avatar) ||
+    cleanString(p.avatarUrl) ||
+    cleanString(p.avatar_url) ||
+    cleanString(p.user?.avatar) ||
+    cleanString(p.user?.avatarUrl) ||
+    cleanString(p.user?.avatar_url) ||
+    cleanString(p.author?.avatar) ||
+    cleanString(p.author?.avatarUrl) ||
+    cleanString(p.author?.avatar_url) ||
+    ''
+  );
+}
+
 function DocumentPreview({
   document,
   locked,
@@ -495,13 +573,20 @@ export default function PostCard({ post }: PostCardProps) {
   const hasInvite = !!myId && collabInvites.includes(myId);
   const canEdit = isOwner || isCollaborator;
 
-  const displayName = post.userName || 'FaceMeX Member';
-  const displayAvatar = post.userAvatar || '';
+  const displayName = getAuthorName(post);
+  const displayAvatar = getAuthorAvatar(post);
 
-  const isAuthorVerified =
-    (post as any)?.verified === true ||
-    (post as any)?.userVerified === true ||
-    (!!addons?.verified && post.userId === currentUserId);
+  const isAuthorVerified = getAuthorVerified(
+    post,
+    currentUserId,
+    Boolean(
+      addons?.verified ||
+        (user as any)?.addons?.verified ||
+        (user as any)?.verified ||
+        (user as any)?.userVerified ||
+        (user as any)?.isVerified
+    )
+  );
 
   useEffect(() => {
     setPostDraft(post.content);
@@ -589,9 +674,7 @@ export default function PostCard({ post }: PostCardProps) {
       localStorage.setItem('facemex:career_workspace_prompt', payload);
       sessionStorage.setItem('facemex:post_action_context', payload);
       sessionStorage.setItem('facemex:career_workspace_prompt', payload);
-    } catch {
-      // ignore
-    }
+    } catch {}
   };
 
   const goCreateCv = () => {
@@ -1163,8 +1246,8 @@ export default function PostCard({ post }: PostCardProps) {
               </Avatar>
 
               {isAuthorVerified && (
-                <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-1 ring-border">
-                  <CheckCircle className="h-2.5 w-2.5 text-primary" />
+                <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-2 ring-background">
+                  <CheckCircle className="h-3.5 w-3.5 fill-primary text-primary" />
                 </span>
               )}
             </div>
@@ -1176,12 +1259,12 @@ export default function PostCard({ post }: PostCardProps) {
                 </p>
 
                 {isAuthorVerified && (
-                  <span className="text-[10px] text-muted-foreground">Verified</span>
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0 fill-primary text-primary" />
                 )}
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                {formatDistanceToNow(post.timestamp, { addSuffix: true })}
+                {formatDistanceToNow(safeDate(post.timestamp), { addSuffix: true })}
               </p>
             </div>
           </button>
@@ -1649,7 +1732,7 @@ export default function PostCard({ post }: PostCardProps) {
                           </p>
 
                           <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(comment.timestamp, { addSuffix: true })}
+                            {formatDistanceToNow(safeDate(comment.timestamp), { addSuffix: true })}
                           </span>
                         </div>
 
