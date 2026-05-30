@@ -45,10 +45,6 @@ function getPostTime(post: any) {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
-/*
-  ORIGINAL SLIDE FEED KEPT.
-  I did not change this to horizontal manual scroll.
-*/
 function BusinessPromotionsStrip() {
   const [items, setItems] = useState<BusinessPromotion[]>([]);
   const [loadingPromos, setLoadingPromos] = useState(true);
@@ -111,9 +107,7 @@ function BusinessPromotionsStrip() {
         if (!cancelled) setItems([]);
       }
 
-      if (!cancelled) {
-        setLoadingPromos(false);
-      }
+      if (!cancelled) setLoadingPromos(false);
     }
 
     loadFeedPromotions();
@@ -140,16 +134,16 @@ function BusinessPromotionsStrip() {
   if (loadingPromos || displayItems.length === 0) return null;
 
   return (
-    <div className="mb-4">
-      <div className="flex items-center justify-between mb-2 px-1">
-        <span className="text-sm font-semibold">Sponsored</span>
-        <span className="text-[11px] text-muted-foreground">
+    <section className="w-full max-w-full min-w-0 overflow-hidden">
+      <div className="mb-2 flex w-full min-w-0 items-center justify-between gap-3 px-1">
+        <span className="shrink-0 text-sm font-semibold">Sponsored</span>
+        <span className="min-w-0 truncate text-right text-[11px] text-muted-foreground">
           Businesses on the feed slide
         </span>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/90 px-3 py-2">
-        <div className="relative h-24 sm:h-28">
+      <div className="relative w-full max-w-full overflow-hidden rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2 dark:border-slate-800/70 dark:bg-slate-900/90">
+        <div className="relative h-24 w-full max-w-full overflow-hidden sm:h-28">
           <motion.div
             className="absolute inset-y-0 left-0 flex items-center gap-3 pr-8"
             initial={{ x: '0%' }}
@@ -163,9 +157,9 @@ function BusinessPromotionsStrip() {
             {[...displayItems, ...displayItems].map((item, index) => (
               <div
                 key={`${item.id}-${index}`}
-                className="flex items-center gap-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/90 dark:bg-slate-900/90 px-3 py-2 min-w-[240px] shadow-sm"
+                className="flex min-w-[218px] max-w-[218px] items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/90"
               >
-                <div className="h-12 w-12 rounded-lg bg-slate-200/80 dark:bg-slate-800/80 overflow-hidden flex items-center justify-center">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-200/80 dark:bg-slate-800/80">
                   {item.imageUrl ? (
                     <img
                       src={item.imageUrl}
@@ -174,17 +168,17 @@ function BusinessPromotionsStrip() {
                       loading="lazy"
                     />
                   ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 flex items-center justify-center text-white text-xs font-bold">
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 text-xs font-bold text-white">
                       {item.businessName.charAt(0)}
                     </div>
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold truncate">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-semibold">
                     {item.headline}
                   </div>
-                  <div className="text-[11px] text-muted-foreground truncate">
+                  <div className="truncate text-[11px] text-muted-foreground">
                     {item.businessName}
                   </div>
                 </div>
@@ -194,7 +188,7 @@ function BusinessPromotionsStrip() {
                     href={item.ctaUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[11px] px-2 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300 whitespace-nowrap"
+                    className="shrink-0 whitespace-nowrap rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-600 dark:text-blue-300"
                   >
                     {item.ctaLabel}
                   </a>
@@ -203,17 +197,17 @@ function BusinessPromotionsStrip() {
             ))}
           </motion.div>
 
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-background to-transparent" />
 
           <motion.div
-            className="pointer-events-none absolute top-2 bottom-2 right-4 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
+            className="pointer-events-none absolute bottom-2 right-4 top-2 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
             initial={{ opacity: 0.4, y: 0 }}
             animate={{ opacity: [0.2, 0.8, 0.2], y: [0, 4, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -266,10 +260,6 @@ export default function NewsFeed() {
     }
   }, [location.search, mode, setMode]);
 
-  /*
-    Stable first load only.
-    This prevents the feed from blinking when scrolling.
-  */
   useEffect(() => {
     if (hasLoadedOnceRef.current) return;
 
@@ -306,11 +296,6 @@ export default function NewsFeed() {
     }
   }, [posts, newPostsAvailable]);
 
-  /*
-    New post banner only.
-    It does NOT reload the list automatically.
-    This avoids blinking while scrolling.
-  */
   useEffect(() => {
     let cancelled = false;
     let pollTimer: number | null = null;
@@ -335,7 +320,7 @@ export default function NewsFeed() {
     setInitialLatestPost();
 
     const channel = supabase
-      .channel('facemex-new-post-banner-phone-fit')
+      .channel('facemex-new-post-banner-phone-lock')
       .on(
         'postgres_changes',
         {
@@ -592,331 +577,340 @@ export default function NewsFeed() {
   }, []);
 
   return (
-    <div className="relative mx-auto w-full max-w-[430px] space-y-4 px-2 py-3 pb-24">
-      {newPostsAvailable && (
-        <div className="sticky top-14 z-20">
-          <Button
-            onClick={loadNewPosts}
-            className="h-9 w-full rounded-full text-xs font-medium"
-          >
-            New posts available. Refresh
-          </Button>
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setIsCreateModalOpen(true)}
-        className="w-full text-left rounded-2xl border bg-card px-4 py-4 focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        <div className="text-sm text-muted-foreground">
-          Write a post, ask for ideas, or plan your next move…
-        </div>
-      </button>
-
-      <MarketplaceAdSlide />
-
-      <BusinessPromotionsStrip />
-
-      <div className="flex flex-col gap-2 rounded-2xl border bg-card p-2.5">
-        <div className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 shrink-0 rounded-full text-xs">
-                <Filter className="h-3.5 w-3.5 mr-2" />
-                {filter === 'ai-curated' && 'AI Curated'}
-                {filter === 'recent' && 'Recent'}
-                {filter === 'trending' && 'Trending'}
-              </Button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => setFilter('ai-curated')}>
-                <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
-                AI Curated
-              </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => setFilter('recent')}>
-                <Clock className="h-4 w-4 mr-2 text-blue-500" />
-                Recent
-              </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => setFilter('trending')}>
-                <TrendingUp className="h-4 w-4 mr-2 text-orange-500" />
-                Trending
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {filter === 'ai-curated' && (
-            <Badge variant="secondary" className="h-8 shrink-0 rounded-full text-[11px]">
-              <Sparkles className="h-3 w-3 mr-1" />
-              For you
-            </Badge>
-          )}
-        </div>
-
-        {mode === 'professional' && (
-          <input
-            value={skillQuery}
-            onChange={(event) => setSkillQuery(event.target.value)}
-            placeholder="Search skill or #tag"
-            className="h-9 w-full rounded-full border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        )}
-      </div>
-
-      <div className="p-3 rounded-2xl border bg-card space-y-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Trending Now</span>
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {trendingHashtags.slice(0, 8).map((tag) => (
-            <Badge
-              key={tag}
-              variant="secondary"
-              className="shrink-0 cursor-pointer rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
-              onClick={() => {
-                const params = new URLSearchParams(location.search);
-                params.set('skill', tag);
-
-                navigate({
-                  pathname: '/feed',
-                  search: `?${params.toString()}`,
-                });
-
-                setSkillQuery(tag);
-
-                if (mode !== 'professional') {
-                  setMode('professional');
-                }
-              }}
+    <div className="relative mx-auto w-full max-w-full min-w-0 overflow-x-hidden px-3 py-3 pb-24">
+      <div className="mx-auto w-full max-w-[390px] min-w-0 space-y-4 overflow-x-hidden">
+        {newPostsAvailable && (
+          <div className="sticky top-14 z-20 w-full max-w-full overflow-hidden">
+            <Button
+              onClick={loadNewPosts}
+              className="h-9 w-full max-w-full rounded-full text-xs font-semibold"
             >
-              #{tag}
-            </Badge>
-          ))}
-
-          {trendingHashtags.length === 0 && (
-            <span className="text-sm text-muted-foreground">
-              No hashtags yet.
-            </span>
-          )}
-        </div>
-
-        {openToCollabUsers.length > 0 && (
-          <div className="border-t pt-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">
-                Open to collaborate
-              </span>
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                {openToCollabUsers.length} profile
-                {openToCollabUsers.length === 1 ? '' : 's'}
-              </span>
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {openToCollabUsers.slice(0, 6).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
-                  onClick={() => navigate('/profile')}
-                >
-                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
-                    {p.avatar ? (
-                      <img
-                        src={p.avatar}
-                        alt={p.name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
-                        {p.name?.charAt(0) || '?'}
-                      </div>
-                    )}
-                  </div>
-
-                  <span className="max-w-[110px] truncate">{p.name}</span>
-
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                    Open
-                  </span>
-                </button>
-              ))}
-            </div>
+              New posts available. Refresh
+            </Button>
           </div>
         )}
 
-        {activeSkill && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Filtered by:</span>
-              <Badge variant="outline" className="rounded-full">
-                {activeSkill}
+        <button
+          type="button"
+          onClick={() => setIsCreateModalOpen(true)}
+          className="w-full max-w-full rounded-2xl border bg-card px-4 py-4 text-left focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <div className="truncate text-sm text-muted-foreground">
+            Write a post, ask for ideas, or plan your next move…
+          </div>
+        </button>
+
+        <div className="w-full max-w-full min-w-0 overflow-hidden">
+          <MarketplaceAdSlide />
+        </div>
+
+        <BusinessPromotionsStrip />
+
+        <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border bg-card p-2.5">
+          <div className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 shrink-0 rounded-full text-xs">
+                  <Filter className="mr-2 h-3.5 w-3.5" />
+                  {filter === 'ai-curated' && 'AI Curated'}
+                  {filter === 'recent' && 'Recent'}
+                  {filter === 'trending' && 'Trending'}
+                </Button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setFilter('ai-curated')}>
+                  <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
+                  AI Curated
+                </DropdownMenuItem>
+
+                <DropdownMenuItem onClick={() => setFilter('recent')}>
+                  <Clock className="mr-2 h-4 w-4 text-blue-500" />
+                  Recent
+                </DropdownMenuItem>
+
+                <DropdownMenuItem onClick={() => setFilter('trending')}>
+                  <TrendingUp className="mr-2 h-4 w-4 text-orange-500" />
+                  Trending
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {filter === 'ai-curated' && (
+              <Badge variant="secondary" className="h-8 shrink-0 rounded-full text-[11px]">
+                <Sparkles className="mr-1 h-3 w-3" />
+                For you
               </Badge>
-            </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-3 text-xs rounded-full"
-              onClick={() => {
-                const params = new URLSearchParams(location.search);
-                params.delete('skill');
-
-                navigate({
-                  pathname: '/feed',
-                  search: params.toString() ? `?${params.toString()}` : '',
-                });
-
-                setSkillQuery('');
-              }}
-            >
-              Clear
-            </Button>
+            )}
           </div>
-        )}
 
-        {activeSkill && (
-          <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] bg-muted/40 rounded-2xl px-3 py-2">
-            <span className="text-muted-foreground">
-              Explore how creators are using{' '}
-              <span className="font-semibold">#{activeSkill}</span> in social mode.
-            </span>
+          {mode === 'professional' && (
+            <input
+              value={skillQuery}
+              onChange={(event) => setSkillQuery(event.target.value)}
+              placeholder="Search skill or #tag"
+              className="mt-2 h-9 w-full rounded-full border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-3 text-[11px] rounded-full"
-              onClick={() => {
-                const params = new URLSearchParams(location.search);
-                params.set('skill', activeSkill);
-
-                navigate({
-                  pathname: '/feed',
-                  search: `?${params.toString()}`,
-                });
-
-                setMode('social');
-                setFilter('trending');
-              }}
-            >
-              Browse creative posts
-            </Button>
+        <div className="w-full max-w-full min-w-0 overflow-hidden rounded-2xl border bg-card p-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-sm font-semibold">Trending Now</span>
           </div>
-        )}
 
-        {activeSkill && peopleForSkill.length > 0 && (
-          <div className="border-t pt-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">
-                People with this skill
+          <div className="mt-3 flex w-full max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {trendingHashtags.slice(0, 8).map((tag) => (
+              <Badge
+                key={tag}
+                variant="secondary"
+                className="shrink-0 cursor-pointer rounded-full transition-colors hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  const params = new URLSearchParams(location.search);
+                  params.set('skill', tag);
+
+                  navigate({
+                    pathname: '/feed',
+                    search: `?${params.toString()}`,
+                  });
+
+                  setSkillQuery(tag);
+
+                  if (mode !== 'professional') {
+                    setMode('professional');
+                  }
+                }}
+              >
+                #{tag}
+              </Badge>
+            ))}
+
+            {trendingHashtags.length === 0 && (
+              <span className="text-sm text-muted-foreground">
+                No hashtags yet.
               </span>
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                {peopleForSkill.length} profile
-                {peopleForSkill.length === 1 ? '' : 's'}
-              </span>
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {peopleForSkill.slice(0, 6).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
-                  onClick={() => navigate('/profile')}
-                >
-                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
-                    {p.avatar ? (
-                      <img
-                        src={p.avatar}
-                        alt={p.name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
-                        {p.name?.charAt(0) || '?'}
-                      </div>
-                    )}
-                  </div>
-
-                  <span className="max-w-[110px] truncate">{p.name}</span>
-
-                  {p.openToCollab && (
-                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                      Open
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {loading && posts.length === 0 ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={index}
-              className="p-4 rounded-2xl border bg-card animate-pulse space-y-3"
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-muted" />
-                <div className="h-4 w-40 bg-muted rounded" />
+          {openToCollabUsers.length > 0 && (
+            <div className="mt-3 space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">
+                  Open to collaborate
+                </span>
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {openToCollabUsers.length} profile
+                  {openToCollabUsers.length === 1 ? '' : 's'}
+                </span>
               </div>
 
-              <div className="h-4 w-3/4 bg-muted rounded" />
-              <div className="h-48 w-full bg-muted rounded" />
+              <div className="flex w-full max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {openToCollabUsers.slice(0, 6).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-2 py-1 text-xs hover:bg-accent/40"
+                    onClick={() => navigate('/profile')}
+                  >
+                    <div className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-muted">
+                      {p.avatar ? (
+                        <img
+                          src={p.avatar}
+                          alt={p.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
+                          {p.name?.charAt(0) || '?'}
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="max-w-[100px] truncate">{p.name}</span>
+
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+                      Open
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-      ) : displayPosts.length === 0 ? (
-        <div className="p-8 text-center rounded-2xl border bg-card">
-          <div className="text-lg font-semibold mb-2">No posts yet</div>
-          <div className="text-sm text-muted-foreground mb-4">
-            Be the first to share something.
-          </div>
+          )}
 
-          <Button onClick={() => setIsCreateModalOpen(true)}>
-            Write your first post
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {displayPosts.slice(0, visibleCount).map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
+          {activeSkill && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Filtered by:</span>
+                <Badge variant="outline" className="rounded-full">
+                  {activeSkill}
+                </Badge>
+              </div>
 
-          {visibleCount < displayPosts.length && (
-            <div className="flex flex-col items-center gap-3">
-              <div ref={setObserverNode} className="h-1 w-full" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 rounded-full px-3 text-xs"
+                onClick={() => {
+                  const params = new URLSearchParams(location.search);
+                  params.delete('skill');
+
+                  navigate({
+                    pathname: '/feed',
+                    search: params.toString() ? `?${params.toString()}` : '',
+                  });
+
+                  setSkillQuery('');
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+
+          {activeSkill && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/40 px-3 py-2 text-[11px]">
+              <span className="min-w-0 text-muted-foreground">
+                Explore how creators are using{' '}
+                <span className="font-semibold">#{activeSkill}</span> in social mode.
+              </span>
 
               <Button
                 variant="outline"
-                className="rounded-full"
-                onClick={() =>
-                  setVisibleCount((count) =>
-                    Math.min(count + 5, displayPosts.length)
-                  )
-                }
+                size="sm"
+                className="h-8 rounded-full px-3 text-[11px]"
+                onClick={() => {
+                  const params = new URLSearchParams(location.search);
+                  params.set('skill', activeSkill);
+
+                  navigate({
+                    pathname: '/feed',
+                    search: `?${params.toString()}`,
+                  });
+
+                  setMode('social');
+                  setFilter('trending');
+                }}
               >
-                Load more
+                Browse creative posts
               </Button>
             </div>
           )}
-        </div>
-      )}
 
-      <CreatePostModal
-        open={isCreateModalOpen}
-        onOpenChange={setIsCreateModalOpen}
-      />
+          {activeSkill && peopleForSkill.length > 0 && (
+            <div className="mt-3 space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">
+                  People with this skill
+                </span>
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {peopleForSkill.length} profile
+                  {peopleForSkill.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <div className="flex w-full max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {peopleForSkill.slice(0, 6).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-2 py-1 text-xs hover:bg-accent/40"
+                    onClick={() => navigate('/profile')}
+                  >
+                    <div className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-muted">
+                      {p.avatar ? (
+                        <img
+                          src={p.avatar}
+                          alt={p.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
+                          {p.name?.charAt(0) || '?'}
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="max-w-[100px] truncate">{p.name}</span>
+
+                    {p.openToCollab && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+                        Open
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {loading && posts.length === 0 ? (
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={index}
+                className="w-full max-w-full space-y-3 overflow-hidden rounded-2xl border bg-card p-4 animate-pulse"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-muted" />
+                  <div className="h-4 w-40 max-w-[70%] rounded bg-muted" />
+                </div>
+
+                <div className="h-4 w-3/4 rounded bg-muted" />
+                <div className="h-48 w-full rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        ) : displayPosts.length === 0 ? (
+          <div className="w-full max-w-full rounded-2xl border bg-card p-8 text-center">
+            <div className="mb-2 text-lg font-semibold">No posts yet</div>
+            <div className="mb-4 text-sm text-muted-foreground">
+              Be the first to share something.
+            </div>
+
+            <Button onClick={() => setIsCreateModalOpen(true)}>
+              Write your first post
+            </Button>
+          </div>
+        ) : (
+          <div className="w-full max-w-full min-w-0 space-y-4 overflow-x-hidden">
+            {displayPosts.slice(0, visibleCount).map((post) => (
+              <div
+                key={post.id}
+                className="w-full max-w-full min-w-0 overflow-hidden"
+              >
+                <PostCard post={post} />
+              </div>
+            ))}
+
+            {visibleCount < displayPosts.length && (
+              <div className="flex flex-col items-center gap-3">
+                <div ref={setObserverNode} className="h-1 w-full" />
+
+                <Button
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() =>
+                    setVisibleCount((count) =>
+                      Math.min(count + 5, displayPosts.length)
+                    )
+                  }
+                >
+                  Load more
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <CreatePostModal
+          open={isCreateModalOpen}
+          onOpenChange={setIsCreateModalOpen}
+        />
+      </div>
     </div>
   );
 }
