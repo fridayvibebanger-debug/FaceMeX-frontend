@@ -465,10 +465,7 @@ function idsMatch(a: unknown, b: unknown) {
 function getMyCollabCode(name: string, id: string) {
   const cleanName = cleanString(name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
   const shortName = cleanName || 'User';
-  const last4 =
-    cleanString(id).replace(/[^a-zA-Z0-9]/g, '').slice(-4) ||
-    String(Math.floor(1000 + Math.random() * 9000));
-
+  const last4 = cleanString(id).replace(/[^a-zA-Z0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
   return `${shortName}${last4}`;
 }
 
@@ -485,7 +482,13 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
             title={profile.name}
           >
             {profile.avatar ? (
-              <img src={profile.avatar} alt={profile.name} className="h-full w-full object-cover" />
+              <img
+                src={profile.avatar}
+                alt={profile.name}
+                className="h-full w-full object-cover"
+                loading="eager"
+                decoding="async"
+              />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[9px] font-bold text-muted-foreground">
                 {getInitial(profile.name)}
@@ -534,7 +537,8 @@ function DocumentPreview({
             src={firstPage}
             alt={`${document.title} preview`}
             className="h-[250px] w-full object-contain sm:h-[340px]"
-            loading="lazy"
+            loading="eager"
+            decoding="async"
             draggable={!downloadsLocked}
           />
 
@@ -563,7 +567,7 @@ function DocumentPreview({
         <button
           type="button"
           onClick={onToggleLock}
-          className="flex h-9 w-full items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+          className="flex h-8 w-full items-center justify-center gap-2 border-t border-border/70 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
         >
           {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
           {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
@@ -588,6 +592,7 @@ export default function PostCard({ post }: PostCardProps) {
   } = usePostStore();
 
   const [showComments, setShowComments] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [editingPost, setEditingPost] = useState(false);
   const [postDraft, setPostDraft] = useState(post.content);
@@ -710,7 +715,9 @@ export default function PostCard({ post }: PostCardProps) {
     } catch {
       setDownloadsLocked(false);
     }
-  }, [post.id, post]);
+    // Important: only post.id here. Adding the whole post causes scroll blinking.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id]);
 
   const toggleDownloadsLocked = () => {
     if (!isOwner) return;
@@ -1099,6 +1106,7 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const handleReplyToComment = (commentUserName: string) => {
+    setReplyOpen(true);
     setShowComments(true);
     setCommentText(`@${commentUserName} `);
 
@@ -1114,7 +1122,7 @@ export default function PostCard({ post }: PostCardProps) {
       <button
         type="button"
         onClick={toggleDownloadsLocked}
-        className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[12px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
+        className="mt-1 flex h-8 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[11px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
       >
         {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
         {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
@@ -1155,7 +1163,8 @@ export default function PostCard({ post }: PostCardProps) {
         src={item.src}
         alt={`Post media ${index + 1}`}
         className="h-full w-full object-contain bg-white"
-        loading="lazy"
+        loading="eager"
+        decoding="async"
         draggable={!downloadsLocked}
         onContextMenu={(e) => {
           if (downloadsLocked) e.preventDefault();
@@ -1197,7 +1206,8 @@ export default function PostCard({ post }: PostCardProps) {
               src={item.src}
               alt="Post media"
               className="h-[250px] w-full object-contain sm:h-[340px]"
-              loading="lazy"
+              loading="eager"
+              decoding="async"
               draggable={!downloadsLocked}
             />
             <DownloadLockChip />
@@ -1224,7 +1234,8 @@ export default function PostCard({ post }: PostCardProps) {
               src={firstImage.src}
               alt="Post media preview"
               className="h-[250px] w-full object-contain sm:h-[340px]"
-              loading="lazy"
+              loading="eager"
+              decoding="async"
               draggable={!downloadsLocked}
             />
 
@@ -1305,18 +1316,11 @@ export default function PostCard({ post }: PostCardProps) {
     }
   })();
 
-  const topActionButton =
-    'h-8 rounded-full px-1.5 text-[13px] font-semibold text-foreground hover:bg-muted/40 hover:text-foreground';
-
-  const topActionCount =
-    'ml-1.5 text-[11px] font-semibold text-muted-foreground tabular-nums';
+  const compactTextButton =
+    'h-8 rounded-full px-2 text-[12px] font-semibold text-muted-foreground hover:bg-muted/50 hover:text-foreground';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-    >
+    <div>
       <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_8px_26px_rgba(15,23,42,0.06)]">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
           <button
@@ -1425,7 +1429,6 @@ export default function PostCard({ post }: PostCardProps) {
                         >
                           Accept
                         </button>
-
                         <button
                           type="button"
                           onClick={() => rejectCollaborationRequest(profile)}
@@ -1455,7 +1458,7 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="space-y-3 px-3 pb-3">
+        <CardContent className="space-y-2.5 px-3 pb-3">
           {editingPost ? (
             <div className="space-y-2">
               <textarea
@@ -1468,7 +1471,6 @@ export default function PostCard({ post }: PostCardProps) {
                 <Button size="sm" variant="ghost" onClick={() => setEditingPost(false)}>
                   Cancel
                 </Button>
-
                 <Button size="sm" onClick={saveEditPost}>
                   Save
                 </Button>
@@ -1583,6 +1585,8 @@ export default function PostCard({ post }: PostCardProps) {
                         src={lightboxSrc}
                         alt={`Image ${lightboxIndex + 1}`}
                         className="object-contain transition-all duration-200"
+                        loading="eager"
+                        decoding="async"
                         style={
                           lightboxZoom <= 1
                             ? {
@@ -1631,7 +1635,7 @@ export default function PostCard({ post }: PostCardProps) {
                     type="button"
                     onClick={zoomOut}
                     disabled={lightboxZoom <= 1}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                    className="inline-flex h-9 items-center gap-2 rounded-full bg-white/15 px-3 text-xs font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
                   >
                     <ZoomOut className="h-4 w-4" />
                     Out
@@ -1641,7 +1645,7 @@ export default function PostCard({ post }: PostCardProps) {
                     type="button"
                     onClick={zoomIn}
                     disabled={lightboxZoom >= 4}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
+                    className="inline-flex h-9 items-center gap-2 rounded-full bg-white/15 px-3 text-xs font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
                   >
                     <ZoomIn className="h-4 w-4" />
                     Zoom
@@ -1651,7 +1655,7 @@ export default function PostCard({ post }: PostCardProps) {
                     type="button"
                     onClick={resetZoom}
                     disabled={lightboxZoom <= 1}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
+                    className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-xs font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Reset
@@ -1661,8 +1665,8 @@ export default function PostCard({ post }: PostCardProps) {
             </DialogContent>
           </Dialog>
 
-          <div className="space-y-2 pt-1.5">
-            <div className="flex items-center justify-between gap-1 px-0.5">
+          <div className="pt-2">
+            <div className="flex items-center justify-between gap-1 px-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -1670,11 +1674,13 @@ export default function PostCard({ post }: PostCardProps) {
                     variant="ghost"
                     size="sm"
                     aria-label="React"
-                    className={`${topActionButton} ${reactionClass}`}
+                    className={`${compactTextButton} ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
                     <span>React</span>
-                    <span className={topActionCount}>{post.likes || 0}</span>
+                    <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
+                      {post.likes || 0}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
 
@@ -1682,23 +1688,18 @@ export default function PostCard({ post }: PostCardProps) {
                   <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="rounded-full px-2">
                     <Heart className="h-4 w-4 text-rose-500" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="rounded-full px-2">
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="rounded-full px-2">
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="rounded-full px-2">
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="rounded-full px-2">
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="rounded-full px-2">
                     <Angry className="h-4 w-4 text-red-500" />
                   </DropdownMenuItem>
@@ -1709,36 +1710,41 @@ export default function PostCard({ post }: PostCardProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={topActionButton}
+                className={compactTextButton}
                 onClick={() => {
-                  setShowComments((v) => !v);
+                  setReplyOpen((v) => !v);
+                  setShowComments(true);
                   window.setTimeout(() => replyInputRef.current?.focus(), 50);
                 }}
               >
                 <span>Reply</span>
-                <span className={topActionCount}>{commentCount}</span>
+                <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
+                  {commentCount}
+                </span>
               </Button>
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={topActionButton}
+                className={compactTextButton}
                 onClick={handleShare}
               >
                 <span>Share</span>
-                <span className={topActionCount}>{post.shares || 0}</span>
+                <span className="ml-1 text-[11px] text-muted-foreground tabular-nums">
+                  {post.shares || 0}
+                </span>
               </Button>
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={`${topActionButton} ${saved ? 'text-foreground' : ''}`}
+                className={`${compactTextButton} ${saved ? 'text-foreground' : ''}`}
                 onClick={toggleSaved}
               >
-                <Bookmark className="mr-1 h-4 w-4" />
-                <span>{saved ? 'Saved' : 'Save'}</span>
+                <Bookmark className="mr-1 h-3.5 w-3.5" />
+                {saved ? 'Saved' : 'Save'}
               </Button>
             </div>
 
@@ -1752,40 +1758,17 @@ export default function PostCard({ post }: PostCardProps) {
                 if (!Number.isFinite(limit)) return false;
                 return getVoiceCommentCountToday() >= limit;
               })()}
-              className={`h-8 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground shadow-[0_0_24px_rgba(168,85,247,0.16)] transition-all hover:shadow-[0_0_30px_rgba(34,211,238,0.22)] ${
-                isRecording ? 'border-red-400/40 bg-red-500/10 text-red-500' : ''
+              className={`mt-1.5 h-9 w-full rounded-full px-3 text-[12px] font-semibold transition-all ${
+                isRecording
+                  ? 'bg-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.28)] hover:bg-red-600'
+                  : 'border border-fuchsia-400/20 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-foreground shadow-[0_0_24px_rgba(168,85,247,0.18)] hover:bg-muted/40'
               }`}
             >
-              <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/20">
-                <AudioLines className={`h-3.5 w-3.5 text-purple-600 ${isRecording ? 'animate-pulse text-red-500' : ''}`} />
+              <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/15">
+                <AudioLines className={`h-3.5 w-3.5 text-purple-500 ${isRecording ? 'animate-pulse' : ''}`} />
               </span>
               {isRecording ? `${recordSeconds}s` : 'Voice'}
             </Button>
-
-            <div className="flex items-center gap-2">
-              <Input
-                ref={replyInputRef}
-                placeholder="Reply..."
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleComment();
-                  }
-                }}
-                className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={handleComment}
-                aria-label="Send reply"
-                className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
 
           {isRecording && (
@@ -1795,7 +1778,6 @@ export default function PostCard({ post }: PostCardProps) {
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]">
                     <AudioLines className="h-4 w-4 animate-pulse" />
                   </span>
-
                   <div>
                     <p className="text-sm font-semibold">Recording voice reply</p>
                     <p className="text-xs opacity-80">Tap stop when you are done.</p>
@@ -1814,12 +1796,40 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          <AnimatePresence>
+          {replyOpen && (
+            <div className="flex items-center gap-2 pt-1">
+              <Input
+                ref={replyInputRef}
+                placeholder="Reply..."
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleComment();
+                  }
+                }}
+                className="h-10 rounded-full border-border/60 bg-muted/30 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleComment}
+                aria-label="Send reply"
+                className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          <AnimatePresence initial={false}>
             {showComments && commentCount > 0 && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18 }}
                 className="w-full space-y-3 border-t border-border/60 pt-3"
               >
                 {(post.comments || []).map((comment: any) => {
@@ -1833,12 +1843,7 @@ export default function PostCard({ post }: PostCardProps) {
                   const commentAvatar = comment.userAvatar || comment.avatar || '';
 
                   return (
-                    <motion.div
-                      key={comment.id}
-                      initial={{ opacity: 0, x: -12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="flex gap-2"
-                    >
+                    <div key={comment.id} className="flex gap-2">
                       <Avatar className="h-7 w-7">
                         <AvatarImage src={commentAvatar} alt={commentName} />
                         <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
@@ -1866,7 +1871,6 @@ export default function PostCard({ post }: PostCardProps) {
                                 <p className="mb-1 text-xs font-semibold text-muted-foreground">
                                   Voice reply
                                 </p>
-
                                 <audio
                                   controls
                                   controlsList="nodownload noplaybackrate"
@@ -1905,7 +1909,7 @@ export default function PostCard({ post }: PostCardProps) {
                           )}
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
               </motion.div>
@@ -1913,6 +1917,6 @@ export default function PostCard({ post }: PostCardProps) {
           </AnimatePresence>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 }
