@@ -52,11 +52,7 @@ type ExtraPostMedia = {
   image?: string;
   images?: string[];
   video?: string;
-  videoUrl?: string;
-  video_url?: string;
   videos?: string[];
-  mediaUrl?: string;
-  media_url?: string;
   mediaType?: string;
   media_type?: string;
   documents?: PostDocument[];
@@ -90,15 +86,9 @@ export interface Post {
 
   image?: string;
   images?: string[];
-
   video?: string;
-  videoUrl?: string;
   videos?: string[];
-
   audio?: string;
-
-  mediaUrl?: string;
-  media_url?: string;
   mediaType?: MediaType;
 
   documents?: PostDocument[];
@@ -191,19 +181,8 @@ function normalizeStringArray(value: unknown): string[] {
   }
 
   if (typeof value === 'string' && value.trim()) {
-    const trimmed = value.trim();
-
-    if (
-      trimmed.startsWith('data:') ||
-      trimmed.startsWith('http://') ||
-      trimmed.startsWith('https://') ||
-      trimmed.startsWith('blob:')
-    ) {
-      return [trimmed];
-    }
-
     try {
-      const parsed = JSON.parse(trimmed);
+      const parsed = JSON.parse(value);
 
       if (Array.isArray(parsed)) {
         return parsed.map((item) => cleanString(item)).filter(Boolean);
@@ -212,14 +191,14 @@ function normalizeStringArray(value: unknown): string[] {
       // continue
     }
 
-    if (trimmed.includes(',')) {
-      return trimmed
+    if (value.includes(',')) {
+      return value
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean);
     }
 
-    return [trimmed];
+    return [value.trim()];
   }
 
   return [];
@@ -234,33 +213,6 @@ function uniqueStrings(values: unknown[]) {
         .filter(Boolean)
     )
   );
-}
-
-function isVideoUrl(value: unknown) {
-  const url = cleanString(value);
-  if (!url) return false;
-
-  const lower = url.toLowerCase();
-
-  if (lower.startsWith('data:video/')) return true;
-  if (lower.startsWith('blob:') && lower.includes('video')) return true;
-
-  if (lower.includes('/video/upload/')) return true;
-  if (lower.includes('resource_type=video')) return true;
-  if (lower.includes('type=video')) return true;
-
-  const cleanUrl = lower.split('?')[0].split('#')[0];
-
-  return /\.(mp4|webm|mov|m4v|avi|mkv|3gp|ogv|ogg)$/i.test(cleanUrl);
-}
-
-function splitUploadedMedia(values: unknown[]) {
-  const all = uniqueStrings(values);
-
-  return {
-    images: all.filter((url) => !isVideoUrl(url)),
-    videos: all.filter((url) => isVideoUrl(url)),
-  };
 }
 
 function getSafeDate(value: unknown) {
@@ -287,14 +239,16 @@ function isVerifiedValue(value: any) {
 }
 
 function getProfileName(profile: any, fallbackId?: string) {
-  const email = cleanString(profile?.email);
-  const emailName = email.includes('@') ? email.split('@')[0] : '';
+  const emailName =
+    typeof profile?.email === 'string' && profile.email.includes('@')
+      ? profile.email.split('@')[0]
+      : '';
 
   return (
-    cleanString(profile?.full_name) ||
-    cleanString(profile?.fullName) ||
-    cleanString(profile?.name) ||
-    cleanString(profile?.username) ||
+    profile?.full_name?.trim?.() ||
+    profile?.fullName?.trim?.() ||
+    profile?.name?.trim?.() ||
+    profile?.username?.trim?.() ||
     emailName ||
     `User ${String(fallbackId || '').slice(0, 6)}`
   );
@@ -302,13 +256,17 @@ function getProfileName(profile: any, fallbackId?: string) {
 
 function getProfileAvatar(profile: any) {
   return (
-    cleanString(profile?.avatar_url) ||
-    cleanString(profile?.avatarUrl) ||
-    cleanString(profile?.avatar) ||
-    cleanString(profile?.profileImage) ||
-    cleanString(profile?.profile_image) ||
+    profile?.avatar_url ||
+    profile?.avatarUrl ||
+    profile?.avatar ||
+    profile?.profileImage ||
+    profile?.profile_image ||
     ''
   );
+}
+
+function getInitial(value: string) {
+  return cleanString(value).charAt(0).toUpperCase() || 'U';
 }
 
 function normalizeProfile(raw: any, fallbackId = ''): CollaboratorProfile {
@@ -499,11 +457,7 @@ function isExtraPostMedia(value: unknown): value is ExtraPostMedia {
     'image' in raw ||
     'images' in raw ||
     'video' in raw ||
-    'videoUrl' in raw ||
-    'video_url' in raw ||
     'videos' in raw ||
-    'mediaUrl' in raw ||
-    'media_url' in raw ||
     'documents' in raw ||
     'documentUrl' in raw ||
     'document_url' in raw ||
@@ -536,17 +490,11 @@ function inferPrimaryMediaType(params: {
 }) {
   const explicit = normalizeMediaType(params.explicit);
 
-  if (explicit === 'video' && params.videoUrls.length > 0) return 'video';
-  if (explicit === 'image' && params.imageUrls.length > 0) return 'image';
-  if (explicit === 'audio' && params.audioUrl) return 'audio';
-  if (explicit === 'document' && params.documents.length > 0) return 'document';
-
+  if (explicit !== 'none') return explicit;
   if (params.videoUrls.length > 0) return 'video';
   if (params.imageUrls.length > 0) return 'image';
   if (params.audioUrl) return 'audio';
   if (params.documents.length > 0) return 'document';
-
-  if (explicit !== 'none') return explicit;
 
   return 'none';
 }
@@ -592,7 +540,10 @@ async function ensureProfile() {
     authUser.email?.split('@')[0] ||
     `User ${String(authUser.id).slice(0, 6)}`;
 
-  const avatarUrl = getProfileAvatar(existingProfile) || authUser.avatar || '';
+  const avatarUrl =
+    getProfileAvatar(existingProfile) ||
+    authUser.avatar ||
+    '';
 
   const { error } = await supabase.from('profiles').upsert({
     id: authUser.id,
@@ -638,13 +589,7 @@ function mapComment(raw: any): Comment {
       cleanString(raw?.userAvatar || raw?.user_avatar || raw?.avatar) || '',
     content: cleanString(raw?.content || raw?.text),
     voiceUrl: cleanString(raw?.voiceUrl || raw?.voice_url) || undefined,
-    type:
-      raw?.type === 'voice' ||
-      raw?.comment_type === 'voice' ||
-      raw?.voiceUrl ||
-      raw?.voice_url
-        ? 'voice'
-        : 'text',
+    type: raw?.type === 'voice' || raw?.comment_type === 'voice' || raw?.voiceUrl || raw?.voice_url ? 'voice' : 'text',
     timestamp: getSafeDate(raw?.timestamp || raw?.createdAt || raw?.created_at),
     verified,
     userVerified: verified,
@@ -653,26 +598,12 @@ function mapComment(raw: any): Comment {
 }
 
 function mapBackendPost(raw: any, currentUserId?: string): Post {
-  const splitMedia = splitUploadedMedia([
-    raw?.images,
-    raw?.image,
-    raw?.videos,
-    raw?.video,
-    raw?.videoUrl,
-    raw?.video_url,
-    raw?.mediaUrl,
-    raw?.media_url,
-  ]);
-
-  const imageUrls = splitMedia.images;
-  const videoUrls = splitMedia.videos;
+  const imageUrls = uniqueStrings([raw?.images, raw?.image]);
+  const videoUrls = uniqueStrings([raw?.videos, raw?.video, raw?.videoUrl]);
 
   const documents = normalizeDocuments(raw?.documents);
 
-  if (
-    documents.length === 0 &&
-    (raw?.documentUrl || raw?.document_url || raw?.documentPages || raw?.document_pages)
-  ) {
+  if (documents.length === 0 && (raw?.documentUrl || raw?.document_url || raw?.documentPages || raw?.document_pages)) {
     const documentPages = normalizeStringArray(raw?.documentPages || raw?.document_pages);
 
     documents.push({
@@ -680,17 +611,8 @@ function mapBackendPost(raw: any, currentUserId?: string): Post {
       title: raw?.documentTitle || raw?.document_title || 'Document',
       url: raw?.documentUrl || raw?.document_url || '',
       pages: documentPages,
-      totalPages: Number(
-        raw?.documentTotalPages ||
-          raw?.document_total_pages ||
-          documentPages.length ||
-          1
-      ),
-      previewPages: Number(
-        raw?.documentPreviewPages ||
-          raw?.document_preview_pages ||
-          1
-      ),
+      totalPages: Number(raw?.documentTotalPages || raw?.document_total_pages || documentPages.length || 1),
+      previewPages: Number(raw?.documentPreviewPages || raw?.document_preview_pages || 1),
     });
   }
 
@@ -712,23 +634,13 @@ function mapBackendPost(raw: any, currentUserId?: string): Post {
       ? normalizeProfiles(raw?.collaborationRequests)
       : normalizeProfiles(raw?.collabInvites);
 
-  const audioUrl = cleanString(raw?.audio) || '';
-
   const mediaType = inferPrimaryMediaType({
     explicit: raw?.mediaType || raw?.media_type,
     imageUrls,
     videoUrls,
-    audioUrl,
+    audioUrl: raw?.audio || '',
     documents,
   });
-
-  const mediaUrl =
-    cleanString(raw?.mediaUrl || raw?.media_url) ||
-    videoUrls[0] ||
-    imageUrls[0] ||
-    audioUrl ||
-    documents[0]?.url ||
-    '';
 
   return {
     id: cleanString(raw?.id || raw?._id),
@@ -747,31 +659,19 @@ function mapBackendPost(raw: any, currentUserId?: string): Post {
     is_verified: verified,
 
     content: cleanString(raw?.content),
-
     image: imageUrls[0] || undefined,
     images: imageUrls,
-
     video: videoUrls[0] || undefined,
-    videoUrl: videoUrls[0] || undefined,
     videos: videoUrls,
-
-    audio: audioUrl || undefined,
-
-    mediaUrl,
-    media_url: mediaUrl,
+    audio: cleanString(raw?.audio) || undefined,
     mediaType,
 
     documents,
     documentUrl: documents[0]?.url || raw?.documentUrl || raw?.document_url || '',
     documentTitle: documents[0]?.title || raw?.documentTitle || raw?.document_title || '',
-    documentPages:
-      documents[0]?.pages || normalizeStringArray(raw?.documentPages || raw?.document_pages),
-    documentTotalPages:
-      documents[0]?.totalPages ||
-      Number(raw?.documentTotalPages || raw?.document_total_pages || 0),
-    documentPreviewPages:
-      documents[0]?.previewPages ||
-      Number(raw?.documentPreviewPages || raw?.document_preview_pages || 1),
+    documentPages: documents[0]?.pages || normalizeStringArray(raw?.documentPages || raw?.document_pages),
+    documentTotalPages: documents[0]?.totalPages || Number(raw?.documentTotalPages || raw?.document_total_pages || 0),
+    documentPreviewPages: documents[0]?.previewPages || Number(raw?.documentPreviewPages || raw?.document_preview_pages || 1),
 
     downloadsLocked:
       raw?.downloadsLocked === true ||
@@ -782,9 +682,7 @@ function mapBackendPost(raw: any, currentUserId?: string): Post {
       raw?.media_locked === true,
 
     hashtags: Array.isArray(raw?.hashtags)
-      ? raw.hashtags
-          .map((tag: string) => cleanString(tag).replace(/^#/, '').toLowerCase())
-          .filter(Boolean)
+      ? raw.hashtags.map((tag: string) => cleanString(tag).replace(/^#/, '').toLowerCase()).filter(Boolean)
       : extractHashtagsStatic(raw?.content || ''),
 
     likes: Number(raw?.likes || likedBy.length || 0),
@@ -840,32 +738,20 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
   const postIds = posts.map((p: any) => p.id).filter(Boolean);
   const postAuthorIds = posts.map((p: any) => p.user_id).filter(Boolean);
 
-  const [commentsResult, reactionsResult, sharesResult, savesResult] =
-    await Promise.all([
-      postIds.length
-        ? supabase
-            .from('post_comments')
-            .select('*')
-            .in('post_id', postIds)
-            .order('created_at', { ascending: true })
-        : Promise.resolve({ data: [], error: null } as any),
-
-      postIds.length
-        ? supabase.from('post_reactions').select('*').in('post_id', postIds)
-        : Promise.resolve({ data: [], error: null } as any),
-
-      postIds.length
-        ? supabase.from('post_shares').select('*').in('post_id', postIds)
-        : Promise.resolve({ data: [], error: null } as any),
-
-      postIds.length && currentUserId
-        ? supabase
-            .from('post_saves')
-            .select('*')
-            .in('post_id', postIds)
-            .eq('user_id', currentUserId)
-        : Promise.resolve({ data: [], error: null } as any),
-    ]);
+  const [commentsResult, reactionsResult, sharesResult, savesResult] = await Promise.all([
+    postIds.length
+      ? supabase.from('post_comments').select('*').in('post_id', postIds).order('created_at', { ascending: true })
+      : Promise.resolve({ data: [], error: null } as any),
+    postIds.length
+      ? supabase.from('post_reactions').select('*').in('post_id', postIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    postIds.length
+      ? supabase.from('post_shares').select('*').in('post_id', postIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    postIds.length && currentUserId
+      ? supabase.from('post_saves').select('*').in('post_id', postIds).eq('user_id', currentUserId)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
 
   const comments = commentsResult.data || [];
   const reactions = reactionsResult.data || [];
@@ -882,9 +768,7 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
 
   if (profilesError) console.log('Profiles load error:', profilesError.message);
 
-  const profileMap = new Map<string, any>(
-    (profiles || []).map((p: any) => [p.id, p])
-  );
+  const profileMap = new Map<string, any>((profiles || []).map((p: any) => [p.id, p]));
 
   const reactionCountMap = new Map<string, number>();
   const myReactionMap = new Map<string, string>();
@@ -932,18 +816,8 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
     const profile = profileMap.get(p.user_id);
     const myReaction = myReactionMap.get(p.id);
 
-    const splitMedia = splitUploadedMedia([
-      p.images,
-      p.image,
-      p.videos,
-      p.video,
-      p.videoUrl,
-      p.video_url,
-      p.media_type === 'image' || p.media_type === 'video' ? p.media_url : '',
-    ]);
-
-    const imageUrls = splitMedia.images;
-    const videoUrls = splitMedia.videos;
+    const imageUrls = uniqueStrings([p.images, p.image, p.media_type === 'image' ? p.media_url : '']);
+    const videoUrls = uniqueStrings([p.videos, p.video, p.media_type === 'video' ? p.media_url : '']);
 
     const documents = normalizeDocuments(p.documents);
 
@@ -970,14 +844,6 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
       documents,
     });
 
-    const mediaUrl =
-      p.media_url ||
-      videoUrls[0] ||
-      imageUrls[0] ||
-      audioUrl ||
-      documents[0]?.url ||
-      '';
-
     const verified = isVerifiedValue(profile) || isVerifiedValue(p);
 
     return {
@@ -994,28 +860,19 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
       is_verified: verified,
 
       content: p.content || '',
-
       image: imageUrls[0] || undefined,
       images: imageUrls,
-
       video: videoUrls[0] || undefined,
-      videoUrl: videoUrls[0] || undefined,
       videos: videoUrls,
-
       audio: audioUrl || undefined,
-
-      mediaUrl,
-      media_url: mediaUrl,
       mediaType,
 
       documents,
       documentUrl: documents[0]?.url || p.document_url || '',
       documentTitle: documents[0]?.title || p.document_title || '',
       documentPages: documents[0]?.pages || normalizeStringArray(p.document_pages),
-      documentTotalPages:
-        documents[0]?.totalPages || Number(p.document_total_pages || 0),
-      documentPreviewPages:
-        documents[0]?.previewPages || Number(p.document_preview_pages || 1),
+      documentTotalPages: documents[0]?.totalPages || Number(p.document_total_pages || 0),
+      documentPreviewPages: documents[0]?.previewPages || Number(p.document_preview_pages || 1),
 
       downloadsLocked:
         p.downloads_locked === true ||
@@ -1059,13 +916,13 @@ export const usePostStore = create<PostState>((set, get) => ({
       if (Array.isArray(data)) {
         backendPosts = data.map((post) => mapBackendPost(post, currentUserId));
       }
-    } catch {
+    } catch (error) {
       console.log('Backend posts unavailable, using Supabase fallback.');
     }
 
     try {
       supabasePosts = await loadSupabasePosts(currentUserId);
-    } catch {
+    } catch (error) {
       console.log('Supabase posts unavailable.');
     }
 
@@ -1074,9 +931,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     const tagCount = new Map<string, number>();
 
     mapped.forEach((post) => {
-      post.hashtags.forEach((tag) => {
-        tagCount.set(tag, (tagCount.get(tag) || 0) + 1);
-      });
+      post.hashtags.forEach((tag) => tagCount.set(tag, (tagCount.get(tag) || 0) + 1));
     });
 
     const trendingHashtags = Array.from(tagCount.entries())
@@ -1159,38 +1014,12 @@ export const usePostStore = create<PostState>((set, get) => ({
       }
     }
 
-    const splitMedia = splitUploadedMedia([
-      images || [],
-      extraMedia.images || [],
-      extraMedia.image || '',
-      extraMedia.videos || [],
-      extraMedia.video || '',
-      extraMedia.videoUrl || '',
-      extraMedia.video_url || '',
-      extraMedia.mediaUrl || '',
-      extraMedia.media_url || '',
-    ]);
-
-    let imageUrls = splitMedia.images;
-    let videoUrls = splitMedia.videos;
-
-    const explicitMediaType = extraMedia.mediaType || extraMedia.media_type || undefined;
-
-    if (
-      normalizeMediaType(explicitMediaType) === 'video' &&
-      videoUrls.length === 0 &&
-      imageUrls.length > 0
-    ) {
-      videoUrls = [imageUrls[0]];
-      imageUrls = imageUrls.slice(1);
-    }
-
+    const imageUrls = uniqueStrings([images || [], extraMedia.images || [], extraMedia.image || '']);
+    const videoUrls = uniqueStrings([extraMedia.videos || [], extraMedia.video || '']);
     const documents = normalizeDocuments(extraMedia.documents || []);
 
     if (documents.length === 0 && (extraMedia.documentUrl || extraMedia.document_url)) {
-      const documentPages = normalizeStringArray(
-        extraMedia.documentPages || extraMedia.document_pages
-      );
+      const documentPages = normalizeStringArray(extraMedia.documentPages || extraMedia.document_pages);
 
       documents.push({
         id: `doc-${Date.now()}`,
@@ -1211,6 +1040,8 @@ export const usePostStore = create<PostState>((set, get) => ({
       });
     }
 
+    const explicitMediaType = extraMedia.mediaType || extraMedia.media_type || undefined;
+
     const primaryMediaType = inferPrimaryMediaType({
       explicit: explicitMediaType,
       imageUrls,
@@ -1230,62 +1061,34 @@ export const usePostStore = create<PostState>((set, get) => ({
               ? documents[0]?.url || ''
               : '';
 
-    const basePostPayload = {
-      content,
-      image: imageUrls[0] || '',
-      images: imageUrls,
-
-      video: videoUrls[0] || '',
-      videoUrl: videoUrls[0] || '',
-      video_url: videoUrls[0] || '',
-      videos: videoUrls,
-
-      audio: audio || '',
-
-      mediaUrl,
-      media_url: mediaUrl,
-      mediaType: primaryMediaType,
-      media_type: primaryMediaType,
-
-      documents,
-      documentUrl: documents[0]?.url || '',
-      documentTitle: documents[0]?.title || '',
-      documentPages: documents[0]?.pages || [],
-      documentTotalPages: documents[0]?.totalPages || 0,
-      documentPreviewPages: documents[0]?.previewPages || 1,
-
-      mode: mode || 'social',
-      hashtags: [...new Set([...extractHashtagsStatic(content), ...(hashtags || [])])],
-      downloadsLocked: extraMedia.downloadsLocked || extraMedia.downloads_locked || false,
-      professionalCategory: mode === 'professional' ? professionalCategory || null : null,
-      professionalAgreed: mode === 'professional' ? professionalAgreed : false,
-    };
-
     try {
-      const created = await api.post('/api/posts', basePostPayload);
+      const created = await api.post('/api/posts', {
+        content,
+        image: imageUrls[0] || '',
+        images: imageUrls,
+        audio: audio || '',
+        video: videoUrls[0] || '',
+        videos: videoUrls,
+        mediaType: primaryMediaType,
+        media_type: primaryMediaType,
+        documents,
+        documentUrl: documents[0]?.url || '',
+        documentTitle: documents[0]?.title || '',
+        documentPages: documents[0]?.pages || [],
+        documentTotalPages: documents[0]?.totalPages || 0,
+        documentPreviewPages: documents[0]?.previewPages || 1,
+        mode: mode || 'social',
+        hashtags: [...new Set([...extractHashtagsStatic(content), ...(hashtags || [])])],
+        downloadsLocked: extraMedia.downloadsLocked || extraMedia.downloads_locked || false,
+        professionalCategory: mode === 'professional' ? professionalCategory || null : null,
+        professionalAgreed: mode === 'professional' ? professionalAgreed : false,
+      });
 
-      const newPost = {
-        ...mapBackendPost(created, authUser.id),
-
-        image: mapBackendPost(created, authUser.id).image || imageUrls[0] || undefined,
-        images: mapBackendPost(created, authUser.id).images?.length
-          ? mapBackendPost(created, authUser.id).images
-          : imageUrls,
-
-        video: mapBackendPost(created, authUser.id).video || videoUrls[0] || undefined,
-        videoUrl: mapBackendPost(created, authUser.id).videoUrl || videoUrls[0] || undefined,
-        videos: mapBackendPost(created, authUser.id).videos?.length
-          ? mapBackendPost(created, authUser.id).videos
-          : videoUrls,
-
-        mediaUrl: mapBackendPost(created, authUser.id).mediaUrl || mediaUrl,
-        media_url: mapBackendPost(created, authUser.id).media_url || mediaUrl,
-        mediaType: mapBackendPost(created, authUser.id).mediaType || primaryMediaType,
-      };
+      const newPost = mapBackendPost(created, authUser.id);
 
       set({ posts: sortPosts([newPost, ...get().posts]) });
       return;
-    } catch {
+    } catch (error) {
       console.log('Backend add post failed, trying Supabase fallback.');
     }
 
@@ -1344,30 +1147,18 @@ export const usePostStore = create<PostState>((set, get) => ({
       is_verified: verified,
 
       content,
-
       image: imageUrls[0] || undefined,
       images: imageUrls,
-
       video: videoUrls[0] || undefined,
-      videoUrl: videoUrls[0] || undefined,
       videos: videoUrls,
-
       audio: audio || undefined,
-
-      mediaUrl,
-      media_url: mediaUrl,
       mediaType: primaryMediaType,
-
       documents,
       documentUrl: documents[0]?.url || '',
       documentTitle: documents[0]?.title || '',
       documentPages: documents[0]?.pages || [],
       documentTotalPages: documents[0]?.totalPages || 0,
       documentPreviewPages: documents[0]?.previewPages || 1,
-
-      downloadsLocked: extraMedia.downloadsLocked || extraMedia.downloads_locked || false,
-      downloads_locked: extraMedia.downloadsLocked || extraMedia.downloads_locked || false,
-
       hashtags: [...new Set([...extractHashtagsStatic(content), ...(hashtags || [])])],
       likes: 0,
       comments: [],
@@ -1396,15 +1187,14 @@ export const usePostStore = create<PostState>((set, get) => ({
     try {
       const updated = await api.post(`/api/posts/${postId}/like`, { reaction });
       const mapped = mapBackendPost(updated, authUser.id);
-      const nextLiked = !post.isLiked || post.reaction !== reaction;
 
       set({
         posts: get().posts.map((p) =>
           p.id === postId
             ? {
                 ...mapped,
-                isLiked: nextLiked,
-                reaction: nextLiked ? (reaction as ReactionType) : undefined,
+                isLiked: !post.isLiked || post.reaction !== reaction,
+                reaction: (!post.isLiked || post.reaction !== reaction) ? reaction as ReactionType : undefined,
               }
             : p
         ),
@@ -1594,8 +1384,7 @@ export const usePostStore = create<PostState>((set, get) => ({
   editPost: async (postId, content) => {
     try {
       const data = await api.patch(`/api/posts/${postId}`, { content });
-      const currentUserId =
-        useAuthStore.getState().user?.id || useUserStore.getState().id || '';
+      const currentUserId = useAuthStore.getState().user?.id || useUserStore.getState().id || '';
       const updated = mapBackendPost(data, currentUserId);
 
       set({
@@ -1902,10 +1691,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     if (!authUser?.id) return;
 
     try {
-      const data = await api.delete(
-        `/api/posts/${postId}/collab/${encodeURIComponent(userId)}`
-      );
-
+      const data = await api.delete(`/api/posts/${postId}/collab/${encodeURIComponent(userId)}`);
       const rawPost = data?.post || data;
       const updated = rawPost?.id ? mapBackendPost(rawPost, authUser.id) : null;
 
@@ -1929,12 +1715,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     const nextLocked =
       typeof locked === 'boolean'
         ? locked
-        : !Boolean(
-            post.downloadsLocked ||
-              post.downloads_locked ||
-              post.imagesLocked ||
-              post.images_locked
-          );
+        : !Boolean(post.downloadsLocked || post.downloads_locked || post.imagesLocked || post.images_locked);
 
     try {
       const data = await api.patch(`/api/posts/${postId}/downloads-lock`, {
@@ -1942,8 +1723,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         downloadsLocked: nextLocked,
       });
 
-      const currentUserId =
-        useAuthStore.getState().user?.id || useUserStore.getState().id || '';
+      const currentUserId = useAuthStore.getState().user?.id || useUserStore.getState().id || '';
       const updated = data?.id ? mapBackendPost(data, currentUserId) : null;
 
       if (updated) {
@@ -1976,10 +1756,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     }
 
     try {
-      localStorage.setItem(
-        `facemex:post_downloads_locked:${postId}`,
-        String(nextLocked)
-      );
+      localStorage.setItem(`facemex:post_downloads_locked:${postId}`, String(nextLocked));
     } catch {
       // ignore
     }
