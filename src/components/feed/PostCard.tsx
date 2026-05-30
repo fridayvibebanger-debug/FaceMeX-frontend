@@ -1306,10 +1306,10 @@ export default function PostCard({ post }: PostCardProps) {
   })();
 
   const topActionButton =
-    'h-9 rounded-full px-2 text-[15px] font-bold text-foreground hover:bg-muted/40 hover:text-foreground';
+    'h-8 rounded-full px-1.5 text-[13px] font-semibold text-foreground hover:bg-muted/40 hover:text-foreground';
 
   const topActionCount =
-    'ml-2 text-[13px] font-semibold text-muted-foreground tabular-nums';
+    'ml-1.5 text-[11px] font-semibold text-muted-foreground tabular-nums';
 
   return (
     <motion.div
@@ -1661,8 +1661,8 @@ export default function PostCard({ post }: PostCardProps) {
             </DialogContent>
           </Dialog>
 
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between gap-1 px-1">
+          <div className="space-y-2 pt-1.5">
+            <div className="flex items-center justify-between gap-1 px-0.5">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -1737,7 +1737,7 @@ export default function PostCard({ post }: PostCardProps) {
                 className={`${topActionButton} ${saved ? 'text-foreground' : ''}`}
                 onClick={toggleSaved}
               >
-                <Bookmark className="mr-1 h-5 w-5" />
+                <Bookmark className="mr-1 h-4 w-4" />
                 <span>{saved ? 'Saved' : 'Save'}</span>
               </Button>
             </div>
@@ -1752,12 +1752,12 @@ export default function PostCard({ post }: PostCardProps) {
                 if (!Number.isFinite(limit)) return false;
                 return getVoiceCommentCountToday() >= limit;
               })()}
-              className={`h-10 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[15px] font-bold text-foreground shadow-[0_0_35px_rgba(168,85,247,0.20)] transition-all hover:shadow-[0_0_45px_rgba(34,211,238,0.30)] ${
+              className={`h-8 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground shadow-[0_0_24px_rgba(168,85,247,0.16)] transition-all hover:shadow-[0_0_30px_rgba(34,211,238,0.22)] ${
                 isRecording ? 'border-red-400/40 bg-red-500/10 text-red-500' : ''
               }`}
             >
-              <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-purple-500/20">
-                <AudioLines className={`h-4 w-4 text-purple-600 ${isRecording ? 'animate-pulse text-red-500' : ''}`} />
+              <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/20">
+                <AudioLines className={`h-3.5 w-3.5 text-purple-600 ${isRecording ? 'animate-pulse text-red-500' : ''}`} />
               </span>
               {isRecording ? `${recordSeconds}s` : 'Voice'}
             </Button>
@@ -1773,7 +1773,7 @@ export default function PostCard({ post }: PostCardProps) {
                     handleComment();
                   }
                 }}
-                className="h-11 rounded-2xl border-border/60 bg-muted/20 px-4 text-[15px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
               />
 
               <Button
@@ -1781,9 +1781,9 @@ export default function PostCard({ post }: PostCardProps) {
                 variant="ghost"
                 onClick={handleComment}
                 aria-label="Send reply"
-                className="h-11 w-11 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                <Send className="h-5 w-5" />
+                <Send className="h-4 w-4" />
               </Button>
             </div>
           </div>
