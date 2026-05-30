@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, TrendingUp, Clock, Filter } from 'lucide-react';
@@ -6,7 +6,6 @@ import PostCard from './PostCard';
 import MarketplaceAdSlide from '@/components/feed/MarketplaceAdSlide';
 import CreatePostModal from './CreatePostModal';
 import { usePostStore } from '@/store/postStore';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,8 +37,6 @@ interface BusinessPromotion {
 type FeedFilter = 'ai-curated' | 'recent' | 'trending';
 
 const STORAGE_KEY_PROMOTIONS = 'faceme_business_promotions_v1';
-
-const StablePostCard = memo(PostCard);
 
 function safePostTime(post: any) {
   const raw = post?.timestamp || post?.createdAt || post?.created_at || Date.now();
@@ -106,14 +103,10 @@ function BusinessPromotionsStrip() {
           setItems(parsed);
         }
       } catch {
-        if (!cancelled) {
-          setItems([]);
-        }
+        if (!cancelled) setItems([]);
       }
 
-      if (!cancelled) {
-        setLoadingPromos(false);
-      }
+      if (!cancelled) setLoadingPromos(false);
     }
 
     loadFeedPromotions();
@@ -149,20 +142,11 @@ function BusinessPromotionsStrip() {
       </div>
 
       <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2 dark:border-slate-800/70 dark:bg-slate-900/90">
-        <div className="relative h-24 sm:h-28">
-          <motion.div
-            className="absolute inset-y-0 left-0 flex items-center gap-3 pr-8"
-            initial={{ x: '0%' }}
-            animate={{ x: ['0%', '-50%'] }}
-            transition={{
-              duration: Math.max(30, displayItems.length * 8),
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-          >
-            {[...displayItems, ...displayItems].map((item, index) => (
+        <div className="relative h-24 sm:h-28 overflow-hidden">
+          <div className="flex h-full items-center gap-3 overflow-x-auto pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {displayItems.map((item) => (
               <div
-                key={`${item.id}-${index}`}
+                key={item.id}
                 className="flex min-w-[240px] items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/90"
               >
                 <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-slate-200/80 dark:bg-slate-800/80">
@@ -201,16 +185,9 @@ function BusinessPromotionsStrip() {
                 )}
               </div>
             ))}
-          </motion.div>
+          </div>
 
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent" />
-
-          <motion.div
-            className="pointer-events-none absolute bottom-2 right-4 top-2 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
-            initial={{ opacity: 0.4, y: 0 }}
-            animate={{ opacity: [0.2, 0.8, 0.2], y: [0, 4, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-background to-transparent" />
         </div>
       </div>
     </div>
@@ -234,7 +211,6 @@ export default function NewsFeed() {
 
   const latestKnownPostIdRef = useRef<string | null>(null);
   const didInitialLoadRef = useRef(false);
-  const visibleCountRef = useRef(5);
 
   const [hiddenNewPostIds, setHiddenNewPostIds] = useState<Set<string>>(
     () => new Set()
@@ -249,10 +225,6 @@ export default function NewsFeed() {
   const [openToCollabUsers, setOpenToCollabUsers] = useState<
     Array<{ id: string; name: string; avatar?: string; openToCollab?: boolean }>
   >([]);
-
-  useEffect(() => {
-    visibleCountRef.current = visibleCount;
-  }, [visibleCount]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -286,9 +258,7 @@ export default function NewsFeed() {
       } catch (error) {
         console.log('NewsFeed initial load failed:', error);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -297,14 +267,11 @@ export default function NewsFeed() {
     return () => {
       cancelled = true;
     };
-    // Run once only. Filtering must not reload/remount the whole feed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (posts.length > 0) {
-      setLoading(false);
-    }
+    if (posts.length > 0) setLoading(false);
   }, [posts.length]);
 
   useEffect(() => {
@@ -337,7 +304,7 @@ export default function NewsFeed() {
     setInitialLatestPost();
 
     const channel = supabase
-      .channel('facemex-new-post-banner-stable-v2')
+      .channel('facemex-new-post-banner-no-card-animation')
       .on(
         'postgres_changes',
         {
@@ -407,9 +374,7 @@ export default function NewsFeed() {
     return () => {
       cancelled = true;
 
-      if (pollTimer) {
-        window.clearInterval(pollTimer);
-      }
+      if (pollTimer) window.clearInterval(pollTimer);
 
       supabase.removeChannel(channel);
     };
@@ -590,23 +555,16 @@ export default function NewsFeed() {
 
   return (
     <div className="relative mx-auto max-w-3xl space-y-4 px-2 py-4 pb-24 sm:px-4 md:space-y-6 md:py-8 lg:px-6">
-      <AnimatePresence>
-        {newPostsAvailable && (
-          <motion.div
-            initial={{ opacity: 0, y: -16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            className="mb-2"
+      {newPostsAvailable && (
+        <div className="mb-2">
+          <Button
+            onClick={loadNewPosts}
+            className="h-9 w-full rounded-full text-xs font-medium"
           >
-            <Button
-              onClick={loadNewPosts}
-              className="h-9 w-full rounded-full text-xs font-medium"
-            >
-              New posts available. Refresh
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            New posts available. Refresh
+          </Button>
+        </div>
+      )}
 
       <button
         type="button"
@@ -652,15 +610,10 @@ export default function NewsFeed() {
           </DropdownMenu>
 
           {filter === 'ai-curated' && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-            >
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
-                Personalized for you
-              </Badge>
-            </motion.div>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Sparkles className="h-3 w-3" />
+              Personalized for you
+            </Badge>
           )}
         </div>
 
@@ -676,11 +629,7 @@ export default function NewsFeed() {
         )}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="space-y-3 rounded-2xl border bg-card p-3 sm:space-y-4 sm:p-4"
-      >
+      <div className="space-y-3 rounded-2xl border bg-card p-3 sm:space-y-4 sm:p-4">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
           <span className="text-xs font-semibold sm:text-sm">Trending Now</span>
@@ -868,7 +817,7 @@ export default function NewsFeed() {
             </div>
           </div>
         )}
-      </motion.div>
+      </div>
 
       {loading && posts.length === 0 ? (
         <div className="space-y-4">
@@ -901,16 +850,7 @@ export default function NewsFeed() {
       ) : (
         <div className="space-y-4">
           {displayPosts.slice(0, visibleCount).map((post) => (
-            <motion.div
-              key={post.id}
-              layout="position"
-              initial={false}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-              className="will-change-transform"
-            >
-              <StablePostCard post={post} />
-            </motion.div>
+            <PostCard key={post.id} post={post} />
           ))}
 
           {visibleCount < displayPosts.length && (
