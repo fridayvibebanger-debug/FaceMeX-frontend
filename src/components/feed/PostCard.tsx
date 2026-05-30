@@ -30,6 +30,10 @@ import {
   ZoomIn,
   ZoomOut,
   X,
+  Users,
+  Copy,
+  UserPlus,
+  Clock,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -64,10 +68,21 @@ type PostDocumentItem = {
   previewPages: number;
 };
 
-/*
-  If Create CV still does not open, your route name is different.
-  Change only this constant to match your App.tsx route.
-*/
+type CollaboratorProfile = {
+  id: string;
+  name: string;
+  avatar?: string;
+  verified?: boolean;
+  inviteCode?: string;
+};
+
+type InviteItem = {
+  id: string;
+  code?: string;
+  name?: string;
+  createdAt?: string;
+};
+
 const CV_BUILDER_ROUTE = '/ai-resume';
 const CAREER_WORKSPACE_ROUTE = '/career-ai';
 
@@ -76,32 +91,8 @@ function cleanString(value: unknown) {
   return value.trim();
 }
 
-function getPostDate(post: Post) {
-  const raw =
-    (post as any).timestamp ||
-    (post as any).createdAt ||
-    (post as any).created_at ||
-    new Date();
-
-  const date = raw instanceof Date ? raw : new Date(raw);
-
-  if (Number.isNaN(date.getTime())) return new Date();
-
-  return date;
-}
-
-function getCommentDate(comment: any) {
-  const raw =
-    comment?.timestamp ||
-    comment?.createdAt ||
-    comment?.created_at ||
-    new Date();
-
-  const date = raw instanceof Date ? raw : new Date(raw);
-
-  if (Number.isNaN(date.getTime())) return new Date();
-
-  return date;
+function safeLower(value: unknown) {
+  return cleanString(value).toLowerCase();
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -131,6 +122,57 @@ function normalizeStringArray(value: unknown): string[] {
   }
 
   return [];
+}
+
+function getAnyUserId(user: any) {
+  return cleanString(
+    user?._id ||
+      user?.id ||
+      user?.externalId ||
+      user?.userId ||
+      user?.sub ||
+      ''
+  );
+}
+
+function getPossibleCurrentUserIds(input: {
+  currentUserId?: string;
+  authUser?: any;
+}) {
+  const ids = [
+    input.currentUserId,
+    input.authUser?._id,
+    input.authUser?.id,
+    input.authUser?.externalId,
+    input.authUser?.userId,
+    input.authUser?.sub,
+  ]
+    .map((x) => cleanString(x))
+    .filter(Boolean);
+
+  try {
+    const localIds = [
+      localStorage.getItem('faceme_user_id'),
+      localStorage.getItem('facemex_user_id'),
+      localStorage.getItem('userId'),
+      localStorage.getItem('uid'),
+    ]
+      .map((x) => cleanString(x))
+      .filter(Boolean);
+
+    ids.push(...localIds);
+  } catch {
+    // ignore
+  }
+
+  return Array.from(new Set(ids));
+}
+
+function isSameUserId(a: unknown, possibleIds: string[]) {
+  const x = cleanString(a);
+  if (!x) return false;
+
+  return possibleIds.some((id) => cleanString(id) === x);
 }
 
 function normalizePostMedia(post: Post): PostMediaItem[] {
@@ -177,7 +219,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
       if (!cleanUrl) return;
 
       docs.push({
-        id: `${(post as any).id}-doc-${index}`,
+        id: `${post.id}-doc-${index}`,
         title: `Document ${index + 1}`,
         url: cleanUrl,
         pages: [],
@@ -239,7 +281,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
     );
 
     docs.push({
-      id: cleanString(raw.id) || `${(post as any).id}-doc-${index}`,
+      id: cleanString(raw.id) || `${post.id}-doc-${index}`,
       title,
       url,
       pages,
@@ -319,7 +361,7 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
     if (!unique.has(key)) {
       unique.set(key, {
         ...doc,
-        id: doc.id || `${(post as any).id}-doc-${index}`,
+        id: doc.id || `${post.id}-doc-${index}`,
         title,
         url,
         pages: Array.isArray(doc.pages) ? doc.pages : [],
@@ -333,6 +375,96 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
   });
 
   return Array.from(unique.values()).slice(0, 1);
+}
+
+function normalizeCollaborators(post: Post): CollaboratorProfile[] {
+  const output: CollaboratorProfile[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, index: number) => {
+    if (!raw) return;
+
+    if (typeof raw === 'string') {
+      const id = cleanString(raw);
+      if (!id || seen.has(id)) return;
+
+      seen.add(id);
+      output.push({
+        id,
+        name: id.length > 18 ? `Collaborator ${index + 1}` : id,
+      });
+
+      return;
+    }
+
+    const id = cleanString(raw.id || raw.userId || raw._id || raw.externalId || raw.code);
+    const name =
+      cleanString(raw.name || raw.userName || raw.fullName || raw.username || raw.displayName) ||
+      (id ? id : `Collaborator ${index + 1}`);
+
+    const key = id || name.toLowerCase();
+    if (!key || seen.has(key)) return;
+
+    seen.add(key);
+
+    output.push({
+      id: id || key,
+      name,
+      avatar: cleanString(raw.avatar || raw.userAvatar || raw.avatarUrl || raw.avatar_url),
+      verified:
+        raw.verified === true ||
+        raw.userVerified === true ||
+        raw.isVerified === true ||
+        raw.is_verified === true,
+      inviteCode: cleanString(raw.inviteCode || raw.code),
+    });
+  };
+
+  const possibleSources = [
+    (post as any).collaboratorProfiles,
+    (post as any).collaboratorsProfiles,
+    (post as any).collabProfiles,
+    (post as any).collaborators,
+  ];
+
+  possibleSources.forEach((source) => {
+    if (Array.isArray(source)) {
+      source.forEach((item, index) => add(item, index));
+    } else if (typeof source === 'string' && source.trim()) {
+      try {
+        const parsed = JSON.parse(source);
+        if (Array.isArray(parsed)) parsed.forEach((item, index) => add(item, index));
+        else add(parsed, 0);
+      } catch {
+        add(source, 0);
+      }
+    }
+  });
+
+  return output.slice(0, 4);
+}
+
+function normalizeInviteItems(post: Post): InviteItem[] {
+  const raw = (post as any).collabInvites || (post as any).collaborationInvites || [];
+  const list = Array.isArray(raw) ? raw : normalizeStringArray(raw);
+
+  return list
+    .map((item: any, index) => {
+      if (typeof item === 'string') {
+        return {
+          id: item,
+          code: item,
+        };
+      }
+
+      return {
+        id: cleanString(item.userId || item.id || item.inviteeId || item.code || `invite-${index}`),
+        code: cleanString(item.code || item.inviteCode),
+        name: cleanString(item.name || item.userName || item.displayName),
+        createdAt: cleanString(item.createdAt),
+      };
+    })
+    .filter((item) => item.id || item.code);
 }
 
 function getCleanPostContent(content: string) {
@@ -364,21 +496,103 @@ function safeFileName(name: string) {
     .slice(0, 70);
 }
 
-function getAuthorVerified(post: Post, currentUserId: string, addons: any) {
-  const p: any = post;
+function createInviteCode(inputName: string) {
+  const cleanName =
+    String(inputName || 'Collab')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(0, 12) || 'Collab';
+
+  const number = Math.floor(1000 + Math.random() * 9000);
+
+  return `${cleanName}${number}`;
+}
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function VerifiedMiniBadge() {
+  return (
+    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-background">
+      <CheckCircle className="h-2.5 w-2.5" />
+    </span>
+  );
+}
+
+function CollaboratorStack({
+  ownerName,
+  ownerAvatar,
+  ownerVerified,
+  collaborators,
+  onProfileClick,
+}: {
+  ownerName: string;
+  ownerAvatar: string;
+  ownerVerified: boolean;
+  collaborators: CollaboratorProfile[];
+  onProfileClick: (id: string) => void;
+}) {
+  if (collaborators.length === 0) return null;
+
+  const visible = collaborators.slice(0, 4);
+  const first = visible[0];
 
   return (
-    p.verified === true ||
-    p.userVerified === true ||
-    p.isVerified === true ||
-    p.is_verified === true ||
-    p.authorVerified === true ||
-    p.author_verified === true ||
-    p.user?.verified === true ||
-    p.user?.userVerified === true ||
-    p.author?.verified === true ||
-    p.author?.userVerified === true ||
-    (!!addons?.verified && String(p.userId || '') === String(currentUserId || ''))
+    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-border/70 bg-muted/25 px-2.5 py-2">
+      <div className="flex shrink-0 items-center -space-x-2">
+        <div className="relative">
+          <Avatar className="h-7 w-7 border-2 border-background">
+            <AvatarImage src={ownerAvatar} alt={ownerName} />
+            <AvatarFallback>{ownerName ? ownerName.charAt(0) : 'U'}</AvatarFallback>
+          </Avatar>
+          {ownerVerified && (
+            <span className="absolute -bottom-1 -right-1">
+              <VerifiedMiniBadge />
+            </span>
+          )}
+        </div>
+
+        {visible.map((collab) => (
+          <button
+            key={collab.id}
+            type="button"
+            className="relative"
+            onClick={() => onProfileClick(collab.id)}
+          >
+            <Avatar className="h-7 w-7 border-2 border-background">
+              <AvatarImage src={collab.avatar} alt={collab.name} />
+              <AvatarFallback>{collab.name ? collab.name.charAt(0) : 'C'}</AvatarFallback>
+            </Avatar>
+
+            {collab.verified && (
+              <span className="absolute -bottom-1 -right-1">
+                <VerifiedMiniBadge />
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-bold text-foreground">
+          Collaboration
+        </p>
+        <p className="truncate text-[11px] text-muted-foreground">
+          {ownerName} with {first?.name}
+          {visible.length > 1 ? ` +${visible.length - 1}` : ''}
+        </p>
+      </div>
+
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">
+        <Users className="h-3 w-3" />
+        Collab
+      </span>
+    </div>
   );
 }
 
@@ -410,7 +624,7 @@ function DocumentPreview({
           <img
             src={firstPage}
             alt={`${document.title} preview`}
-            className="h-[250px] w-full object-contain sm:h-[340px]"
+            className="h-[250px] w-full select-none object-contain sm:h-[340px]"
             loading="lazy"
             draggable={false}
             onContextMenu={(e) => {
@@ -418,15 +632,17 @@ function DocumentPreview({
             }}
           />
 
-          {document.pages.length > 1 && (
+          {document.pages.length > 1 && (!locked || canControl) && (
             <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
               {document.pages.length} images
             </span>
           )}
 
           {locked && !canControl && (
-            <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-              Locked
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 px-5 text-center text-white">
+              <Lock className="mb-2 h-7 w-7 drop-shadow" />
+              <p className="text-sm font-semibold drop-shadow">Images locked</p>
+              <p className="mt-1 text-xs text-white/85 drop-shadow">Download disabled by author.</p>
             </div>
           )}
         </button>
@@ -470,11 +686,12 @@ export default function PostCard({ post }: PostCardProps) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [editingPost, setEditingPost] = useState(false);
-  const [postDraft, setPostDraft] = useState(String((post as any).content || ''));
+  const [postDraft, setPostDraft] = useState(post.content);
   const [saved, setSaved] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [expandedPost, setExpandedPost] = useState(false);
+  const [lastInviteCode, setLastInviteCode] = useState('');
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxItems, setLightboxItems] = useState<string[]>([]);
@@ -493,18 +710,17 @@ export default function PostCard({ post }: PostCardProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  const mediaItems = useMemo(() => normalizePostMedia(post), [post]);
-  const documentItems = useMemo(() => normalizePostDocuments(post), [post]);
-
-  const cleanPostContent = useMemo(
-    () => getCleanPostContent(String((post as any).content || '')),
-    [post]
+  const possibleUserIds = useMemo(
+    () => getPossibleCurrentUserIds({ currentUserId, authUser: user }),
+    [currentUserId, user]
   );
 
-  const hashtags = useMemo(() => {
-    const tags = (post as any).hashtags;
-    return Array.isArray(tags) ? tags.filter(Boolean) : [];
-  }, [post]);
+  const mediaItems = useMemo(() => normalizePostMedia(post), [post]);
+  const documentItems = useMemo(() => normalizePostDocuments(post), [post]);
+  const collaborators = useMemo(() => normalizeCollaborators(post), [post]);
+  const inviteItems = useMemo(() => normalizeInviteItems(post), [post]);
+
+  const cleanPostContent = useMemo(() => getCleanPostContent(post.content), [post.content]);
 
   const hasMediaOrDocs = mediaItems.length > 0 || documentItems.length > 0;
   const collapseLines = hasMediaOrDocs ? 2 : 10;
@@ -518,48 +734,57 @@ export default function PostCard({ post }: PostCardProps) {
 
   const lightboxSrc = lightboxItems[lightboxIndex] || null;
 
-  const myId = String(currentUserId || user?.id || '').trim();
-  const isOwner = String((post as any).userId || '') === myId;
+  const myId = possibleUserIds[0] || '';
 
-  const collaborators = Array.isArray((post as any).collaborators)
-    ? ((post as any).collaborators as any[]).map(String)
-    : [];
+  const postOwnerId = cleanString((post as any).userId || (post as any).authorId || '');
+  const isOwner = isSameUserId(postOwnerId, possibleUserIds);
 
-  const collabInvites = Array.isArray((post as any).collabInvites)
-    ? ((post as any).collabInvites as any[]).map(String)
-    : [];
+  const collaboratorIds = collaborators.map((x) => x.id);
+  const isCollaborator = collaboratorIds.some((id) => isSameUserId(id, possibleUserIds));
 
-  const isCollaborator = !!myId && collaborators.includes(myId);
-  const hasInvite = !!myId && collabInvites.includes(myId);
+  const hasInvite = inviteItems.some((invite) => {
+    if (isSameUserId(invite.id, possibleUserIds)) return true;
+    if (isSameUserId(invite.code, possibleUserIds)) return true;
+
+    try {
+      const myInviteCode = localStorage.getItem('facemex_my_collab_code');
+      return !!myInviteCode && myInviteCode === invite.code;
+    } catch {
+      return false;
+    }
+  });
+
   const canEdit = isOwner || isCollaborator;
 
-  const displayName =
-    (post as any).userName ||
-    (post as any).name ||
-    (post as any).author?.name ||
-    'FaceMeX Member';
+  const displayName = (post as any).userName || 'FaceMeX Member';
+  const displayAvatar = (post as any).userAvatar || (post as any).avatar || '';
 
-  const displayAvatar =
-    (post as any).userAvatar ||
-    (post as any).avatar ||
-    (post as any).author?.avatar ||
-    '';
+  const isAuthorVerified =
+    (post as any)?.verified === true ||
+    (post as any)?.userVerified === true ||
+    (post as any)?.isVerified === true ||
+    (post as any)?.is_verified === true ||
+    (!!addons?.verified && isOwner);
 
-  const isAuthorVerified = getAuthorVerified(post, currentUserId || '', addons);
+  const postTime = useMemo(() => {
+    const raw = (post as any).createdAt || (post as any).timestamp || (post as any).date || null;
+    const d = raw ? new Date(raw) : new Date();
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }, [post]);
 
   useEffect(() => {
-    setPostDraft(String((post as any).content || ''));
-  }, [post]);
+    setPostDraft(post.content);
+  }, [post.content]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem('faceme_saved_posts_v1');
       const ids = raw ? (JSON.parse(raw) as string[]) : [];
-      setSaved(Array.isArray(ids) ? ids.includes((post as any).id) : false);
+      setSaved(Array.isArray(ids) ? ids.includes(post.id) : false);
     } catch {
       setSaved(false);
     }
-  }, [post]);
+  }, [post.id]);
 
   useEffect(() => {
     try {
@@ -569,14 +794,14 @@ export default function PostCard({ post }: PostCardProps) {
         (post as any).mediaLocked === true ||
         (post as any).media_locked === true;
 
-      const raw = localStorage.getItem(`facemex:post_images_locked:${(post as any).id}`);
+      const raw = localStorage.getItem(`facemex:post_images_locked:${post.id}`);
       const localLocked = raw === 'true';
 
       setImagesLocked(serverLocked || localLocked);
     } catch {
       setImagesLocked(false);
     }
-  }, [post]);
+  }, [post.id, post]);
 
   const toggleImagesLocked = () => {
     if (!isOwner) return;
@@ -585,7 +810,7 @@ export default function PostCard({ post }: PostCardProps) {
       const next = !prev;
 
       try {
-        localStorage.setItem(`facemex:post_images_locked:${(post as any).id}`, String(next));
+        localStorage.setItem(`facemex:post_images_locked:${post.id}`, String(next));
       } catch {}
 
       return next;
@@ -594,6 +819,10 @@ export default function PostCard({ post }: PostCardProps) {
 
   const saveImageToDevice = async (src: string, name = 'facemex-image') => {
     if (!src) return;
+    if (imagesLocked && !isOwner) {
+      alert('This author locked image downloads.');
+      return;
+    }
 
     try {
       const response = await fetch(src);
@@ -616,16 +845,14 @@ export default function PostCard({ post }: PostCardProps) {
 
   const saveCurrentLightboxImage = () => {
     if (!lightboxSrc) return;
-    if (imagesLocked && !isOwner) return;
-
-    saveImageToDevice(lightboxSrc, `facemex-post-${(post as any).id}-${lightboxIndex + 1}`);
+    saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
   };
 
   const storePostActionContext = (type: string, prompt: string) => {
     try {
       const payload = JSON.stringify({
         type,
-        postId: (post as any).id,
+        postId: post.id,
         content: cleanPostContent,
         prompt,
         createdAt: new Date().toISOString(),
@@ -633,23 +860,21 @@ export default function PostCard({ post }: PostCardProps) {
 
       localStorage.setItem('facemex:post_action_context', payload);
       localStorage.setItem('facemex:career_workspace_prompt', payload);
-      localStorage.setItem('facemex:cv_builder_prompt', payload);
       sessionStorage.setItem('facemex:post_action_context', payload);
       sessionStorage.setItem('facemex:career_workspace_prompt', payload);
-      sessionStorage.setItem('facemex:cv_builder_prompt', payload);
     } catch {
       // ignore
     }
   };
 
   const goCreateCv = () => {
-    const prompt = `Create a professional ATS CV for this opportunity:\n\n${cleanPostContent}`;
+    const prompt = `Create a CV for this opportunity:\n\n${cleanPostContent}`;
 
     storePostActionContext('create-cv', prompt);
 
     navigate(CV_BUILDER_ROUTE, {
       state: {
-        fromPost: (post as any).id,
+        fromPost: post.id,
         mode: 'create-cv',
         content: cleanPostContent,
         prompt,
@@ -664,7 +889,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     navigate(CAREER_WORKSPACE_ROUTE, {
       state: {
-        fromPost: (post as any).id,
+        fromPost: post.id,
         mode: 'apply-message',
         content: cleanPostContent,
         prompt,
@@ -679,7 +904,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     navigate(CAREER_WORKSPACE_ROUTE, {
       state: {
-        fromPost: (post as any).id,
+        fromPost: post.id,
         mode: 'check-job',
         content: cleanPostContent,
         prompt,
@@ -688,6 +913,8 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const openLightbox = (items: string[] | string, startIndex = 0) => {
+    if (imagesLocked && !isOwner) return;
+
     const gallery = Array.isArray(items)
       ? items.filter(Boolean)
       : [items].filter(Boolean);
@@ -728,6 +955,8 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const openMediaLightbox = (src: string) => {
+    if (imagesLocked && !isOwner) return;
+
     const imageGallery = mediaItems
       .filter((item) => item.type === 'image')
       .map((item) => item.src);
@@ -824,7 +1053,7 @@ export default function PostCard({ post }: PostCardProps) {
 
           const voiceUrl = await uploadVoiceComment(audioBlob);
 
-          await addVoiceComment((post as any).id, voiceUrl);
+          await addVoiceComment(post.id, voiceUrl);
 
           incrementVoiceCommentCountToday();
           setShowComments(true);
@@ -910,8 +1139,8 @@ export default function PostCard({ post }: PostCardProps) {
         const ids = raw ? (JSON.parse(raw) as string[]) : [];
         const safe = Array.isArray(ids) ? ids : [];
         const updated = next
-          ? Array.from(new Set([...safe, (post as any).id]))
-          : safe.filter((id) => id !== (post as any).id);
+          ? Array.from(new Set([...safe, post.id]))
+          : safe.filter((id) => id !== post.id);
 
         localStorage.setItem('faceme_saved_posts_v1', JSON.stringify(updated));
       } catch {}
@@ -922,7 +1151,7 @@ export default function PostCard({ post }: PostCardProps) {
 
   const handleShare = async () => {
     try {
-      const url = `${window.location.origin}/post/${(post as any).id}`;
+      const url = `${window.location.origin}/post/${post.id}`;
       const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
 
       if (navAny && typeof navAny.share === 'function') {
@@ -937,12 +1166,16 @@ export default function PostCard({ post }: PostCardProps) {
       console.log(error);
     }
 
-    sharePost((post as any).id);
+    sharePost(post.id);
   };
 
   const startEditPost = () => {
-    if (!canEdit) return;
-    setPostDraft(String((post as any).content || ''));
+    if (!canEdit) {
+      alert('Only the author or accepted collaborators can edit this post.');
+      return;
+    }
+
+    setPostDraft(post.content);
     setEditingPost(true);
   };
 
@@ -951,35 +1184,102 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!next || !canEdit) return;
 
-    await editPost((post as any).id, next);
+    await editPost(post.id, next);
     setEditingPost(false);
   };
 
   const handleDeletePost = async () => {
-    if (!isOwner) return;
+    if (!isOwner) {
+      alert('Only the author can delete this post.');
+      return;
+    }
 
     const ok = window.confirm('Delete this post?');
 
     if (!ok) return;
 
-    await deletePost((post as any).id);
+    await deletePost(post.id);
   };
 
   const handleInviteCollaborator = async () => {
-    if (!isOwner) return;
+    if (!isOwner) {
+      alert('Only the author can invite collaborators.');
+      return;
+    }
 
-    const inviteeId = window.prompt('Enter the user id to invite as collaborator');
-    const next = String(inviteeId || '').trim();
+    if (collaborators.length >= 4) {
+      alert('You can collaborate with up to 4 profiles on one post.');
+      return;
+    }
 
-    if (!next) return;
+    const collaboratorName = window.prompt(
+      'Enter collaborator name or FaceMeX username. Example: Thabo'
+    );
 
-    await inviteCollaborator((post as any).id, next);
+    const name = cleanString(collaboratorName);
+
+    if (!name) return;
+
+    const inviteCode = createInviteCode(name);
+    setLastInviteCode(inviteCode);
+
+    try {
+      localStorage.setItem(`facemex:collab_invite:${post.id}`, inviteCode);
+    } catch {
+      // ignore
+    }
+
+    try {
+      await inviteCollaborator(post.id, inviteCode);
+    } catch (error) {
+      console.error('Invite collaborator failed:', error);
+      alert(
+        'Invite code was generated, but backend invite failed. Update postStore.ts and backend routes/posts.js to support code invites.'
+      );
+    }
+
+    const copied = await copyText(inviteCode);
+
+    alert(
+      copied
+        ? `Invite code generated and copied:\n${inviteCode}\n\nSend this code to ${name}.`
+        : `Invite code generated:\n${inviteCode}\n\nSend this code to ${name}.`
+    );
+  };
+
+  const handleCopyInviteCode = async () => {
+    const code = lastInviteCode || cleanString(inviteItems[0]?.code || inviteItems[0]?.id);
+
+    if (!code) {
+      alert('No invite code available yet.');
+      return;
+    }
+
+    const copied = await copyText(code);
+
+    alert(copied ? `Invite code copied: ${code}` : `Invite code: ${code}`);
+  };
+
+  const handleAcceptInvite = async () => {
+    const ok = window.confirm('Accept collaboration invite?');
+
+    if (!ok) return;
+
+    await acceptCollabInvite(post.id);
+  };
+
+  const handleRejectInvite = async () => {
+    const ok = window.confirm('Decline collaboration invite?');
+
+    if (!ok) return;
+
+    await rejectCollabInvite(post.id);
   };
 
   const handleComment = async () => {
     if (!commentText.trim()) return;
 
-    await addComment((post as any).id, commentText.trim());
+    await addComment(post.id, commentText.trim());
 
     setCommentText('');
     setShowComments(true);
@@ -990,7 +1290,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     if (!ok) return;
 
-    await deleteComment((post as any).id, commentId);
+    await deleteComment(post.id, commentId);
   };
 
   const handleReplyToComment = (commentUserName: string) => {
@@ -1003,6 +1303,18 @@ export default function PostCard({ post }: PostCardProps) {
     }, 0);
   };
 
+  const MediaLockOverlay = () => {
+    if (!imagesLocked || isOwner) return null;
+
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 px-5 text-center text-white">
+        <Lock className="mb-2 h-7 w-7 drop-shadow" />
+        <p className="text-sm font-semibold drop-shadow">Images locked</p>
+        <p className="mt-1 text-xs text-white/85 drop-shadow">Download disabled by author.</p>
+      </div>
+    );
+  };
+
   const renderMediaItem = (item: PostMediaItem, index: number) => {
     if (item.type === 'video') {
       return (
@@ -1011,9 +1323,11 @@ export default function PostCard({ post }: PostCardProps) {
           controls
           playsInline
           preload="metadata"
-          className="h-full w-full object-contain bg-black"
-          controlsList="nodownload"
-          onContextMenu={(e) => e.preventDefault()}
+          className="h-full w-full bg-black object-contain"
+          controlsList={imagesLocked && !isOwner ? 'nodownload noplaybackrate' : 'noplaybackrate'}
+          onContextMenu={(e) => {
+            if (imagesLocked && !isOwner) e.preventDefault();
+          }}
         />
       );
     }
@@ -1022,7 +1336,7 @@ export default function PostCard({ post }: PostCardProps) {
       <img
         src={item.src}
         alt={`Post media ${index + 1}`}
-        className="h-full w-full object-contain bg-white"
+        className="h-full w-full select-none bg-white object-contain"
         loading="lazy"
         draggable={false}
         onContextMenu={(e) => {
@@ -1042,19 +1356,8 @@ export default function PostCard({ post }: PostCardProps) {
         className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[12px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
       >
         {imagesLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-        {imagesLocked ? 'Unlock images' : 'Lock images'}
+        {imagesLocked ? 'Unlock image downloads' : 'Lock image downloads'}
       </button>
-    );
-  };
-
-  const LockedLabel = () => {
-    if (!imagesLocked) return null;
-
-    return (
-      <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-        <Lock className="h-3 w-3" />
-        Locked
-      </span>
     );
   };
 
@@ -1084,15 +1387,14 @@ export default function PostCard({ post }: PostCardProps) {
             <img
               src={item.src}
               alt="Post media"
-              className="h-[250px] w-full object-contain sm:h-[340px]"
+              className="h-[250px] w-full select-none object-contain sm:h-[340px]"
               loading="lazy"
               draggable={false}
               onContextMenu={(e) => {
                 if (imagesLocked && !isOwner) e.preventDefault();
               }}
             />
-
-            <LockedLabel />
+            <MediaLockOverlay />
           </button>
         </div>
       );
@@ -1111,7 +1413,7 @@ export default function PostCard({ post }: PostCardProps) {
             <img
               src={firstImage.src}
               alt="Post media preview"
-              className="h-[250px] w-full object-contain sm:h-[340px]"
+              className="h-[250px] w-full select-none object-contain sm:h-[340px]"
               loading="lazy"
               draggable={false}
               onContextMenu={(e) => {
@@ -1119,11 +1421,13 @@ export default function PostCard({ post }: PostCardProps) {
               }}
             />
 
-            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-              {imageItems.length} images
-            </span>
+            {!imagesLocked || isOwner ? (
+              <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+                {imageItems.length} images
+              </span>
+            ) : null}
 
-            <LockedLabel />
+            <MediaLockOverlay />
           </button>
         </div>
       );
@@ -1145,13 +1449,13 @@ export default function PostCard({ post }: PostCardProps) {
               >
                 {renderMediaItem(item, index)}
 
-                {showMore && (
+                {showMore && (!imagesLocked || isOwner) && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
                     +{extraCount}
                   </div>
                 )}
 
-                <LockedLabel />
+                <MediaLockOverlay />
               </button>
             );
           })}
@@ -1160,12 +1464,10 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
-  const commentCount = Array.isArray((post as any).comments)
-    ? (post as any).comments.length
-    : 0;
+  const commentCount = post.comments?.length || 0;
 
-  const reactionType = (post as any).isLiked
-    ? (((post as any).reaction || 'like') as
+  const reactionType = post.isLiked
+    ? ((post.reaction || 'like') as
         | 'love'
         | 'like'
         | 'haha'
@@ -1175,7 +1477,7 @@ export default function PostCard({ post }: PostCardProps) {
     : undefined;
 
   const reactionClass = (() => {
-    if (!(post as any).isLiked) return '';
+    if (!post.isLiked) return '';
 
     switch (reactionType) {
       case 'love':
@@ -1210,7 +1512,7 @@ export default function PostCard({ post }: PostCardProps) {
           <button
             type="button"
             className="flex min-w-0 items-center space-x-2 text-left"
-            onClick={() => navigate(`/profile/${(post as any).userId}`)}
+            onClick={() => navigate(`/profile/${post.userId}`)}
           >
             <div className="relative shrink-0">
               <Avatar className="h-10 w-10">
@@ -1219,8 +1521,8 @@ export default function PostCard({ post }: PostCardProps) {
               </Avatar>
 
               {isAuthorVerified && (
-                <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-1 ring-border">
-                  <CheckCircle className="h-2.5 w-2.5 text-primary" />
+                <span className="absolute -bottom-1 -right-1">
+                  <VerifiedMiniBadge />
                 </span>
               )}
             </div>
@@ -1234,10 +1536,17 @@ export default function PostCard({ post }: PostCardProps) {
                 {isAuthorVerified && (
                   <CheckCircle className="h-3.5 w-3.5 shrink-0 text-primary" />
                 )}
+
+                {collaborators.length > 0 && (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                    <Users className="h-2.5 w-2.5" />
+                    Collab
+                  </span>
+                )}
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                {formatDistanceToNow(getPostDate(post), { addSuffix: true })}
+                {formatDistanceToNow(postTime, { addSuffix: true })}
               </p>
             </div>
           </button>
@@ -1257,38 +1566,50 @@ export default function PostCard({ post }: PostCardProps) {
               {canEdit && (
                 <DropdownMenuItem onClick={startEditPost}>
                   <PencilLine className="mr-2 h-4 w-4" />
-                  Edit
+                  Edit post
+                </DropdownMenuItem>
+              )}
+
+              {isOwner && (
+                <DropdownMenuItem onClick={handleInviteCollaborator}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite collaborator
+                </DropdownMenuItem>
+              )}
+
+              {isOwner && lastInviteCode && (
+                <DropdownMenuItem onClick={handleCopyInviteCode}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy invite code
                 </DropdownMenuItem>
               )}
 
               {isOwner && hasMediaOrDocs && (
                 <DropdownMenuItem onClick={toggleImagesLocked}>
                   {imagesLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
-                  {imagesLocked ? 'Unlock images' : 'Lock images'}
+                  {imagesLocked ? 'Unlock downloads' : 'Lock downloads'}
                 </DropdownMenuItem>
               )}
 
               {hasInvite && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => acceptCollabInvite((post as any).id)}>
-                    Accept invite
+                  <DropdownMenuItem onClick={handleAcceptInvite}>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Accept collaboration
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => rejectCollabInvite((post as any).id)}
+                    onClick={handleRejectInvite}
                     className="text-destructive focus:text-destructive"
                   >
-                    Reject invite
+                    <X className="mr-2 h-4 w-4" />
+                    Decline collaboration
                   </DropdownMenuItem>
                 </>
               )}
 
               {isOwner && (
                 <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleInviteCollaborator}>
-                    Invite collaborator
-                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={handleDeletePost}
@@ -1304,6 +1625,58 @@ export default function PostCard({ post }: PostCardProps) {
         </CardHeader>
 
         <CardContent className="space-y-2.5 px-3 pb-3">
+          <CollaboratorStack
+            ownerName={displayName}
+            ownerAvatar={displayAvatar}
+            ownerVerified={isAuthorVerified}
+            collaborators={collaborators}
+            onProfileClick={(id) => navigate(`/profile/${id}`)}
+          />
+
+          {lastInviteCode && isOwner && (
+            <div className="flex items-center justify-between gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-primary">Invite code ready</p>
+                <p className="truncate text-xs text-muted-foreground">{lastInviteCode}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopyInviteCode}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-primary px-3 text-[11px] font-bold text-primary-foreground"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy
+              </button>
+            </div>
+          )}
+
+          {hasInvite && (
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 px-3 py-3">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Users className="h-4 w-4" />
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold">Collaboration invite</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    You were invited to collaborate on this post.
+                  </p>
+
+                  <div className="mt-3 flex gap-2">
+                    <Button size="sm" className="h-8 rounded-full text-xs" onClick={handleAcceptInvite}>
+                      Accept
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 rounded-full text-xs" onClick={handleRejectInvite}>
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {editingPost ? (
             <div className="space-y-2">
               <textarea
@@ -1344,15 +1717,15 @@ export default function PostCard({ post }: PostCardProps) {
             )
           )}
 
-          {hashtags.length > 0 && (
+          {post.hashtags && post.hashtags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {hashtags.map((tag: string, index: number) => (
+              {post.hashtags.map((tag, index) => (
                 <span
                   key={index}
                   className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                  onClick={() => navigate(`/hashtag/${String(tag).replace('#', '')}`)}
+                  onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
-                  {String(tag).startsWith('#') ? tag : `#${tag}`}
+                  {tag.startsWith('#') ? tag : `#${tag}`}
                 </span>
               ))}
             </div>
@@ -1396,7 +1769,7 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          {(post as any).audio && (
+          {post.audio && (
             <div className="rounded-2xl border bg-background p-3">
               <div className="mb-2 flex items-center gap-2">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
@@ -1409,7 +1782,7 @@ export default function PostCard({ post }: PostCardProps) {
                 controls
                 controlsList="nodownload noplaybackrate"
                 className="w-full"
-                src={(post as any).audio}
+                src={post.audio}
                 preload="metadata"
                 onContextMenu={(e) => e.preventDefault()}
               />
@@ -1454,7 +1827,7 @@ export default function PostCard({ post }: PostCardProps) {
                     <img
                       src={lightboxSrc}
                       alt={`Image ${lightboxIndex + 1}`}
-                      className="max-h-full max-w-full object-contain transition-transform duration-200"
+                      className="max-h-full max-w-full select-none object-contain transition-transform duration-200"
                       draggable={false}
                       onContextMenu={(e) => {
                         if (imagesLocked && !isOwner) e.preventDefault();
@@ -1536,30 +1909,30 @@ export default function PostCard({ post }: PostCardProps) {
                     size="sm"
                     aria-label="React"
                     className={`${premiumActionButton} ${reactionClass}`}
-                    onClick={() => likePost((post as any).id, ((post as any).reaction || 'like') as any)}
+                    onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
                     <Heart className="mr-1 h-3.5 w-3.5" />
-                    {(post as any).likes || 0}
+                    {post.likes || 0}
                   </Button>
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent align="start" className="flex gap-1 rounded-full px-2 py-2">
-                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'love')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="rounded-full px-2">
                     <Heart className="h-4 w-4 text-rose-500" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'like')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="rounded-full px-2">
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'haha')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="rounded-full px-2">
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'wow')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="rounded-full px-2">
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'sad')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="rounded-full px-2">
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost((post as any).id, 'angry')} className="rounded-full px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="rounded-full px-2">
                     <Angry className="h-4 w-4 text-red-500" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -1686,37 +2059,41 @@ export default function PostCard({ post }: PostCardProps) {
                 exit={{ opacity: 0, height: 0 }}
                 className="w-full space-y-3 border-t border-border/60 pt-3"
               >
-                {(((post as any).comments || []) as any[]).map((comment) => {
+                {(post.comments || []).map((comment: any) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const commentUserId = String(comment.userId || '').trim();
-                  const canDeleteComment = commentUserId === myId || isOwner;
+                  const commentUserId = cleanString(comment.userId || comment.authorId || '');
+                  const commentId = cleanString(comment.id || comment._id || '');
+                  const commentUserName = cleanString(comment.userName || comment.name || 'User');
+                  const commentAvatar = cleanString(comment.userAvatar || comment.avatar || '');
+                  const commentTextValue = cleanString(comment.content || comment.text || '');
+                  const canDeleteComment = isSameUserId(commentUserId, possibleUserIds) || isOwner;
 
-                  const commentName = comment.userName || comment.name || 'User';
-                  const commentAvatar = comment.userAvatar || comment.avatar || '';
-                  const commentTextValue = comment.content || comment.text || '';
+                  const rawCommentTime = comment.createdAt || comment.timestamp || comment.date || null;
+                  const commentTime = rawCommentTime ? new Date(rawCommentTime) : new Date();
+                  const safeCommentTime = Number.isNaN(commentTime.getTime()) ? new Date() : commentTime;
 
                   return (
                     <motion.div
-                      key={comment.id}
+                      key={commentId || `${commentUserId}-${commentTextValue}`}
                       initial={{ opacity: 0, x: -12 }}
                       animate={{ opacity: 1, x: 0 }}
                       className="flex gap-2"
                     >
                       <Avatar className="h-7 w-7">
-                        <AvatarImage src={commentAvatar} alt={commentName} />
+                        <AvatarImage src={commentAvatar} alt={commentUserName} />
                         <AvatarFallback>
-                          {commentName ? commentName.charAt(0) : 'U'}
+                          {commentUserName ? commentUserName.charAt(0) : 'U'}
                         </AvatarFallback>
                       </Avatar>
 
                       <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
                         <div className="flex items-baseline gap-2">
                           <p className="text-sm font-medium text-foreground">
-                            {commentName}
+                            {commentUserName}
                           </p>
 
                           <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
+                            {formatDistanceToNow(safeCommentTime, { addSuffix: true })}
                           </span>
                         </div>
 
@@ -1744,7 +2121,7 @@ export default function PostCard({ post }: PostCardProps) {
                             </div>
                           ) : (
                             <p className="break-words">
-                              {String(commentTextValue).replace(
+                              {commentTextValue.replace(
                                 /\[(REAL_LIFE|PRO COLLAB|PRO COLLAB INVITE|CREATOR_CONTENT)\s*/g,
                                 ''
                               )}
@@ -1755,17 +2132,17 @@ export default function PostCard({ post }: PostCardProps) {
                         <div className="mt-2 flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => handleReplyToComment(commentName)}
+                            onClick={() => handleReplyToComment(commentUserName)}
                             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                           >
                             <MessageCircle className="h-3 w-3" />
                             Reply
                           </button>
 
-                          {canDeleteComment && (
+                          {canDeleteComment && commentId && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteComment(String(comment.id))}
+                              onClick={() => handleDeleteComment(commentId)}
                               className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -1780,6 +2157,13 @@ export default function PostCard({ post }: PostCardProps) {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {isOwner && inviteItems.length > 0 && (
+            <div className="flex items-center gap-2 rounded-2xl bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />
+              {inviteItems.length} pending collaboration invite{inviteItems.length === 1 ? '' : 's'}
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>
