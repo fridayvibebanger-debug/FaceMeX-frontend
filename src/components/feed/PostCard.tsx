@@ -32,7 +32,6 @@ import {
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -88,7 +87,7 @@ function normalizeStringArray(value: unknown): string[] {
         return parsed.map((item) => cleanString(item)).filter(Boolean);
       }
     } catch {
-      // continue below
+      // continue
     }
 
     if (value.includes(',')) {
@@ -111,11 +110,19 @@ function getSafeDate(value: unknown) {
 }
 
 function getPostDate(post: Post) {
-  return getSafeDate((post as any).timestamp || (post as any).createdAt || (post as any).created_at);
+  return getSafeDate(
+    (post as any).timestamp ||
+      (post as any).createdAt ||
+      (post as any).created_at
+  );
 }
 
 function getCommentDate(comment: any) {
-  return getSafeDate(comment?.timestamp || comment?.createdAt || comment?.created_at);
+  return getSafeDate(
+    comment?.timestamp ||
+      comment?.createdAt ||
+      comment?.created_at
+  );
 }
 
 function getCommentText(comment: any) {
@@ -149,8 +156,19 @@ function normalizePostMedia(post: Post): PostMediaItem[] {
   addMany('video', (post as any).videos);
   addMany('video', (post as any).video);
   addMany('video', (post as any).videoUrl);
+  addMany('video', (post as any).video_url);
 
-  if ((post as any).mediaType === 'video' || (post as any).media_type === 'video') {
+  if (
+    (post as any).mediaType === 'image' ||
+    (post as any).media_type === 'image'
+  ) {
+    add('image', (post as any).mediaUrl || (post as any).media_url);
+  }
+
+  if (
+    (post as any).mediaType === 'video' ||
+    (post as any).media_type === 'video'
+  ) {
     add('video', (post as any).mediaUrl || (post as any).media_url);
   }
 
@@ -212,7 +230,10 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         1
     );
 
-    const totalPages = Math.max(1, Number.isFinite(rawTotalPages) ? rawTotalPages : 1);
+    const totalPages = Math.max(
+      1,
+      Number.isFinite(rawTotalPages) ? rawTotalPages : 1
+    );
 
     const rawPreviewPages = Number(
       raw.previewPages ||
@@ -409,7 +430,9 @@ function normalizeCollaboratorProfiles(post: Post): CollaboratorProfile[] {
   const seen = new Set<string>();
 
   return source
-    .map((item: any, index: number) => normalizeProfile(item, `${post.id}-collab-${index}`, index))
+    .map((item: any, index: number) =>
+      normalizeProfile(item, `${post.id}-collab-${index}`, index)
+    )
     .filter((profile: CollaboratorProfile) => {
       if (!profile.id) return false;
       if (seen.has(profile.id)) return false;
@@ -463,9 +486,16 @@ function idsMatch(a: unknown, b: unknown) {
 }
 
 function getMyCollabCode(name: string, id: string) {
-  const cleanName = cleanString(name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+  const cleanName = cleanString(name)
+    .replace(/\s+/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '');
+
   const shortName = cleanName || 'User';
-  const last4 = cleanString(id).replace(/[^a-zA-Z0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
+
+  const last4 =
+    cleanString(id).replace(/[^a-zA-Z0-9]/g, '').slice(-4) ||
+    String(Math.floor(1000 + Math.random() * 9000));
+
   return `${shortName}${last4}`;
 }
 
@@ -486,7 +516,7 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
                 src={profile.avatar}
                 alt={profile.name}
                 className="h-full w-full object-cover"
-                loading="eager"
+                loading="lazy"
                 decoding="async"
               />
             ) : (
@@ -537,7 +567,7 @@ function DocumentPreview({
             src={firstPage}
             alt={`${document.title} preview`}
             className="h-[250px] w-full object-contain sm:h-[340px]"
-            loading="eager"
+            loading="lazy"
             decoding="async"
             draggable={!downloadsLocked}
           />
@@ -569,7 +599,11 @@ function DocumentPreview({
           onClick={onToggleLock}
           className="flex h-8 w-full items-center justify-center gap-2 border-t border-border/70 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
         >
-          {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+          {downloadsLocked ? (
+            <Unlock className="h-3.5 w-3.5" />
+          ) : (
+            <Lock className="h-3.5 w-3.5" />
+          )}
           {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
         </button>
       )}
@@ -618,22 +652,28 @@ export default function PostCard({ post }: PostCardProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  const myIds = useMemo(() => getMyIdentityCodes(user, currentUserId || ''), [user, currentUserId]);
+  const myIds = useMemo(
+    () => getMyIdentityCodes(user, currentUserId || ''),
+    [user, currentUserId]
+  );
 
   const ownerIds = useMemo(
-    () => [
-      cleanString(post.userId),
-      cleanString((post as any).authorId),
-      cleanString((post as any).ownerId),
-      cleanString((post as any).user?._id),
-      cleanString((post as any).user?.id),
-      cleanString((post as any).externalId),
-    ].filter(Boolean),
+    () =>
+      [
+        cleanString(post.userId),
+        cleanString((post as any).authorId),
+        cleanString((post as any).ownerId),
+        cleanString((post as any).user?._id),
+        cleanString((post as any).user?.id),
+        cleanString((post as any).externalId),
+      ].filter(Boolean),
     [post]
   );
 
   const isOwner = useMemo(() => {
-    return ownerIds.some((ownerId) => myIds.some((myId) => idsMatch(ownerId, myId)));
+    return ownerIds.some((ownerId) =>
+      myIds.some((myId) => idsMatch(ownerId, myId))
+    );
   }, [ownerIds, myIds]);
 
   const mediaItems = useMemo(() => normalizePostMedia(post), [post]);
@@ -641,7 +681,10 @@ export default function PostCard({ post }: PostCardProps) {
   const collaboratorProfiles = useMemo(() => normalizeCollaboratorProfiles(post), [post]);
   const pendingCollabRequests = useMemo(() => normalizePendingCollabRequests(post), [post]);
 
-  const cleanPostContent = useMemo(() => getCleanPostContent(post.content), [post.content]);
+  const cleanPostContent = useMemo(
+    () => getCleanPostContent(post.content),
+    [post.content]
+  );
 
   const hasMediaOrDocs = mediaItems.length > 0 || documentItems.length > 0;
   const collapseLines = hasMediaOrDocs ? 2 : 10;
@@ -658,7 +701,9 @@ export default function PostCard({ post }: PostCardProps) {
       )
     : [];
 
-  const isCollaborator = myIds.some((myId) => collaborators.some((id) => idsMatch(id, myId)));
+  const isCollaborator = myIds.some((myId) =>
+    collaborators.some((id) => idsMatch(id, myId))
+  );
 
   const collabInvites = Array.isArray((post as any).collabInvites)
     ? ((post as any).collabInvites as any[]).map((x) =>
@@ -666,12 +711,15 @@ export default function PostCard({ post }: PostCardProps) {
       )
     : [];
 
-  const hasInvite = myIds.some((myId) => collabInvites.some((id) => idsMatch(id, myId)));
+  const hasInvite = myIds.some((myId) =>
+    collabInvites.some((id) => idsMatch(id, myId))
+  );
 
   const canEdit = isOwner || isCollaborator;
 
   const displayName = post.userName || (post as any).name || 'FaceMeX Member';
-  const displayAvatar = post.userAvatar || (post as any).avatar || (post as any).userAvatar || '';
+  const displayAvatar =
+    post.userAvatar || (post as any).avatar || (post as any).userAvatar || '';
 
   const isAuthorVerified =
     (post as any)?.verified === true ||
@@ -682,7 +730,10 @@ export default function PostCard({ post }: PostCardProps) {
     (post as any)?.is_verified === true ||
     (post as any)?.user?.verified === true ||
     (post as any)?.user?.userVerified === true ||
-    (isOwner && (addons?.verified === true || (user as any)?.isVerified === true || (user as any)?.verified === true));
+    (isOwner &&
+      (addons?.verified === true ||
+        (user as any)?.isVerified === true ||
+        (user as any)?.verified === true));
 
   useEffect(() => {
     setPostDraft(post.content);
@@ -715,8 +766,6 @@ export default function PostCard({ post }: PostCardProps) {
     } catch {
       setDownloadsLocked(false);
     }
-    // Important: only post.id here. Adding the whole post causes scroll blinking.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
 
   const toggleDownloadsLocked = () => {
@@ -760,9 +809,11 @@ export default function PostCard({ post }: PostCardProps) {
   const inviteCollaboratorByCode = async () => {
     if (!isOwner) return;
 
-    const invitee = window.prompt('Enter collaborator user ID or unique code, example: Thabo4040');
-    const value = cleanString(invitee);
+    const invitee = window.prompt(
+      'Enter collaborator user ID or unique code, example: Thabo4040'
+    );
 
+    const value = cleanString(invitee);
     if (!value) return;
 
     try {
@@ -796,7 +847,9 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const openLightbox = (items: string[] | string, startIndex = 0) => {
-    const gallery = Array.isArray(items) ? items.filter(Boolean) : [items].filter(Boolean);
+    const gallery = Array.isArray(items)
+      ? items.filter(Boolean)
+      : [items].filter(Boolean);
 
     if (!gallery.length) return;
 
@@ -1124,7 +1177,11 @@ export default function PostCard({ post }: PostCardProps) {
         onClick={toggleDownloadsLocked}
         className="mt-1 flex h-8 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[11px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
       >
-        {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+        {downloadsLocked ? (
+          <Unlock className="h-3.5 w-3.5" />
+        ) : (
+          <Lock className="h-3.5 w-3.5" />
+        )}
         {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
       </button>
     );
@@ -1149,7 +1206,7 @@ export default function PostCard({ post }: PostCardProps) {
           controls
           playsInline
           preload="metadata"
-          className="h-full w-full object-contain bg-black"
+          className="h-full w-full bg-black object-contain"
           controlsList={downloadsLocked ? 'nodownload' : undefined}
           onContextMenu={(e) => {
             if (downloadsLocked) e.preventDefault();
@@ -1162,8 +1219,8 @@ export default function PostCard({ post }: PostCardProps) {
       <img
         src={item.src}
         alt={`Post media ${index + 1}`}
-        className="h-full w-full object-contain bg-white"
-        loading="eager"
+        className="h-full w-full bg-white object-contain"
+        loading="lazy"
         decoding="async"
         draggable={!downloadsLocked}
         onContextMenu={(e) => {
@@ -1206,7 +1263,7 @@ export default function PostCard({ post }: PostCardProps) {
               src={item.src}
               alt="Post media"
               className="h-[250px] w-full object-contain sm:h-[340px]"
-              loading="eager"
+              loading="lazy"
               decoding="async"
               draggable={!downloadsLocked}
             />
@@ -1234,7 +1291,7 @@ export default function PostCard({ post }: PostCardProps) {
               src={firstImage.src}
               alt="Post media preview"
               className="h-[250px] w-full object-contain sm:h-[340px]"
-              loading="eager"
+              loading="lazy"
               decoding="async"
               draggable={!downloadsLocked}
             />
@@ -1396,7 +1453,11 @@ export default function PostCard({ post }: PostCardProps) {
 
               {isOwner && hasMediaOrDocs && (
                 <DropdownMenuItem onClick={toggleDownloadsLocked}>
-                  {downloadsLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                  {downloadsLocked ? (
+                    <Unlock className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Lock className="mr-2 h-4 w-4" />
+                  )}
                   {downloadsLocked ? 'Unlock downloads' : 'Lock downloads'}
                 </DropdownMenuItem>
               )}
@@ -1565,7 +1626,9 @@ export default function PostCard({ post }: PostCardProps) {
                   <div className="w-10" />
 
                   <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-semibold text-white backdrop-blur">
-                    {lightboxItems.length > 0 ? `${lightboxIndex + 1} / ${lightboxItems.length}` : 'Image'}
+                    {lightboxItems.length > 0
+                      ? `${lightboxIndex + 1} / ${lightboxItems.length}`
+                      : 'Image'}
                   </div>
 
                   <button
@@ -1584,8 +1647,8 @@ export default function PostCard({ post }: PostCardProps) {
                       <img
                         src={lightboxSrc}
                         alt={`Image ${lightboxIndex + 1}`}
-                        className="object-contain transition-all duration-200"
-                        loading="eager"
+                        className="object-contain"
+                        loading="lazy"
                         decoding="async"
                         style={
                           lightboxZoom <= 1
@@ -1758,14 +1821,14 @@ export default function PostCard({ post }: PostCardProps) {
                 if (!Number.isFinite(limit)) return false;
                 return getVoiceCommentCountToday() >= limit;
               })()}
-              className={`mt-1.5 h-9 w-full rounded-full px-3 text-[12px] font-semibold transition-all ${
+              className={`mt-1.5 h-9 w-full rounded-full px-3 text-[12px] font-semibold ${
                 isRecording
-                  ? 'bg-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.28)] hover:bg-red-600'
+                  ? 'bg-red-500 text-white hover:bg-red-600'
                   : 'border border-fuchsia-400/20 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-foreground shadow-[0_0_24px_rgba(168,85,247,0.18)] hover:bg-muted/40'
               }`}
             >
               <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/15">
-                <AudioLines className={`h-3.5 w-3.5 text-purple-500 ${isRecording ? 'animate-pulse' : ''}`} />
+                <AudioLines className="h-3.5 w-3.5 text-purple-500" />
               </span>
               {isRecording ? `${recordSeconds}s` : 'Voice'}
             </Button>
@@ -1776,7 +1839,7 @@ export default function PostCard({ post }: PostCardProps) {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]">
-                    <AudioLines className="h-4 w-4 animate-pulse" />
+                    <AudioLines className="h-4 w-4" />
                   </span>
                   <div>
                     <p className="text-sm font-semibold">Recording voice reply</p>
@@ -1823,98 +1886,90 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          <AnimatePresence initial={false}>
-            {showComments && commentCount > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.18 }}
-                className="w-full space-y-3 border-t border-border/60 pt-3"
-              >
-                {(post.comments || []).map((comment: any) => {
-                  const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const commentUserId = cleanString(comment.userId);
-                  const canDeleteComment =
-                    isOwner || myIds.some((myId) => idsMatch(myId, commentUserId));
+          {showComments && commentCount > 0 && (
+            <div className="w-full space-y-3 border-t border-border/60 pt-3">
+              {(post.comments || []).map((comment: any) => {
+                const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
+                const commentUserId = cleanString(comment.userId);
+                const canDeleteComment =
+                  isOwner || myIds.some((myId) => idsMatch(myId, commentUserId));
 
-                  const commentTextSafe = getCommentText(comment);
-                  const commentName = comment.userName || comment.name || 'User';
-                  const commentAvatar = comment.userAvatar || comment.avatar || '';
+                const commentTextSafe = getCommentText(comment);
+                const commentName = comment.userName || comment.name || 'User';
+                const commentAvatar = comment.userAvatar || comment.avatar || '';
 
-                  return (
-                    <div key={comment.id} className="flex gap-2">
-                      <Avatar className="h-7 w-7">
-                        <AvatarImage src={commentAvatar} alt={commentName} />
-                        <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
-                      </Avatar>
+                return (
+                  <div key={comment.id} className="flex gap-2">
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={commentAvatar} alt={commentName} />
+                      <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
+                    </Avatar>
 
-                      <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
-                        <div className="flex items-baseline gap-2">
-                          <p className="text-sm font-medium text-foreground">
-                            {commentName}
-                          </p>
+                    <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {commentName}
+                        </p>
 
-                          <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
-                          </span>
-                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
+                        </span>
+                      </div>
 
-                        <div className="mt-1 text-sm leading-relaxed text-foreground">
-                          {isVoice && comment.voiceUrl ? (
-                            <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
-                                <AudioLines className="h-4 w-4" />
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                                  Voice reply
-                                </p>
-                                <audio
-                                  controls
-                                  controlsList="nodownload noplaybackrate"
-                                  preload="metadata"
-                                  className="h-8 w-full"
-                                  onContextMenu={(e) => e.preventDefault()}
-                                >
-                                  <source src={comment.voiceUrl} type="audio/webm" />
-                                </audio>
-                              </div>
+                      <div className="mt-1 text-sm leading-relaxed text-foreground">
+                        {isVoice && comment.voiceUrl ? (
+                          <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
+                              <AudioLines className="h-4 w-4" />
                             </div>
-                          ) : (
-                            <p className="break-words">{commentTextSafe}</p>
-                          )}
-                        </div>
 
-                        <div className="mt-2 flex items-center gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                Voice reply
+                              </p>
+                              <audio
+                                controls
+                                controlsList="nodownload noplaybackrate"
+                                preload="metadata"
+                                className="h-8 w-full"
+                                onContextMenu={(e) => e.preventDefault()}
+                              >
+                                <source src={comment.voiceUrl} type="audio/webm" />
+                              </audio>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="break-words">{commentTextSafe}</p>
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleReplyToComment(commentName)}
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          Reply
+                        </button>
+
+                        {canDeleteComment && (
                           <button
                             type="button"
-                            onClick={() => handleReplyToComment(commentName)}
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
                           >
-                            <MessageCircle className="h-3 w-3" />
-                            Reply
+                            <Trash2 className="h-3 w-3" />
+                            Delete
                           </button>
-
-                          {canDeleteComment && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              Delete
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
