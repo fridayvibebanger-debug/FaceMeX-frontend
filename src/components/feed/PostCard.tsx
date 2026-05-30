@@ -65,15 +65,12 @@ type PostDocumentItem = {
 };
 
 /*
-  IMPORTANT ROUTES
-  Your GitHub screenshot shows:
-  - AIResumePage.tsx
-  - AIJobAssistantPage.tsx
-
-  If your real route is different, only change these two lines.
+  IMPORTANT:
+  Your GitHub shows AIResumePage.tsx and CareerAIPage.tsx.
+  If these buttons still do not open, only change these route constants.
 */
 const CV_BUILDER_ROUTE = '/ai-resume';
-const CAREER_WORKSPACE_ROUTE = '/ai-job-assistant';
+const CAREER_WORKSPACE_ROUTE = '/career-ai';
 
 function cleanString(value: unknown) {
   if (typeof value !== 'string') return '';
@@ -346,22 +343,19 @@ function DocumentPreview({
   canControl,
   onToggleLock,
   onOpenPages,
-  onSaveImage,
 }: {
   document: PostDocumentItem;
   locked: boolean;
   canControl: boolean;
   onToggleLock: () => void;
   onOpenPages: (pages: string[], startIndex: number) => void;
-  onSaveImage: (src: string, name?: string) => void;
 }) {
-  const totalPages = Math.max(1, document.totalPages || document.pages.length || 1);
   const firstPage = document.pages[0] || '';
 
   if (locked && !canControl) {
     return (
       <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
-        <div className="relative h-[210px] bg-muted/40 sm:h-[300px]">
+        <div className="relative h-[230px] bg-muted/40 sm:h-[320px]">
           {firstPage ? (
             <img
               src={firstPage}
@@ -377,8 +371,8 @@ function DocumentPreview({
 
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
             <Lock className="mb-2 h-7 w-7" />
-            <p className="text-sm font-semibold">Images locked by author</p>
-            <p className="mt-1 text-xs text-white/70">Full view and saving are disabled.</p>
+            <p className="text-sm font-semibold">Images locked</p>
+            <p className="mt-1 text-xs text-white/75">The author protected this media.</p>
           </div>
         </div>
       </div>
@@ -391,7 +385,7 @@ function DocumentPreview({
         <button
           type="button"
           onClick={() => onOpenPages(document.pages, 0)}
-          className="block w-full bg-white"
+          className="relative block w-full bg-white"
         >
           <img
             src={firstPage}
@@ -399,6 +393,12 @@ function DocumentPreview({
             className="h-[250px] w-full object-contain sm:h-[340px]"
             loading="lazy"
           />
+
+          {document.pages.length > 1 && (
+            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+              {document.pages.length} images
+            </span>
+          )}
         </button>
       ) : (
         <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
@@ -408,60 +408,15 @@ function DocumentPreview({
         </div>
       )}
 
-      <div className="grid grid-cols-2 border-t border-border/70">
-        {document.pages.length > 1 ? (
-          <button
-            type="button"
-            onClick={() => onOpenPages(document.pages, 0)}
-            className="flex h-10 items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white"
-          >
-            <FileText className="h-4 w-4" />
-            View {document.pages.length} images
-          </button>
-        ) : document.url ? (
-          <a
-            href={document.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex h-10 items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white"
-          >
-            <FileText className="h-4 w-4" />
-            Open document
-          </a>
-        ) : (
-          <div className="flex h-10 items-center justify-center bg-slate-950 text-[13px] font-semibold text-white">
-            Document
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => firstPage && onSaveImage(firstPage, document.title)}
-          disabled={!firstPage}
-          className="flex h-10 items-center justify-center gap-2 bg-background text-[13px] font-semibold text-foreground disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" />
-          Save image
-        </button>
-      </div>
-
       {canControl && (
         <button
           type="button"
           onClick={onToggleLock}
-          className="flex h-9 w-full items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground"
+          className="flex h-9 w-full items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
         >
           {locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
           {locked ? 'Unlock images' : 'Lock images'}
         </button>
-      )}
-
-      {totalPages > document.previewPages && (
-        <div className="flex items-center gap-1 px-3 py-2 text-[11px] text-muted-foreground">
-          <Lock className="h-3 w-3" />
-          {totalPages - document.previewPages} locked page
-          {totalPages - document.previewPages === 1 ? '' : 's'}
-        </div>
       )}
     </div>
   );
@@ -622,27 +577,18 @@ export default function PostCard({ post }: PostCardProps) {
 
   const storePostActionContext = (type: string, prompt: string) => {
     try {
-      localStorage.setItem(
-        'facemex:post_action_context',
-        JSON.stringify({
-          type,
-          postId: post.id,
-          content: cleanPostContent,
-          prompt,
-          createdAt: new Date().toISOString(),
-        })
-      );
+      const payload = JSON.stringify({
+        type,
+        postId: post.id,
+        content: cleanPostContent,
+        prompt,
+        createdAt: new Date().toISOString(),
+      });
 
-      sessionStorage.setItem(
-        'facemex:post_action_context',
-        JSON.stringify({
-          type,
-          postId: post.id,
-          content: cleanPostContent,
-          prompt,
-          createdAt: new Date().toISOString(),
-        })
-      );
+      localStorage.setItem('facemex:post_action_context', payload);
+      localStorage.setItem('facemex:career_workspace_prompt', payload);
+      sessionStorage.setItem('facemex:post_action_context', payload);
+      sessionStorage.setItem('facemex:career_workspace_prompt', payload);
     } catch {
       // ignore
     }
@@ -1013,6 +959,18 @@ export default function PostCard({ post }: PostCardProps) {
     }, 0);
   };
 
+  const MediaLockOverlay = () => {
+    if (!imagesLocked || isOwner) return null;
+
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
+        <Lock className="mb-2 h-7 w-7" />
+        <p className="text-sm font-semibold">Images locked</p>
+        <p className="mt-1 text-xs text-white/75">The author protected this media.</p>
+      </div>
+    );
+  };
+
   const renderMediaItem = (item: PostMediaItem, index: number) => {
     if (item.type === 'video') {
       return (
@@ -1038,55 +996,18 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
-  const MediaLockOverlay = () => {
-    if (!imagesLocked || isOwner) return null;
+  const AuthorLockButton = () => {
+    if (!isOwner || !hasMediaOrDocs) return null;
 
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
-        <Lock className="mb-2 h-7 w-7" />
-        <p className="text-sm font-semibold">Images locked by author</p>
-        <p className="mt-1 text-xs text-white/70">Full view and saving are disabled.</p>
-      </div>
-    );
-  };
-
-  const renderMediaFooter = (imageItems: PostMediaItem[]) => {
-    const firstImage = imageItems[0]?.src || '';
-    const imageCount = imageItems.length;
-
-    return (
-      <div className="grid grid-cols-2 border-t border-border/70">
-        <button
-          type="button"
-          disabled={imagesLocked && !isOwner}
-          onClick={() => openLightbox(imageItems.map((item) => item.src), 0)}
-          className="flex h-10 items-center justify-center gap-2 bg-slate-950 text-[13px] font-semibold text-white disabled:opacity-60"
-        >
-          <FileText className="h-4 w-4" />
-          View {imageCount} image{imageCount === 1 ? '' : 's'}
-        </button>
-
-        <button
-          type="button"
-          disabled={(imagesLocked && !isOwner) || !firstImage}
-          onClick={() => saveImageToDevice(firstImage, `facemex-post-${post.id}`)}
-          className="flex h-10 items-center justify-center gap-2 bg-background text-[13px] font-semibold text-foreground disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" />
-          Save image
-        </button>
-
-        {isOwner && (
-          <button
-            type="button"
-            onClick={toggleImagesLocked}
-            className="col-span-2 flex h-9 items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground"
-          >
-            {imagesLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-            {imagesLocked ? 'Unlock images' : 'Lock images'}
-          </button>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={toggleImagesLocked}
+        className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[12px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
+      >
+        {imagesLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+        {imagesLocked ? 'Unlock images' : 'Lock images'}
+      </button>
     );
   };
 
@@ -1121,8 +1042,6 @@ export default function PostCard({ post }: PostCardProps) {
             />
             <MediaLockOverlay />
           </button>
-
-          {renderMediaFooter([{ type: 'image', src: item.src }])}
         </div>
       );
     }
@@ -1143,10 +1062,15 @@ export default function PostCard({ post }: PostCardProps) {
               className={`h-[250px] w-full object-contain sm:h-[340px] ${imagesLocked && !isOwner ? 'blur-md' : ''}`}
               loading="lazy"
             />
+
+            {!imagesLocked && (
+              <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+                {imageItems.length} images
+              </span>
+            )}
+
             <MediaLockOverlay />
           </button>
-
-          {renderMediaFooter(imageItems)}
         </div>
       );
     }
@@ -1167,7 +1091,7 @@ export default function PostCard({ post }: PostCardProps) {
               >
                 {renderMediaItem(item, index)}
 
-                {showMore && (
+                {showMore && !imagesLocked && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
                     +{extraCount}
                   </div>
@@ -1178,8 +1102,6 @@ export default function PostCard({ post }: PostCardProps) {
             );
           })}
         </div>
-
-        {imageItems.length > 0 && renderMediaFooter(imageItems)}
       </div>
     );
   };
@@ -1201,7 +1123,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     switch (reactionType) {
       case 'love':
-        return 'text-destructive';
+        return 'text-rose-500';
       case 'like':
       case 'haha':
       case 'wow':
@@ -1209,14 +1131,14 @@ export default function PostCard({ post }: PostCardProps) {
       case 'sad':
         return 'text-muted-foreground';
       case 'angry':
-        return 'text-destructive';
+        return 'text-red-500';
       default:
         return 'text-primary';
     }
   })();
 
-  const smallActionButton =
-    'h-8 rounded-full px-2 text-[12px] font-semibold text-muted-foreground hover:text-foreground';
+  const premiumActionButton =
+    'h-9 min-w-0 flex-1 rounded-full px-2 text-[12px] font-semibold text-muted-foreground hover:bg-muted/50 hover:text-foreground';
 
   const pillButton =
     'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 text-[11px] font-semibold shadow-sm hover:bg-muted/50';
@@ -1227,7 +1149,7 @@ export default function PostCard({ post }: PostCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
     >
-      <Card className="mb-3 overflow-hidden rounded-[22px] border bg-card shadow-sm">
+      <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_8px_26px_rgba(15,23,42,0.06)]">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
           <button
             type="button"
@@ -1371,7 +1293,7 @@ export default function PostCard({ post }: PostCardProps) {
               {post.hashtags.map((tag, index) => (
                 <span
                   key={index}
-                  className="cursor-pointer text-xs text-primary hover:underline"
+                  className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                   onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
                   {tag.startsWith('#') ? tag : `#${tag}`}
@@ -1392,11 +1314,12 @@ export default function PostCard({ post }: PostCardProps) {
                   canControl={isOwner}
                   onToggleLock={toggleImagesLocked}
                   onOpenPages={(pages, startIndex) => openLightbox(pages, startIndex)}
-                  onSaveImage={saveImageToDevice}
                 />
               ))}
             </div>
           )}
+
+          <AuthorLockButton />
 
           {isOpportunityPost && (
             <div className="flex gap-2 overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1541,8 +1464,8 @@ export default function PostCard({ post }: PostCardProps) {
             </DialogContent>
           </Dialog>
 
-          <div className="flex items-center justify-between border-t border-border/60 pt-2">
-            <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-1.5 py-1.5 shadow-inner">
+            <div className="flex items-center justify-between gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -1550,7 +1473,7 @@ export default function PostCard({ post }: PostCardProps) {
                     variant="ghost"
                     size="sm"
                     aria-label="React"
-                    className={`${smallActionButton} ${reactionClass}`}
+                    className={`${premiumActionButton} ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
                     <Heart className="mr-1 h-3.5 w-3.5" />
@@ -1558,24 +1481,24 @@ export default function PostCard({ post }: PostCardProps) {
                   </Button>
                 </DropdownMenuTrigger>
 
-                <DropdownMenuContent align="start" className="flex gap-1">
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="px-2">
-                    <Heart className="h-4 w-4 text-destructive" />
+                <DropdownMenuContent align="start" className="flex gap-1 rounded-full px-2 py-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="rounded-full px-2">
+                    <Heart className="h-4 w-4 text-rose-500" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="rounded-full px-2">
                     <ThumbsUp className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="rounded-full px-2">
                     <Laugh className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="rounded-full px-2">
                     <Smile className="h-4 w-4 text-primary" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="px-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="rounded-full px-2">
                     <Frown className="h-4 w-4 text-muted-foreground" />
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="px-2">
-                    <Angry className="h-4 w-4 text-destructive" />
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="rounded-full px-2">
+                    <Angry className="h-4 w-4 text-red-500" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1584,7 +1507,7 @@ export default function PostCard({ post }: PostCardProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={smallActionButton}
+                className={premiumActionButton}
                 onClick={() => {
                   setReplyOpen((v) => !v);
                   setShowComments(true);
@@ -1599,7 +1522,7 @@ export default function PostCard({ post }: PostCardProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={smallActionButton}
+                className={premiumActionButton}
                 onClick={handleShare}
               >
                 Share
@@ -1612,7 +1535,7 @@ export default function PostCard({ post }: PostCardProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={`${smallActionButton} ${saved ? 'text-foreground' : ''}`}
+                className={`${premiumActionButton} ${saved ? 'text-foreground' : ''}`}
                 onClick={toggleSaved}
               >
                 <Bookmark className="mr-1 h-3.5 w-3.5" />
@@ -1629,15 +1552,42 @@ export default function PostCard({ post }: PostCardProps) {
                   if (!Number.isFinite(limit)) return false;
                   return getVoiceCommentCountToday() >= limit;
                 })()}
-                className="h-8 shrink-0 rounded-full px-2 text-[12px] text-muted-foreground hover:text-foreground"
+                className={`h-9 min-w-[74px] shrink-0 rounded-full px-2 text-[12px] font-semibold transition-all ${
+                  isRecording
+                    ? 'bg-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.35)] hover:bg-red-600'
+                    : 'bg-gradient-to-r from-slate-950 to-slate-800 text-white shadow-sm hover:from-slate-900 hover:to-slate-700'
+                }`}
               >
-                <AudioLines
-                  className={`mr-1 h-3.5 w-3.5 ${isRecording ? 'animate-pulse text-red-500' : ''}`}
-                />
+                <AudioLines className={`mr-1 h-3.5 w-3.5 ${isRecording ? 'animate-pulse' : ''}`} />
                 {isRecording ? `${recordSeconds}s` : 'Voice'}
               </Button>
             </div>
           </div>
+
+          {isRecording && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]">
+                    <AudioLines className="h-4 w-4 animate-pulse" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold">Recording voice reply</p>
+                    <p className="text-xs opacity-80">Tap stop when you are done.</p>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={toggleVoiceRecording}
+                  className="rounded-full bg-red-500 text-white hover:bg-red-600"
+                >
+                  Stop {recordSeconds}s
+                </Button>
+              </div>
+            </div>
+          )}
 
           {replyOpen && (
             <div className="flex items-center gap-2 pt-1">
@@ -1659,7 +1609,7 @@ export default function PostCard({ post }: PostCardProps) {
                 variant="ghost"
                 onClick={handleComment}
                 aria-label="Send reply"
-                className="h-10 w-10 text-muted-foreground hover:text-foreground"
+                className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -1705,20 +1655,25 @@ export default function PostCard({ post }: PostCardProps) {
 
                         <div className="mt-1 text-sm leading-relaxed text-foreground">
                           {isVoice && comment.voiceUrl ? (
-                            <div className="mt-2 flex items-center gap-2 rounded-full border bg-background px-3 py-2">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 shadow-sm">
-                                <AudioLines className="h-4 w-4 text-purple-500" />
+                            <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
+                                <AudioLines className="h-4 w-4" />
                               </div>
 
-                              <audio
-                                controls
-                                controlsList="nodownload noplaybackrate"
-                                preload="metadata"
-                                className="h-8 w-full"
-                                onContextMenu={(e) => e.preventDefault()}
-                              >
-                                <source src={comment.voiceUrl} type="audio/webm" />
-                              </audio>
+                              <div className="min-w-0 flex-1">
+                                <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                  Voice reply
+                                </p>
+                                <audio
+                                  controls
+                                  controlsList="nodownload noplaybackrate"
+                                  preload="metadata"
+                                  className="h-8 w-full"
+                                  onContextMenu={(e) => e.preventDefault()}
+                                >
+                                  <source src={comment.voiceUrl} type="audio/webm" />
+                                </audio>
+                              </div>
                             </div>
                           ) : (
                             <p className="break-words">
