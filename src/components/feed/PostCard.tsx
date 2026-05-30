@@ -64,6 +64,10 @@ type PostDocumentItem = {
   previewPages: number;
 };
 
+/*
+  If Create CV still does not open after this update,
+  change only CV_BUILDER_ROUTE to the exact route used in your App.tsx.
+*/
 const CV_BUILDER_ROUTE = '/ai-resume';
 const CAREER_WORKSPACE_ROUTE = '/career-ai';
 
@@ -72,23 +76,10 @@ function cleanString(value: unknown) {
   return value.trim();
 }
 
-function toBool(value: unknown) {
-  if (value === true) return true;
-  if (value === false) return false;
-
-  const text = String(value || '').trim().toLowerCase();
-
-  return text === 'true' || text === '1' || text === 'yes' || text === 'verified';
-}
-
-function safeDate(value: unknown) {
-  if (value instanceof Date) return value;
-
-  const date = new Date(value as any);
-
-  if (Number.isNaN(date.getTime())) return new Date();
-
-  return date;
+function sameText(a: unknown, b: unknown) {
+  const x = cleanString(a).toLowerCase();
+  const y = cleanString(b).toLowerCase();
+  return Boolean(x && y && x === y);
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -351,67 +342,73 @@ function safeFileName(name: string) {
     .slice(0, 70);
 }
 
-function getAuthorVerified(post: Post, currentUserId?: string, currentUserVerified?: boolean) {
-  const p = post as any;
-
-  const direct =
-    toBool(p.verified) ||
-    toBool(p.userVerified) ||
-    toBool(p.isVerified) ||
-    toBool(p.authorVerified) ||
-    toBool(p.accountVerified);
-
-  const nested =
-    toBool(p.addons?.verified) ||
-    toBool(p.userAddons?.verified) ||
-    toBool(p.authorAddons?.verified) ||
-    toBool(p.user?.verified) ||
-    toBool(p.user?.isVerified) ||
-    toBool(p.user?.userVerified) ||
-    toBool(p.user?.addons?.verified) ||
-    toBool(p.author?.verified) ||
-    toBool(p.author?.isVerified) ||
-    toBool(p.author?.userVerified) ||
-    toBool(p.author?.addons?.verified);
-
-  const currentUserOwnVerified =
-    String(post.userId || '') === String(currentUserId || '') && Boolean(currentUserVerified);
-
-  return direct || nested || currentUserOwnVerified;
-}
-
-function getAuthorName(post: Post) {
-  const p = post as any;
-
-  return (
-    cleanString(p.userName) ||
-    cleanString(p.authorName) ||
-    cleanString(p.name) ||
-    cleanString(p.user?.name) ||
-    cleanString(p.user?.full_name) ||
-    cleanString(p.user?.fullName) ||
-    cleanString(p.author?.name) ||
-    cleanString(p.author?.full_name) ||
-    cleanString(p.author?.fullName) ||
-    'FaceMeX Member'
+function getPostVerified(post: Post) {
+  return Boolean(
+    (post as any)?.verified === true ||
+      (post as any)?.userVerified === true ||
+      (post as any)?.authorVerified === true ||
+      (post as any)?.accountVerified === true ||
+      (post as any)?.isVerified === true ||
+      (post as any)?.is_verified === true ||
+      (post as any)?.author?.verified === true ||
+      (post as any)?.author?.userVerified === true ||
+      (post as any)?.author?.addons?.verified === true ||
+      (post as any)?.user?.verified === true ||
+      (post as any)?.user?.userVerified === true ||
+      (post as any)?.user?.addons?.verified === true
   );
 }
 
-function getAuthorAvatar(post: Post) {
-  const p = post as any;
-
+function ProtectedImage({
+  src,
+  alt,
+  className,
+  locked,
+  onClick,
+}: {
+  src: string;
+  alt: string;
+  className: string;
+  locked: boolean;
+  onClick?: () => void;
+}) {
   return (
-    cleanString(p.userAvatar) ||
-    cleanString(p.avatar) ||
-    cleanString(p.avatarUrl) ||
-    cleanString(p.avatar_url) ||
-    cleanString(p.user?.avatar) ||
-    cleanString(p.user?.avatarUrl) ||
-    cleanString(p.user?.avatar_url) ||
-    cleanString(p.author?.avatar) ||
-    cleanString(p.author?.avatarUrl) ||
-    cleanString(p.author?.avatar_url) ||
-    ''
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative block h-full w-full overflow-hidden"
+      onContextMenu={(e) => {
+        if (locked) e.preventDefault();
+      }}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className={className}
+        loading="lazy"
+        draggable={!locked}
+        onContextMenu={(e) => {
+          if (locked) e.preventDefault();
+        }}
+        style={{
+          WebkitUserSelect: locked ? 'none' : undefined,
+          userSelect: locked ? 'none' : undefined,
+          WebkitTouchCallout: locked ? 'none' : undefined,
+        } as CSSProperties}
+      />
+
+      {locked && (
+        <div
+          className="absolute inset-0 z-10"
+          onContextMenu={(e) => e.preventDefault()}
+          style={{
+            WebkitTouchCallout: 'none',
+            WebkitUserSelect: 'none',
+            userSelect: 'none',
+          } as CSSProperties}
+        />
+      )}
+    </button>
   );
 }
 
@@ -430,46 +427,16 @@ function DocumentPreview({
 }) {
   const firstPage = document.pages[0] || '';
 
-  if (locked && !canControl) {
-    return (
-      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
-        <div className="relative h-[230px] bg-muted/40 sm:h-[320px]">
-          {firstPage ? (
-            <img
-              src={firstPage}
-              alt={`${document.title} preview`}
-              className="h-full w-full object-contain blur-md"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <FileText className="h-8 w-8 text-muted-foreground" />
-            </div>
-          )}
-
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
-            <Lock className="mb-2 h-7 w-7" />
-            <p className="text-sm font-semibold">Images locked</p>
-            <p className="mt-1 text-xs text-white/75">The author protected this media.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
       {firstPage ? (
-        <button
-          type="button"
-          onClick={() => onOpenPages(document.pages, 0)}
-          className="relative block w-full bg-white"
-        >
-          <img
+        <div className="relative block w-full bg-white">
+          <ProtectedImage
             src={firstPage}
             alt={`${document.title} preview`}
+            locked={locked && !canControl}
             className="h-[250px] w-full object-contain sm:h-[340px]"
-            loading="lazy"
+            onClick={() => onOpenPages(document.pages, 0)}
           />
 
           {document.pages.length > 1 && (
@@ -477,7 +444,14 @@ function DocumentPreview({
               {document.pages.length} images
             </span>
           )}
-        </button>
+
+          {locked && (
+            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur">
+              <Lock className="h-3 w-3" />
+              Locked
+            </span>
+          )}
+        </div>
       ) : (
         <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
           <FileText className="h-8 w-8 text-muted-foreground" />
@@ -537,7 +511,14 @@ export default function PostCard({ post }: PostCardProps) {
   const recordIntervalRef = useRef<number | null>(null);
   const replyInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { addons, id: currentUserId, tier } = useUserStore();
+  const {
+    addons,
+    id: currentUserId,
+    tier,
+    name: storeName,
+    avatar: storeAvatar,
+  } = useUserStore() as any;
+
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
@@ -558,8 +539,51 @@ export default function PostCard({ post }: PostCardProps) {
 
   const lightboxSrc = lightboxItems[lightboxIndex] || null;
 
-  const myId = String(currentUserId || user?.id || '').trim();
-  const isOwner = String(post.userId || '') === myId;
+  const possibleCurrentIds = useMemo(() => {
+    const ids = [
+      currentUserId,
+      user?.id,
+      (user as any)?._id,
+      (user as any)?.externalId,
+      (user as any)?.supabaseId,
+      typeof window !== 'undefined' ? localStorage.getItem('faceme_user_id') : '',
+      typeof window !== 'undefined' ? localStorage.getItem('facemex_user_id') : '',
+    ]
+      .map((x) => cleanString(x))
+      .filter(Boolean);
+
+    return Array.from(new Set(ids));
+  }, [currentUserId, user]);
+
+  const possibleCurrentNames = useMemo(() => {
+    const names = [
+      storeName,
+      user?.name,
+      (user as any)?.fullName,
+      (user as any)?.full_name,
+      user?.email,
+      typeof window !== 'undefined' ? localStorage.getItem('faceme_user_name') : '',
+      typeof window !== 'undefined' ? localStorage.getItem('facemex_user_name') : '',
+    ]
+      .map((x) => cleanString(x))
+      .filter(Boolean);
+
+    return Array.from(new Set(names));
+  }, [storeName, user]);
+
+  const postUserId = cleanString((post as any).userId || (post as any).authorId || (post as any).user?._id);
+  const displayName = cleanString((post as any).userName) || 'FaceMeX Member';
+  const displayAvatar = cleanString((post as any).userAvatar || (post as any).avatar) || '';
+
+  const isOwner = useMemo(() => {
+    if (postUserId && possibleCurrentIds.includes(postUserId)) return true;
+
+    if (possibleCurrentNames.some((name) => sameText(name, displayName))) {
+      return true;
+    }
+
+    return false;
+  }, [postUserId, possibleCurrentIds, possibleCurrentNames, displayName]);
 
   const collaborators = Array.isArray((post as any).collaborators)
     ? ((post as any).collaborators as any[]).map(String)
@@ -569,24 +593,20 @@ export default function PostCard({ post }: PostCardProps) {
     ? ((post as any).collabInvites as any[]).map(String)
     : [];
 
-  const isCollaborator = !!myId && collaborators.includes(myId);
-  const hasInvite = !!myId && collabInvites.includes(myId);
+  const isCollaborator = possibleCurrentIds.some((id) => collaborators.includes(id));
+  const hasInvite = possibleCurrentIds.some((id) => collabInvites.includes(id));
   const canEdit = isOwner || isCollaborator;
 
-  const displayName = getAuthorName(post);
-  const displayAvatar = getAuthorAvatar(post);
-
-  const isAuthorVerified = getAuthorVerified(
-    post,
-    currentUserId,
-    Boolean(
-      addons?.verified ||
-        (user as any)?.addons?.verified ||
-        (user as any)?.verified ||
-        (user as any)?.userVerified ||
-        (user as any)?.isVerified
-    )
-  );
+  const isAuthorVerified =
+    getPostVerified(post) ||
+    (isOwner &&
+      Boolean(
+        addons?.verified ||
+          user?.addons?.verified ||
+          (user as any)?.verified ||
+          (user as any)?.userVerified ||
+          (user as any)?.isVerified
+      ));
 
   useEffect(() => {
     setPostDraft(post.content);
@@ -619,7 +639,7 @@ export default function PostCard({ post }: PostCardProps) {
     }
   }, [post.id, post]);
 
-  const toggleImagesLocked = () => {
+  const toggleImagesLocked = async () => {
     if (!isOwner) return;
 
     setImagesLocked((prev) => {
@@ -657,6 +677,8 @@ export default function PostCard({ post }: PostCardProps) {
 
   const saveCurrentLightboxImage = () => {
     if (!lightboxSrc) return;
+    if (imagesLocked && !isOwner) return;
+
     saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
   };
 
@@ -672,13 +694,17 @@ export default function PostCard({ post }: PostCardProps) {
 
       localStorage.setItem('facemex:post_action_context', payload);
       localStorage.setItem('facemex:career_workspace_prompt', payload);
+      localStorage.setItem('facemex:cv_builder_prompt', payload);
       sessionStorage.setItem('facemex:post_action_context', payload);
       sessionStorage.setItem('facemex:career_workspace_prompt', payload);
-    } catch {}
+      sessionStorage.setItem('facemex:cv_builder_prompt', payload);
+    } catch {
+      // ignore
+    }
   };
 
   const goCreateCv = () => {
-    const prompt = `Create a CV for this opportunity:\n\n${cleanPostContent}`;
+    const prompt = `Create a professional CV for this opportunity:\n\n${cleanPostContent}`;
 
     storePostActionContext('create-cv', prompt);
 
@@ -723,8 +749,6 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const openLightbox = (items: string[] | string, startIndex = 0) => {
-    if (imagesLocked && !isOwner) return;
-
     const gallery = Array.isArray(items)
       ? items.filter(Boolean)
       : [items].filter(Boolean);
@@ -765,8 +789,6 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const openMediaLightbox = (src: string) => {
-    if (imagesLocked && !isOwner) return;
-
     const imageGallery = mediaItems
       .filter((item) => item.type === 'image')
       .map((item) => item.src);
@@ -1042,18 +1064,6 @@ export default function PostCard({ post }: PostCardProps) {
     }, 0);
   };
 
-  const MediaLockOverlay = () => {
-    if (!imagesLocked || isOwner) return null;
-
-    return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 px-5 text-center text-white">
-        <Lock className="mb-2 h-7 w-7" />
-        <p className="text-sm font-semibold">Images locked</p>
-        <p className="mt-1 text-xs text-white/75">The author protected this media.</p>
-      </div>
-    );
-  };
-
   const renderMediaItem = (item: PostMediaItem, index: number) => {
     if (item.type === 'video') {
       return (
@@ -1063,18 +1073,21 @@ export default function PostCard({ post }: PostCardProps) {
           playsInline
           preload="metadata"
           className="h-full w-full object-contain bg-black"
-          controlsList="nodownload"
-          onContextMenu={(e) => e.preventDefault()}
+          controlsList={imagesLocked && !isOwner ? 'nodownload noplaybackrate' : 'noplaybackrate'}
+          onContextMenu={(e) => {
+            if (imagesLocked && !isOwner) e.preventDefault();
+          }}
         />
       );
     }
 
     return (
-      <img
+      <ProtectedImage
         src={item.src}
         alt={`Post media ${index + 1}`}
-        className={`h-full w-full object-contain bg-white ${imagesLocked && !isOwner ? 'blur-md' : ''}`}
-        loading="lazy"
+        className="h-full w-full object-contain bg-white"
+        locked={imagesLocked && !isOwner}
+        onClick={() => openMediaLightbox(item.src)}
       />
     );
   };
@@ -1094,6 +1107,17 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
+  const LockedBadge = () => {
+    if (!imagesLocked) return null;
+
+    return (
+      <span className="absolute left-3 top-3 z-20 inline-flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur">
+        <Lock className="h-3 w-3" />
+        Locked
+      </span>
+    );
+  };
+
   const renderMediaFrame = () => {
     if (mediaItems.length === 0) return null;
 
@@ -1105,26 +1129,20 @@ export default function PostCard({ post }: PostCardProps) {
       if (item.type === 'video') {
         return (
           <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-            <div className="h-[250px] sm:h-[340px]">{renderMediaItem(item, 0)}</div>
+            <div className="relative h-[250px] sm:h-[340px]">
+              {renderMediaItem(item, 0)}
+              <LockedBadge />
+            </div>
           </div>
         );
       }
 
       return (
         <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => openMediaLightbox(item.src)}
-            className="relative block w-full"
-          >
-            <img
-              src={item.src}
-              alt="Post media"
-              className={`h-[250px] w-full object-contain sm:h-[340px] ${imagesLocked && !isOwner ? 'blur-md' : ''}`}
-              loading="lazy"
-            />
-            <MediaLockOverlay />
-          </button>
+          <div className="relative h-[250px] w-full sm:h-[340px]">
+            {renderMediaItem(item, 0)}
+            <LockedBadge />
+          </div>
         </div>
       );
     }
@@ -1134,26 +1152,21 @@ export default function PostCard({ post }: PostCardProps) {
 
       return (
         <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => openMediaLightbox(firstImage.src)}
-            className="relative block w-full"
-          >
-            <img
+          <div className="relative h-[250px] w-full sm:h-[340px]">
+            <ProtectedImage
               src={firstImage.src}
               alt="Post media preview"
-              className={`h-[250px] w-full object-contain sm:h-[340px] ${imagesLocked && !isOwner ? 'blur-md' : ''}`}
-              loading="lazy"
+              locked={imagesLocked && !isOwner}
+              className="h-[250px] w-full object-contain bg-white sm:h-[340px]"
+              onClick={() => openMediaLightbox(firstImage.src)}
             />
 
-            {!imagesLocked && (
-              <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-                {imageItems.length} images
-              </span>
-            )}
+            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+              {imageItems.length} images
+            </span>
 
-            <MediaLockOverlay />
-          </button>
+            <LockedBadge />
+          </div>
         </div>
       );
     }
@@ -1166,22 +1179,20 @@ export default function PostCard({ post }: PostCardProps) {
             const showMore = index === 3 && extraCount > 0;
 
             return (
-              <button
+              <div
                 key={`${item.src}-${index}`}
-                type="button"
                 className="relative h-full w-full overflow-hidden bg-black"
-                onClick={() => item.type === 'image' && openMediaLightbox(item.src)}
               >
                 {renderMediaItem(item, index)}
 
-                {showMore && !imagesLocked && (
+                {showMore && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
                     +{extraCount}
                   </div>
                 )}
 
-                <MediaLockOverlay />
-              </button>
+                <LockedBadge />
+              </div>
             );
           })}
         </div>
@@ -1241,13 +1252,13 @@ export default function PostCard({ post }: PostCardProps) {
           >
             <div className="relative shrink-0">
               <Avatar className="h-10 w-10">
-                <AvatarImage src={displayAvatar} alt={displayName} />
+                <AvatarImage src={displayAvatar || storeAvatar} alt={displayName} />
                 <AvatarFallback>{displayName ? displayName.charAt(0) : 'U'}</AvatarFallback>
               </Avatar>
 
               {isAuthorVerified && (
-                <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-background ring-2 ring-background">
-                  <CheckCircle className="h-3.5 w-3.5 fill-primary text-primary" />
+                <span className="absolute -bottom-1 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white ring-2 ring-background shadow-sm">
+                  <CheckCircle className="h-3.5 w-3.5" />
                 </span>
               )}
             </div>
@@ -1259,12 +1270,15 @@ export default function PostCard({ post }: PostCardProps) {
                 </p>
 
                 {isAuthorVerified && (
-                  <CheckCircle className="h-3.5 w-3.5 shrink-0 fill-primary text-primary" />
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                    <ShieldCheck className="h-3 w-3" />
+                    Verified
+                  </span>
                 )}
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                {formatDistanceToNow(safeDate(post.timestamp), { addSuffix: true })}
+                {formatDistanceToNow(post.timestamp || post.createdAt || new Date(), { addSuffix: true })}
               </p>
             </div>
           </button>
@@ -1322,7 +1336,7 @@ export default function PostCard({ post }: PostCardProps) {
                     className="text-destructive focus:text-destructive"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
+                    Delete post
                   </DropdownMenuItem>
                 </>
               )}
@@ -1481,12 +1495,25 @@ export default function PostCard({ post }: PostCardProps) {
                     <img
                       src={lightboxSrc}
                       alt={`Image ${lightboxIndex + 1}`}
+                      draggable={!(imagesLocked && !isOwner)}
+                      onContextMenu={(e) => {
+                        if (imagesLocked && !isOwner) e.preventDefault();
+                      }}
                       className="max-h-full max-w-full object-contain transition-transform duration-200"
                       style={{
                         transform: `scale(${lightboxZoom})`,
                         transformOrigin: 'center center',
-                      }}
+                        WebkitTouchCallout: imagesLocked && !isOwner ? 'none' : undefined,
+                        WebkitUserSelect: imagesLocked && !isOwner ? 'none' : undefined,
+                        userSelect: imagesLocked && !isOwner ? 'none' : undefined,
+                      } as CSSProperties}
                     />
+                  )}
+
+                  {imagesLocked && !isOwner && (
+                    <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold text-white backdrop-blur">
+                      Downloads locked by author
+                    </div>
                   )}
 
                   {lightboxItems.length > 1 && (
@@ -1533,15 +1560,17 @@ export default function PostCard({ post }: PostCardProps) {
                     Zoom
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={saveCurrentLightboxImage}
-                    disabled={!lightboxSrc}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
-                  >
-                    <Download className="h-4 w-4" />
-                    Save
-                  </button>
+                  {(!imagesLocked || isOwner) && (
+                    <button
+                      type="button"
+                      onClick={saveCurrentLightboxImage}
+                      disabled={!lightboxSrc}
+                      className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
+                    >
+                      <Download className="h-4 w-4" />
+                      Save
+                    </button>
+                  )}
                 </div>
               </div>
             </DialogContent>
@@ -1707,9 +1736,17 @@ export default function PostCard({ post }: PostCardProps) {
                 exit={{ opacity: 0, height: 0 }}
                 className="w-full space-y-3 border-t border-border/60 pt-3"
               >
-                {(post.comments || []).map((comment) => {
+                {(post.comments || []).map((comment: any) => {
                   const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const canDeleteComment = String(comment.userId || '') === myId || isOwner;
+
+                  const commentUserId = cleanString(comment.userId || comment.authorId || comment.user?._id);
+                  const commentUserName = cleanString(comment.userName || comment.name);
+
+                  const isCommentOwner =
+                    (commentUserId && possibleCurrentIds.includes(commentUserId)) ||
+                    possibleCurrentNames.some((name) => sameText(name, commentUserName));
+
+                  const canDeleteComment = isOwner || isCommentOwner;
 
                   return (
                     <motion.div
@@ -1719,20 +1756,20 @@ export default function PostCard({ post }: PostCardProps) {
                       className="flex gap-2"
                     >
                       <Avatar className="h-7 w-7">
-                        <AvatarImage src={comment.userAvatar} alt={comment.userName} />
+                        <AvatarImage src={comment.userAvatar || comment.avatar} alt={commentUserName} />
                         <AvatarFallback>
-                          {comment.userName ? comment.userName.charAt(0) : 'U'}
+                          {commentUserName ? commentUserName.charAt(0) : 'U'}
                         </AvatarFallback>
                       </Avatar>
 
                       <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
                         <div className="flex items-baseline gap-2">
                           <p className="text-sm font-medium text-foreground">
-                            {comment.userName}
+                            {commentUserName || 'FaceMeX Member'}
                           </p>
 
                           <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(safeDate(comment.timestamp), { addSuffix: true })}
+                            {formatDistanceToNow(comment.timestamp || comment.createdAt || new Date(), { addSuffix: true })}
                           </span>
                         </div>
 
@@ -1760,7 +1797,7 @@ export default function PostCard({ post }: PostCardProps) {
                             </div>
                           ) : (
                             <p className="break-words">
-                              {comment.content.replace(
+                              {String(comment.content || comment.text || '').replace(
                                 /\[(REAL_LIFE|PRO COLLAB|PRO COLLAB INVITE|CREATOR_CONTENT)\s*/g,
                                 ''
                               )}
@@ -1771,7 +1808,7 @@ export default function PostCard({ post }: PostCardProps) {
                         <div className="mt-2 flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => handleReplyToComment(comment.userName)}
+                            onClick={() => handleReplyToComment(commentUserName)}
                             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                           >
                             <MessageCircle className="h-3 w-3" />
