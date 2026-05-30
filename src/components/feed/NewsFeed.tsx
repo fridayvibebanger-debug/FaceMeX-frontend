@@ -6,6 +6,7 @@ import PostCard from './PostCard';
 import MarketplaceAdSlide from '@/components/feed/MarketplaceAdSlide';
 import CreatePostModal from './CreatePostModal';
 import { usePostStore } from '@/store/postStore';
+import { motion } from 'framer-motion';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,18 +39,16 @@ type FeedFilter = 'ai-curated' | 'recent' | 'trending';
 
 const STORAGE_KEY_PROMOTIONS = 'faceme_business_promotions_v1';
 
-function safePostTime(post: any) {
-  const raw =
-    post?.timestamp ||
-    post?.createdAt ||
-    post?.created_at ||
-    Date.now();
-
+function getPostTime(post: any) {
+  const raw = post?.timestamp || post?.createdAt || post?.created_at || Date.now();
   const date = raw instanceof Date ? raw : new Date(raw);
-
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
+/*
+  ORIGINAL SLIDE FEED KEPT.
+  I did not change this to horizontal manual scroll.
+*/
 function BusinessPromotionsStrip() {
   const [items, setItems] = useState<BusinessPromotion[]>([]);
   const [loadingPromos, setLoadingPromos] = useState(true);
@@ -112,7 +111,9 @@ function BusinessPromotionsStrip() {
         if (!cancelled) setItems([]);
       }
 
-      if (!cancelled) setLoadingPromos(false);
+      if (!cancelled) {
+        setLoadingPromos(false);
+      }
     }
 
     loadFeedPromotions();
@@ -125,14 +126,12 @@ function BusinessPromotionsStrip() {
   const displayItems = useMemo(() => {
     const now = Date.now();
 
-    return items.filter((promotion) => {
+    return items.filter((p) => {
       const until =
-        typeof promotion.monthlyPaidUntil === 'number'
-          ? promotion.monthlyPaidUntil
-          : promotion.endAt;
+        typeof p.monthlyPaidUntil === 'number' ? p.monthlyPaidUntil : p.endAt;
 
       if (!until) return true;
-      if (promotion.startAt && now < promotion.startAt) return false;
+      if (p.startAt && now < p.startAt) return false;
 
       return now <= until;
     });
@@ -141,57 +140,77 @@ function BusinessPromotionsStrip() {
   if (loadingPromos || displayItems.length === 0) return null;
 
   return (
-    <div className="mb-3 sm:mb-4">
-      <div className="mb-2 flex items-center justify-between px-1">
-        <span className="text-xs font-semibold sm:text-sm">Sponsored</span>
-        <span className="text-[10px] text-muted-foreground sm:text-[11px]">
-          Feed promotions
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2 px-1">
+        <span className="text-sm font-semibold">Sponsored</span>
+        <span className="text-[11px] text-muted-foreground">
+          Businesses on the feed slide
         </span>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card px-2 py-2 shadow-sm sm:px-3">
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-3 [&::-webkit-scrollbar]:hidden">
-          {displayItems.map((item) => (
-            <div
-              key={item.id}
-              className="flex min-w-[220px] items-center gap-2 rounded-xl border border-border/70 bg-background px-2.5 py-2 shadow-sm sm:min-w-[260px] sm:gap-3 sm:px-3"
-            >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted sm:h-12 sm:w-12">
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.businessName}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-xs font-bold text-white">
-                    {item.businessName.charAt(0)}
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/90 px-3 py-2">
+        <div className="relative h-24 sm:h-28">
+          <motion.div
+            className="absolute inset-y-0 left-0 flex items-center gap-3 pr-8"
+            initial={{ x: '0%' }}
+            animate={{ x: ['0%', '-50%'] }}
+            transition={{
+              duration: Math.max(30, displayItems.length * 8),
+              repeat: Infinity,
+              ease: 'linear',
+            }}
+          >
+            {[...displayItems, ...displayItems].map((item, index) => (
+              <div
+                key={`${item.id}-${index}`}
+                className="flex items-center gap-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/90 dark:bg-slate-900/90 px-3 py-2 min-w-[240px] shadow-sm"
+              >
+                <div className="h-12 w-12 rounded-lg bg-slate-200/80 dark:bg-slate-800/80 overflow-hidden flex items-center justify-center">
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.businessName}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 flex items-center justify-center text-white text-xs font-bold">
+                      {item.businessName.charAt(0)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold truncate">
+                    {item.headline}
                   </div>
+                  <div className="text-[11px] text-muted-foreground truncate">
+                    {item.businessName}
+                  </div>
+                </div>
+
+                {item.ctaLabel && item.ctaUrl && (
+                  <a
+                    href={item.ctaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] px-2 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300 whitespace-nowrap"
+                  >
+                    {item.ctaLabel}
+                  </a>
                 )}
               </div>
+            ))}
+          </motion.div>
 
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-semibold sm:text-sm">
-                  {item.headline}
-                </div>
-                <div className="truncate text-[11px] text-muted-foreground">
-                  {item.businessName}
-                </div>
-              </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent" />
 
-              {item.ctaLabel && item.ctaUrl && (
-                <a
-                  href={item.ctaUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary sm:text-[11px]"
-                >
-                  {item.ctaLabel}
-                </a>
-              )}
-            </div>
-          ))}
+          <motion.div
+            className="pointer-events-none absolute top-2 bottom-2 right-4 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
+            initial={{ opacity: 0.4, y: 0 }}
+            animate={{ opacity: [0.2, 0.8, 0.2], y: [0, 4, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          />
         </div>
       </div>
     </div>
@@ -216,7 +235,7 @@ export default function NewsFeed() {
   const navigate = useNavigate();
 
   const latestKnownPostIdRef = useRef<string | null>(null);
-  const didInitialLoadRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
 
   const [hiddenNewPostIds, setHiddenNewPostIds] = useState<Set<string>>(
     () => new Set()
@@ -247,26 +266,30 @@ export default function NewsFeed() {
     }
   }, [location.search, mode, setMode]);
 
+  /*
+    Stable first load only.
+    This prevents the feed from blinking when scrolling.
+  */
   useEffect(() => {
-    if (didInitialLoadRef.current) return;
+    if (hasLoadedOnceRef.current) return;
 
-    didInitialLoadRef.current = true;
+    hasLoadedOnceRef.current = true;
 
     let cancelled = false;
 
-    async function runInitialLoad() {
+    async function runLoad() {
       if (posts.length === 0) setLoading(true);
 
       try {
         await loadPosts();
       } catch (error) {
-        console.log('NewsFeed initial load failed:', error);
+        console.log('Initial feed load failed:', error);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    runInitialLoad();
+    runLoad();
 
     return () => {
       cancelled = true;
@@ -283,6 +306,11 @@ export default function NewsFeed() {
     }
   }, [posts, newPostsAvailable]);
 
+  /*
+    New post banner only.
+    It does NOT reload the list automatically.
+    This avoids blinking while scrolling.
+  */
   useEffect(() => {
     let cancelled = false;
     let pollTimer: number | null = null;
@@ -307,7 +335,7 @@ export default function NewsFeed() {
     setInitialLatestPost();
 
     const channel = supabase
-      .channel('facemex-new-post-banner-stable-mobile')
+      .channel('facemex-new-post-banner-phone-fit')
       .on(
         'postgres_changes',
         {
@@ -377,7 +405,9 @@ export default function NewsFeed() {
     return () => {
       cancelled = true;
 
-      if (pollTimer) window.clearInterval(pollTimer);
+      if (pollTimer) {
+        window.clearInterval(pollTimer);
+      }
 
       supabase.removeChannel(channel);
     };
@@ -388,19 +418,19 @@ export default function NewsFeed() {
 
     if (mode) {
       filtered = filtered.filter(
-        (post: any) =>
-          (post.mode === 'professional' ? 'professional' : 'social') === mode
+        (p: any) =>
+          (p.mode === 'professional' ? 'professional' : 'social') === mode
       );
     }
 
     if (activeSkill) {
       const cleanSkill = activeSkill.toLowerCase();
 
-      filtered = filtered.filter((post: any) => {
-        const content = String(post.content || '').toLowerCase();
+      filtered = filtered.filter((p: any) => {
+        const content = String(p.content || '').toLowerCase();
 
-        const tags = Array.isArray(post.hashtags)
-          ? post.hashtags.map((tag: string) => tag.toLowerCase())
+        const tags = Array.isArray(p.hashtags)
+          ? p.hashtags.map((tag: string) => tag.toLowerCase())
           : [];
 
         return (
@@ -411,19 +441,19 @@ export default function NewsFeed() {
       });
     }
 
-    filtered = filtered.filter((post) => !hiddenNewPostIds.has(post.id));
+    filtered = filtered.filter((p) => !hiddenNewPostIds.has(p.id));
 
     switch (filter) {
       case 'ai-curated':
         filtered.sort((a, b) => {
-          const bScore = b.aiScore || safePostTime(b);
-          const aScore = a.aiScore || safePostTime(a);
+          const bScore = b.aiScore || getPostTime(b);
+          const aScore = a.aiScore || getPostTime(a);
           return bScore - aScore;
         });
         break;
 
       case 'recent':
-        filtered.sort((a, b) => safePostTime(b) - safePostTime(a));
+        filtered.sort((a, b) => getPostTime(b) - getPostTime(a));
         break;
 
       case 'trending':
@@ -457,14 +487,14 @@ export default function NewsFeed() {
       });
     };
 
-    const observer = new IntersectionObserver(onIntersect, {
-      rootMargin: '300px',
+    const io = new IntersectionObserver(onIntersect, {
+      rootMargin: '280px',
       threshold: 0.01,
     });
 
-    observer.observe(observerNode);
+    io.observe(observerNode);
 
-    return () => observer.disconnect();
+    return () => io.disconnect();
   }, [observerNode, displayPosts.length]);
 
   const loadNewPosts = async () => {
@@ -510,11 +540,11 @@ export default function NewsFeed() {
           const users = Array.isArray(data.users) ? data.users : [];
 
           setPeopleForSkill(
-            users.map((user: any) => ({
-              id: String(user.id),
-              name: user.name,
-              avatar: user.avatar,
-              openToCollab: !!user.professional?.openToCollab,
+            users.map((u: any) => ({
+              id: String(u.id),
+              name: u.name,
+              avatar: u.avatar,
+              openToCollab: !!u.professional?.openToCollab,
             }))
           );
         }
@@ -541,10 +571,10 @@ export default function NewsFeed() {
           const users = Array.isArray(data.users) ? data.users : [];
 
           setOpenToCollabUsers(
-            users.map((user: any) => ({
-              id: String(user.id),
-              name: user.name,
-              avatar: user.avatar,
+            users.map((u: any) => ({
+              id: String(u.id),
+              name: u.name,
+              avatar: u.avatar,
               openToCollab: true,
             }))
           );
@@ -562,12 +592,12 @@ export default function NewsFeed() {
   }, []);
 
   return (
-    <div className="relative mx-auto w-full max-w-3xl space-y-3 px-2 py-3 pb-24 sm:space-y-4 sm:px-4 sm:py-5 md:space-y-6 md:px-6 md:py-8">
+    <div className="relative mx-auto w-full max-w-[430px] space-y-4 px-2 py-3 pb-24">
       {newPostsAvailable && (
-        <div className="sticky top-16 z-20 px-1">
+        <div className="sticky top-14 z-20">
           <Button
             onClick={loadNewPosts}
-            className="h-9 w-full rounded-full text-xs font-semibold shadow-sm"
+            className="h-9 w-full rounded-full text-xs font-medium"
           >
             New posts available. Refresh
           </Button>
@@ -577,9 +607,9 @@ export default function NewsFeed() {
       <button
         type="button"
         onClick={() => setIsCreateModalOpen(true)}
-        className="w-full rounded-2xl border border-border/70 bg-card px-4 py-3 text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-ring sm:px-5 sm:py-4"
+        className="w-full text-left rounded-2xl border bg-card px-4 py-4 focus:outline-none focus:ring-2 focus:ring-ring"
       >
-        <div className="text-sm text-muted-foreground sm:text-base">
+        <div className="text-sm text-muted-foreground">
           Write a post, ask for ideas, or plan your next move…
         </div>
       </button>
@@ -588,39 +618,39 @@ export default function NewsFeed() {
 
       <BusinessPromotionsStrip />
 
-      <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-card p-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-3">
+      <div className="flex flex-col gap-2 rounded-2xl border bg-card p-2.5">
         <div className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 shrink-0 rounded-full text-xs">
-                <Filter className="mr-2 h-3.5 w-3.5" />
+                <Filter className="h-3.5 w-3.5 mr-2" />
                 {filter === 'ai-curated' && 'AI Curated'}
                 {filter === 'recent' && 'Recent'}
                 {filter === 'trending' && 'Trending'}
               </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="start" className="rounded-2xl">
+            <DropdownMenuContent align="start">
               <DropdownMenuItem onClick={() => setFilter('ai-curated')}>
-                <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
+                <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
                 AI Curated
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => setFilter('recent')}>
-                <Clock className="mr-2 h-4 w-4 text-blue-500" />
+                <Clock className="h-4 w-4 mr-2 text-blue-500" />
                 Recent
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => setFilter('trending')}>
-                <TrendingUp className="mr-2 h-4 w-4 text-orange-500" />
+                <TrendingUp className="h-4 w-4 mr-2 text-orange-500" />
                 Trending
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           {filter === 'ai-curated' && (
-            <Badge variant="secondary" className="h-8 shrink-0 rounded-full px-3 text-[11px]">
-              <Sparkles className="mr-1 h-3 w-3" />
+            <Badge variant="secondary" className="h-8 shrink-0 rounded-full text-[11px]">
+              <Sparkles className="h-3 w-3 mr-1" />
               For you
             </Badge>
           )}
@@ -631,23 +661,15 @@ export default function NewsFeed() {
             value={skillQuery}
             onChange={(event) => setSkillQuery(event.target.value)}
             placeholder="Search skill or #tag"
-            className="h-9 w-full rounded-full border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-60"
+            className="h-9 w-full rounded-full border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
         )}
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-border/70 bg-card p-3 shadow-sm sm:p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">Trending Now</span>
-          </div>
-
-          {trendingHashtags.length > 0 && (
-            <span className="text-[11px] text-muted-foreground">
-              {trendingHashtags.length} tags
-            </span>
-          )}
+      <div className="p-3 rounded-2xl border bg-card space-y-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold">Trending Now</span>
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -655,7 +677,7 @@ export default function NewsFeed() {
             <Badge
               key={tag}
               variant="secondary"
-              className="shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="shrink-0 cursor-pointer rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
               onClick={() => {
                 const params = new URLSearchParams(location.search);
                 params.set('skill', tag);
@@ -684,12 +706,11 @@ export default function NewsFeed() {
         </div>
 
         {openToCollabUsers.length > 0 && (
-          <div className="space-y-2 border-t border-border/70 pt-3">
+          <div className="border-t pt-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">
                 Open to collaborate
               </span>
-
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 {openToCollabUsers.length} profile
                 {openToCollabUsers.length === 1 ? '' : 's'}
@@ -697,31 +718,31 @@ export default function NewsFeed() {
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {openToCollabUsers.slice(0, 8).map((person) => (
+              {openToCollabUsers.slice(0, 6).map((p) => (
                 <button
-                  key={person.id}
+                  key={p.id}
                   type="button"
-                  className="flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-background px-2 py-1 text-xs hover:bg-accent/40"
+                  className="flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
                   onClick={() => navigate('/profile')}
                 >
-                  <div className="h-6 w-6 overflow-hidden rounded-full bg-muted">
-                    {person.avatar ? (
+                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
+                    {p.avatar ? (
                       <img
-                        src={person.avatar}
-                        alt={person.name}
+                        src={p.avatar}
+                        alt={p.name}
                         className="h-full w-full object-cover"
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
-                        {person.name?.charAt(0) || '?'}
+                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
+                        {p.name?.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
 
-                  <span className="max-w-[110px] truncate">{person.name}</span>
+                  <span className="max-w-[110px] truncate">{p.name}</span>
 
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
                     Open
                   </span>
                 </button>
@@ -731,7 +752,7 @@ export default function NewsFeed() {
         )}
 
         {activeSkill && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3 text-xs sm:text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-xs">
             <div className="flex items-center gap-2">
               <span className="font-medium">Filtered by:</span>
               <Badge variant="outline" className="rounded-full">
@@ -742,7 +763,7 @@ export default function NewsFeed() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 rounded-full px-3 text-xs"
+              className="h-8 px-3 text-xs rounded-full"
               onClick={() => {
                 const params = new URLSearchParams(location.search);
                 params.delete('skill');
@@ -761,16 +782,16 @@ export default function NewsFeed() {
         )}
 
         {activeSkill && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/40 px-3 py-2 text-[11px] sm:text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] bg-muted/40 rounded-2xl px-3 py-2">
             <span className="text-muted-foreground">
               Explore how creators are using{' '}
-              <span className="font-semibold">#{activeSkill}</span>.
+              <span className="font-semibold">#{activeSkill}</span> in social mode.
             </span>
 
             <Button
               variant="outline"
               size="sm"
-              className="h-8 rounded-full px-3 text-[11px]"
+              className="h-8 px-3 text-[11px] rounded-full"
               onClick={() => {
                 const params = new URLSearchParams(location.search);
                 params.set('skill', activeSkill);
@@ -790,12 +811,11 @@ export default function NewsFeed() {
         )}
 
         {activeSkill && peopleForSkill.length > 0 && (
-          <div className="space-y-2 border-t border-border/70 pt-3">
+          <div className="border-t pt-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">
                 People with this skill
               </span>
-
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 {peopleForSkill.length} profile
                 {peopleForSkill.length === 1 ? '' : 's'}
@@ -803,32 +823,32 @@ export default function NewsFeed() {
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {peopleForSkill.slice(0, 8).map((person) => (
+              {peopleForSkill.slice(0, 6).map((p) => (
                 <button
-                  key={person.id}
+                  key={p.id}
                   type="button"
-                  className="flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-background px-2 py-1 text-xs hover:bg-accent/40"
+                  className="flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
                   onClick={() => navigate('/profile')}
                 >
-                  <div className="h-6 w-6 overflow-hidden rounded-full bg-muted">
-                    {person.avatar ? (
+                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
+                    {p.avatar ? (
                       <img
-                        src={person.avatar}
-                        alt={person.name}
+                        src={p.avatar}
+                        alt={p.name}
                         className="h-full w-full object-cover"
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
-                        {person.name?.charAt(0) || '?'}
+                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
+                        {p.name?.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
 
-                  <span className="max-w-[120px] truncate">{person.name}</span>
+                  <span className="max-w-[110px] truncate">{p.name}</span>
 
-                  {person.openToCollab && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+                  {p.openToCollab && (
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
                       Open
                     </span>
                   )}
@@ -840,27 +860,26 @@ export default function NewsFeed() {
       </div>
 
       {loading && posts.length === 0 ? (
-        <div className="space-y-3 sm:space-y-4">
+        <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={index}
-              className="space-y-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
+              className="p-4 rounded-2xl border bg-card animate-pulse space-y-3"
             >
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
-                <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+                <div className="h-10 w-10 rounded-full bg-muted" />
+                <div className="h-4 w-40 bg-muted rounded" />
               </div>
 
-              <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
-              <div className="h-48 w-full animate-pulse rounded-2xl bg-muted" />
+              <div className="h-4 w-3/4 bg-muted rounded" />
+              <div className="h-48 w-full bg-muted rounded" />
             </div>
           ))}
         </div>
       ) : displayPosts.length === 0 ? (
-        <div className="rounded-2xl border border-border/70 bg-card p-8 text-center shadow-sm">
-          <div className="mb-2 text-lg font-semibold">No posts yet</div>
-
-          <div className="mb-4 text-sm text-muted-foreground">
+        <div className="p-8 text-center rounded-2xl border bg-card">
+          <div className="text-lg font-semibold mb-2">No posts yet</div>
+          <div className="text-sm text-muted-foreground mb-4">
             Be the first to share something.
           </div>
 
@@ -869,18 +888,18 @@ export default function NewsFeed() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-3 sm:space-y-4">
+        <div className="space-y-4">
           {displayPosts.slice(0, visibleCount).map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
 
           {visibleCount < displayPosts.length && (
-            <div className="flex flex-col items-center gap-3 py-2">
+            <div className="flex flex-col items-center gap-3">
               <div ref={setObserverNode} className="h-1 w-full" />
 
               <Button
                 variant="outline"
-                className="h-9 rounded-full px-5 text-xs font-semibold"
+                className="rounded-full"
                 onClick={() =>
                   setVisibleCount((count) =>
                     Math.min(count + 5, displayPosts.length)
