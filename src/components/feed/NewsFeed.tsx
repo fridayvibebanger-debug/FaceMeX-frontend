@@ -149,68 +149,48 @@ function BusinessPromotionsStrip() {
       </div>
 
       <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2 dark:border-slate-800/70 dark:bg-slate-900/90">
-        <div className="relative h-24 sm:h-28">
-          <motion.div
-            className="absolute inset-y-0 left-0 flex items-center gap-3 pr-8"
-            initial={{ x: '0%' }}
-            animate={{ x: ['0%', '-50%'] }}
-            transition={{
-              duration: Math.max(30, displayItems.length * 8),
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-          >
-            {[...displayItems, ...displayItems].map((item, index) => (
-              <div
-                key={`${item.id}-${index}`}
-                className="flex min-w-[240px] items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/90"
-              >
-                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-slate-200/80 dark:bg-slate-800/80">
-                  {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.businessName}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 text-xs font-bold text-white">
-                      {item.businessName.charAt(0)}
-                    </div>
-                  )}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-semibold">
-                    {item.headline}
+        <div className="flex gap-3 overflow-x-auto py-1">
+          {displayItems.map((item) => (
+            <div
+              key={item.id}
+              className="flex min-w-[240px] items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/90"
+            >
+              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-slate-200/80 dark:bg-slate-800/80">
+                {item.imageUrl ? (
+                  <img
+                    src={item.imageUrl}
+                    alt={item.businessName}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 text-xs font-bold text-white">
+                    {item.businessName.charAt(0)}
                   </div>
-                  <div className="truncate text-[11px] text-muted-foreground">
-                    {item.businessName}
-                  </div>
-                </div>
-
-                {item.ctaLabel && item.ctaUrl && (
-                  <a
-                    href={item.ctaUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="whitespace-nowrap rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-600 dark:text-blue-300"
-                  >
-                    {item.ctaLabel}
-                  </a>
                 )}
               </div>
-            ))}
-          </motion.div>
 
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-semibold">
+                  {item.headline}
+                </div>
+                <div className="truncate text-[11px] text-muted-foreground">
+                  {item.businessName}
+                </div>
+              </div>
 
-          <motion.div
-            className="pointer-events-none absolute bottom-2 right-4 top-2 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
-            initial={{ opacity: 0.4, y: 0 }}
-            animate={{ opacity: [0.2, 0.8, 0.2], y: [0, 4, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          />
+              {item.ctaLabel && item.ctaUrl && (
+                <a
+                  href={item.ctaUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="whitespace-nowrap rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-600 dark:text-blue-300"
+                >
+                  {item.ctaLabel}
+                </a>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
