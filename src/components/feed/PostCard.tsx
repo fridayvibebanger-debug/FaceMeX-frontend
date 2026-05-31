@@ -525,7 +525,7 @@ function DocumentPreview({
         <button
           type="button"
           onClick={() => onOpenPages(document.pages, 0)}
-          className="relative block w-full bg-muted/30"
+          className="relative block w-full bg-white"
           onContextMenu={(e) => {
             if (downloadsLocked) e.preventDefault();
           }}
@@ -533,7 +533,7 @@ function DocumentPreview({
           <img
             src={firstPage}
             alt={`${document.title} preview`}
-            className="h-[250px] w-full object-contain bg-muted/30 sm:h-[340px]"
+            className="h-[250px] w-full object-contain sm:h-[340px]"
             loading="lazy"
             draggable={!downloadsLocked}
           />
@@ -710,15 +710,7 @@ export default function PostCard({ post }: PostCardProps) {
     } catch {
       setDownloadsLocked(false);
     }
-  }, [
-    post.id,
-    (post as any).downloadsLocked,
-    (post as any).downloads_locked,
-    (post as any).imagesLocked,
-    (post as any).images_locked,
-    (post as any).mediaLocked,
-    (post as any).media_locked,
-  ]);
+  }, [post.id, post]);
 
   const toggleDownloadsLocked = () => {
     if (!isOwner) return;
@@ -1162,7 +1154,7 @@ export default function PostCard({ post }: PostCardProps) {
       <img
         src={item.src}
         alt={`Post media ${index + 1}`}
-        className="h-full w-full object-contain bg-muted/30"
+        className="h-full w-full object-contain bg-white"
         loading="lazy"
         draggable={!downloadsLocked}
         onContextMenu={(e) => {
@@ -1192,7 +1184,7 @@ export default function PostCard({ post }: PostCardProps) {
       }
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-muted/30 shadow-sm">
+        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
           <button
             type="button"
             onClick={() => openMediaLightbox(item.src)}
@@ -1204,7 +1196,7 @@ export default function PostCard({ post }: PostCardProps) {
             <img
               src={item.src}
               alt="Post media"
-              className="h-[250px] w-full object-contain bg-muted/30 sm:h-[340px]"
+              className="h-[250px] w-full object-contain sm:h-[340px]"
               loading="lazy"
               draggable={!downloadsLocked}
             />
@@ -1219,7 +1211,7 @@ export default function PostCard({ post }: PostCardProps) {
       const imageCount = imageItems.length;
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-muted/30 shadow-sm">
+        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
           <button
             type="button"
             onClick={() => openMediaLightbox(firstImage.src)}
@@ -1231,7 +1223,7 @@ export default function PostCard({ post }: PostCardProps) {
             <img
               src={firstImage.src}
               alt="Post media preview"
-              className="h-[250px] w-full object-contain bg-muted/30 sm:h-[340px]"
+              className="h-[250px] w-full object-contain sm:h-[340px]"
               loading="lazy"
               draggable={!downloadsLocked}
             />
@@ -1285,7 +1277,13 @@ export default function PostCard({ post }: PostCardProps) {
   const commentCount = post.comments?.length || 0;
 
   const reactionType = post.isLiked
-    ? ((post.reaction || 'like') as 'love' | 'like' | 'haha' | 'wow' | 'sad' | 'angry')
+    ? ((post.reaction || 'like') as
+        | 'love'
+        | 'like'
+        | 'haha'
+        | 'wow'
+        | 'sad'
+        | 'angry')
     : undefined;
 
   const reactionClass = (() => {
@@ -1314,7 +1312,11 @@ export default function PostCard({ post }: PostCardProps) {
     'ml-1.5 text-[11px] font-semibold text-muted-foreground tabular-nums';
 
   return (
-    <div className="transform-gpu">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+    >
       <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_8px_26px_rgba(15,23,42,0.06)]">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
           <button
@@ -1911,6 +1913,6 @@ export default function PostCard({ post }: PostCardProps) {
           </AnimatePresence>
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   );
 }
