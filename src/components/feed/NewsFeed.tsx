@@ -901,16 +901,9 @@ export default function NewsFeed() {
       ) : (
         <div className="space-y-4">
           {displayPosts.slice(0, visibleCount).map((post) => (
-            <motion.div
-              key={post.id}
-              layout="position"
-              initial={false}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-              className="will-change-transform"
-            >
+            <div key={post.id}>
               <StablePostCard post={post} />
-            </motion.div>
+            </div>
           ))}
 
           {visibleCount < displayPosts.length && (
