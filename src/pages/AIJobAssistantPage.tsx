@@ -92,10 +92,10 @@ type ApplyPreview = {
 };
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
-  career_plan: 'Saved career plan',
-  cv_advice: 'Saved CV advice',
-  application_message: 'Saved application message',
-  research: 'Saved research',
+  career_plan: 'Saved Career Plan',
+  cv_advice: 'Saved CV Advice',
+  application_message: 'Saved Application Message',
+  research: 'Saved Research',
 };
 
 function clean(value: string) {
@@ -888,7 +888,7 @@ export default function AIJobAssistantPage() {
     setRadarCards(links);
     setActiveCard(0);
 
-    toast({ title: 'Radar refreshed', description: 'Opportunity sources updated.' });
+    toast({ title: 'Jobs matched', description: 'Opportunity sources updated.' });
   };
 
   const saveReminders = (next: Reminder[]) => {
@@ -924,7 +924,7 @@ export default function AIJobAssistantPage() {
         setGeoLabel(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
         setLocation(location || 'near me');
 
-        toast({ title: 'Nearby enabled', description: 'Radar will prioritize your area.' });
+        toast({ title: 'Nearby enabled', description: 'FaceMeX will prioritize your area.' });
         setGeoBusy(false);
       },
       () => {
@@ -1237,7 +1237,7 @@ export default function AIJobAssistantPage() {
       },
     ]);
 
-    toast({ title: 'Saved application message', description: 'Saved in your workspace.' });
+    toast({ title: 'Saved Application Message', description: 'Saved in your workspace.' });
   };
 
   const saveMessageAs = (id: string, category: SavedCategory) => {
@@ -1376,14 +1376,14 @@ export default function AIJobAssistantPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Search className="h-4 w-4" />
-                  Opportunity profile
+                  Tell FaceMeX what work you want
                 </CardTitle>
               </CardHeader>
 
               <CardContent className="space-y-3">
-                <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Role, skill, or opportunity" className={premiumInput} />
-                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location e.g. Tzaneen" className={premiumInput} />
-                <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Industry e.g. retail, tech, admin" className={premiumInput} />
+                <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Job, skill, or opportunity" className={premiumInput} />
+                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Where do you want to work? e.g. Tzaneen" className={premiumInput} />
+                <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Industry or field e.g. retail, tech, admin" className={premiumInput} />
 
                 <select value={workMode} onChange={(e) => setWorkMode(e.target.value)} className={premiumSelect}>
                   <option value="">Any work mode</option>
@@ -1421,7 +1421,7 @@ export default function AIJobAssistantPage() {
 
                 <Button onClick={refreshSources} className="h-11 w-full rounded-2xl bg-slate-950 text-white dark:bg-white dark:text-black">
                   <RefreshCcw className="mr-2 h-4 w-4" />
-                  Refresh radar
+                  Find matching jobs
                 </Button>
               </CardContent>
             </Card>
@@ -1435,6 +1435,10 @@ export default function AIJobAssistantPage() {
               </CardHeader>
 
               <CardContent className="space-y-3">
+                <p className="text-xs leading-relaxed text-slate-500 dark:text-white/50">
+                  Search trusted job sources faster from one place.
+                </p>
+
                 {activeRadarCard && (
                   <a href={activeRadarCard.url} target="_blank" rel="noreferrer" className="block rounded-[24px] border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.06]">
                     <div className="flex gap-3">
@@ -1521,7 +1525,14 @@ export default function AIJobAssistantPage() {
                           disabled={applyBusy}
                           onClick={() => generateApplyContent('email', template.purpose)}
                         >
-                          {applyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          {applyBusy ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Sparkles className="mr-1 h-4 w-4" />
+                              <span className="text-xs">AI</span>
+                            </>
+                          )}
                         </Button>
                       </div>
                     ))}
@@ -1556,7 +1567,14 @@ export default function AIJobAssistantPage() {
                           disabled={applyBusy}
                           onClick={() => generateApplyContent('message', template.purpose)}
                         >
-                          {applyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          {applyBusy ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Sparkles className="mr-1 h-4 w-4" />
+                              <span className="text-xs">AI</span>
+                            </>
+                          )}
                         </Button>
                       </div>
                     ))}
@@ -1751,10 +1769,11 @@ export default function AIJobAssistantPage() {
         <button
           type="button"
           onClick={() => setWorkspaceOpen(true)}
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] right-3 z-40 rounded-full bg-slate-950 px-4 py-3 text-sm font-medium text-white shadow-[0_14px_40px_rgba(15,23,42,0.25)] dark:bg-white dark:text-black"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] right-3 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-sm font-medium text-white shadow-[0_14px_40px_rgba(15,23,42,0.25)] dark:bg-white dark:text-black sm:w-auto sm:px-4"
+          aria-label="Open FaceMeX Career Workspace"
         >
-          <MessageCircle className="mr-2 inline h-4 w-4" />
-          Ask
+          <MessageCircle className="h-5 w-5 sm:mr-2 sm:h-4 sm:w-4" />
+          <span className="hidden sm:inline">Ask</span>
         </button>
       )}
 
