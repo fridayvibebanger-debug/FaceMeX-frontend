@@ -1,55 +1,43 @@
-import { io, Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
+
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_BACKEND_URL ||
+  'https://YOUR-RENDER-BACKEND.onrender.com';
 
 let socket: Socket | null = null;
 
-function getSocketUrl() {
-  const directSocketUrl = import.meta.env.VITE_SOCKET_URL;
-  const apiUrl = import.meta.env.VITE_API_URL;
-
-  if (directSocketUrl) {
-    return String(directSocketUrl).replace(/\/$/, '');
-  }
-
-  if (apiUrl) {
-    return String(apiUrl)
-      .replace(/\/api\/?$/, '')
-      .replace(/\/$/, '');
-  }
-
-  return 'http://localhost:4000';
-}
-
 export function getSocket() {
-  if (socket) return socket;
+  if (!socket) {
+    socket = io(API_URL, {
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
 
-  socket = io(getSocketUrl(), {
-    transports: ['websocket', 'polling'],
-    withCredentials: true,
-    autoConnect: true,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 800,
-    reconnectionDelayMax: 4000,
-    timeout: 20000,
-  });
+    socket.on('connect', () => {
+      console.log('✅ FaceMeX socket connected:', socket?.id);
+    });
 
-  socket.on('connect', () => {
-    console.log('✅ FaceMeX socket connected:', socket?.id);
-  });
+    socket.on('disconnect', (reason) => {
+      console.log('⚠️ FaceMeX socket disconnected:', reason);
+    });
 
-  socket.on('disconnect', (reason) => {
-    console.log('⚠️ FaceMeX socket disconnected:', reason);
-  });
-
-  socket.on('connect_error', (error) => {
-    console.log('❌ FaceMeX socket error:', error.message);
-  });
+    socket.on('connect_error', (error) => {
+      console.log('❌ FaceMeX socket error:', error.message);
+    });
+  }
 
   return socket;
 }
 
 export function joinUserSocket(userId?: string | null) {
   const cleanUserId = String(userId || '').trim();
+
   if (!cleanUserId) return;
 
   const s = getSocket();
@@ -65,8 +53,34 @@ export function joinUserSocket(userId?: string | null) {
 }
 
 export function disconnectSocket() {
-  if (!socket) return;
-
-  socket.disconnect();
-  socket = null;
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
 }
+
+export function emitSocket(event: string, payload?: any) {
+  const s = getSocket();
+  s.emit(event, payload || {});
+}
+
+export function onSocket(event: string, callback: (...args: any[]) => void) {
+  const s = getSocket();
+  s.on(event, callback);
+
+  return () => {
+    s.off(event, callback);
+  };
+}
+
+export function offSocket(event: string, callback?: (...args: any[]) => void) {
+  const s = getSocket();
+
+  if (callback) {
+    s.off(event, callback);
+  } else {
+    s.off(event);
+  }
+}
+
+export default getSocket;
