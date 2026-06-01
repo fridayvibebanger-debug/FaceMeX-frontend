@@ -27,10 +27,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/components/layout/Navbar';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useUserStore } from '@/store/userStore';
-import { api, API_URL } from '@/lib/api';
+import { api } from '@/lib/api';
 import { deepseekReply } from '@/utils/ai';
 import { uploadMedia } from '@/lib/storage';
 import { supabase } from '@/lib/supabaseClient';
+import { getSocket, joinUserSocket } from '@/lib/socket';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,12 +48,12 @@ import {
 } from '@/components/ui/drawer';
 import CallModal from '@/components/calls/CallModal';
 import { toast } from '@/components/ui/use-toast';
-import { io, Socket } from 'socket.io-client';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import SafetyWarningDialog from '@/components/safety/SafetyWarningDialog';
 import { reportSafetyEvent, safetyScanText, type SafetyScanResult } from '@/lib/safety';
 
 type MessageType = 'text' | 'image' | 'document' | 'voice';
+type CallType = 'voice' | 'video';
 
 type ProfileRow = {
   id: string;
@@ -107,6 +108,17 @@ type UiConversation = {
   isTyping?: string[];
 };
 
+type IncomingCall = {
+  callId: string;
+  roomId: string;
+  fromUserId: string;
+  fromUser?: {
+    name?: string;
+    avatar?: string;
+  } | null;
+  callType?: 'audio' | 'video';
+};
+
 function VoiceMessageBubble({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -120,12 +132,13 @@ function VoiceMessageBubble({ src }: { src: string }) {
     if (playing) {
       audio.pause();
       setPlaying(false);
-    } else {
-      audio
-        .play()
-        .then(() => setPlaying(true))
-        .catch(() => setPlaying(false));
+      return;
     }
+
+    audio
+      .play()
+      .then(() => setPlaying(true))
+      .catch(() => setPlaying(false));
   };
 
   const fmt = (s: number) => {
@@ -156,9 +169,7 @@ function VoiceMessageBubble({ src }: { src: string }) {
             <div
               className="h-full bg-white/40"
               style={{
-                width: `${
-                  duration > 0 ? Math.min(100, (current / duration) * 100) : 0
-                }%`,
+                width: `${duration > 0 ? Math.min(100, (current / duration) * 100) : 0}%`,
               }}
             />
           </div>
@@ -210,6 +221,9 @@ export default function MessagesPage() {
       : false;
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState('FaceMeX user');
+  const [currentUserAvatar, setCurrentUserAvatar] = useState('');
+
   const [conversations, setConversations] = useState<UiConversation[]>([]);
   const [messages, setMessages] = useState<Record<string, UiMessage[]>>({});
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
@@ -232,14 +246,19 @@ export default function MessagesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [quickReplyFor, setQuickReplyFor] = useState<string | null>(null);
   const [quickReplyText, setQuickReplyText] = useState('');
+
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const docInputRef = useRef<HTMLInputElement | null>(null);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [callType, setCallType] = useState<'voice' | 'video'>('voice');
+  const [callType, setCallType] = useState<CallType>('voice');
+  const [incomingCallData, setIncomingCallData] = useState<IncomingCall | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+
   const [translatorAutoByConv, setTranslatorAutoByConv] = useState<Record<string, boolean>>({});
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
 
@@ -248,28 +267,19 @@ export default function MessagesPage() {
   const [aiSuggestionDismissed, setAiSuggestionDismissed] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
 
-  const canUseAI = hasTier('pro');
-  const showAiSuggestion =
-    canUseAI && !!messageText.trim() && !aiTyping && !aiDraftNotice && !aiSuggestionDismissed;
-
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pendingVoiceUrl, setPendingVoiceUrl] = useState<string | null>(null);
   const [pendingVoiceBlob, setPendingVoiceBlob] = useState<Blob | null>(null);
+
   const recordingIntervalRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
-
-  const socketRef = useRef<Socket | null>(null);
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [isCaller, setIsCaller] = useState(false);
-  const [isRinging, setIsRinging] = useState(false);
-  const [incomingCall, setIncomingCall] = useState(false);
-  const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
-  const ringingTimeoutRef = useRef<number | null>(null);
   const activeConversationRef = useRef<string | null>(null);
+
+  const canUseAI = hasTier('pro');
+  const showAiSuggestion =
+    canUseAI && !!messageText.trim() && !aiTyping && !aiDraftNotice && !aiSuggestionDismissed;
 
   const activeConv = conversations.find((c) => c.id === activeConversation);
   const activeMessages = activeConversation ? messages[activeConversation] || [] : [];
@@ -305,13 +315,13 @@ export default function MessagesPage() {
 
   const loadMessages = async (otherUserId: string) => {
     if (!currentUserId || !otherUserId) return;
-  
+
     const cached = messages[otherUserId];
-  
+
     if (cached && cached.length > 0) {
       setActiveConversation(otherUserId);
     }
-  
+
     const { data, error } = await supabase
       .from('messages')
       .select(
@@ -322,22 +332,21 @@ export default function MessagesPage() {
       )
       .order('created_at', { ascending: true })
       .limit(80);
-  
+
     if (error) {
       toast({ title: 'Messages failed', description: error.message });
       return;
     }
-  
+
     setMessages((prev) => ({
       ...prev,
-      [otherUserId]: (data || []).map((row) =>
-        mapSupabaseMessage(row as DbMessage)),
+      [otherUserId]: (data || []).map((row) => mapSupabaseMessage(row as DbMessage)),
     }));
   };
 
   const loadConversations = async () => {
     if (!currentUserId) return;
-  
+
     const { data, error } = await supabase
       .from('messages')
       .select(
@@ -346,47 +355,46 @@ export default function MessagesPage() {
       .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
       .order('created_at', { ascending: false })
       .limit(120);
-  
+
     if (error) {
       toast({ title: 'Conversations failed', description: error.message });
       return;
     }
-  
+
     const unique = new Map<string, DbMessage>();
-  
+
     (data || []).forEach((raw) => {
       const msg = raw as DbMessage;
-      const otherId =
-        msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
-  
+      const otherId = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
+
       if (!unique.has(otherId)) {
         unique.set(otherId, msg);
       }
     });
-  
+
     const ids = Array.from(unique.keys());
-  
+
     if (ids.length === 0) {
       setConversations([]);
       return;
     }
-  
+
     const { data: profileRows } = await supabase
       .from('profiles')
       .select('id, full_name, name, username, avatar_url, avatar, is_active')
       .in('id', ids);
-  
+
     const profiles = (profileRows || []) as ProfileRow[];
     const profileMap = new Map<string, ProfileRow>();
-  
+
     profiles.forEach((profile) => profileMap.set(profile.id, profile));
-  
+
     const nextConversations: UiConversation[] = ids.map((otherId) => {
       const profile = profileMap.get(otherId);
       const name = getProfileName(profile);
       const avatar = getProfileAvatar(profile);
       const last = unique.get(otherId);
-  
+
       return {
         id: otherId,
         type: 'dm',
@@ -403,14 +411,41 @@ export default function MessagesPage() {
         unreadCount: 0,
       };
     });
-  
+
     setConversations(nextConversations);
   };
 
   useEffect(() => {
     const loadUser = async () => {
       const { data } = await supabase.auth.getUser();
-      setCurrentUserId(data.user?.id || null);
+      const authUser = data.user;
+
+      setCurrentUserId(authUser?.id || null);
+
+      if (authUser?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name, name, username, avatar_url, avatar')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        const profileRow = profile as ProfileRow | null;
+
+        setCurrentUserName(
+          getProfileName(profileRow) ||
+            authUser.user_metadata?.full_name ||
+            authUser.email?.split('@')[0] ||
+            'FaceMeX user'
+        );
+
+        setCurrentUserAvatar(
+          getProfileAvatar(profileRow) ||
+            authUser.user_metadata?.avatar_url ||
+            ''
+        );
+
+        joinUserSocket(authUser.id);
+      }
     };
 
     loadUser();
@@ -422,6 +457,82 @@ export default function MessagesPage() {
   }, [currentUserId]);
 
   useEffect(() => {
+    if (!currentUserId) return;
+
+    const socket = getSocket();
+    joinUserSocket(currentUserId);
+
+    const handleIncomingCall = async (payload: IncomingCall) => {
+      const fromUserId = payload?.fromUserId;
+
+      if (!fromUserId) return;
+
+      setIncomingCallData(payload);
+      setCallType(payload.callType === 'video' ? 'video' : 'voice');
+      setActiveConversation(fromUserId);
+      activeConversationRef.current = fromUserId;
+
+      setConversations((prev) => {
+        const old = prev.find((conversation) => conversation.id === fromUserId);
+
+        const name =
+          payload.fromUser?.name ||
+          old?.name ||
+          'FaceMeX user';
+
+        const avatar =
+          payload.fromUser?.avatar ||
+          old?.participants?.[0]?.avatar ||
+          '';
+
+        const openedConversation: UiConversation = {
+          id: fromUserId,
+          type: 'dm',
+          name,
+          participants: [
+            {
+              id: fromUserId,
+              name,
+              avatar,
+              isOnline: true,
+            },
+          ],
+          lastMessage: old?.lastMessage,
+          unreadCount: old?.unreadCount || 0,
+          isTyping: old?.isTyping,
+        };
+
+        return [
+          openedConversation,
+          ...prev.filter((conversation) => conversation.id !== fromUserId),
+        ];
+      });
+
+      loadMessages(fromUserId).catch(() => {});
+      setIsCallModalOpen(true);
+    };
+
+    const clearCall = () => {
+      setIncomingCallData(null);
+      setIsCallModalOpen(false);
+    };
+
+    socket.on('call:incoming', handleIncomingCall);
+    socket.on('call:cancelled', clearCall);
+    socket.on('call:declined', clearCall);
+    socket.on('call:end', clearCall);
+    socket.on('call:cleanup', clearCall);
+
+    return () => {
+      socket.off('call:incoming', handleIncomingCall);
+      socket.off('call:cancelled', clearCall);
+      socket.off('call:declined', clearCall);
+      socket.off('call:end', clearCall);
+      socket.off('call:cleanup', clearCall);
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
     if (!currentUserId || !userId) return;
 
     let cancelled = false;
@@ -429,13 +540,9 @@ export default function MessagesPage() {
     async function openMessageFromButton() {
       setActiveConversation(userId);
       activeConversationRef.current = userId;
-      
-      /**
-       * Open the chat immediately first.
-       * Then load messages and profile without blocking the screen.
-       */
+
       loadMessages(userId).catch(() => {});
-      
+
       const { data: profile } = await supabase
         .from('profiles')
         .select('id, full_name, name, username, avatar_url, avatar, is_active')
@@ -540,8 +647,7 @@ export default function MessagesPage() {
   }, [activeConversation, conversations]);
 
   useEffect(() => {
-    if (!socketRef.current || !activeConversation) return;
-    socketRef.current.emit('call:join', { roomId: activeConversation });
+    activeConversationRef.current = activeConversation || null;
   }, [activeConversation]);
 
   useEffect(() => {
@@ -687,99 +793,15 @@ export default function MessagesPage() {
     if (activeConversation === conversationId) setMessageText('');
   };
 
-  useEffect(() => {
-    activeConversationRef.current = activeConversation || null;
-  }, [activeConversation]);
+  const openConversation = (conversationId: string) => {
+    setActiveConversation(conversationId);
+    activeConversationRef.current = conversationId;
 
-  useEffect(() => {
-    if (!API_URL) return;
+    bumpInteraction(conversationId, 3);
+    setQuickReplyFor(null);
+    setQuickReplyText('');
 
-    const socket = io(API_URL, { withCredentials: true });
-    socketRef.current = socket;
-
-    socket.on('call:offer', async ({ offer, type }: { offer: any; type?: 'voice' | 'video' }) => {
-      if (!activeConversationRef.current) return;
-
-      try {
-        setIncomingCall(true);
-        setPendingOffer(offer);
-        setIsCaller(false);
-        setCallType(type || 'video');
-      } catch (e) {
-        console.error('Error handling call offer', e);
-      }
-    });
-
-    socket.on('call:answer', async ({ answer }) => {
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        setIsRinging(false);
-
-        if (ringingTimeoutRef.current) {
-          clearTimeout(ringingTimeoutRef.current);
-          ringingTimeoutRef.current = null;
-        }
-      } catch (e) {
-        console.error('Error setting remote answer', e);
-      }
-    });
-
-    socket.on('call:candidate', async ({ candidate }) => {
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (e) {
-        console.error('Error adding ICE candidate', e);
-      }
-    });
-
-    socket.on('call:end', () => {
-      endCallInternal();
-    });
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, []);
-
-  const endCallInternal = () => {
-    setIsCallModalOpen(false);
-    setIsCaller(false);
-    setIsRinging(false);
-    setIncomingCall(false);
-    setPendingOffer(null);
-
-    if (ringingTimeoutRef.current) {
-      clearTimeout(ringingTimeoutRef.current);
-      ringingTimeoutRef.current = null;
-    }
-
-    if (pcRef.current) {
-      pcRef.current.getSenders().forEach((sender) => {
-        try {
-          sender.track?.stop();
-        } catch {}
-      });
-
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      setLocalStream(null);
-    }
-
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((track) => track.stop());
-      setRemoteStream(null);
-    }
+    loadMessages(conversationId).catch(() => {});
   };
 
   const handleToggleRecording = async () => {
@@ -852,58 +874,6 @@ export default function MessagesPage() {
       if (recordingIntervalRef.current === t) recordingIntervalRef.current = null;
     };
   }, [isRecording]);
-
-  const ensurePeerConnection = async (type: 'voice' | 'video') => {
-    if (pcRef.current) return pcRef.current;
-
-    const extraIceServers: RTCIceServer[] = [];
-    const turnUrl = (import.meta as any).env?.VITE_TURN_URL as string | undefined;
-    const turnUser = (import.meta as any).env?.VITE_TURN_USERNAME as string | undefined;
-    const turnCred = (import.meta as any).env?.VITE_TURN_CREDENTIAL as string | undefined;
-
-    if (turnUrl && turnUser && turnCred) {
-      extraIceServers.push({ urls: turnUrl, username: turnUser, credential: turnCred });
-    }
-
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        ...extraIceServers,
-      ],
-    });
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate && activeConversation && socketRef.current) {
-        socketRef.current.emit('call:candidate', {
-          roomId: activeConversation,
-          candidate: event.candidate,
-        });
-      }
-    };
-
-    pc.ontrack = (event) => {
-      const [stream] = event.streams;
-      setRemoteStream(stream);
-    };
-
-    pcRef.current = pc;
-
-    if (!localStream) {
-      const constraints =
-        type === 'voice'
-          ? { audio: true, video: false }
-          : { audio: true, video: true };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      setLocalStream(stream);
-    } else {
-      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-    }
-
-    return pc;
-  };
 
   const sendSupabaseMessage = async (
     content: string,
@@ -1158,12 +1128,12 @@ export default function MessagesPage() {
         if (stored) targetLang = stored;
       } catch {}
 
-      const res = (await api.post('/api/ai/translate', {
+      const res = (await api.post('/api/translate', {
         text,
-        targetLang,
+        to: targetLang,
       })) as any;
 
-      const translated = res?.translated || text;
+      const translated = res?.translatedText || res?.translated || text;
 
       setTranslatedMessages((prev) => ({
         ...prev,
@@ -1210,7 +1180,7 @@ export default function MessagesPage() {
     const base =
       lastIncoming?.content || 'Draft a friendly, concise, positive reply.';
 
-    const input = `You are replying in a private chat. Write like a real human: warm, natural, and easy to read. Keep it short (ideally 1–4 sentences, never more than about 270 words). Avoid lists and headings.
+    const input = `You are replying in a private chat. Write like a real human: warm, natural, and easy to read. Keep it short.
 
 Last message you are replying to:
 "${base}"`;
@@ -1236,7 +1206,7 @@ Last message you are replying to:
     }
   };
 
-  const handleStartCall = (type: 'voice' | 'video') => {
+  const handleStartCall = (nextType: CallType) => {
     if (!activeConversation) {
       toast({
         title: 'Select a chat',
@@ -1245,69 +1215,17 @@ Last message you are replying to:
       return;
     }
 
-    const callTypeParam = type === 'video' ? 'video' : 'audio';
-
-    navigate(`/call/${activeConversation}?type=${callTypeParam}`);
-  };
-
-  const handleAcceptIncomingCall = async () => {
-    if (!activeConversation || !socketRef.current || !pendingOffer) return;
-
-    try {
-      const socket = socketRef.current;
-      await ensurePeerConnection(callType);
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
-
-      if (!localStream) {
-        const constraints =
-          callType === 'voice'
-            ? { audio: true, video: false }
-            : { audio: true, video: true };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        setLocalStream(stream);
-      }
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('call:answer', { roomId: activeConversation, answer });
-
-      setIsCallModalOpen(true);
-      setIncomingCall(false);
-      setPendingOffer(null);
-    } catch (e) {
-      console.error('Error accepting call', e);
-      setIncomingCall(false);
-      setPendingOffer(null);
+    if (!currentUserId) {
+      toast({
+        title: 'Login required',
+        description: 'Please login again before starting a call.',
+      });
+      return;
     }
-  };
 
-  const handleDeclineIncomingCall = () => {
-    if (activeConversation && socketRef.current) {
-      socketRef.current.emit('call:end', { roomId: activeConversation });
-    }
-    setIncomingCall(false);
-    setPendingOffer(null);
-  };
-
-  const handleToggleMute = () => {
-    if (!localStream) return;
-
-    localStream.getAudioTracks().forEach((track) => {
-      track.enabled = !track.enabled;
-    });
-  };
-
-  const handleToggleVideo = () => {
-    if (!localStream) return;
-
-    localStream.getVideoTracks().forEach((track) => {
-      track.enabled = !track.enabled;
-    });
+    setIncomingCallData(null);
+    setCallType(nextType);
+    setIsCallModalOpen(true);
   };
 
   const getConversationName = (conv: UiConversation) => conv.name || 'Unknown';
@@ -1369,17 +1287,6 @@ Last message you are replying to:
     );
   };
 
-  const openConversation = (conversationId: string) => {
-    setActiveConversation(conversationId);
-    activeConversationRef.current = conversationId;
-  
-    bumpInteraction(conversationId, 3);
-    setQuickReplyFor(null);
-    setQuickReplyText('');
-  
-    loadMessages(conversationId).catch(() => {});
-  };
-
   const handleQuickReplySend = async (conversationId: string) => {
     const text = quickReplyText.trim();
     if (!text || !currentUserId) return;
@@ -1399,10 +1306,11 @@ Last message you are replying to:
     bumpInteraction(conversationId, 2);
     setQuickReplyText('');
     setQuickReplyFor(null);
+
     if (activeConversation === conversationId) {
       await loadMessages(conversationId);
     }
-    
+
     loadConversations().catch(() => {});
 
     toast({ title: 'Sent', description: 'Quick reply delivered.' });
@@ -1458,6 +1366,16 @@ Last message you are replying to:
     const name = conv.type === 'dm' ? conv.participants[0]?.name : conv.name;
     return name?.toLowerCase().includes(searchQuery.toLowerCase());
   });
+
+  const callParticipant = incomingCallData
+    ? {
+        name: incomingCallData.fromUser?.name || activeConv?.name || 'FaceMeX user',
+        avatar: incomingCallData.fromUser?.avatar || activeConv?.participants?.[0]?.avatar || '',
+      }
+    : {
+        name: activeConv ? getConversationName(activeConv) : 'FaceMeX user',
+        avatar: activeConv ? getConversationAvatar(activeConv) : '',
+      };
 
   return (
     <div className="min-h-screen bg-background">
@@ -1560,33 +1478,6 @@ Last message you are replying to:
                     whileHover={{ scale: 1.002 }}
                     whileTap={{ scale: 0.998 }}
                   >
-                    <div className="absolute inset-0 rounded-2xl overflow-hidden">
-                      <div className="h-full w-full flex items-stretch">
-                        <div className="w-1/2 bg-muted/25 flex items-center justify-start px-4">
-                          <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
-                            <Pin className="h-4 w-4" />
-                            {pinnedConversations[conv.id] ? 'Unpin' : 'Pin'}
-                          </div>
-                        </div>
-
-                        <div className="w-1/2 bg-muted/20 flex items-center justify-end px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
-                              <BellOff className="h-4 w-4" />
-                              {mutedConversations[conv.id] ? 'Unmute' : 'Mute'}
-                            </div>
-
-                            <div className="h-6 w-px bg-slate-400/30" />
-
-                            <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
-                              <Archive className="h-4 w-4" />
-                              {archivedConversations[conv.id] ? 'Unarchive' : 'Archive'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
                     <motion.div
                       drag="x"
                       dragConstraints={{ left: 0, right: 0 }}
@@ -1868,6 +1759,26 @@ Last message you are replying to:
                     </div>
 
                     <div className="flex items-center gap-1 md:gap-2">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="rounded-full"
+                        onClick={() => handleStartCall('voice')}
+                      >
+                        <Phone className="h-5 w-5" />
+                      </Button>
+
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="rounded-full"
+                        onClick={() => handleStartCall('video')}
+                      >
+                        <Video className="h-5 w-5" />
+                      </Button>
+
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button size="icon" variant="ghost" className="rounded-full">
@@ -1916,36 +1827,6 @@ Last message you are replying to:
                       </DropdownMenu>
                     </div>
                   </div>
-
-                  {incomingCall && (
-                    <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-sm">Incoming {callType} call</p>
-                        <p className="text-xs text-muted-foreground">
-                          {getConversationName(activeConv)} is calling you.
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full"
-                          onClick={handleDeclineIncomingCall}
-                        >
-                          Decline
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          className="rounded-full"
-                          onClick={handleAcceptIncomingCall}
-                        >
-                          Accept
-                        </Button>
-                      </div>
-                    </div>
-                  )}
 
                   <ScrollArea className="flex-1 p-3 md:p-4">
                     <div className="w-full max-w-4xl space-y-4 md:ml-0 md:mr-auto">
@@ -2096,7 +1977,7 @@ Last message you are replying to:
                                     </p>
                                   )}
 
-                                  {translatorAuto && !isOwn && !translatedMessages[message.id] && (
+                                  {message.type === 'text' && !translatedMessages[message.id] && (
                                     <button
                                       className={`mt-1 text-[11px] underline text-muted-foreground hover:text-foreground ${
                                         isOwn ? 'ml-auto' : ''
@@ -2104,19 +1985,7 @@ Last message you are replying to:
                                       type="button"
                                       onClick={() => translateMessage(message.id, message.content)}
                                     >
-                                      Auto-translate preview
-                                    </button>
-                                  )}
-
-                                  {!translatorAuto && !translatedMessages[message.id] && (
-                                    <button
-                                      className={`mt-1 text-[11px] underline text-muted-foreground hover:text-foreground ${
-                                        isOwn ? 'ml-auto' : ''
-                                      }`}
-                                      type="button"
-                                      onClick={() => translateMessage(message.id, message.content)}
-                                    >
-                                      Translate
+                                      {translatorAuto && !isOwn ? 'Auto-translate preview' : 'Translate'}
                                     </button>
                                   )}
 
@@ -2419,25 +2288,23 @@ Last message you are replying to:
           </div>
         </div>
 
-        {activeConv && (
+        {isCallModalOpen && currentUserId && (
           <CallModal
             open={isCallModalOpen}
-            onOpenChange={setIsCallModalOpen}
-            type={callType}
-            participant={{
-              name: getConversationName(activeConv),
-              avatar: getConversationAvatar(activeConv),
-            }}
-            localStream={localStream}
-            remoteStream={remoteStream}
-            onToggleMute={handleToggleMute}
-            onToggleVideo={handleToggleVideo}
-            onEnd={() => {
-              if (activeConversation && socketRef.current) {
-                socketRef.current.emit('call:end', { roomId: activeConversation });
+            onOpenChange={(next) => {
+              setIsCallModalOpen(next);
+              if (!next) {
+                setIncomingCallData(null);
               }
-              endCallInternal();
             }}
+            type={callType}
+            participant={callParticipant}
+            myUserId={currentUserId}
+            myName={currentUserName}
+            myAvatar={currentUserAvatar}
+            receiverId={incomingCallData ? incomingCallData.fromUserId : activeConversation || ''}
+            incomingCall={incomingCallData}
+            autoStart={!incomingCallData}
           />
         )}
       </div>
