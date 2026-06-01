@@ -51,6 +51,7 @@ import RecruiterPortalPage from './pages/RecruiterPortalPage';
 import TestAI from './pages/TestAI';
 import TierSync from '@/components/auth/TierSync';
 import LiveNotificationListener from '@/components/LiveNotificationListener';
+import GlobalCallListener from '@/components/calls/GlobalCallListener';
 import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -111,6 +112,7 @@ function App() {
     <>
       <TierSync />
       <LiveNotificationListener />
+      <GlobalCallListener />
       <AppAnalyticsTracker />
 
       <Routes>
@@ -153,7 +155,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         <Route
           path="/feed"
           element={
@@ -171,7 +173,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         <Route
           path="/watch/:id"
           element={
