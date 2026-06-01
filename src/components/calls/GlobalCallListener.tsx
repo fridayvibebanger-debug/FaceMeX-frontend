@@ -41,18 +41,12 @@ export default function GlobalCallListener() {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [callOpen, setCallOpen] = useState(false);
 
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const vibrationTimerRef = useRef<number | null>(null);
+  const ringtoneTimerRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const lastCallIdRef = useRef<string | null>(null);
 
   const stopRingtone = () => {
-    try {
-      if (ringtoneRef.current) {
-        ringtoneRef.current.pause();
-        ringtoneRef.current.currentTime = 0;
-      }
-    } catch {}
-
     try {
       navigator.vibrate?.(0);
     } catch {}
@@ -61,25 +55,65 @@ export default function GlobalCallListener() {
       window.clearInterval(vibrationTimerRef.current);
       vibrationTimerRef.current = null;
     }
+
+    if (ringtoneTimerRef.current) {
+      window.clearInterval(ringtoneTimerRef.current);
+      ringtoneTimerRef.current = null;
+    }
+
+    try {
+      audioContextRef.current?.close();
+    } catch {}
+
+    audioContextRef.current = null;
+  };
+
+  const playBeep = () => {
+    try {
+      const AudioContextClass =
+        window.AudioContext || (window as any).webkitAudioContext;
+
+      if (!AudioContextClass) return;
+
+      const ctx = audioContextRef.current || new AudioContextClass();
+      audioContextRef.current = ctx;
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.65);
+    } catch {
+      // Some mobile browsers block sound until the user taps the app once.
+    }
   };
 
   const startRingtone = () => {
     stopRingtone();
 
-    try {
-      if (!ringtoneRef.current) {
-        ringtoneRef.current = new Audio('/sounds/facemex-ringtone.mp3');
-        ringtoneRef.current.loop = true;
-        ringtoneRef.current.volume = 0.85;
-      }
+    playBeep();
 
-      ringtoneRef.current.play().catch(() => {
-        console.log('Ringtone autoplay blocked until user interacts with the app.');
-      });
-    } catch {}
+    ringtoneTimerRef.current = window.setInterval(() => {
+      playBeep();
+    }, 1200);
 
     try {
       navigator.vibrate?.([700, 300, 700, 300, 700]);
+
       vibrationTimerRef.current = window.setInterval(() => {
         navigator.vibrate?.([700, 300, 700, 300, 700]);
       }, 3000);
@@ -96,6 +130,12 @@ export default function GlobalCallListener() {
   const showBrowserNotification = (payload: IncomingCall) => {
     try {
       if (!('Notification' in window)) return;
+
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+        return;
+      }
+
       if (Notification.permission !== 'granted') return;
 
       const callerName = payload.fromUser?.name || 'FaceMeX user';
@@ -173,9 +213,7 @@ export default function GlobalCallListener() {
 
     const handleIncomingCall = (payload: IncomingCall) => {
       if (!payload?.callId || !payload?.roomId || !payload?.fromUserId) return;
-
       if (payload.fromUserId === currentUser.id) return;
-
       if (lastCallIdRef.current === payload.callId) return;
 
       lastCallIdRef.current = payload.callId;
@@ -195,7 +233,10 @@ export default function GlobalCallListener() {
     const handleCallAccepted = (payload: any) => {
       if (!payload?.callId) return;
 
-      if (payload.callId === incomingCall?.callId || payload.callId === lastCallIdRef.current) {
+      if (
+        payload.callId === incomingCall?.callId ||
+        payload.callId === lastCallIdRef.current
+      ) {
         stopRingtone();
       }
     };
@@ -203,7 +244,11 @@ export default function GlobalCallListener() {
     const handleCallClosed = (payload: any) => {
       const payloadCallId = payload?.callId;
 
-      if (!payloadCallId || payloadCallId === incomingCall?.callId || payloadCallId === lastCallIdRef.current) {
+      if (
+        !payloadCallId ||
+        payloadCallId === incomingCall?.callId ||
+        payloadCallId === lastCallIdRef.current
+      ) {
         closeCall();
       }
     };
@@ -225,6 +270,7 @@ export default function GlobalCallListener() {
       socket.off('call:end', handleCallClosed);
       socket.off('call:cleanup', handleCallClosed);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, incomingCall?.callId]);
 
   useEffect(() => {
