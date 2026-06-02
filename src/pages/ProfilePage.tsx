@@ -93,23 +93,6 @@ function decodeRouteValue(value: unknown) {
   }
 }
 
-function getPostOwnerId(post: any) {
-  return cleanString(
-    post?.userId ||
-      post?.user_id ||
-      post?.authorId ||
-      post?.author_id ||
-      post?.ownerId ||
-      post?.owner_id ||
-      post?.profileId ||
-      post?.profile_id ||
-      post?.externalId ||
-      post?.user?.id ||
-      post?.user?._id ||
-      ''
-  );
-}
-
 function postBelongsToProfile(post: any, profileId: string) {
   const target = cleanString(profileId);
 
@@ -289,18 +272,54 @@ export default function ProfilePage() {
 
   const effectiveUserId = cleanString(user?.id);
 
-  const viewedUserId = useMemo(() => {
-    return (
-      decodeRouteValue(params.id) ||
-      cleanString(routeState?.userId) ||
-      cleanString(routeState?.profileId) ||
-      effectiveUserId
-    );
-  }, [params.id, routeState?.userId, routeState?.profileId, effectiveUserId]);
+  const myIdentityIds = useMemo(() => {
+    const ids = new Set<string>();
 
-  const isOwnProfile = Boolean(
-    effectiveUserId && viewedUserId && effectiveUserId === viewedUserId
-  );
+    const add = (value: unknown) => {
+      const clean = cleanString(value);
+      if (clean) ids.add(clean);
+    };
+
+    add(user?.id);
+    add(user?._id);
+    add(user?.externalId);
+    add(user?.supabaseId);
+    add(user?.authId);
+
+    try {
+      add(localStorage.getItem('faceme_user_id'));
+      add(localStorage.getItem('facemex_user_id'));
+    } catch {
+      // ignore
+    }
+
+    return Array.from(ids);
+  }, [user?.id, user?._id, user?.externalId, user?.supabaseId, user?.authId]);
+
+  const viewedUserId = useMemo(() => {
+    const routeId = decodeRouteValue(params.id);
+    const stateUserId = cleanString(routeState?.userId);
+    const stateProfileId = cleanString(routeState?.profileId);
+
+    if (routeState?.ownProfile === true && effectiveUserId) {
+      return effectiveUserId;
+    }
+
+    return routeId || stateUserId || stateProfileId || effectiveUserId;
+  }, [
+    params.id,
+    routeState?.ownProfile,
+    routeState?.userId,
+    routeState?.profileId,
+    effectiveUserId,
+  ]);
+
+  const isOwnProfile = useMemo(() => {
+    if (routeState?.ownProfile === true) return true;
+    if (!viewedUserId) return false;
+
+    return myIdentityIds.some((id) => id === viewedUserId);
+  }, [routeState?.ownProfile, viewedUserId, myIdentityIds]);
 
   const [viewedProfile, setViewedProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -318,8 +337,6 @@ export default function ProfilePage() {
 
   const [bioEditing, setBioEditing] = useState(false);
   const [bioDraft, setBioDraft] = useState(user?.bio || '');
-
-  const storePro = useMemo(() => normalizePro(professional), [professional]);
 
   const viewedPro = useMemo(() => {
     if (isOwnProfile) {
@@ -382,10 +399,12 @@ export default function ProfilePage() {
       setProfileLoading(true);
       setProfileNotFound(false);
 
+      const profileIdToFetch = isOwnProfile && effectiveUserId ? effectiveUserId : viewedUserId;
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', viewedUserId)
+        .eq('id', profileIdToFetch)
         .maybeSingle();
 
       if (error) {
@@ -443,7 +462,19 @@ export default function ProfilePage() {
     };
 
     loadProfile();
-  }, [viewedUserId, isOwnProfile, user?.id, user?.email, user?.name, user?.avatar]);
+  }, [
+    viewedUserId,
+    isOwnProfile,
+    effectiveUserId,
+    user?.id,
+    user?.email,
+    user?.name,
+    user?.avatar,
+    user?.bio,
+    user?.coverPhoto,
+    user?.location,
+    user?.website,
+  ]);
 
   const fallbackPostForProfile = useMemo(() => {
     if (!viewedUserId) return null;
@@ -458,7 +489,7 @@ export default function ProfilePage() {
     if (isOwnProfile) {
       return {
         ...user,
-        id: user?.id || viewedUserId,
+        id: user?.id || effectiveUserId || viewedUserId,
         email: viewedProfile?.email || user?.email || '',
         name:
           viewedProfile?.full_name ||
@@ -565,6 +596,7 @@ export default function ProfilePage() {
   }, [
     isOwnProfile,
     user,
+    effectiveUserId,
     viewedUserId,
     viewedProfile,
     currentTier,
@@ -592,11 +624,13 @@ export default function ProfilePage() {
     viewedPro.resumeSummary,
   ]);
 
+  const profilePostUserId = isOwnProfile && effectiveUserId ? effectiveUserId : viewedUserId;
+
   const userPosts = useMemo(() => {
-    if (!viewedUserId) return [];
+    if (!profilePostUserId) return [];
 
     return posts
-      .filter((post: any) => postBelongsToProfile(post, viewedUserId))
+      .filter((post: any) => postBelongsToProfile(post, profilePostUserId))
       .sort((a: any, b: any) => {
         const aTime = new Date(
           a.createdAt || a.created_at || a.timestamp || 0
@@ -608,23 +642,23 @@ export default function ProfilePage() {
 
         return bTime - aTime;
       });
-  }, [posts, viewedUserId]);
+  }, [posts, profilePostUserId]);
 
   const loadProfileRelationships = async () => {
-    if (!viewedUserId) return;
+    if (!profilePostUserId) return;
 
     try {
       const [followersResult, connectionsResult] = await Promise.all([
         supabase
           .from('follows')
           .select('*', { count: 'exact', head: true })
-          .eq('following_id', viewedUserId),
+          .eq('following_id', profilePostUserId),
 
         supabase
           .from('connection_requests')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'accepted')
-          .or(`sender_id.eq.${viewedUserId},receiver_id.eq.${viewedUserId}`),
+          .or(`sender_id.eq.${profilePostUserId},receiver_id.eq.${profilePostUserId}`),
       ]);
 
       setFollowerCount(followersResult.count || 0);
@@ -636,7 +670,7 @@ export default function ProfilePage() {
         .from('follows')
         .select('id')
         .eq('follower_id', effectiveUserId)
-        .eq('following_id', viewedUserId)
+        .eq('following_id', profilePostUserId)
         .maybeSingle();
 
       setIsFollowing(Boolean(followData));
@@ -649,8 +683,8 @@ export default function ProfilePage() {
       const connection = (connectionRows || []).find((row: any) => {
         return (
           (row.sender_id === effectiveUserId &&
-            row.receiver_id === viewedUserId) ||
-          (row.sender_id === viewedUserId &&
+            row.receiver_id === profilePostUserId) ||
+          (row.sender_id === profilePostUserId &&
             row.receiver_id === effectiveUserId)
         );
       });
@@ -663,12 +697,12 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    if (!viewedUserId) return;
+    if (!profilePostUserId) return;
 
     loadProfileRelationships();
 
     const channel = supabase
-      .channel(`profile-relationship-${viewedUserId}-${effectiveUserId}`)
+      .channel(`profile-relationship-${profilePostUserId}-${effectiveUserId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'follows' },
@@ -684,7 +718,7 @@ export default function ProfilePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [viewedUserId, effectiveUserId, isOwnProfile]);
+  }, [profilePostUserId, effectiveUserId, isOwnProfile]);
 
   useEffect(() => {
     if (isOwnProfile) return;
@@ -756,7 +790,7 @@ export default function ProfilePage() {
   ).toLowerCase();
 
   const handleFollowProfile = async () => {
-    if (!viewedUserId || isOwnProfile) return;
+    if (!profilePostUserId || isOwnProfile) return;
 
     setButtonBusy('follow');
 
@@ -775,7 +809,7 @@ export default function ProfilePage() {
 
       const myUserId = authData.user.id;
 
-      if (myUserId === viewedUserId) {
+      if (myUserId === profilePostUserId) {
         toast({
           title: 'Not allowed',
           description: 'You cannot follow your own profile.',
@@ -788,7 +822,7 @@ export default function ProfilePage() {
           .from('follows')
           .delete()
           .eq('follower_id', myUserId)
-          .eq('following_id', viewedUserId);
+          .eq('following_id', profilePostUserId);
 
         if (error) throw error;
 
@@ -806,7 +840,7 @@ export default function ProfilePage() {
       const { error } = await supabase.from('follows').upsert(
         {
           follower_id: myUserId,
-          following_id: viewedUserId,
+          following_id: profilePostUserId,
           created_at: new Date().toISOString(),
         },
         {
@@ -824,22 +858,6 @@ export default function ProfilePage() {
         title: 'Followed',
         description: `You are now following ${viewedUser?.name || 'this user'}.`,
       });
-
-      void (async () => {
-        try {
-          await supabase.from('notifications').insert({
-            user_id: viewedUserId,
-            actor_id: myUserId,
-            type: 'follow',
-            title: 'New follower',
-            message: `${
-              user?.name || user?.email?.split('@')[0] || 'Someone'
-            } followed you.`,
-            action_url: `/profile/${myUserId}`,
-            is_read: false,
-          });
-        } catch {}
-      })();
     } catch (error: any) {
       toast({
         title: 'Follow failed',
@@ -854,7 +872,7 @@ export default function ProfilePage() {
   };
 
   const handleConnectProfile = async () => {
-    if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
+    if (!effectiveUserId || !profilePostUserId || isOwnProfile) return;
 
     setButtonBusy('connect');
 
@@ -864,7 +882,7 @@ export default function ProfilePage() {
         .upsert(
           {
             sender_id: effectiveUserId,
-            receiver_id: viewedUserId,
+            receiver_id: profilePostUserId,
             status: 'pending',
           },
           {
@@ -882,7 +900,7 @@ export default function ProfilePage() {
         try {
           await supabase.from('notifications').upsert({
             id: data.id,
-            user_id: viewedUserId,
+            user_id: profilePostUserId,
             actor_id: effectiveUserId,
             type: 'connection_request',
             title: 'New connection request',
@@ -911,12 +929,12 @@ export default function ProfilePage() {
   };
 
   const startProfileChat = async () => {
-    if (!effectiveUserId || !viewedUserId || isOwnProfile) return;
+    if (!effectiveUserId || !profilePostUserId || isOwnProfile) return;
 
     setButtonBusy('message');
 
     try {
-      navigate(`/messages/${viewedUserId}?focus=1`);
+      navigate(`/messages/${profilePostUserId}?focus=1`);
     } finally {
       setButtonBusy(null);
     }
@@ -1213,16 +1231,6 @@ export default function ProfilePage() {
                     </div>
                   )}
 
-                  {viewedUser?.interests && viewedUser.interests.length > 0 && (
-                    <div className="hidden sm:flex flex-wrap gap-2 mb-3 justify-start">
-                      {viewedUser.interests.map((interest: string) => (
-                        <Badge key={interest} variant="outline">
-                          {interest}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-
                   <div className="flex flex-wrap items-center justify-start gap-3 text-xs sm:text-sm text-muted-foreground">
                     {viewedUser?.location && (
                       <div className="flex items-center">
@@ -1477,32 +1485,6 @@ export default function ProfilePage() {
                   </div>
                 ) : null}
 
-                {viewedPro.experience.length > 0 ? (
-                  <div className="rounded-xl border bg-card p-3">
-                    <div className="text-xs font-semibold mb-1">
-                      Experience
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {viewedPro.experience[0]?.role}
-                      {viewedPro.experience[0]?.company
-                        ? ` · ${viewedPro.experience[0].company}`
-                        : ''}
-                    </div>
-                  </div>
-                ) : null}
-
-                {viewedPro.education.length > 0 ? (
-                  <div className="rounded-xl border bg-card p-3">
-                    <div className="text-xs font-semibold mb-1">Education</div>
-                    <div className="text-xs text-muted-foreground">
-                      {viewedPro.education[0]?.institution}
-                      {viewedPro.education[0]?.degree
-                        ? ` · ${viewedPro.education[0].degree}`
-                        : ''}
-                    </div>
-                  </div>
-                ) : null}
-
                 {viewedPro.skills.length > 0 ? (
                   <div>
                     <div className="text-xs font-semibold mb-2">Skills</div>
@@ -1519,25 +1501,6 @@ export default function ProfilePage() {
                         >
                           {skill}
                         </Badge>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {viewedPro.links.length > 0 ? (
-                  <div>
-                    <div className="text-xs font-semibold mb-2">Links</div>
-                    <div className="flex flex-col gap-1">
-                      {viewedPro.links.slice(0, 4).map((link, index) => (
-                        <a
-                          key={index}
-                          className="text-xs text-primary hover:underline truncate"
-                          href={link.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {link.type}: {link.url}
-                        </a>
                       ))}
                     </div>
                   </div>
@@ -1720,28 +1683,6 @@ export default function ProfilePage() {
                           {viewedPro.location || 'No location added yet.'}
                         </p>
                       )}
-                    </div>
-
-                    <div className="pt-4 border-t flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold mb-1 flex items-center gap-2">
-                          <Briefcase className="h-4 w-4 text-muted-foreground" />
-                          <span>Professional Groups</span>
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          Join industry-focused groups for discussions and collaboration.
-                        </p>
-                      </div>
-
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="text-xs rounded-full"
-                        onClick={() => navigate('/groups/pro')}
-                      >
-                        View groups
-                      </Button>
                     </div>
 
                     <div className="pt-4 border-t space-y-3">
