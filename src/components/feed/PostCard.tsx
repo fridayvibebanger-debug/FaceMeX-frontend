@@ -131,6 +131,22 @@ function getCommentText(comment: any) {
     .trim();
 }
 
+function getPostAuthorId(post: Post) {
+  return cleanString(
+    (post as any).userId ||
+      (post as any).user_id ||
+      (post as any).authorId ||
+      (post as any).author_id ||
+      (post as any).ownerId ||
+      (post as any).owner_id ||
+      (post as any).user?.id ||
+      (post as any).user?._id ||
+      (post as any).profileId ||
+      (post as any).profile_id ||
+      (post as any).externalId
+  );
+}
+
 function normalizePostMedia(post: Post): PostMediaItem[] {
   const media: PostMediaItem[] = [];
   const seen = new Set<string>();
@@ -551,6 +567,7 @@ function DocumentPreview({
             alt={`${document.title} preview`}
             className="h-[250px] w-full object-contain sm:h-[340px]"
             loading="lazy"
+            decoding="async"
           />
 
           {imageCount > 1 && (
@@ -609,21 +626,28 @@ export default function PostCard({ post }: PostCardProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
+  const profileId = useMemo(() => getPostAuthorId(post), [post]);
+
   const myIds = useMemo(
     () => getMyIdentityCodes(user, currentUserId || ''),
     [user, currentUserId]
   );
 
   const ownerIds = useMemo(
-    () => [
-      cleanString(post.userId),
-      cleanString((post as any).authorId),
-      cleanString((post as any).ownerId),
-      cleanString((post as any).user?._id),
-      cleanString((post as any).user?.id),
-      cleanString((post as any).externalId),
-    ].filter(Boolean),
-    [post]
+    () =>
+      [
+        profileId,
+        cleanString(post.userId),
+        cleanString((post as any).user_id),
+        cleanString((post as any).authorId),
+        cleanString((post as any).author_id),
+        cleanString((post as any).ownerId),
+        cleanString((post as any).owner_id),
+        cleanString((post as any).user?._id),
+        cleanString((post as any).user?.id),
+        cleanString((post as any).externalId),
+      ].filter(Boolean),
+    [post, profileId]
   );
 
   const isOwner = useMemo(() => {
@@ -688,6 +712,24 @@ export default function PostCard({ post }: PostCardProps) {
       (addons?.verified === true ||
         (user as any)?.isVerified === true ||
         (user as any)?.verified === true));
+
+  const openAuthorProfile = () => {
+    const targetId = profileId || getPostAuthorId(post);
+
+    if (!targetId) {
+      alert('Profile ID not found for this post.');
+      return;
+    }
+
+    navigate(`/profile/${encodeURIComponent(targetId)}`, {
+      state: {
+        userId: targetId,
+        profileId: targetId,
+        userName: displayName,
+        userAvatar: displayAvatar,
+      },
+    });
+  };
 
   useEffect(() => {
     setPostDraft(post.content);
@@ -1199,6 +1241,7 @@ export default function PostCard({ post }: PostCardProps) {
             alt="Post media"
             className="max-h-[540px] w-full object-cover"
             loading="lazy"
+            decoding="async"
           />
         </button>
       );
@@ -1220,6 +1263,7 @@ export default function PostCard({ post }: PostCardProps) {
                   alt={`Post image ${index + 1}`}
                   className="h-full w-full object-cover"
                   loading="lazy"
+                  decoding="async"
                 />
 
                 {index === 0 && imageItems.length > 1 && (
@@ -1291,7 +1335,7 @@ export default function PostCard({ post }: PostCardProps) {
           <button
             type="button"
             className="flex min-w-0 items-center space-x-2 text-left"
-            onClick={() => navigate(`/profile/${post.userId}`)}
+            onClick={openAuthorProfile}
           >
             <div className="relative shrink-0">
               <Avatar className="h-10 w-10">
