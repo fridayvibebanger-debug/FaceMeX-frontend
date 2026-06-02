@@ -1,8 +1,11 @@
+import '@/admin/analytics';
+
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { uploadImagesToAzure } from '@/lib/azureUpload';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -102,8 +105,6 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     );
   })();
 
-  // Free and Pro users can VIEW documents inside PostCard.
-  // Only Creator, Business and Exclusive users can UPLOAD/POST documents here.
   const canUseDocumentPost = (() => {
     if (typeof hasTier === 'function') {
       try {
@@ -160,53 +161,6 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     window.setTimeout(() => {
       setUploadProgress(0);
     }, 500);
-  };
-
-  const compressImage = async (file: File, maxSize = 1600): Promise<File> => {
-    if (!file.type.startsWith('image/')) return file;
-
-    try {
-      const dataUrl = await readAsDataURL(file);
-      const img = new Image();
-      img.src = dataUrl;
-
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Image load failed'));
-      });
-
-      const { width, height } = img;
-      const scale = Math.min(1, maxSize / Math.max(width, height));
-
-      if (scale >= 1) return file;
-
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(width * scale);
-      canvas.height = Math.round(height * scale);
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return file;
-
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      const blob: Blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(
-          (b) => {
-            if (!b) return reject(new Error('Compression failed'));
-            resolve(b);
-          },
-          'image/jpeg',
-          0.8
-        );
-      });
-
-      return new File([blob], file.name.replace(/\.(png|webp)$/i, '.jpg'), {
-        type: 'image/jpeg',
-      });
-    } catch (err) {
-      console.warn('Image compression skipped', err);
-      return file;
-    }
   };
 
   const getVideoDuration = (file: File) => {
@@ -450,19 +404,34 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   };
 
   const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []).filter((file) =>
+      file.type.startsWith('image/')
+    );
 
-    if (files.length === 0) return;
-
-    const currentTotal = imagePreviews.length + files.length;
-
-    if (currentTotal > 10) {
-      alert('You can upload up to 10 images per post.');
+    if (files.length === 0) {
       e.currentTarget.value = '';
       return;
     }
 
-    const tooLarge = files.find((f) => f.size > 15 * 1024 * 1024);
+    const maxImages = 5;
+    const remainingSlots = Math.max(0, maxImages - imagePreviews.length);
+
+    if (remainingSlots <= 0) {
+      alert(`You can upload up to ${maxImages} images per post.`);
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const filesToUpload = files.slice(0, remainingSlots);
+
+    if (files.length > remainingSlots) {
+      toast({
+        title: 'Image limit reached',
+        description: `Only ${remainingSlots} more image${remainingSlots === 1 ? '' : 's'} added. Maximum is ${maxImages}.`,
+      });
+    }
+
+    const tooLarge = filesToUpload.find((f) => f.size > 15 * 1024 * 1024);
 
     if (tooLarge) {
       alert('One of the images is too large. Please pick files under 15MB each.');
@@ -475,11 +444,11 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
     try {
       try {
-        const local = await Promise.all(files.map((f) => readAsDataURL(f)));
+        const local = await Promise.all(filesToUpload.map((f) => readAsDataURL(f)));
 
         if (uploadGenRef.current !== myGen) return;
 
-        setImagePreviews((prev) => [...prev, ...local].slice(0, 10));
+        setImagePreviews((prev) => [...prev, ...local].slice(0, maxImages));
       } catch {
         // instant preview failed, continue with upload
       }
@@ -487,19 +456,18 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       setIsUploading(true);
       startUploadProgress();
 
-      const compressed = await Promise.all(files.map((f) => compressImage(f)));
-      const urls = await Promise.all(compressed.map((f) => uploadMedia(f, 'posts/images')));
+      const urls = await uploadImagesToAzure(filesToUpload);
 
       if (uploadGenRef.current !== myGen) return;
 
       setImagePreviews((prev) => {
         const withoutLocal = prev.filter((src) => !src.startsWith('data:'));
-        return [...withoutLocal, ...urls].slice(0, 10);
+        return [...withoutLocal, ...urls].slice(0, maxImages);
       });
 
       finishUploadProgress();
     } catch (err) {
-      console.error('Images upload failed', err);
+      console.error('Azure images upload failed', err);
       const msg = (err as any)?.code || (err as any)?.message || 'Upload failed';
       alert(`Images upload failed: ${msg}.`);
     } finally {
@@ -621,20 +589,6 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       setIsUploading(false);
       e.currentTarget.value = '';
     }
-  };
-
-  const openDocumentPicker = () => {
-    if (!canUseDocumentPost) {
-      toast({
-        title: 'Creator+ required',
-        description: 'Only Creator, Business and Exclusive users can post documents. Free and Pro users can view documents only.',
-        variant: 'destructive',
-      });
-
-      return;
-    }
-
-    documentInputRef.current?.click();
   };
 
   const handlePost = async () => {
@@ -1152,7 +1106,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                       </span>
                     </Button>
                   </label>
-          
+
                   <input
                     id="images-upload"
                     type="file"
@@ -1161,7 +1115,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     multiple
                     onChange={handleImagesUpload}
                   />
-          
+
                   <input
                     ref={videoInputRef}
                     id="videos-upload"
@@ -1171,7 +1125,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     multiple
                     onChange={handleVideosUpload}
                   />
-          
+
                   <input
                     ref={documentInputRef}
                     id="documents-upload"
@@ -1181,7 +1135,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     multiple
                     onChange={handleDocumentsUpload}
                   />
-          
+
                   <Button
                     type="button"
                     variant="ghost"
@@ -1193,7 +1147,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     <Video className="h-4 w-4 mr-2" />
                     Add video
                   </Button>
-          
+
                   <Button
                     type="button"
                     variant="ghost"
@@ -1205,7 +1159,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     <FileText className="h-4 w-4 mr-2" />
                     Add document
                   </Button>
-          
+
                   <Button
                     type="button"
                     variant="ghost"
@@ -1224,14 +1178,14 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 </>
               )}
             </div>
-          
+
             <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-end gap-2 overflow-hidden sm:w-auto sm:shrink-0">
               {isUploading && (
                 <span className="text-[11px] text-muted-foreground min-w-[48px] text-right">
                   {`${uploadProgress}%`}
                 </span>
               )}
-          
+
               {isUploading && (
                 <Button
                   type="button"
@@ -1243,7 +1197,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                   Cancel upload
                 </Button>
               )}
-          
+
               <Button
                 onClick={handlePost}
                 disabled={
