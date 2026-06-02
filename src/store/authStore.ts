@@ -73,6 +73,7 @@ function buildUserFromSupabaseUser(supaUser: any, profile?: any): User {
     profile?.avatar_url ||
     profile?.avatar ||
     supaUser.user_metadata?.avatar_url ||
+    supaUser.user_metadata?.avatar ||
     '';
 
   const tier =
@@ -101,6 +102,19 @@ function buildUserFromSupabaseUser(supaUser: any, profile?: any): User {
     followers: 0,
     following: 0,
     joinedDate: supaUser.created_at ? new Date(supaUser.created_at) : new Date(),
+  };
+}
+
+function mergeUser(current: User, incoming: Partial<User>): User {
+  return {
+    ...current,
+    ...incoming,
+    id: incoming.id || current.id,
+    name: incoming.name || current.name || 'FaceMeX user',
+    email: incoming.email || current.email || '',
+    avatar: incoming.avatar || current.avatar || '',
+    tier: incoming.tier || current.tier || 'free',
+    addons: incoming.addons || current.addons || { verified: false },
   };
 }
 
@@ -173,49 +187,116 @@ async function syncUserStoreFallback(profile: User) {
   }
 }
 
-async function loadBackendUserAndMerge(
-  set: any,
-  profile: User
-) {
-  try {
-    await syncUserStoreFallback(profile);
-  } catch {}
+function createFastSessionUser(supaUser: any, accessToken?: string) {
+  const profile = buildUserFromSupabaseUser(supaUser);
 
-  try {
-    await useUserStore.getState().loadMe();
-  } catch {
-    // ignore user store sync error
-  }
+  saveAuthCache(profile, accessToken).catch(() => {});
+  syncUserStoreFallback(profile).catch(() => {});
 
-  try {
-    const me = await api.get('/api/users/me');
+  return profile;
+}
 
-    set((state: AuthState) => ({
-      user: state.user
-        ? {
-            ...state.user,
-            ...me,
-            id: profile.id || me.id || state.user.id,
-            avatar: profile.avatar || me.avatar || state.user.avatar || '',
-            name: profile.name || me.name || state.user.name || 'FaceMeX user',
-            email: profile.email || me.email || state.user.email || '',
-            tier: me.tier || profile.tier || state.user.tier || 'free',
-            addons: me.addons || profile.addons || state.user.addons || { verified: false },
-          }
-        : state.user,
-    }));
-  } catch {
-    // Supabase profile is still enough for login session
+function syncUserInBackground(set: any, profile: User, supaUser?: any) {
+  const run = async () => {
+    let latestProfile = profile;
+
+    try {
+      if (supaUser?.id) {
+        const profileData = await getProfileFromSupabase(supaUser.id);
+        const supabaseProfile = buildUserFromSupabaseUser(supaUser, profileData);
+
+        latestProfile = mergeUser(profile, supabaseProfile);
+
+        await saveAuthCache(latestProfile);
+
+        set((state: AuthState) => ({
+          user: state.user ? mergeUser(state.user, latestProfile) : state.user,
+        }));
+
+        await syncUserStoreFallback(latestProfile);
+      }
+    } catch {
+      // keep fast profile
+    }
+
+    try {
+      await useUserStore.getState().loadMe();
+    } catch {
+      // ignore user store sync error
+    }
+
+    try {
+      const me = await api.get('/api/users/me');
+
+      set((state: AuthState) => ({
+        user: state.user
+          ? mergeUser(state.user, {
+              ...me,
+              id: latestProfile.id || me.id || state.user.id,
+              avatar:
+                latestProfile.avatar ||
+                me.avatar ||
+                state.user.avatar ||
+                '',
+              name:
+                latestProfile.name ||
+                me.name ||
+                state.user.name ||
+                'FaceMeX user',
+              email:
+                latestProfile.email ||
+                me.email ||
+                state.user.email ||
+                '',
+              tier:
+                me.tier ||
+                latestProfile.tier ||
+                state.user.tier ||
+                'free',
+              addons:
+                me.addons ||
+                latestProfile.addons ||
+                state.user.addons ||
+                { verified: false },
+            })
+          : state.user,
+      }));
+    } catch {
+      // Supabase profile is still enough for login session
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.setTimeout(run, 250);
+  } else {
+    run().catch(() => {});
   }
 }
 
-async function createSessionUser(supaUser: any, accessToken?: string) {
-  const profileData = await getProfileFromSupabase(supaUser.id);
-  const profile = buildUserFromSupabaseUser(supaUser, profileData);
+function upsertRegisterProfileInBackground(supaUser: any, name: string, email: string) {
+  const run = async () => {
+    try {
+      await supabase.from('profiles').upsert({
+        id: supaUser.id,
+        email: supaUser.email || email,
+        full_name: name,
+        name,
+        username: name,
+        avatar_url: null,
+        avatar: null,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      });
+    } catch {
+      // ignore profile upsert error
+    }
+  };
 
-  await saveAuthCache(profile, accessToken);
-
-  return profile;
+  if (typeof window !== 'undefined') {
+    window.setTimeout(run, 50);
+  } else {
+    run().catch(() => {});
+  }
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -257,7 +338,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw new Error('login_failed');
     }
 
-    const profile = await createSessionUser(supaUser, accessToken);
+    const profile = createFastSessionUser(supaUser, accessToken);
 
     set({
       user: profile,
@@ -265,7 +346,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isInitialized: true,
     });
 
-    await loadBackendUserAndMerge(set, profile);
+    syncUserInBackground(set, profile, supaUser);
   },
 
   register: async (name: string, email: string, password: string) => {
@@ -310,27 +391,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw new Error('register_failed');
     }
 
-    await supabase.from('profiles').upsert({
-      id: supaUser.id,
-      email: supaUser.email || email,
-      full_name: name,
-      name,
-      username: name,
-      avatar_url: null,
-      avatar: null,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    });
+    upsertRegisterProfileInBackground(supaUser, name, email);
 
-    const profile = await createSessionUser(supaUser, accessToken);
+    const profile = createFastSessionUser(supaUser, accessToken);
 
     set({
-      user: profile,
+      user: {
+        ...profile,
+        name: name || profile.name,
+        email: email || profile.email,
+      },
       isAuthenticated: true,
       isInitialized: true,
     });
 
-    await loadBackendUserAndMerge(set, profile);
+    syncUserInBackground(
+      set,
+      {
+        ...profile,
+        name: name || profile.name,
+        email: email || profile.email,
+      },
+      supaUser
+    );
   },
 
   logout: () => {
@@ -400,17 +483,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           return;
         }
 
-        (async () => {
-          const profile = await createSessionUser(supaUser, accessToken);
+        const profile = createFastSessionUser(supaUser, accessToken);
 
-          set({
-            user: profile,
-            isAuthenticated: true,
-            isInitialized: true,
-          });
+        set({
+          user: profile,
+          isAuthenticated: true,
+          isInitialized: true,
+        });
 
-          await loadBackendUserAndMerge(set, profile);
-        })();
+        syncUserInBackground(set, profile, supaUser);
       });
     }
 
@@ -430,7 +511,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
 
-    const profile = await createSessionUser(supaUser, accessToken);
+    const profile = createFastSessionUser(supaUser, accessToken);
 
     set({
       user: profile,
@@ -438,7 +519,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isInitialized: true,
     });
 
-    await loadBackendUserAndMerge(set, profile);
+    syncUserInBackground(set, profile, supaUser);
   },
 
   updateProfile: (updates: Partial<User>) => {
