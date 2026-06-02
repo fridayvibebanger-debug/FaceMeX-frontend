@@ -482,6 +482,8 @@ function getMyIdentityCodes(user: any, userStoreId: string) {
   push(user?.id);
   push(user?._id);
   push(user?.externalId);
+  push(user?.supabaseId);
+  push(user?.authId);
 
   if (typeof window !== 'undefined') {
     push(window.localStorage.getItem('faceme_user_id'));
@@ -715,6 +717,20 @@ export default function PostCard({ post }: PostCardProps) {
 
   const openAuthorProfile = () => {
     const targetId = profileId || getPostAuthorId(post);
+    const myRealId = cleanString(currentUserId || user?.id);
+
+    if (isOwner && myRealId) {
+      navigate(`/profile/${encodeURIComponent(myRealId)}`, {
+        state: {
+          ownProfile: true,
+          userId: myRealId,
+          profileId: myRealId,
+          userName: user?.name || displayName,
+          userAvatar: user?.avatar || displayAvatar,
+        },
+      });
+      return;
+    }
 
     if (!targetId) {
       alert('Profile ID not found for this post.');
@@ -979,6 +995,8 @@ export default function PostCard({ post }: PostCardProps) {
 
           incrementVoiceCommentCountToday();
           setShowComments(true);
+          setCommentComposerOpen(false);
+          setCommentText('');
         } catch (error) {
           console.error('Voice comment failed:', error);
           alert('Voice comment failed. Please try again.');
@@ -1123,8 +1141,17 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const openCommentComposer = () => {
-    setCommentComposerOpen(true);
+    const shouldClose = showComments || commentComposerOpen;
+
+    if (shouldClose) {
+      setShowComments(false);
+      setCommentComposerOpen(false);
+      setCommentText('');
+      return;
+    }
+
     setShowComments(true);
+    setCommentComposerOpen(true);
 
     window.setTimeout(() => {
       replyInputRef.current?.focus();
@@ -1132,7 +1159,7 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const toggleCommentsOnly = () => {
-    setShowComments((v) => !v);
+    openCommentComposer();
   };
 
   const startEditPost = () => {
@@ -1370,57 +1397,68 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           </button>
 
-          <DropdownMenu>
+          <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button
+                type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                aria-label="Post options"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="end" className="w-64 rounded-2xl">
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              onClick={(event) => event.stopPropagation()}
+              className="z-[80] w-64 rounded-2xl border border-border/70 bg-popover p-1 shadow-xl"
+            >
               {canEdit && (
-                <DropdownMenuItem onClick={startEditPost}>
+                <DropdownMenuItem
+                  onClick={startEditPost}
+                  className="cursor-pointer rounded-xl"
+                >
                   <PencilLine className="mr-2 h-4 w-4" />
                   Edit post
-                </DropdownMenuItem>
-              )}
-
-              {isOwner && (
-                <DropdownMenuItem onClick={inviteCollaboratorByCode}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Invite collaborator
-                </DropdownMenuItem>
-              )}
-
-              {!isOwner && !isCollaborator && !hasInvite && (
-                <DropdownMenuItem onClick={requestCollaboration}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Request collaboration
                 </DropdownMenuItem>
               )}
 
               {isOwner && pendingCollabRequests.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
+
                   <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Collaboration requests
                   </div>
 
                   {pendingCollabRequests.slice(0, 4).map((profile) => (
-                    <div key={profile.id} className="px-2 py-1">
-                      <div className="mb-1 flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
+                    <div
+                      key={profile.id}
+                      className="rounded-xl px-2 py-2 hover:bg-muted/40"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <Avatar className="h-7 w-7">
                           <AvatarImage src={profile.avatar} alt={profile.name} />
                           <AvatarFallback>{getInitial(profile.name)}</AvatarFallback>
                         </Avatar>
 
-                        <span className="min-w-0 flex-1 truncate text-xs font-semibold">
-                          {profile.name}
-                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold">
+                            {profile.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Wants to collaborate
+                          </p>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-1">
@@ -1446,11 +1484,42 @@ export default function PostCard({ post }: PostCardProps) {
               )}
 
               {isOwner && (
+                <DropdownMenuItem
+                  onClick={inviteCollaboratorByCode}
+                  className="cursor-pointer rounded-xl"
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite collaborator
+                </DropdownMenuItem>
+              )}
+
+              {!isOwner && !isCollaborator && !hasInvite && (
+                <DropdownMenuItem
+                  onClick={requestCollaboration}
+                  className="cursor-pointer rounded-xl"
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Request collaboration
+                </DropdownMenuItem>
+              )}
+
+              {hasInvite && !isOwner && (
+                <DropdownMenuItem
+                  disabled
+                  className="cursor-default rounded-xl text-muted-foreground"
+                >
+                  <UsersRound className="mr-2 h-4 w-4" />
+                  Collaboration request sent
+                </DropdownMenuItem>
+              )}
+
+              {isOwner && (
                 <>
                   <DropdownMenuSeparator />
+
                   <DropdownMenuItem
                     onClick={handleDeletePost}
-                    className="text-destructive focus:text-destructive"
+                    className="cursor-pointer rounded-xl text-destructive focus:text-destructive"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete post
@@ -1578,7 +1647,7 @@ export default function PostCard({ post }: PostCardProps) {
                     <div />
                   )}
 
-                  <DropdownMenu>
+                  <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
@@ -1689,7 +1758,7 @@ export default function PostCard({ post }: PostCardProps) {
 
           <div className="space-y-2 pt-0.5">
             <div className="flex items-center justify-between gap-1 border-y border-border/40 py-1">
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
@@ -1731,9 +1800,10 @@ export default function PostCard({ post }: PostCardProps) {
 
               <button
                 type="button"
-                className={actionButton}
+                className={`${actionButton} ${
+                  showComments || commentComposerOpen ? 'bg-muted/55 text-foreground' : ''
+                }`}
                 onClick={openCommentComposer}
-                onDoubleClick={toggleCommentsOnly}
               >
                 <MessageSquareText className={actionIcon} />
                 <span className={actionCount}>{commentCount}</span>
