@@ -27,6 +27,7 @@ import {
   X,
   Sparkles,
   Repeat2,
+  Download,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -354,6 +355,14 @@ function getInitial(value: string) {
   return cleanString(value).charAt(0).toUpperCase() || 'U';
 }
 
+function safeFileName(name: string) {
+  return String(name || 'facemex-image')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
 function normalizeProfile(raw: any, fallbackId: string, index: number): CollaboratorProfile {
   if (typeof raw === 'string') {
     return {
@@ -576,10 +585,12 @@ export default function PostCard({ post }: PostCardProps) {
   } = usePostStore();
 
   const [showComments, setShowComments] = useState(false);
+  const [commentComposerOpen, setCommentComposerOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [editingPost, setEditingPost] = useState(false);
   const [postDraft, setPostDraft] = useState(post.content);
   const [saved, setSaved] = useState(false);
+  const [reposted, setReposted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [expandedPost, setExpandedPost] = useState(false);
@@ -692,6 +703,16 @@ export default function PostCard({ post }: PostCardProps) {
     }
   }, [post.id]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('faceme_reposted_posts_v1');
+      const ids = raw ? (JSON.parse(raw) as string[]) : [];
+      setReposted(Array.isArray(ids) ? ids.includes(post.id) : false);
+    } catch {
+      setReposted(false);
+    }
+  }, [post.id]);
+
   const requestCollaboration = async () => {
     const myId = myIds[0] || '';
     const myName = user?.name || 'FaceMeX user';
@@ -790,6 +811,43 @@ export default function PostCard({ post }: PostCardProps) {
     const startIndex = Math.max(0, imageGallery.indexOf(src));
 
     openLightbox(imageGallery.length ? imageGallery : src, startIndex);
+  };
+
+  const saveImageToDevice = async (src: string, name = 'facemex-image') => {
+    if (!src) return;
+
+    try {
+      const response = await fetch(src, { mode: 'cors' });
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${safeFileName(name)}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch {
+      try {
+        const link = document.createElement('a');
+        link.href = src;
+        link.download = `${safeFileName(name)}.jpg`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch {
+        window.open(src, '_blank', 'noopener,noreferrer');
+      }
+    }
+  };
+
+  const saveCurrentLightboxImage = () => {
+    if (!lightboxSrc) return;
+    saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
   };
 
   const getVoiceCommentDailyLimit = () => {
@@ -974,9 +1032,65 @@ export default function PostCard({ post }: PostCardProps) {
   const handleRepost = async () => {
     try {
       await sharePost(post.id);
+
+      setReposted(true);
+
+      try {
+        const raw = localStorage.getItem('faceme_reposted_posts_v1');
+        const ids = raw ? (JSON.parse(raw) as string[]) : [];
+        const safe = Array.isArray(ids) ? ids : [];
+        localStorage.setItem(
+          'faceme_reposted_posts_v1',
+          JSON.stringify(Array.from(new Set([...safe, post.id])))
+        );
+      } catch {}
     } catch (error) {
       console.error('Repost failed:', error);
+      alert('Could not repost. Please try again.');
     }
+  };
+
+  const handleShareOnly = async () => {
+    const url = `${window.location.origin}/post/${post.id}`;
+
+    try {
+      const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
+
+      if (navAny && typeof navAny.share === 'function') {
+        await navAny.share({
+          title: 'FaceMeX',
+          text: cleanPostContent || 'Check this post on FaceMeX',
+          url,
+        });
+        return;
+      }
+
+      if (navAny?.clipboard?.writeText) {
+        await navAny.clipboard.writeText(url);
+        return;
+      }
+
+      window.prompt('Copy post link:', url);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        window.prompt('Copy post link:', url);
+      }
+    }
+  };
+
+  const openCommentComposer = () => {
+    setCommentComposerOpen(true);
+    setShowComments(true);
+
+    window.setTimeout(() => {
+      replyInputRef.current?.focus();
+    }, 50);
+  };
+
+  const toggleCommentsOnly = () => {
+    setShowComments((v) => !v);
   };
 
   const startEditPost = () => {
@@ -1021,6 +1135,7 @@ export default function PostCard({ post }: PostCardProps) {
 
     setCommentText('');
     setShowComments(true);
+    setCommentComposerOpen(false);
   };
 
   const handleDeleteComment = async (commentId: string) => {
@@ -1038,6 +1153,7 @@ export default function PostCard({ post }: PostCardProps) {
 
   const handleReplyToComment = (commentUserName: string) => {
     setShowComments(true);
+    setCommentComposerOpen(true);
     setCommentText(`@${commentUserName} `);
 
     window.setTimeout(() => {
@@ -1152,23 +1268,17 @@ export default function PostCard({ post }: PostCardProps) {
     }
   })();
 
-  const feedActionButton =
-    'group h-[54px] min-w-0 rounded-2xl px-1 text-[11px] font-semibold text-muted-foreground transition-all hover:bg-muted/45 hover:text-foreground';
+  const actionButton =
+    'group flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-muted-foreground transition-all hover:bg-muted/45 hover:text-foreground active:scale-[0.98]';
 
-  const feedActionInner =
-    'flex h-full w-full flex-col items-center justify-center gap-1';
+  const actionIcon =
+    'h-[18px] w-[18px] transition-transform group-hover:scale-110';
 
-  const feedActionIcon =
-    'flex h-7 w-7 items-center justify-center rounded-full bg-muted/55 transition-all group-hover:scale-105 group-hover:bg-background group-hover:shadow-sm';
-
-  const feedActionLabel =
-    'flex items-center justify-center gap-1 leading-none';
-
-  const feedActionCount =
-    'text-[10px] font-bold text-muted-foreground tabular-nums';
+  const actionCount =
+    'text-[11px] font-semibold tabular-nums text-muted-foreground';
 
   const viewerActionButton =
-    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition hover:text-white';
+    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition hover:text-white active:scale-95';
 
   return (
     <motion.div
@@ -1424,13 +1534,24 @@ export default function PostCard({ post }: PostCardProps) {
                     <div />
                   )}
 
-                  <button
-                    type="button"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur hover:bg-white/15"
-                    aria-label="More"
-                  >
-                    <MoreHorizontal className="h-6 w-6" />
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur hover:bg-white/15"
+                        aria-label="More"
+                      >
+                        <MoreHorizontal className="h-6 w-6" />
+                      </button>
+                    </DropdownMenuTrigger>
+
+                    <DropdownMenuContent align="end" className="w-44 rounded-2xl">
+                      <DropdownMenuItem onClick={saveCurrentLightboxImage}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Save image
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
                 <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
@@ -1468,13 +1589,13 @@ export default function PostCard({ post }: PostCardProps) {
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 px-5 py-4 backdrop-blur">
-                  <div className="mx-auto grid max-w-md grid-cols-4 gap-3 text-white">
+                  <div className="mx-auto grid max-w-md grid-cols-5 gap-2 text-white">
                     <button
                       type="button"
                       onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                       className={viewerActionButton}
                     >
-                      <Sparkles className="h-6 w-6" />
+                      <Sparkles className="h-5 w-5" />
                       <span>{post.likes || 0}</span>
                     </button>
 
@@ -1482,31 +1603,39 @@ export default function PostCard({ post }: PostCardProps) {
                       type="button"
                       onClick={() => {
                         closeLightbox();
-                        setShowComments(true);
-                        window.setTimeout(() => replyInputRef.current?.focus(), 80);
+                        openCommentComposer();
                       }}
                       className={viewerActionButton}
                     >
-                      <MessageSquareText className="h-6 w-6" />
+                      <MessageSquareText className="h-5 w-5" />
                       <span>{post.comments?.length || 0}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleRepost}
-                      className={viewerActionButton}
+                      className={`${viewerActionButton} ${reposted ? 'text-cyan-300' : ''}`}
                     >
-                      <Repeat2 className="h-6 w-6" />
+                      <Repeat2 className="h-5 w-5" />
                       <span>{post.shares || 0}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={toggleSaved}
+                      className={`${viewerActionButton} ${saved ? 'text-cyan-300' : ''}`}
+                    >
+                      <Bookmark className="h-5 w-5" />
+                      <span>{saved ? 'Saved' : 'Save'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleShareOnly}
                       className={viewerActionButton}
                     >
-                      <Bookmark className="h-6 w-6" />
-                      <span>{saved ? 'Saved' : 'Save'}</span>
+                      <Send className="h-5 w-5" />
+                      <span>Send</span>
                     </button>
                   </div>
                 </div>
@@ -1514,27 +1643,19 @@ export default function PostCard({ post }: PostCardProps) {
             </DialogContent>
           </Dialog>
 
-          <div className="space-y-2 pt-1.5">
-            <div className="grid grid-cols-4 gap-1.5 border-y border-border/50 py-1.5">
+          <div className="space-y-2 pt-0.5">
+            <div className="flex items-center justify-between gap-1 border-y border-border/40 py-1">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="sm"
                     aria-label="React"
-                    className={`${feedActionButton} ${reactionClass}`}
+                    className={`${actionButton} ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
-                    <span className={feedActionInner}>
-                      <span className={feedActionIcon}>
-                        <Sparkles className="h-4 w-4" />
-                      </span>
-                      <span className={feedActionLabel}>
-                        React <span className={feedActionCount}>{post.likes || 0}</span>
-                      </span>
-                    </span>
-                  </Button>
+                    <Sparkles className={actionIcon} />
+                    <span className={actionCount}>{post.likes || 0}</span>
+                  </button>
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent align="start" className="flex gap-1 rounded-full px-2 py-2">
@@ -1564,59 +1685,40 @@ export default function PostCard({ post }: PostCardProps) {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className={feedActionButton}
-                onClick={() => {
-                  setShowComments((v) => !v);
-                  window.setTimeout(() => replyInputRef.current?.focus(), 50);
-                }}
+                className={actionButton}
+                onClick={openCommentComposer}
+                onDoubleClick={toggleCommentsOnly}
               >
-                <span className={feedActionInner}>
-                  <span className={feedActionIcon}>
-                    <MessageSquareText className="h-4 w-4" />
-                  </span>
-                  <span className={feedActionLabel}>
-                    Reply <span className={feedActionCount}>{commentCount}</span>
-                  </span>
-                </span>
-              </Button>
+                <MessageSquareText className={actionIcon} />
+                <span className={actionCount}>{commentCount}</span>
+              </button>
 
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className={feedActionButton}
+                className={`${actionButton} ${reposted ? 'text-cyan-600' : ''}`}
                 onClick={handleRepost}
               >
-                <span className={feedActionInner}>
-                  <span className={feedActionIcon}>
-                    <Repeat2 className="h-4 w-4" />
-                  </span>
-                  <span className={feedActionLabel}>
-                    Repost <span className={feedActionCount}>{post.shares || 0}</span>
-                  </span>
-                </span>
-              </Button>
+                <Repeat2 className={actionIcon} />
+                <span className={actionCount}>{post.shares || 0}</span>
+              </button>
 
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className={`${feedActionButton} ${saved ? 'text-foreground' : ''}`}
+                className={`${actionButton} ${saved ? 'text-cyan-600' : ''}`}
                 onClick={toggleSaved}
               >
-                <span className={feedActionInner}>
-                  <span className={feedActionIcon}>
-                    <Bookmark className="h-4 w-4" />
-                  </span>
-                  <span className={feedActionLabel}>
-                    {saved ? 'Saved' : 'Save'}
-                  </span>
-                </span>
-              </Button>
+                <Bookmark className={actionIcon} />
+              </button>
+
+              <button
+                type="button"
+                className={actionButton}
+                onClick={handleShareOnly}
+              >
+                <Send className={actionIcon} />
+              </button>
             </div>
 
             <Button
@@ -1639,30 +1741,41 @@ export default function PostCard({ post }: PostCardProps) {
               {isRecording ? `${recordSeconds}s` : 'Voice'}
             </Button>
 
-            <div className="flex items-center gap-2">
-              <Input
-                ref={replyInputRef}
-                placeholder="Reply..."
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleComment();
-                  }
-                }}
-                className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
+            <AnimatePresence>
+              {commentComposerOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, height: 0 }}
+                  animate={{ opacity: 1, y: 0, height: 'auto' }}
+                  exit={{ opacity: 0, y: -4, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 pt-1">
+                    <Input
+                      ref={replyInputRef}
+                      placeholder="Reply..."
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleComment();
+                        }
+                      }}
+                      className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                    />
 
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={handleComment}
-                aria-label="Send reply"
-                className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleComment}
+                      aria-label="Send reply"
+                      className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {isRecording && (
