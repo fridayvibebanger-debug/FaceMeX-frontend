@@ -19,8 +19,6 @@ import {
   AudioLines,
   MessageCircle,
   FileText,
-  Lock,
-  Unlock,
   ChevronLeft,
   ChevronRight,
   UserPlus,
@@ -111,11 +109,19 @@ function getSafeDate(value: unknown) {
 }
 
 function getPostDate(post: Post) {
-  return getSafeDate((post as any).timestamp || (post as any).createdAt || (post as any).created_at);
+  return getSafeDate(
+    (post as any).timestamp ||
+      (post as any).createdAt ||
+      (post as any).created_at
+  );
 }
 
 function getCommentDate(comment: any) {
-  return getSafeDate(comment?.timestamp || comment?.createdAt || comment?.created_at);
+  return getSafeDate(
+    comment?.timestamp ||
+      comment?.createdAt ||
+      comment?.created_at
+  );
 }
 
 function getCommentText(comment: any) {
@@ -212,7 +218,10 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         1
     );
 
-    const totalPages = Math.max(1, Number.isFinite(rawTotalPages) ? rawTotalPages : 1);
+    const totalPages = Math.max(
+      1,
+      Number.isFinite(rawTotalPages) ? rawTotalPages : 1
+    );
 
     const rawPreviewPages = Number(
       raw.previewPages ||
@@ -409,7 +418,9 @@ function normalizeCollaboratorProfiles(post: Post): CollaboratorProfile[] {
   const seen = new Set<string>();
 
   return source
-    .map((item: any, index: number) => normalizeProfile(item, `${post.id}-collab-${index}`, index))
+    .map((item: any, index: number) =>
+      normalizeProfile(item, `${post.id}-collab-${index}`, index)
+    )
     .filter((profile: CollaboratorProfile) => {
       if (!profile.id) return false;
       if (seen.has(profile.id)) return false;
@@ -465,6 +476,7 @@ function idsMatch(a: unknown, b: unknown) {
 function getMyCollabCode(name: string, id: string) {
   const cleanName = cleanString(name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
   const shortName = cleanName || 'User';
+
   const last4 =
     cleanString(id).replace(/[^a-zA-Z0-9]/g, '').slice(-4) ||
     String(Math.floor(1000 + Math.random() * 9000));
@@ -485,7 +497,11 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
             title={profile.name}
           >
             {profile.avatar ? (
-              <img src={profile.avatar} alt={profile.name} className="h-full w-full object-cover" />
+              <img
+                src={profile.avatar}
+                alt={profile.name}
+                className="h-full w-full object-cover"
+              />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[9px] font-bold text-muted-foreground">
                 {getInitial(profile.name)}
@@ -505,15 +521,9 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
 
 function DocumentPreview({
   document,
-  downloadsLocked,
-  canControl,
-  onToggleLock,
   onOpenPages,
 }: {
   document: PostDocumentItem;
-  downloadsLocked: boolean;
-  canControl: boolean;
-  onToggleLock: () => void;
   onOpenPages: (pages: string[], startIndex: number) => void;
 }) {
   const firstPage = document.pages[0] || '';
@@ -526,28 +536,17 @@ function DocumentPreview({
           type="button"
           onClick={() => onOpenPages(document.pages, 0)}
           className="relative block w-full bg-white"
-          onContextMenu={(e) => {
-            if (downloadsLocked) e.preventDefault();
-          }}
         >
           <img
             src={firstPage}
             alt={`${document.title} preview`}
             className="h-[250px] w-full object-contain sm:h-[340px]"
             loading="lazy"
-            draggable={!downloadsLocked}
           />
 
           {imageCount > 1 && (
             <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
               {imageCount} images
-            </span>
-          )}
-
-          {downloadsLocked && (
-            <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">
-              <Lock className="h-3 w-3" />
-              Downloads locked
             </span>
           )}
         </button>
@@ -557,17 +556,6 @@ function DocumentPreview({
           <p className="text-sm font-semibold">{document.title}</p>
           <p className="text-xs text-muted-foreground">Document uploaded</p>
         </div>
-      )}
-
-      {canControl && (
-        <button
-          type="button"
-          onClick={onToggleLock}
-          className="flex h-9 w-full items-center justify-center gap-2 border-t border-border/70 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
-        >
-          {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-          {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
-        </button>
       )}
     </div>
   );
@@ -601,8 +589,6 @@ export default function PostCard({ post }: PostCardProps) {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxZoom, setLightboxZoom] = useState(1);
 
-  const [downloadsLocked, setDownloadsLocked] = useState(false);
-
   const audioStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -613,7 +599,10 @@ export default function PostCard({ post }: PostCardProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  const myIds = useMemo(() => getMyIdentityCodes(user, currentUserId || ''), [user, currentUserId]);
+  const myIds = useMemo(
+    () => getMyIdentityCodes(user, currentUserId || ''),
+    [user, currentUserId]
+  );
 
   const ownerIds = useMemo(
     () => [
@@ -653,7 +642,9 @@ export default function PostCard({ post }: PostCardProps) {
       )
     : [];
 
-  const isCollaborator = myIds.some((myId) => collaborators.some((id) => idsMatch(id, myId)));
+  const isCollaborator = myIds.some((myId) =>
+    collaborators.some((id) => idsMatch(id, myId))
+  );
 
   const collabInvites = Array.isArray((post as any).collabInvites)
     ? ((post as any).collabInvites as any[]).map((x) =>
@@ -661,12 +652,18 @@ export default function PostCard({ post }: PostCardProps) {
       )
     : [];
 
-  const hasInvite = myIds.some((myId) => collabInvites.some((id) => idsMatch(id, myId)));
+  const hasInvite = myIds.some((myId) =>
+    collabInvites.some((id) => idsMatch(id, myId))
+  );
 
   const canEdit = isOwner || isCollaborator;
 
   const displayName = post.userName || (post as any).name || 'FaceMeX Member';
-  const displayAvatar = post.userAvatar || (post as any).avatar || (post as any).userAvatar || '';
+  const displayAvatar =
+    post.userAvatar ||
+    (post as any).avatar ||
+    (post as any).userAvatar ||
+    '';
 
   const isAuthorVerified =
     (post as any)?.verified === true ||
@@ -677,7 +674,10 @@ export default function PostCard({ post }: PostCardProps) {
     (post as any)?.is_verified === true ||
     (post as any)?.user?.verified === true ||
     (post as any)?.user?.userVerified === true ||
-    (isOwner && (addons?.verified === true || (user as any)?.isVerified === true || (user as any)?.verified === true));
+    (isOwner &&
+      (addons?.verified === true ||
+        (user as any)?.isVerified === true ||
+        (user as any)?.verified === true));
 
   useEffect(() => {
     setPostDraft(post.content);
@@ -692,39 +692,6 @@ export default function PostCard({ post }: PostCardProps) {
       setSaved(false);
     }
   }, [post.id]);
-
-  useEffect(() => {
-    try {
-      const serverLocked =
-        (post as any).downloadsLocked === true ||
-        (post as any).downloads_locked === true ||
-        (post as any).imagesLocked === true ||
-        (post as any).images_locked === true ||
-        (post as any).mediaLocked === true ||
-        (post as any).media_locked === true;
-
-      const raw = localStorage.getItem(`facemex:post_downloads_locked:${post.id}`);
-      const localLocked = raw === 'true';
-
-      setDownloadsLocked(serverLocked || localLocked);
-    } catch {
-      setDownloadsLocked(false);
-    }
-  }, [post.id, post]);
-
-  const toggleDownloadsLocked = () => {
-    if (!isOwner) return;
-
-    setDownloadsLocked((prev) => {
-      const next = !prev;
-
-      try {
-        localStorage.setItem(`facemex:post_downloads_locked:${post.id}`, String(next));
-      } catch {}
-
-      return next;
-    });
-  };
 
   const requestCollaboration = async () => {
     const myId = myIds[0] || '';
@@ -1107,171 +1074,80 @@ export default function PostCard({ post }: PostCardProps) {
     }, 0);
   };
 
-  const AuthorDownloadLockButton = () => {
-    if (!isOwner || !hasMediaOrDocs) return null;
-
-    return (
-      <button
-        type="button"
-        onClick={toggleDownloadsLocked}
-        className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-background text-[12px] font-semibold text-muted-foreground shadow-sm hover:bg-muted/40 hover:text-foreground"
-      >
-        {downloadsLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-        {downloadsLocked ? 'Unlock image downloads' : 'Lock image downloads'}
-      </button>
-    );
-  };
-
-  const DownloadLockChip = () => {
-    if (!downloadsLocked) return null;
-
-    return (
-      <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">
-        <Lock className="h-3 w-3" />
-        Downloads locked
-      </span>
-    );
-  };
-
-  const renderMediaItem = (item: PostMediaItem, index: number) => {
-    if (item.type === 'video') {
-      return (
-        <video
-          src={item.src}
-          controls
-          playsInline
-          preload="metadata"
-          className="h-full w-full object-contain bg-black"
-          controlsList={downloadsLocked ? 'nodownload' : undefined}
-          onContextMenu={(e) => {
-            if (downloadsLocked) e.preventDefault();
-          }}
-        />
-      );
-    }
-
-    return (
-      <img
-        src={item.src}
-        alt={`Post media ${index + 1}`}
-        className="h-full w-full object-contain bg-white"
-        loading="lazy"
-        draggable={!downloadsLocked}
-        onContextMenu={(e) => {
-          if (downloadsLocked) e.preventDefault();
-        }}
-      />
-    );
-  };
-
   const renderMediaFrame = () => {
     if (mediaItems.length === 0) return null;
 
     const imageItems = mediaItems.filter((item) => item.type === 'image');
+    const videoItems = mediaItems.filter((item) => item.type === 'video');
 
-    if (mediaItems.length === 1) {
-      const item = mediaItems[0];
-
-      if (item.type === 'video') {
-        return (
-          <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-            <div className="relative h-[250px] sm:h-[340px]">
-              {renderMediaItem(item, 0)}
-              <DownloadLockChip />
-            </div>
-          </div>
-        );
-      }
+    if (videoItems.length > 0 && mediaItems.length === 1) {
+      const item = videoItems[0];
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => openMediaLightbox(item.src)}
-            className="relative block w-full"
-            onContextMenu={(e) => {
-              if (downloadsLocked) e.preventDefault();
-            }}
-          >
-            <img
-              src={item.src}
-              alt="Post media"
-              className="h-[250px] w-full object-contain sm:h-[340px]"
-              loading="lazy"
-              draggable={!downloadsLocked}
-            />
-            <DownloadLockChip />
-          </button>
+        <div className="mt-2 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm">
+          <video
+            src={item.src}
+            controls
+            playsInline
+            preload="metadata"
+            className="h-auto max-h-[520px] w-full object-contain bg-black"
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
+          />
         </div>
       );
     }
 
-    if (imageItems.length === mediaItems.length) {
-      const firstImage = imageItems[0];
-      const imageCount = imageItems.length;
+    if (imageItems.length === 1) {
+      const item = imageItems[0];
 
       return (
-        <div className="overflow-hidden rounded-[22px] border border-border/70 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => openMediaLightbox(firstImage.src)}
-            className="relative block w-full"
-            onContextMenu={(e) => {
-              if (downloadsLocked) e.preventDefault();
-            }}
-          >
-            <img
-              src={firstImage.src}
-              alt="Post media preview"
-              className="h-[250px] w-full object-contain sm:h-[340px]"
-              loading="lazy"
-              draggable={!downloadsLocked}
-            />
-
-            {imageCount > 1 && (
-              <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-                {imageCount} images
-              </span>
-            )}
-
-            <DownloadLockChip />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => openMediaLightbox(item.src)}
+          className="mt-2 block w-full overflow-hidden rounded-[22px] border border-border/60 bg-muted/20 shadow-sm"
+        >
+          <img
+            src={item.src}
+            alt="Post media"
+            className="max-h-[540px] w-full object-cover"
+            loading="lazy"
+          />
+        </button>
       );
     }
 
-    return (
-      <div className="overflow-hidden rounded-[22px] border border-border/70 bg-black shadow-sm">
-        <div className="grid h-[250px] grid-cols-2 gap-1 bg-black sm:h-[340px]">
-          {mediaItems.slice(0, 4).map((item, index) => {
-            const extraCount = mediaItems.length - 4;
-            const showMore = index === 3 && extraCount > 0;
-
-            return (
+    if (imageItems.length > 1) {
+      return (
+        <div className="mt-2 w-full overflow-hidden">
+          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {imageItems.map((item, index) => (
               <button
                 key={`${item.src}-${index}`}
                 type="button"
-                className="relative h-full w-full overflow-hidden bg-black"
-                onClick={() => item.type === 'image' && openMediaLightbox(item.src)}
-                onContextMenu={(e) => {
-                  if (downloadsLocked) e.preventDefault();
-                }}
+                onClick={() => openMediaLightbox(item.src)}
+                className="relative h-[360px] min-w-[82%] overflow-hidden rounded-[22px] border border-border/60 bg-muted/20 shadow-sm sm:h-[460px] sm:min-w-[58%]"
               >
-                {renderMediaItem(item, index)}
+                <img
+                  src={item.src}
+                  alt={`Post image ${index + 1}`}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
 
-                {showMore && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
-                    +{extraCount}
-                  </div>
+                {index === 0 && imageItems.length > 1 && (
+                  <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">
+                    {imageItems.length} images
+                  </span>
                 )}
-
-                <DownloadLockChip />
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    return null;
   };
 
   const commentCount = post.comments?.length || 0;
@@ -1387,13 +1263,6 @@ export default function PostCard({ post }: PostCardProps) {
                 <DropdownMenuItem onClick={requestCollaboration}>
                   <UserPlus className="mr-2 h-4 w-4" />
                   Request collaboration
-                </DropdownMenuItem>
-              )}
-
-              {isOwner && hasMediaOrDocs && (
-                <DropdownMenuItem onClick={toggleDownloadsLocked}>
-                  {downloadsLocked ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
-                  {downloadsLocked ? 'Unlock downloads' : 'Lock downloads'}
                 </DropdownMenuItem>
               )}
 
@@ -1519,16 +1388,11 @@ export default function PostCard({ post }: PostCardProps) {
                 <DocumentPreview
                   key={doc.id}
                   document={doc}
-                  downloadsLocked={downloadsLocked}
-                  canControl={isOwner}
-                  onToggleLock={toggleDownloadsLocked}
                   onOpenPages={(pages, startIndex) => openLightbox(pages, startIndex)}
                 />
               ))}
             </div>
           )}
-
-          <AuthorDownloadLockButton />
 
           {post.audio && (
             <div className="rounded-2xl border bg-background p-3">
@@ -1563,7 +1427,9 @@ export default function PostCard({ post }: PostCardProps) {
                   <div className="w-10" />
 
                   <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-semibold text-white backdrop-blur">
-                    {lightboxItems.length > 0 ? `${lightboxIndex + 1} / ${lightboxItems.length}` : 'Image'}
+                    {lightboxItems.length > 0
+                      ? `${lightboxIndex + 1} / ${lightboxItems.length}`
+                      : 'Image'}
                   </div>
 
                   <button
@@ -1595,10 +1461,6 @@ export default function PostCard({ post }: PostCardProps) {
                                 maxHeight: 'none',
                               }
                         }
-                        draggable={!downloadsLocked}
-                        onContextMenu={(e) => {
-                          if (downloadsLocked) e.preventDefault();
-                        }}
                       />
                     )}
                   </div>
