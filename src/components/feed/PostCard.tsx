@@ -18,15 +18,15 @@ import {
   Trash2,
   AudioLines,
   MessageCircle,
+  MessageSquareText,
   FileText,
   ChevronLeft,
   ChevronRight,
   UserPlus,
   UsersRound,
   X,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
+  Sparkles,
+  Repeat2,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -587,7 +587,6 @@ export default function PostCard({ post }: PostCardProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxItems, setLightboxItems] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [lightboxZoom, setLightboxZoom] = useState(1);
 
   const audioStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -764,7 +763,6 @@ export default function PostCard({ post }: PostCardProps) {
 
     setLightboxItems(gallery);
     setLightboxIndex(safeIndex);
-    setLightboxZoom(1);
     setLightboxOpen(true);
   };
 
@@ -772,31 +770,16 @@ export default function PostCard({ post }: PostCardProps) {
     setLightboxOpen(false);
     setLightboxItems([]);
     setLightboxIndex(0);
-    setLightboxZoom(1);
   };
 
   const goPrevLightbox = () => {
     if (!lightboxItems.length) return;
-    setLightboxZoom(1);
     setLightboxIndex((prev) => (prev <= 0 ? lightboxItems.length - 1 : prev - 1));
   };
 
   const goNextLightbox = () => {
     if (!lightboxItems.length) return;
-    setLightboxZoom(1);
     setLightboxIndex((prev) => (prev >= lightboxItems.length - 1 ? 0 : prev + 1));
-  };
-
-  const zoomIn = () => {
-    setLightboxZoom((prev) => Math.min(prev + 0.4, 4));
-  };
-
-  const zoomOut = () => {
-    setLightboxZoom((prev) => Math.max(prev - 0.4, 1));
-  };
-
-  const resetZoom = () => {
-    setLightboxZoom(1);
   };
 
   const openMediaLightbox = (src: string) => {
@@ -988,24 +971,12 @@ export default function PostCard({ post }: PostCardProps) {
     });
   };
 
-  const handleShare = async () => {
+  const handleRepost = async () => {
     try {
-      const url = `${window.location.origin}/post/${post.id}`;
-      const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
-
-      if (navAny && typeof navAny.share === 'function') {
-        await navAny.share({
-          title: 'FaceMeX',
-          url,
-        });
-      } else if (navAny?.clipboard?.writeText) {
-        await navAny.clipboard.writeText(url);
-      }
+      await sharePost(post.id);
     } catch (error) {
-      console.log(error);
+      console.error('Repost failed:', error);
     }
-
-    sharePost(post.id);
   };
 
   const startEditPost = () => {
@@ -1181,11 +1152,23 @@ export default function PostCard({ post }: PostCardProps) {
     }
   })();
 
-  const topActionButton =
-    'h-8 rounded-full px-1.5 text-[13px] font-semibold text-foreground hover:bg-muted/40 hover:text-foreground';
+  const feedActionButton =
+    'group h-[54px] min-w-0 rounded-2xl px-1 text-[11px] font-semibold text-muted-foreground transition-all hover:bg-muted/45 hover:text-foreground';
 
-  const topActionCount =
-    'ml-1.5 text-[11px] font-semibold text-muted-foreground tabular-nums';
+  const feedActionInner =
+    'flex h-full w-full flex-col items-center justify-center gap-1';
+
+  const feedActionIcon =
+    'flex h-7 w-7 items-center justify-center rounded-full bg-muted/55 transition-all group-hover:scale-105 group-hover:bg-background group-hover:shadow-sm';
+
+  const feedActionLabel =
+    'flex items-center justify-center gap-1 leading-none';
+
+  const feedActionCount =
+    'text-[10px] font-bold text-muted-foreground tabular-nums';
+
+  const viewerActionButton =
+    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition hover:text-white';
 
   return (
     <motion.div
@@ -1421,110 +1404,118 @@ export default function PostCard({ post }: PostCardProps) {
               else setLightboxOpen(true);
             }}
           >
-            <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] overflow-hidden border border-white/10 bg-black/95 p-0">
-              <div className="relative flex h-full w-full flex-col overflow-hidden">
-                <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between gap-2 bg-gradient-to-b from-black/85 to-transparent px-3 py-3">
-                  <div className="w-10" />
-
-                  <div className="rounded-full bg-white/15 px-3 py-2 text-xs font-semibold text-white backdrop-blur">
-                    {lightboxItems.length > 0
-                      ? `${lightboxIndex + 1} / ${lightboxItems.length}`
-                      : 'Image'}
-                  </div>
-
+            <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[9999] !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none border-0 bg-black p-0 shadow-none [&>button]:hidden">
+              <div className="relative flex h-full w-full flex-col bg-black text-white">
+                <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-5">
                   <button
                     type="button"
                     onClick={closeLightbox}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
-                    aria-label="Close"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur hover:bg-white/15"
+                    aria-label="Close image"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-6 w-6" />
+                  </button>
+
+                  {lightboxItems.length > 1 ? (
+                    <div className="rounded-full bg-black/55 px-4 py-2 text-sm font-bold text-white backdrop-blur">
+                      {lightboxIndex + 1} / {lightboxItems.length}
+                    </div>
+                  ) : (
+                    <div />
+                  )}
+
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur hover:bg-white/15"
+                    aria-label="More"
+                  >
+                    <MoreHorizontal className="h-6 w-6" />
                   </button>
                 </div>
 
-                <div className="relative h-full w-full overflow-auto px-2 py-16 touch-pan-x touch-pan-y">
-                  <div className="flex min-h-full min-w-full items-center justify-center">
-                    {lightboxSrc && (
-                      <img
-                        src={lightboxSrc}
-                        alt={`Image ${lightboxIndex + 1}`}
-                        className="object-contain transition-all duration-200"
-                        style={
-                          lightboxZoom <= 1
-                            ? {
-                                maxWidth: '100%',
-                                maxHeight: '100%',
-                              }
-                            : {
-                                width: `${100 * lightboxZoom}%`,
-                                maxWidth: 'none',
-                                maxHeight: 'none',
-                              }
-                        }
-                      />
-                    )}
-                  </div>
+                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
+                  {lightboxSrc && (
+                    <img
+                      src={lightboxSrc}
+                      alt={`Image ${lightboxIndex + 1}`}
+                      className="max-h-full max-w-full object-contain"
+                      draggable={false}
+                      onContextMenu={(e) => e.preventDefault()}
+                    />
+                  )}
 
                   {lightboxItems.length > 1 && (
                     <>
                       <button
                         type="button"
                         onClick={goPrevLightbox}
-                        className="fixed left-4 top-1/2 z-30 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                        className="absolute left-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur hover:bg-white/15"
                         aria-label="Previous image"
                       >
-                        <ChevronLeft className="h-5 w-5" />
+                        <ChevronLeft className="h-7 w-7" />
                       </button>
 
                       <button
                         type="button"
                         onClick={goNextLightbox}
-                        className="fixed right-4 top-1/2 z-30 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+                        className="absolute right-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur hover:bg-white/15"
                         aria-label="Next image"
                       >
-                        <ChevronRight className="h-5 w-5" />
+                        <ChevronRight className="h-7 w-7" />
                       </button>
                     </>
                   )}
                 </div>
 
-                <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-center gap-2 bg-gradient-to-t from-black/85 to-transparent px-3 py-4">
-                  <button
-                    type="button"
-                    onClick={zoomOut}
-                    disabled={lightboxZoom <= 1}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
-                  >
-                    <ZoomOut className="h-4 w-4" />
-                    Out
-                  </button>
+                <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 px-5 py-4 backdrop-blur">
+                  <div className="mx-auto grid max-w-md grid-cols-4 gap-3 text-white">
+                    <button
+                      type="button"
+                      onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                      className={viewerActionButton}
+                    >
+                      <Sparkles className="h-6 w-6" />
+                      <span>{post.likes || 0}</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={zoomIn}
-                    disabled={lightboxZoom >= 4}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-40"
-                  >
-                    <ZoomIn className="h-4 w-4" />
-                    Zoom
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeLightbox();
+                        setShowComments(true);
+                        window.setTimeout(() => replyInputRef.current?.focus(), 80);
+                      }}
+                      className={viewerActionButton}
+                    >
+                      <MessageSquareText className="h-6 w-6" />
+                      <span>{post.comments?.length || 0}</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={resetZoom}
-                    disabled={lightboxZoom <= 1}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-black shadow-lg hover:bg-white/90 disabled:opacity-40"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    Reset
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleRepost}
+                      className={viewerActionButton}
+                    >
+                      <Repeat2 className="h-6 w-6" />
+                      <span>{post.shares || 0}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleSaved}
+                      className={viewerActionButton}
+                    >
+                      <Bookmark className="h-6 w-6" />
+                      <span>{saved ? 'Saved' : 'Save'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </DialogContent>
           </Dialog>
 
           <div className="space-y-2 pt-1.5">
-            <div className="flex items-center justify-between gap-1 px-0.5">
+            <div className="grid grid-cols-4 gap-1.5 border-y border-border/50 py-1.5">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -1532,11 +1523,17 @@ export default function PostCard({ post }: PostCardProps) {
                     variant="ghost"
                     size="sm"
                     aria-label="React"
-                    className={`${topActionButton} ${reactionClass}`}
+                    className={`${feedActionButton} ${reactionClass}`}
                     onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
                   >
-                    <span>React</span>
-                    <span className={topActionCount}>{post.likes || 0}</span>
+                    <span className={feedActionInner}>
+                      <span className={feedActionIcon}>
+                        <Sparkles className="h-4 w-4" />
+                      </span>
+                      <span className={feedActionLabel}>
+                        React <span className={feedActionCount}>{post.likes || 0}</span>
+                      </span>
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
 
@@ -1571,36 +1568,54 @@ export default function PostCard({ post }: PostCardProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={topActionButton}
+                className={feedActionButton}
                 onClick={() => {
                   setShowComments((v) => !v);
                   window.setTimeout(() => replyInputRef.current?.focus(), 50);
                 }}
               >
-                <span>Reply</span>
-                <span className={topActionCount}>{commentCount}</span>
+                <span className={feedActionInner}>
+                  <span className={feedActionIcon}>
+                    <MessageSquareText className="h-4 w-4" />
+                  </span>
+                  <span className={feedActionLabel}>
+                    Reply <span className={feedActionCount}>{commentCount}</span>
+                  </span>
+                </span>
               </Button>
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={topActionButton}
-                onClick={handleShare}
+                className={feedActionButton}
+                onClick={handleRepost}
               >
-                <span>Share</span>
-                <span className={topActionCount}>{post.shares || 0}</span>
+                <span className={feedActionInner}>
+                  <span className={feedActionIcon}>
+                    <Repeat2 className="h-4 w-4" />
+                  </span>
+                  <span className={feedActionLabel}>
+                    Repost <span className={feedActionCount}>{post.shares || 0}</span>
+                  </span>
+                </span>
               </Button>
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={`${topActionButton} ${saved ? 'text-foreground' : ''}`}
+                className={`${feedActionButton} ${saved ? 'text-foreground' : ''}`}
                 onClick={toggleSaved}
               >
-                <Bookmark className="mr-1 h-4 w-4" />
-                <span>{saved ? 'Saved' : 'Save'}</span>
+                <span className={feedActionInner}>
+                  <span className={feedActionIcon}>
+                    <Bookmark className="h-4 w-4" />
+                  </span>
+                  <span className={feedActionLabel}>
+                    {saved ? 'Saved' : 'Save'}
+                  </span>
+                </span>
               </Button>
             </div>
 
@@ -1614,7 +1629,7 @@ export default function PostCard({ post }: PostCardProps) {
                 if (!Number.isFinite(limit)) return false;
                 return getVoiceCommentCountToday() >= limit;
               })()}
-              className={`h-8 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground shadow-[0_0_24px_rgba(168,85,247,0.16)] transition-all hover:shadow-[0_0_30px_rgba(34,211,238,0.22)] ${
+              className={`h-9 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground shadow-[0_0_24px_rgba(168,85,247,0.16)] transition-all hover:shadow-[0_0_30px_rgba(34,211,238,0.22)] ${
                 isRecording ? 'border-red-400/40 bg-red-500/10 text-red-500' : ''
               }`}
             >
