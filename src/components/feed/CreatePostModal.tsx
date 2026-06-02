@@ -1,4 +1,4 @@
-import '@/admin/analytics';
+import '@/pages/AdminAnalyticsPage';
 
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
