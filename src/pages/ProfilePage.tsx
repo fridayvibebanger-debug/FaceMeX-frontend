@@ -28,7 +28,7 @@ import EditProfileModal from '@/components/profile/EditProfileModal';
 import { AnimatePresence, motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { useUserStore } from '@/store/userStore';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import { toast } from '@/components/ui/use-toast';
 
@@ -76,6 +76,120 @@ const emptyProfessional: ProfessionalProfile = {
   collabNote: '',
   resumeSummary: '',
 };
+
+function cleanString(value: unknown) {
+  return String(value || '').trim();
+}
+
+function decodeRouteValue(value: unknown) {
+  const raw = cleanString(value);
+
+  if (!raw) return '';
+
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function getPostOwnerId(post: any) {
+  return cleanString(
+    post?.userId ||
+      post?.user_id ||
+      post?.authorId ||
+      post?.author_id ||
+      post?.ownerId ||
+      post?.owner_id ||
+      post?.profileId ||
+      post?.profile_id ||
+      post?.externalId ||
+      post?.user?.id ||
+      post?.user?._id ||
+      ''
+  );
+}
+
+function postBelongsToProfile(post: any, profileId: string) {
+  const target = cleanString(profileId);
+
+  if (!target) return false;
+
+  const ids = [
+    post?.userId,
+    post?.user_id,
+    post?.authorId,
+    post?.author_id,
+    post?.ownerId,
+    post?.owner_id,
+    post?.profileId,
+    post?.profile_id,
+    post?.externalId,
+    post?.user?.id,
+    post?.user?._id,
+  ]
+    .map(cleanString)
+    .filter(Boolean);
+
+  return ids.includes(target);
+}
+
+function getPostDisplayName(post: any) {
+  return (
+    cleanString(post?.userName) ||
+    cleanString(post?.user_name) ||
+    cleanString(post?.name) ||
+    cleanString(post?.authorName) ||
+    cleanString(post?.author_name) ||
+    cleanString(post?.user?.name) ||
+    cleanString(post?.user?.full_name) ||
+    'FaceMeX user'
+  );
+}
+
+function getPostAvatar(post: any) {
+  return (
+    cleanString(post?.userAvatar) ||
+    cleanString(post?.user_avatar) ||
+    cleanString(post?.avatar) ||
+    cleanString(post?.authorAvatar) ||
+    cleanString(post?.author_avatar) ||
+    cleanString(post?.user?.avatar) ||
+    cleanString(post?.user?.avatar_url) ||
+    ''
+  );
+}
+
+function getPostImages(post: any) {
+  const images: string[] = [];
+
+  const push = (value: unknown) => {
+    const v = cleanString(value);
+    if (v && !images.includes(v)) images.push(v);
+  };
+
+  if (Array.isArray(post?.images)) {
+    post.images.forEach(push);
+  }
+
+  push(post?.image);
+  push(post?.media_type === 'image' ? post?.media_url : '');
+
+  return images;
+}
+
+function isPostAuthorVerified(post: any) {
+  return Boolean(
+    post?.verified === true ||
+      post?.userVerified === true ||
+      post?.authorVerified === true ||
+      post?.accountVerified === true ||
+      post?.isVerified === true ||
+      post?.is_verified === true ||
+      post?.user?.verified === true ||
+      post?.user?.userVerified === true
+  );
+}
 
 function PremiumVerifiedBadge({ size = 'md' }: { size?: 'sm' | 'md' }) {
   const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
@@ -154,7 +268,7 @@ function getTierRank(tier?: string) {
 
 export default function ProfilePage() {
   const { user, updateProfile } = useAuthStore() as any;
-  const { posts } = usePostStore();
+  const { posts, loadPosts } = usePostStore();
   const { currentTier } = useSubscriptionStore();
 
   const {
@@ -168,11 +282,25 @@ export default function ProfilePage() {
   } = useUserStore();
 
   const params = useParams<{ id?: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
 
-  const effectiveUserId = user?.id || '';
-  const viewedUserId = params.id || effectiveUserId;
-  const isOwnProfile = viewedUserId === effectiveUserId;
+  const routeState = (location.state || {}) as any;
+
+  const effectiveUserId = cleanString(user?.id);
+
+  const viewedUserId = useMemo(() => {
+    return (
+      decodeRouteValue(params.id) ||
+      cleanString(routeState?.userId) ||
+      cleanString(routeState?.profileId) ||
+      effectiveUserId
+    );
+  }, [params.id, routeState?.userId, routeState?.profileId, effectiveUserId]);
+
+  const isOwnProfile = Boolean(
+    effectiveUserId && viewedUserId && effectiveUserId === viewedUserId
+  );
 
   const [viewedProfile, setViewedProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -191,10 +319,7 @@ export default function ProfilePage() {
   const [bioEditing, setBioEditing] = useState(false);
   const [bioDraft, setBioDraft] = useState(user?.bio || '');
 
-  const storePro = useMemo(
-    () => normalizePro(professional),
-    [professional]
-  );
+  const storePro = useMemo(() => normalizePro(professional), [professional]);
 
   const viewedPro = useMemo(() => {
     if (isOwnProfile) {
@@ -243,9 +368,14 @@ export default function ProfilePage() {
   >(mode === 'professional' ? 'professional' : 'posts');
 
   useEffect(() => {
+    loadPosts?.().catch(() => {});
+  }, [loadPosts]);
+
+  useEffect(() => {
     const loadProfile = async () => {
       if (!viewedUserId) {
         setProfileLoading(false);
+        setProfileNotFound(true);
         return;
       }
 
@@ -261,24 +391,68 @@ export default function ProfilePage() {
       if (error) {
         console.error('Profile load error:', error);
         setViewedProfile(null);
-        setProfileNotFound(true);
+        setProfileNotFound(false);
         setProfileLoading(false);
         return;
       }
 
-      if (!data && !isOwnProfile) {
-        setViewedProfile(null);
-        setProfileNotFound(true);
+      if (!data && isOwnProfile && user?.id) {
+        const fallbackName =
+          user?.name ||
+          user?.email?.split('@')?.[0] ||
+          'FaceMeX user';
+
+        const fallbackAvatar = user?.avatar || '';
+
+        const upsertPayload = {
+          id: user.id,
+          email: user.email || '',
+          full_name: fallbackName,
+          name: fallbackName,
+          username: fallbackName,
+          avatar_url: fallbackAvatar,
+          avatar: fallbackAvatar,
+          bio: user?.bio || '',
+          cover_photo: user?.coverPhoto || '',
+          location: user?.location || '',
+          website: user?.website || '',
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        };
+
+        try {
+          const { data: createdProfile } = await supabase
+            .from('profiles')
+            .upsert(upsertPayload)
+            .select('*')
+            .maybeSingle();
+
+          setViewedProfile(createdProfile || upsertPayload);
+        } catch {
+          setViewedProfile(upsertPayload);
+        }
+
+        setProfileNotFound(false);
         setProfileLoading(false);
         return;
       }
 
       setViewedProfile(data || null);
+      setProfileNotFound(false);
       setProfileLoading(false);
     };
 
     loadProfile();
-  }, [viewedUserId, isOwnProfile]);
+  }, [viewedUserId, isOwnProfile, user?.id, user?.email, user?.name, user?.avatar]);
+
+  const fallbackPostForProfile = useMemo(() => {
+    if (!viewedUserId) return null;
+
+    return (
+      posts.find((post: any) => postBelongsToProfile(post, viewedUserId)) ||
+      null
+    );
+  }, [posts, viewedUserId]);
 
   const viewedUser = useMemo(() => {
     if (isOwnProfile) {
@@ -321,39 +495,73 @@ export default function ProfilePage() {
         verified:
           viewedProfile?.verified === true ||
           viewedProfile?.is_verified === true ||
+          viewedProfile?.userVerified === true ||
+          viewedProfile?.user_verified === true ||
           user?.verified === true ||
           user?.is_verified === true ||
+          user?.isVerified === true ||
           addons?.verified === true,
       } as any;
     }
 
-    if (!viewedProfile) return null;
+    if (viewedProfile) {
+      const realName =
+        viewedProfile.full_name ||
+        viewedProfile.name ||
+        viewedProfile.username ||
+        viewedProfile.email?.split('@')[0] ||
+        'FaceMeX user';
 
-    const realName =
-      viewedProfile.full_name ||
-      viewedProfile.name ||
-      viewedProfile.username ||
-      viewedProfile.email?.split('@')[0] ||
-      'FaceMeX user';
+      return {
+        id: viewedProfile.id || viewedUserId,
+        email: viewedProfile.email || '',
+        name: realName,
+        avatar: viewedProfile.avatar_url || viewedProfile.avatar || '',
+        coverPhoto: viewedProfile.cover_photo || viewedProfile.coverPhoto || '',
+        bio: viewedProfile.bio || '',
+        joinedDate: viewedProfile.created_at
+          ? new Date(viewedProfile.created_at)
+          : null,
+        interests: viewedProfile.interests || [],
+        location: viewedProfile.location || '',
+        website: viewedProfile.website || '',
+        tier: viewedProfile.tier || viewedProfile.subscription_tier || 'free',
+        verified:
+          viewedProfile.verified === true ||
+          viewedProfile.is_verified === true ||
+          viewedProfile.userVerified === true ||
+          viewedProfile.user_verified === true,
+      } as any;
+    }
 
-    return {
-      id: viewedProfile.id || viewedUserId,
-      email: viewedProfile.email || '',
-      name: realName,
-      avatar: viewedProfile.avatar_url || viewedProfile.avatar || '',
-      coverPhoto: viewedProfile.cover_photo || viewedProfile.coverPhoto || '',
-      bio: viewedProfile.bio || '',
-      joinedDate: viewedProfile.created_at
-        ? new Date(viewedProfile.created_at)
-        : null,
-      interests: viewedProfile.interests || [],
-      location: viewedProfile.location || '',
-      website: viewedProfile.website || '',
-      tier: viewedProfile.tier || viewedProfile.subscription_tier || 'free',
-      verified:
-        viewedProfile.verified === true ||
-        viewedProfile.is_verified === true,
-    } as any;
+    if (routeState?.userName || routeState?.userAvatar || fallbackPostForProfile) {
+      const name =
+        cleanString(routeState?.userName) ||
+        getPostDisplayName(fallbackPostForProfile) ||
+        'FaceMeX user';
+
+      const avatar =
+        cleanString(routeState?.userAvatar) ||
+        getPostAvatar(fallbackPostForProfile) ||
+        '';
+
+      return {
+        id: viewedUserId,
+        email: '',
+        name,
+        avatar,
+        coverPhoto: '',
+        bio: '',
+        joinedDate: null,
+        interests: [],
+        location: '',
+        website: '',
+        tier: 'free',
+        verified: isPostAuthorVerified(fallbackPostForProfile),
+      } as any;
+    }
+
+    return null;
   }, [
     isOwnProfile,
     user,
@@ -361,6 +569,9 @@ export default function ProfilePage() {
     viewedProfile,
     currentTier,
     addons?.verified,
+    routeState?.userName,
+    routeState?.userAvatar,
+    fallbackPostForProfile,
   ]);
 
   const isProfileVerified = Boolean(viewedUser?.verified);
@@ -382,9 +593,21 @@ export default function ProfilePage() {
   ]);
 
   const userPosts = useMemo(() => {
-    return posts.filter((post: any) => {
-      return post.userId === viewedUserId || post.user_id === viewedUserId;
-    });
+    if (!viewedUserId) return [];
+
+    return posts
+      .filter((post: any) => postBelongsToProfile(post, viewedUserId))
+      .sort((a: any, b: any) => {
+        const aTime = new Date(
+          a.createdAt || a.created_at || a.timestamp || 0
+        ).getTime();
+
+        const bTime = new Date(
+          b.createdAt || b.created_at || b.timestamp || 0
+        ).getTime();
+
+        return bTime - aTime;
+      });
   }, [posts, viewedUserId]);
 
   const loadProfileRelationships = async () => {
@@ -487,9 +710,7 @@ export default function ProfilePage() {
   }, [effectiveUserId]);
 
   const myPostAnalytics = useMemo(() => {
-    const mine = posts.filter((p: any) => {
-      return p.userId === effectiveUserId || p.user_id === effectiveUserId;
-    });
+    const mine = posts.filter((p: any) => postBelongsToProfile(p, effectiveUserId));
 
     const totalPosts = mine.length;
     const totalLikes = mine.reduce((a: number, p: any) => a + (p.likes || 0), 0);
@@ -889,6 +1110,8 @@ export default function ProfilePage() {
                   src={viewedUser.coverPhoto}
                   alt="Cover"
                   className="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
               ) : (
                 <div className="w-full h-full bg-muted/40" />
@@ -1357,9 +1580,9 @@ export default function ProfilePage() {
               userPosts.map((post: any, index: number) => (
                 <motion.div
                   key={post.id}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
+                  transition={{ delay: Math.min(index * 0.025, 0.15) }}
                 >
                   <PostCard post={post} />
                 </motion.div>
@@ -1920,22 +2143,29 @@ export default function ProfilePage() {
               <CardContent className="py-6">
                 <div className="grid grid-cols-3 gap-2">
                   {userPosts
-                    .filter((post: any) => post.image)
-                    .map((post: any) => (
+                    .flatMap((post: any) => {
+                      return getPostImages(post).map((src) => ({
+                        id: `${post.id}-${src}`,
+                        src,
+                      }));
+                    })
+                    .map((item: any) => (
                       <div
-                        key={post.id}
+                        key={item.id}
                         className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
                       >
                         <img
-                          src={post.image}
+                          src={item.src}
                           alt="Post"
                           className="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
                         />
                       </div>
                     ))}
                 </div>
 
-                {userPosts.filter((post: any) => post.image).length === 0 ? (
+                {userPosts.flatMap((post: any) => getPostImages(post)).length === 0 ? (
                   <p className="text-center text-muted-foreground py-6">
                     No photos yet
                   </p>
