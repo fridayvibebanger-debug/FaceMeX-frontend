@@ -558,17 +558,17 @@ function DocumentPreview({
   const imageCount = document.pages.filter(Boolean).length;
 
   return (
-    <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
+    <div className="w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
       {firstPage ? (
         <button
           type="button"
           onClick={() => onOpenPages(document.pages, 0)}
-          className="relative block w-full bg-white"
+          className="relative block aspect-[4/5] w-full max-w-full overflow-hidden bg-black sm:aspect-[16/10]"
         >
           <img
             src={firstPage}
             alt={`${document.title} preview`}
-            className="h-[250px] w-full object-contain sm:h-[340px]"
+            className="block h-full w-full max-w-full object-contain"
             loading="lazy"
             decoding="async"
           />
@@ -580,7 +580,7 @@ function DocumentPreview({
           )}
         </button>
       ) : (
-        <div className="flex h-[170px] flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
+        <div className="flex h-[170px] w-full max-w-full flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
           <FileText className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm font-semibold">{document.title}</p>
           <p className="text-xs text-muted-foreground">Document uploaded</p>
@@ -1237,16 +1237,18 @@ export default function PostCard({ post }: PostCardProps) {
       const item = videoItems[0];
 
       return (
-        <div className="mt-2 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm">
-          <video
-            src={item.src}
-            controls
-            playsInline
-            preload="metadata"
-            className="h-auto max-h-[520px] w-full object-contain bg-black"
-            controlsList="nodownload"
-            onContextMenu={(e) => e.preventDefault()}
-          />
+        <div className="mt-2 w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm">
+          <div className="aspect-[4/5] w-full max-w-full overflow-hidden bg-black sm:aspect-[16/10]">
+            <video
+              src={item.src}
+              controls
+              playsInline
+              preload="metadata"
+              className="block h-full w-full max-w-full object-contain bg-black"
+              controlsList="nodownload"
+              onContextMenu={(e) => e.preventDefault()}
+            />
+          </div>
         </div>
       );
     }
@@ -1258,34 +1260,36 @@ export default function PostCard({ post }: PostCardProps) {
         <button
           type="button"
           onClick={() => openMediaLightbox(item.src)}
-          className="mt-2 block w-full overflow-hidden rounded-[22px] border border-border/60 bg-muted/20 shadow-sm"
+          className="mt-2 block w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm"
         >
-          <img
-            src={item.src}
-            alt="Post media"
-            className="max-h-[540px] w-full object-cover"
-            loading="lazy"
-            decoding="async"
-          />
+          <span className="block aspect-[4/5] w-full max-w-full overflow-hidden bg-black sm:aspect-[16/10]">
+            <img
+              src={item.src}
+              alt="Post media"
+              className="block h-full w-full max-w-full object-contain"
+              loading="lazy"
+              decoding="async"
+            />
+          </span>
         </button>
       );
     }
 
     if (imageItems.length > 1) {
       return (
-        <div className="mt-2 w-full overflow-hidden">
-          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="mt-2 w-full max-w-full min-w-0 overflow-hidden">
+          <div className="flex w-full max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {imageItems.map((item, index) => (
               <button
                 key={`${item.src}-${index}`}
                 type="button"
                 onClick={() => openMediaLightbox(item.src)}
-                className="relative h-[360px] min-w-[82%] overflow-hidden rounded-[22px] border border-border/60 bg-muted/20 shadow-sm sm:h-[460px] sm:min-w-[58%]"
+                className="relative aspect-[4/5] h-auto min-w-[82%] max-w-[82%] shrink-0 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm sm:aspect-[16/10] sm:min-w-[58%] sm:max-w-[58%]"
               >
                 <img
                   src={item.src}
                   alt={`Post image ${index + 1}`}
-                  className="h-full w-full object-cover"
+                  className="block h-full w-full max-w-full object-contain"
                   loading="lazy"
                   decoding="async"
                 />
@@ -1349,14 +1353,14 @@ export default function PostCard({ post }: PostCardProps) {
 
   return (
     <div
-      className="transform-gpu"
+      className="w-full max-w-full min-w-0 transform-gpu overflow-hidden"
       style={{
         contain: 'layout paint style',
         background: 'transparent',
       }}
     >
-      <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
+      <Card className="mb-3 w-full max-w-full min-w-0 overflow-hidden rounded-[24px] border bg-card shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
+        <CardHeader className="flex min-w-0 flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
           <button
             type="button"
             className="flex min-w-0 items-center space-x-2 text-left"
@@ -1528,7 +1532,7 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="space-y-3 px-3 pb-3">
+        <CardContent className="min-w-0 space-y-3 px-3 pb-3">
           {editingPost ? (
             <div className="space-y-2">
               <textarea
@@ -1549,9 +1553,9 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           ) : (
             cleanPostContent && (
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <p
-                  className="whitespace-pre-wrap text-[15px] leading-6 text-foreground"
+                  className="min-w-0 whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground"
                   style={!expandedPost && shouldCollapsePost ? clampStyle(collapseLines) : undefined}
                 >
                   {cleanPostContent}
@@ -1571,7 +1575,7 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           {post.hashtags && post.hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex max-w-full flex-wrap gap-1 overflow-hidden">
               {post.hashtags.map((tag, index) => (
                 <span
                   key={index}
@@ -1587,7 +1591,7 @@ export default function PostCard({ post }: PostCardProps) {
           {renderMediaFrame()}
 
           {documentItems.length > 0 && (
-            <div className="space-y-2">
+            <div className="w-full max-w-full min-w-0 space-y-2 overflow-hidden">
               {documentItems.map((doc) => (
                 <DocumentPreview
                   key={doc.id}
@@ -1599,7 +1603,7 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           {post.audio && (
-            <div className="rounded-2xl border bg-background p-3">
+            <div className="w-full max-w-full overflow-hidden rounded-2xl border bg-background p-3">
               <div className="mb-2 flex items-center gap-2">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                   <AudioLines className="h-3.5 w-3.5" />
@@ -1610,7 +1614,7 @@ export default function PostCard({ post }: PostCardProps) {
               <audio
                 controls
                 controlsList="nodownload noplaybackrate"
-                className="w-full"
+                className="w-full max-w-full"
                 src={post.audio}
                 preload="metadata"
                 onContextMenu={(e) => e.preventDefault()}
@@ -1671,7 +1675,7 @@ export default function PostCard({ post }: PostCardProps) {
                       <img
                         src={lightboxSrc}
                         alt={`Image ${lightboxIndex + 1}`}
-                        className="max-h-full max-w-full object-contain"
+                        className="block max-h-full max-w-full object-contain"
                         draggable={false}
                         onContextMenu={(e) => e.preventDefault()}
                       />
@@ -1757,7 +1761,7 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           <div className="space-y-2 pt-0.5">
-            <div className="flex items-center justify-between gap-1 border-y border-border/40 py-1">
+            <div className="flex min-w-0 items-center justify-between gap-1 border-y border-border/40 py-1">
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button
