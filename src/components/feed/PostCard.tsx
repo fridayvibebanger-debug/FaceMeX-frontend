@@ -31,7 +31,6 @@ import {
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -528,6 +527,8 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
                 src={profile.avatar}
                 alt={profile.name}
                 className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[9px] font-bold text-muted-foreground">
@@ -573,7 +574,7 @@ function DocumentPreview({
           />
 
           {imageCount > 1 && (
-            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white">
               {imageCount} images
             </span>
           )}
@@ -1158,10 +1159,6 @@ export default function PostCard({ post }: PostCardProps) {
     }, 50);
   };
 
-  const toggleCommentsOnly = () => {
-    openCommentComposer();
-  };
-
   const startEditPost = () => {
     if (!canEdit) return;
     setPostDraft(post.content);
@@ -1294,7 +1291,7 @@ export default function PostCard({ post }: PostCardProps) {
                 />
 
                 {index === 0 && imageItems.length > 1 && (
-                  <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">
+                  <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white">
                     {imageItems.length} images
                   </span>
                 )}
@@ -1340,24 +1337,25 @@ export default function PostCard({ post }: PostCardProps) {
   })();
 
   const actionButton =
-    'group flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-muted-foreground transition-all hover:bg-muted/45 hover:text-foreground active:scale-[0.98]';
+    'group flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground active:scale-[0.98]';
 
-  const actionIcon =
-    'h-[18px] w-[18px] transition-transform group-hover:scale-110';
+  const actionIcon = 'h-[18px] w-[18px]';
 
   const actionCount =
     'text-[11px] font-semibold tabular-nums text-muted-foreground';
 
   const viewerActionButton =
-    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition hover:text-white active:scale-95';
+    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition-colors hover:text-white active:scale-95';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+    <div
+      className="transform-gpu"
+      style={{
+        contain: 'layout paint style',
+        background: 'transparent',
+      }}
     >
-      <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_8px_26px_rgba(15,23,42,0.06)]">
+      <Card className="mb-3 overflow-hidden rounded-[24px] border bg-card shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
           <button
             type="button"
@@ -1620,141 +1618,143 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          <Dialog
-            open={lightboxOpen}
-            onOpenChange={(open) => {
-              if (!open) closeLightbox();
-              else setLightboxOpen(true);
-            }}
-          >
-            <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[9999] !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none border-0 bg-black p-0 shadow-none [&>button]:hidden">
-              <div className="relative flex h-full w-full flex-col bg-black text-white">
-                <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-5">
-                  <button
-                    type="button"
-                    onClick={closeLightbox}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur hover:bg-white/15"
-                    aria-label="Close image"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
+          {lightboxOpen && (
+            <Dialog
+              open={lightboxOpen}
+              onOpenChange={(open) => {
+                if (!open) closeLightbox();
+                else setLightboxOpen(true);
+              }}
+            >
+              <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[9999] !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none border-0 bg-black p-0 shadow-none [&>button]:hidden">
+                <div className="relative flex h-full w-full flex-col bg-black text-white">
+                  <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-5">
+                    <button
+                      type="button"
+                      onClick={closeLightbox}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white hover:bg-white/15"
+                      aria-label="Close image"
+                    >
+                      <X className="h-6 w-6" />
+                    </button>
 
-                  {lightboxItems.length > 1 ? (
-                    <div className="rounded-full bg-black/55 px-4 py-2 text-sm font-bold text-white backdrop-blur">
-                      {lightboxIndex + 1} / {lightboxItems.length}
+                    {lightboxItems.length > 1 ? (
+                      <div className="rounded-full bg-black/55 px-4 py-2 text-sm font-bold text-white">
+                        {lightboxIndex + 1} / {lightboxItems.length}
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white hover:bg-white/15"
+                          aria-label="More"
+                        >
+                          <MoreHorizontal className="h-6 w-6" />
+                        </button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent align="end" className="w-44 rounded-2xl">
+                        <DropdownMenuItem onClick={saveCurrentLightboxImage}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Save image
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
+                    {lightboxSrc && (
+                      <img
+                        src={lightboxSrc}
+                        alt={`Image ${lightboxIndex + 1}`}
+                        className="max-h-full max-w-full object-contain"
+                        draggable={false}
+                        onContextMenu={(e) => e.preventDefault()}
+                      />
+                    )}
+
+                    {lightboxItems.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={goPrevLightbox}
+                          className="absolute left-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white hover:bg-white/15"
+                          aria-label="Previous image"
+                        >
+                          <ChevronLeft className="h-7 w-7" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={goNextLightbox}
+                          className="absolute right-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white hover:bg-white/15"
+                          aria-label="Next image"
+                        >
+                          <ChevronRight className="h-7 w-7" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 px-5 py-4">
+                    <div className="mx-auto grid max-w-md grid-cols-5 gap-2 text-white">
+                      <button
+                        type="button"
+                        onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                        className={viewerActionButton}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                        <span>{post.likes || 0}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeLightbox();
+                          openCommentComposer();
+                        }}
+                        className={viewerActionButton}
+                      >
+                        <MessageSquareText className="h-5 w-5" />
+                        <span>{post.comments?.length || 0}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRepost}
+                        className={`${viewerActionButton} ${reposted ? 'text-cyan-300' : ''}`}
+                      >
+                        <Repeat2 className="h-5 w-5" />
+                        <span>{post.shares || 0}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={toggleSaved}
+                        className={`${viewerActionButton} ${saved ? 'text-cyan-300' : ''}`}
+                      >
+                        <Bookmark className="h-5 w-5" />
+                        <span>{saved ? 'Saved' : 'Save'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleShareOnly}
+                        className={viewerActionButton}
+                      >
+                        <Send className="h-5 w-5" />
+                        <span>Send</span>
+                      </button>
                     </div>
-                  ) : (
-                    <div />
-                  )}
-
-                  <DropdownMenu modal={false}>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur hover:bg-white/15"
-                        aria-label="More"
-                      >
-                        <MoreHorizontal className="h-6 w-6" />
-                      </button>
-                    </DropdownMenuTrigger>
-
-                    <DropdownMenuContent align="end" className="w-44 rounded-2xl">
-                      <DropdownMenuItem onClick={saveCurrentLightboxImage}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Save image
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
-                  {lightboxSrc && (
-                    <img
-                      src={lightboxSrc}
-                      alt={`Image ${lightboxIndex + 1}`}
-                      className="max-h-full max-w-full object-contain"
-                      draggable={false}
-                      onContextMenu={(e) => e.preventDefault()}
-                    />
-                  )}
-
-                  {lightboxItems.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={goPrevLightbox}
-                        className="absolute left-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur hover:bg-white/15"
-                        aria-label="Previous image"
-                      >
-                        <ChevronLeft className="h-7 w-7" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={goNextLightbox}
-                        className="absolute right-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur hover:bg-white/15"
-                        aria-label="Next image"
-                      >
-                        <ChevronRight className="h-7 w-7" />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 px-5 py-4 backdrop-blur">
-                  <div className="mx-auto grid max-w-md grid-cols-5 gap-2 text-white">
-                    <button
-                      type="button"
-                      onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
-                      className={viewerActionButton}
-                    >
-                      <Sparkles className="h-5 w-5" />
-                      <span>{post.likes || 0}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        closeLightbox();
-                        openCommentComposer();
-                      }}
-                      className={viewerActionButton}
-                    >
-                      <MessageSquareText className="h-5 w-5" />
-                      <span>{post.comments?.length || 0}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleRepost}
-                      className={`${viewerActionButton} ${reposted ? 'text-cyan-300' : ''}`}
-                    >
-                      <Repeat2 className="h-5 w-5" />
-                      <span>{post.shares || 0}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={toggleSaved}
-                      className={`${viewerActionButton} ${saved ? 'text-cyan-300' : ''}`}
-                    >
-                      <Bookmark className="h-5 w-5" />
-                      <span>{saved ? 'Saved' : 'Save'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleShareOnly}
-                      className={viewerActionButton}
-                    >
-                      <Send className="h-5 w-5" />
-                      <span>Send</span>
-                    </button>
                   </div>
                 </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          )}
 
           <div className="space-y-2 pt-0.5">
             <div className="flex items-center justify-between gap-1 border-y border-border/40 py-1">
@@ -1845,59 +1845,52 @@ export default function PostCard({ post }: PostCardProps) {
                 if (!Number.isFinite(limit)) return false;
                 return getVoiceCommentCountToday() >= limit;
               })()}
-              className={`h-9 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground shadow-[0_0_24px_rgba(168,85,247,0.16)] transition-all hover:shadow-[0_0_30px_rgba(34,211,238,0.22)] ${
+              className={`h-9 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground transition-colors ${
                 isRecording ? 'border-red-400/40 bg-red-500/10 text-red-500' : ''
               }`}
             >
               <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/20">
-                <AudioLines className={`h-3.5 w-3.5 text-purple-600 ${isRecording ? 'animate-pulse text-red-500' : ''}`} />
+                <AudioLines className={`h-3.5 w-3.5 text-purple-600 ${isRecording ? 'text-red-500' : ''}`} />
               </span>
               {isRecording ? `${recordSeconds}s` : 'Voice'}
             </Button>
 
-            <AnimatePresence>
-              {commentComposerOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4, height: 0 }}
-                  animate={{ opacity: 1, y: 0, height: 'auto' }}
-                  exit={{ opacity: 0, y: -4, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="flex items-center gap-2 pt-1">
-                    <Input
-                      ref={replyInputRef}
-                      placeholder="Reply..."
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleComment();
-                        }
-                      }}
-                      className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
+            {commentComposerOpen && (
+              <div className="overflow-hidden">
+                <div className="flex items-center gap-2 pt-1">
+                  <Input
+                    ref={replyInputRef}
+                    placeholder="Reply..."
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleComment();
+                      }
+                    }}
+                    className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
 
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={handleComment}
-                      aria-label="Send reply"
-                      className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleComment}
+                    aria-label="Send reply"
+                    className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {isRecording && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]">
-                    <AudioLines className="h-4 w-4 animate-pulse" />
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white">
+                    <AudioLines className="h-4 w-4" />
                   </span>
 
                   <div>
@@ -1918,105 +1911,93 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           )}
 
-          <AnimatePresence>
-            {showComments && commentCount > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="w-full space-y-3 border-t border-border/60 pt-3"
-              >
-                {(post.comments || []).map((comment: any) => {
-                  const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
-                  const commentUserId = cleanString(comment.userId);
-                  const canDeleteComment =
-                    isOwner || myIds.some((myId) => idsMatch(myId, commentUserId));
+          {showComments && commentCount > 0 && (
+            <div className="w-full space-y-3 border-t border-border/60 pt-3">
+              {(post.comments || []).map((comment: any) => {
+                const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
+                const commentUserId = cleanString(comment.userId);
+                const canDeleteComment =
+                  isOwner || myIds.some((myId) => idsMatch(myId, commentUserId));
 
-                  const commentTextSafe = getCommentText(comment);
-                  const commentName = comment.userName || comment.name || 'User';
-                  const commentAvatar = comment.userAvatar || comment.avatar || '';
+                const commentTextSafe = getCommentText(comment);
+                const commentName = comment.userName || comment.name || 'User';
+                const commentAvatar = comment.userAvatar || comment.avatar || '';
 
-                  return (
-                    <motion.div
-                      key={comment.id}
-                      initial={{ opacity: 0, x: -12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="flex gap-2"
-                    >
-                      <Avatar className="h-7 w-7">
-                        <AvatarImage src={commentAvatar} alt={commentName} />
-                        <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
-                      </Avatar>
+                return (
+                  <div key={comment.id} className="flex gap-2">
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={commentAvatar} alt={commentName} />
+                      <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
+                    </Avatar>
 
-                      <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
-                        <div className="flex items-baseline gap-2">
-                          <p className="text-sm font-medium text-foreground">
-                            {commentName}
-                          </p>
+                    <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {commentName}
+                        </p>
 
-                          <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
-                          </span>
-                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
+                        </span>
+                      </div>
 
-                        <div className="mt-1 text-sm leading-relaxed text-foreground">
-                          {isVoice && comment.voiceUrl ? (
-                            <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
-                                <AudioLines className="h-4 w-4" />
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                                  Voice reply
-                                </p>
-
-                                <audio
-                                  controls
-                                  controlsList="nodownload noplaybackrate"
-                                  preload="metadata"
-                                  className="h-8 w-full"
-                                  onContextMenu={(e) => e.preventDefault()}
-                                >
-                                  <source src={comment.voiceUrl} type="audio/webm" />
-                                </audio>
-                              </div>
+                      <div className="mt-1 text-sm leading-relaxed text-foreground">
+                        {isVoice && comment.voiceUrl ? (
+                          <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
+                              <AudioLines className="h-4 w-4" />
                             </div>
-                          ) : (
-                            <p className="break-words">{commentTextSafe}</p>
-                          )}
-                        </div>
 
-                        <div className="mt-2 flex items-center gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                Voice reply
+                              </p>
+
+                              <audio
+                                controls
+                                controlsList="nodownload noplaybackrate"
+                                preload="metadata"
+                                className="h-8 w-full"
+                                onContextMenu={(e) => e.preventDefault()}
+                              >
+                                <source src={comment.voiceUrl} type="audio/webm" />
+                              </audio>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="break-words">{commentTextSafe}</p>
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleReplyToComment(commentName)}
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          Reply
+                        </button>
+
+                        {canDeleteComment && (
                           <button
                             type="button"
-                            onClick={() => handleReplyToComment(commentName)}
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
                           >
-                            <MessageCircle className="h-3 w-3" />
-                            Reply
+                            <Trash2 className="h-3 w-3" />
+                            Delete
                           </button>
-
-                          {canDeleteComment && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              Delete
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
-                    </motion.div>
-                  );
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 }
