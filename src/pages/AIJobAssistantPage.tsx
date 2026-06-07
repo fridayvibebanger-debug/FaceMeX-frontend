@@ -68,6 +68,7 @@ type ChatMessage = {
   pinned?: boolean;
   saved?: boolean;
   savedCategory?: SavedCategory;
+  deletedFromChat?: boolean;
   images?: WorkspaceImage[];
 };
 
@@ -397,13 +398,68 @@ function normalizeAnswerText(raw: any, fallback: string) {
   return clean(answer) || fallback;
 }
 
+function stripTrailingPunctuation(value: string) {
+  const trimmed = value.trim();
+  const trailing = trimmed.match(/[),.;:!?]+$/)?.[0] || '';
+  const cleanValue = trailing ? trimmed.slice(0, -trailing.length) : trimmed;
+
+  return {
+    cleanValue,
+    trailing,
+  };
+}
+
+function getLinkHref(rawUrl: string) {
+  const { cleanValue } = stripTrailingPunctuation(rawUrl);
+
+  if (/^https?:\/\//i.test(cleanValue)) return cleanValue;
+
+  return `https://${cleanValue}`;
+}
+
+function getLinkLabel(rawUrl: string) {
+  const { cleanValue } = stripTrailingPunctuation(rawUrl);
+
+  try {
+    const href = getLinkHref(cleanValue);
+    const host = new URL(href).hostname.replace(/^www\./, '');
+
+    return host;
+  } catch {
+    return cleanValue;
+  }
+}
+
+function SourceChip({
+  label,
+  url,
+  onClick,
+}: {
+  label: string;
+  url: string;
+  onClick?: (url: string, label?: string) => void;
+}) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={() => onClick?.(url, label)}
+      className="mx-1 inline-flex max-w-full translate-y-[-1px] items-center rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold leading-none text-slate-700 no-underline transition hover:bg-slate-300 dark:bg-white/12 dark:text-white/70 dark:hover:bg-white/20"
+    >
+      <span className="max-w-[140px] truncate">{label}</span>
+    </a>
+  );
+}
+
 function renderInlineText(
   text: string,
   onLinkClick?: (url: string, label?: string) => void
 ) {
   const nodes: ReactNode[] = [];
+
   const regex =
-    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+)/gi;
+    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|((?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -422,35 +478,36 @@ function renderInlineText(
       );
     } else if (match[3] && match[4]) {
       const label = match[3];
-      const url = match[4];
+      const rawUrl = match[4];
+      const href = getLinkHref(rawUrl);
+      const { trailing } = stripTrailingPunctuation(rawUrl);
 
       nodes.push(
-        <a
+        <SourceChip
           key={`md-link-${key++}`}
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={() => onLinkClick?.(url, label)}
-          className="font-semibold text-slate-950 underline underline-offset-4 dark:text-white"
-        >
-          {label}
-        </a>
+          label={label}
+          url={href}
+          onClick={onLinkClick}
+        />
       );
+
+      if (trailing) nodes.push(trailing);
     } else if (match[5]) {
-      const url = match[5];
+      const rawUrl = match[5];
+      const href = getLinkHref(rawUrl);
+      const label = getLinkLabel(rawUrl);
+      const { trailing } = stripTrailingPunctuation(rawUrl);
 
       nodes.push(
-        <a
-          key={`url-${key++}`}
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={() => onLinkClick?.(url, url)}
-          className="break-all font-semibold text-slate-950 underline underline-offset-4 dark:text-white"
-        >
-          {url}
-        </a>
+        <SourceChip
+          key={`domain-link-${key++}`}
+          label={label}
+          url={href}
+          onClick={onLinkClick}
+        />
       );
+
+      if (trailing) nodes.push(trailing);
     }
 
     lastIndex = match.index + match[0].length;
@@ -563,6 +620,10 @@ export default function AIJobAssistantPage() {
     return Math.max(0, deepSeekLimit - deepSeekUsage);
   }, [deepSeekLimit, deepSeekUsage]);
 
+  const chatMessages = useMemo(() => {
+    return messages.filter((message) => !message.deletedFromChat);
+  }, [messages]);
+
   const savedMessages = useMemo(() => {
     return messages.filter((message) => message.saved && message.savedCategory);
   }, [messages]);
@@ -615,7 +676,7 @@ export default function AIJobAssistantPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, busy]);
+  }, [chatMessages.length, busy]);
 
   const recordAIUse = () => {
     if (deepSeekLimit === null) return;
@@ -883,15 +944,19 @@ export default function AIJobAssistantPage() {
 
   const removeFromSaved = (id: string) => {
     setMessages((prev) =>
-      prev.map((message) =>
-        message.id === id
-          ? {
-              ...message,
-              saved: false,
-              savedCategory: undefined,
-            }
-          : message
-      )
+      prev.flatMap((message) => {
+        if (message.id !== id) return [message];
+
+        if (message.deletedFromChat) return [];
+
+        return [
+          {
+            ...message,
+            saved: false,
+            savedCategory: undefined,
+          },
+        ];
+      })
     );
 
     toast({ title: 'Removed', description: 'Item removed from Saved.' });
@@ -906,11 +971,26 @@ export default function AIJobAssistantPage() {
   };
 
   const deleteMessage = (id: string) => {
-    setMessages((prev) => prev.filter((message) => message.id !== id));
+    setMessages((prev) =>
+      prev.flatMap((message) => {
+        if (message.id !== id) return [message];
+
+        if (message.saved) {
+          return [
+            {
+              ...message,
+              deletedFromChat: true,
+            },
+          ];
+        }
+
+        return [];
+      })
+    );
 
     toast({
       title: 'Deleted',
-      description: 'Response deleted. If it was saved, it was also removed from Saved.',
+      description: 'Removed from chat. Saved copy stays in Saved.',
     });
   };
 
@@ -936,11 +1016,19 @@ export default function AIJobAssistantPage() {
 
   const clearSavedItems = () => {
     setMessages((prev) =>
-      prev.map((message) => ({
-        ...message,
-        saved: false,
-        savedCategory: undefined,
-      }))
+      prev.flatMap((message) => {
+        if (!message.saved) return [message];
+
+        if (message.deletedFromChat) return [];
+
+        return [
+          {
+            ...message,
+            saved: false,
+            savedCategory: undefined,
+          },
+        ];
+      })
     );
 
     toast({ title: 'Saved items cleared', description: 'Your saved workspace list is now empty.' });
@@ -1067,7 +1155,7 @@ export default function AIJobAssistantPage() {
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.045] sm:rounded-[30px]">
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-              {messages.length === 0 && !busy && (
+              {chatMessages.length === 0 && !busy && (
                 <div className="mx-auto flex min-h-[48vh] max-w-xl flex-col items-center justify-center text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-black">
                     <Sparkles className="h-5 w-5" />
@@ -1097,7 +1185,7 @@ export default function AIJobAssistantPage() {
                 </div>
               )}
 
-              {messages.map((message) => (
+              {chatMessages.map((message) => (
                 <div
                   key={message.id}
                   className={`flex w-full gap-2 sm:gap-3 ${
