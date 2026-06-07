@@ -1,37 +1,60 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { uploadImagesToAzure } from '@/lib/azureUpload';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
-  Image as ImageIcon,
-  X,
-  Hash,
-  Mic,
-  Lock,
-  Video,
+  Send,
+  CheckCircle,
+  Heart,
+  Bookmark,
+  MoreHorizontal,
+  ThumbsUp,
+  Laugh,
+  Smile,
+  Frown,
+  Angry,
+  PencilLine,
+  Trash2,
+  AudioLines,
+  MessageCircle,
+  MessageSquareText,
   FileText,
-  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  UserPlus,
+  UsersRound,
+  X,
+  Sparkles,
+  Repeat2,
+  Download,
+  ExternalLink,
+  PlayCircle,
 } from 'lucide-react';
-import { useAuthStore } from '@/store/authStore';
-import { usePostStore } from '@/store/postStore';
+import { usePostStore, type Post } from '@/store/postStore';
+import { formatDistanceToNow } from 'date-fns';
 import { useUserStore } from '@/store/userStore';
-import { motion, AnimatePresence } from 'framer-motion';
-import { uploadMedia } from '@/lib/storage';
-import { generateAIReply } from '@/lib/aiReply';
-import { toast } from '@/components/ui/use-toast';
-import SafetyWarningDialog from '@/components/safety/SafetyWarningDialog';
-import { reportSafetyEvent, safetyScanText, type SafetyScanResult } from '@/lib/safety';
+import { useAuthStore } from '@/store/authStore';
+import { useNavigate } from 'react-router-dom';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
-interface CreatePostModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface PostCardProps {
+  post: Post;
 }
 
-type UploadedDocument = {
+type PostMediaItem = {
+  type: 'image' | 'video';
+  src: string;
+};
+
+type PostDocumentItem = {
   id: string;
   title: string;
   url: string;
@@ -39,35 +62,171 @@ type UploadedDocument = {
   totalPages: number;
   previewPages: number;
   coverUrl?: string;
-  mimeType?: string;
-  size?: number;
 };
 
-type PostMode = 'social' | 'professional';
+type CollaboratorProfile = {
+  id: string;
+  name: string;
+  avatar: string;
+  verified?: boolean;
+};
 
-function cleanTier(value: unknown) {
-  return String(value || '').trim().toLowerCase();
+function cleanString(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
 }
 
-function isCreatorPlusTier(value: unknown) {
-  const tier = cleanTier(value);
+function normalizeStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => cleanString(item)).filter(Boolean);
+  }
 
-  return (
-    tier === 'creator' ||
-    tier === 'business' ||
-    tier === 'exclusive' ||
-    tier.startsWith('creator') ||
-    tier.startsWith('business') ||
-    tier.startsWith('exclusive')
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => cleanString(item)).filter(Boolean);
+      }
+    } catch {
+      // continue below
+    }
+
+    if (value.includes(',')) {
+      return value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    return [value.trim()];
+  }
+
+  return [];
+}
+
+function getSafeDate(value: unknown) {
+  const raw = value || new Date().toISOString();
+  const date = raw instanceof Date ? raw : new Date(String(raw));
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function getPostDate(post: Post) {
+  return getSafeDate(
+    (post as any).timestamp ||
+      (post as any).createdAt ||
+      (post as any).created_at
   );
 }
 
-function safeId(prefix = 'id') {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return `${prefix}-${crypto.randomUUID()}`;
+function getCommentDate(comment: any) {
+  return getSafeDate(
+    comment?.timestamp ||
+      comment?.createdAt ||
+      comment?.created_at
+  );
+}
+
+function getCommentText(comment: any) {
+  return String(comment?.content || comment?.text || '')
+    .replace(/\[(REAL_LIFE|PRO COLLAB|PRO COLLAB INVITE|CREATOR_CONTENT)\s*/g, '')
+    .trim();
+}
+
+function getPostAuthorId(post: Post) {
+  return cleanString(
+    (post as any).userId ||
+      (post as any).user_id ||
+      (post as any).authorId ||
+      (post as any).author_id ||
+      (post as any).ownerId ||
+      (post as any).owner_id ||
+      (post as any).user?.id ||
+      (post as any).user?._id ||
+      (post as any).profileId ||
+      (post as any).profile_id ||
+      (post as any).externalId
+  );
+}
+
+function isLikelyVideoUrl(src: string) {
+  const clean = String(src || '').toLowerCase().split('?')[0];
+
+  return (
+    clean.startsWith('data:video/') ||
+    clean.endsWith('.mp4') ||
+    clean.endsWith('.webm') ||
+    clean.endsWith('.mov') ||
+    clean.endsWith('.m4v') ||
+    clean.endsWith('.ogg') ||
+    clean.includes('/videos/') ||
+    clean.includes('/video/')
+  );
+}
+
+function isLikelyImageUrl(src: string) {
+  const clean = String(src || '').toLowerCase().split('?')[0];
+
+  return (
+    clean.startsWith('data:image/') ||
+    clean.endsWith('.jpg') ||
+    clean.endsWith('.jpeg') ||
+    clean.endsWith('.png') ||
+    clean.endsWith('.webp') ||
+    clean.endsWith('.gif') ||
+    clean.endsWith('.avif') ||
+    clean.includes('/images/') ||
+    clean.includes('/image/')
+  );
+}
+
+function normalizePostMedia(post: Post): PostMediaItem[] {
+  const media: PostMediaItem[] = [];
+  const seen = new Set<string>();
+
+  const add = (type: 'image' | 'video', value: unknown) => {
+    const src = cleanString(value);
+    if (!src) return;
+
+    const finalType =
+      type === 'image' && isLikelyVideoUrl(src)
+        ? 'video'
+        : type === 'video' && isLikelyImageUrl(src)
+          ? 'image'
+          : type;
+
+    const key = `${finalType}:${src}`;
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    media.push({ type: finalType, src });
+  };
+
+  const addMany = (type: 'image' | 'video', value: unknown) => {
+    normalizeStringArray(value).forEach((src) => add(type, src));
+  };
+
+  addMany('image', (post as any).images);
+  addMany('image', (post as any).image);
+  addMany('image', (post as any).imageUrl);
+  addMany('image', (post as any).image_url);
+
+  addMany('video', (post as any).videos);
+  addMany('video', (post as any).video);
+  addMany('video', (post as any).videoUrl);
+  addMany('video', (post as any).videoUrls);
+  addMany('video', (post as any).video_url);
+  addMany('video', (post as any).video_urls);
+
+  if ((post as any).mediaType === 'video' || (post as any).media_type === 'video') {
+    add('video', (post as any).mediaUrl || (post as any).media_url);
   }
 
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  if ((post as any).mediaType === 'image' || (post as any).media_type === 'image') {
+    add('image', (post as any).mediaUrl || (post as any).media_url);
+  }
+
+  return media;
 }
 
 function escapeSvgText(value: string) {
@@ -127,248 +286,949 @@ function createDocumentCoverDataUrl(fileName: string, fileType = 'DOC') {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-export default function CreatePostModal({ open, onOpenChange }: CreatePostModalProps) {
-  const [content, setContent] = useState('');
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [videoPreviews, setVideoPreviews] = useState<string[]>([]);
-  const [documentPreviews, setDocumentPreviews] = useState<UploadedDocument[]>([]);
-  const [documentPreviewPages, setDocumentPreviewPages] = useState(1);
-  const [documentTotalPages, setDocumentTotalPages] = useState(1);
+function normalizePostDocuments(post: Post): PostDocumentItem[] {
+  const docs: PostDocumentItem[] = [];
 
-  const [audioPreview, setAudioPreview] = useState<string | null>(null);
-  const [showAISuggestions, setShowAISuggestions] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const uploadProgressTimerRef = useRef<number | null>(null);
-  const [isPosting, setIsPosting] = useState(false);
+  const addDoc = (raw: any, index: number) => {
+    if (!raw) return;
 
-  const { user } = useAuthStore();
-  const { addPost, getAISuggestions, trendingHashtags } = usePostStore();
-  const { mode, tier, addons, hasTier } = useUserStore();
+    if (typeof raw === 'string') {
+      const cleanUrl = cleanString(raw);
+      if (!cleanUrl) return;
 
-  const [postMode, setPostMode] = useState<PostMode>(mode || 'social');
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-  const uploadGenRef = useRef(0);
-  const [topic, setTopic] = useState('');
-  const [isGeneratingAIContent, setIsGeneratingAIContent] = useState(false);
+      const title = `Document ${index + 1}`;
+      const coverUrl = createDocumentCoverDataUrl(title, 'DOC');
 
-  const [postSafetyDialogOpen, setPostSafetyDialogOpen] = useState(false);
-  const [postSafetyScan, setPostSafetyScan] = useState<SafetyScanResult | null>(null);
-  const pendingPostRef = useRef(false);
-
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const videoInputRef = useRef<HTMLInputElement | null>(null);
-  const documentInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
-  const [voiceSeconds, setVoiceSeconds] = useState(0);
-  const voiceStreamRef = useRef<MediaStream | null>(null);
-  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
-  const voiceChunksRef = useRef<BlobPart[]>([]);
-  const voiceTimerRef = useRef<number | null>(null);
-
-  const userTier = cleanTier(tier || user?.tier || 'free');
-
-  const canUseProAi = (() => {
-    try {
-      return Boolean(
-        hasTier?.('pro') ||
-          hasTier?.('creator') ||
-          hasTier?.('business') ||
-          hasTier?.('exclusive')
-      );
-    } catch {
-      return userTier === 'pro' || isCreatorPlusTier(userTier);
-    }
-  })();
-
-  const canUseVoiceNote = (() => {
-    const t = cleanTier(tier || user?.tier);
-
-    return (
-      t.startsWith('creator') ||
-      t.startsWith('business') ||
-      t.startsWith('exclusive') ||
-      addons?.verified === true
-    );
-  })();
-
-  const canUseDocumentPost = (() => {
-    try {
-      return Boolean(hasTier?.('creator') || hasTier?.('business') || hasTier?.('exclusive'));
-    } catch {
-      return isCreatorPlusTier(userTier);
-    }
-  })();
-
-  const readAsDataURL = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-
-      reader.readAsDataURL(file);
-    });
-
-  const clearUploadTimer = () => {
-    if (uploadProgressTimerRef.current !== null) {
-      window.clearInterval(uploadProgressTimerRef.current);
-      uploadProgressTimerRef.current = null;
-    }
-  };
-
-  const startUploadProgress = () => {
-    setUploadProgress(3);
-    clearUploadTimer();
-
-    uploadProgressTimerRef.current = window.setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 92) return prev;
-        return Math.min(92, prev + Math.floor(Math.random() * 9) + 3);
+      docs.push({
+        id: `${post.id}-doc-${index}`,
+        title,
+        url: cleanUrl,
+        pages: [coverUrl],
+        coverUrl,
+        totalPages: 1,
+        previewPages: 1,
       });
-    }, 350);
-  };
 
-  const finishUploadProgress = () => {
-    setUploadProgress(100);
-    clearUploadTimer();
+      return;
+    }
 
-    window.setTimeout(() => {
-      setUploadProgress(0);
-    }, 500);
-  };
+    const pages = normalizeStringArray(
+      raw.pages ||
+        raw.documentPages ||
+        raw.document_pages ||
+        raw.pageImages ||
+        raw.page_images
+    );
 
-  const getVideoDuration = (file: File) => {
-    return new Promise<number>((resolve, reject) => {
-      const video = document.createElement('video');
-      const url = URL.createObjectURL(file);
+    const url = cleanString(
+      raw.url ||
+        raw.documentUrl ||
+        raw.document_url ||
+        raw.fileUrl ||
+        raw.file_url ||
+        raw.mediaUrl ||
+        raw.media_url
+    );
 
-      video.preload = 'metadata';
+    const title =
+      cleanString(raw.title || raw.fileName || raw.file_name || raw.name) ||
+      `Document ${index + 1}`;
 
-      video.onloadedmetadata = () => {
-        URL.revokeObjectURL(url);
-        resolve(video.duration || 0);
-      };
+    const coverUrl =
+      cleanString(
+        raw.coverUrl ||
+          raw.cover_url ||
+          raw.documentCoverUrl ||
+          raw.document_cover_url ||
+          raw.thumbnail ||
+          raw.thumbnailUrl ||
+          raw.thumbnail_url
+      ) ||
+      pages[0] ||
+      createDocumentCoverDataUrl(title, getFileExtension(title));
 
-      video.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error('Could not read video duration.'));
-      };
+    if (!url && !coverUrl && pages.length === 0) return;
 
-      video.src = url;
+    const rawTotalPages = Number(
+      raw.totalPages ||
+        raw.total_pages ||
+        raw.pageCount ||
+        raw.page_count ||
+        pages.length ||
+        1
+    );
+
+    const totalPages = Math.max(
+      1,
+      Number.isFinite(rawTotalPages) ? rawTotalPages : 1
+    );
+
+    const rawPreviewPages = Number(
+      raw.previewPages ||
+        raw.preview_pages ||
+        raw.unlockedPages ||
+        raw.unlocked_pages ||
+        raw.visiblePages ||
+        raw.visible_pages ||
+        Math.min(1, totalPages)
+    );
+
+    const previewPages = Math.max(
+      1,
+      Math.min(Number.isFinite(rawPreviewPages) ? rawPreviewPages : 1, totalPages)
+    );
+
+    docs.push({
+      id: cleanString(raw.id) || `${post.id}-doc-${index}`,
+      title,
+      url,
+      pages: pages.length ? pages : [coverUrl],
+      coverUrl,
+      totalPages,
+      previewPages,
     });
   };
 
-  const getMaxVideoSeconds = () => {
-    if (isCreatorPlusTier(tier || user?.tier)) return 60;
+  const rawDocuments = (post as any).documents;
+
+  if (Array.isArray(rawDocuments)) {
+    rawDocuments.forEach((doc, index) => addDoc(doc, index));
+  } else if (typeof rawDocuments === 'string' && rawDocuments.trim()) {
+    try {
+      const parsed = JSON.parse(rawDocuments);
+
+      if (Array.isArray(parsed)) {
+        parsed.forEach((doc, index) => addDoc(doc, index));
+      } else {
+        addDoc(parsed, 0);
+      }
+    } catch {
+      addDoc(rawDocuments, 0);
+    }
+  }
+
+  if (docs.length === 0) {
+    const directDocumentUrl =
+      (post as any).documentUrl ||
+      (post as any).document_url ||
+      (post as any).document ||
+      (post as any).fileUrl ||
+      (post as any).file_url;
+
+    const directTitle =
+      (post as any).documentTitle ||
+      (post as any).document_title ||
+      (post as any).fileName ||
+      (post as any).file_name ||
+      'Document';
+
+    const directPages = normalizeStringArray(
+      (post as any).documentPages ||
+        (post as any).document_pages ||
+        (post as any).pageImages ||
+        (post as any).page_images
+    );
+
+    const directCover =
+      cleanString(
+        (post as any).documentCoverUrl ||
+          (post as any).document_cover_url ||
+          directPages[0]
+      ) || createDocumentCoverDataUrl(directTitle, getFileExtension(directTitle));
+
+    if (directDocumentUrl || directPages.length || directCover) {
+      addDoc(
+        {
+          url: directDocumentUrl,
+          title: directTitle,
+          pages: directPages.length ? directPages : [directCover],
+          coverUrl: directCover,
+          totalPages:
+            (post as any).documentTotalPages ||
+            (post as any).document_total_pages ||
+            directPages.length ||
+            1,
+          previewPages:
+            (post as any).documentPreviewPages ||
+            (post as any).document_preview_pages ||
+            (post as any).previewPages ||
+            (post as any).preview_pages ||
+            Math.min(1, directPages.length || 1),
+        },
+        docs.length
+      );
+    }
+  }
+
+  const unique = new Map<string, PostDocumentItem>();
+
+  docs.forEach((doc, index) => {
+    const url = cleanString(doc.url);
+    const title = cleanString(doc.title) || `Document ${index + 1}`;
+    const coverUrl =
+      cleanString(doc.coverUrl) ||
+      doc.pages[0] ||
+      createDocumentCoverDataUrl(title, getFileExtension(title));
+    const key = url || title.toLowerCase();
+
+    if (!unique.has(key)) {
+      unique.set(key, {
+        ...doc,
+        id: doc.id || `${post.id}-doc-${index}`,
+        title,
+        url,
+        coverUrl,
+        pages: Array.isArray(doc.pages) && doc.pages.length ? doc.pages.filter(Boolean) : [coverUrl],
+        totalPages: Math.max(1, Number(doc.totalPages) || 1),
+        previewPages: Math.max(
+          1,
+          Math.min(Number(doc.previewPages) || 1, Number(doc.totalPages) || 1)
+        ),
+      });
+    }
+  });
+
+  return Array.from(unique.values()).slice(0, 5);
+}
+
+function getCleanPostContent(content: string) {
+  return String(content || '')
+    .replace(/\[CREATOR_CONTENT\]/g, '')
+    .trim();
+}
+
+function clampStyle(lines: number): CSSProperties {
+  return {
+    display: '-webkit-box',
+    WebkitLineClamp: lines,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+}
+
+function getInitial(value: string) {
+  return cleanString(value).charAt(0).toUpperCase() || 'U';
+}
+
+function safeFileName(name: string) {
+  return String(name || 'facemex-image')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function normalizeProfile(raw: any, fallbackId: string, index: number): CollaboratorProfile {
+  if (typeof raw === 'string') {
+    return {
+      id: raw,
+      name: raw.length > 18 ? `Collaborator ${index + 1}` : raw,
+      avatar: '',
+      verified: false,
+    };
+  }
+
+  const id =
+    cleanString(raw?.id) ||
+    cleanString(raw?._id) ||
+    cleanString(raw?.userId) ||
+    cleanString(raw?.externalId) ||
+    fallbackId;
+
+  const name =
+    cleanString(raw?.name) ||
+    cleanString(raw?.userName) ||
+    cleanString(raw?.fullName) ||
+    cleanString(raw?.username) ||
+    `Collaborator ${index + 1}`;
+
+  const avatar =
+    cleanString(raw?.avatar) ||
+    cleanString(raw?.userAvatar) ||
+    cleanString(raw?.avatar_url) ||
+    '';
+
+  const verified =
+    raw?.verified === true ||
+    raw?.userVerified === true ||
+    raw?.isVerified === true ||
+    raw?.is_verified === true;
+
+  return {
+    id,
+    name,
+    avatar,
+    verified,
+  };
+}
+
+function normalizeCollaboratorProfiles(post: Post): CollaboratorProfile[] {
+  const rawProfiles =
+    (post as any).collaboratorProfiles ||
+    (post as any).collaborator_profiles ||
+    (post as any).collabProfiles ||
+    (post as any).collab_profiles ||
+    [];
+
+  const rawCollaborators = (post as any).collaborators || [];
+
+  const source =
+    Array.isArray(rawProfiles) && rawProfiles.length
+      ? rawProfiles
+      : Array.isArray(rawCollaborators)
+        ? rawCollaborators
+        : [];
+
+  const seen = new Set<string>();
+
+  return source
+    .map((item: any, index: number) =>
+      normalizeProfile(item, `${post.id}-collab-${index}`, index)
+    )
+    .filter((profile: CollaboratorProfile) => {
+      if (!profile.id) return false;
+      if (seen.has(profile.id)) return false;
+      seen.add(profile.id);
+      return true;
+    })
+    .slice(0, 4);
+}
+
+function normalizePendingCollabRequests(post: Post): CollaboratorProfile[] {
+  const raw =
+    (post as any).collabInvites ||
+    (post as any).collab_invites ||
+    (post as any).collaborationRequests ||
+    (post as any).collaboration_requests ||
+    [];
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item: any, index: number) => normalizeProfile(item, `request-${index}`, index))
+    .slice(0, 10);
+}
+
+function getMyIdentityCodes(user: any, userStoreId: string) {
+  const ids = new Set<string>();
+
+  const push = (value: unknown) => {
+    const v = cleanString(value);
+    if (v) ids.add(v);
+  };
+
+  push(userStoreId);
+  push(user?.id);
+  push(user?._id);
+  push(user?.externalId);
+  push(user?.supabaseId);
+  push(user?.authId);
+
+  if (typeof window !== 'undefined') {
+    push(window.localStorage.getItem('faceme_user_id'));
+    push(window.localStorage.getItem('facemex_user_id'));
+  }
+
+  return Array.from(ids);
+}
+
+function idsMatch(a: unknown, b: unknown) {
+  const aa = cleanString(a);
+  const bb = cleanString(b);
+  if (!aa || !bb) return false;
+  return aa === bb;
+}
+
+function getMyCollabCode(name: string, id: string) {
+  const cleanName = cleanString(name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+  const shortName = cleanName || 'User';
+
+  const last4 =
+    cleanString(id).replace(/[^a-zA-Z0-9]/g, '').slice(-4) ||
+    String(Math.floor(1000 + Math.random() * 9000));
+
+  return `${shortName}${last4}`;
+}
+
+function renderLinkedText(text: string): ReactNode[] {
+  const source = String(text || '');
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = urlRegex.exec(source)) !== null) {
+    const rawUrl = match[0];
+    const start = match.index;
+
+    if (start > lastIndex) {
+      nodes.push(source.slice(lastIndex, start));
+    }
+
+    const trailing = rawUrl.match(/[.,!?;:)]+$/)?.[0] || '';
+    const cleanUrl = trailing ? rawUrl.slice(0, -trailing.length) : rawUrl;
+    const href = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;
+
+    nodes.push(
+      <a
+        key={`${href}-${start}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="break-all font-semibold text-blue-600 underline underline-offset-2 dark:text-blue-400"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {cleanUrl}
+      </a>
+    );
+
+    if (trailing) nodes.push(trailing);
+
+    lastIndex = start + rawUrl.length;
+  }
+
+  if (lastIndex < source.length) {
+    nodes.push(source.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) {
+  if (!profiles.length) return null;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex -space-x-1.5">
+        {profiles.slice(0, 4).map((profile) => (
+          <div
+            key={profile.id}
+            className="relative h-5 w-5 overflow-hidden rounded-full border border-background bg-muted shadow-sm"
+            title={profile.name}
+          >
+            {profile.avatar ? (
+              <img
+                src={profile.avatar}
+                alt={profile.name}
+                className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[9px] font-bold text-muted-foreground">
+                {getInitial(profile.name)}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+        <UsersRound className="h-3 w-3" />
+        Collab
+      </span>
+    </div>
+  );
+}
+
+function DocumentPreview({
+  document,
+  onOpenPages,
+}: {
+  document: PostDocumentItem;
+  onOpenPages: (pages: string[], startIndex: number) => void;
+}) {
+  const cover =
+    document.coverUrl ||
+    document.pages[0] ||
+    createDocumentCoverDataUrl(document.title, getFileExtension(document.title));
+
+  const imageCount = document.pages.filter(Boolean).length;
+
+  const openDocument = () => {
+    if (document.url) {
+      window.open(document.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (document.pages.length) {
+      onOpenPages(document.pages, 0);
+    }
+  };
+
+  return (
+    <div className="w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
+      <button
+        type="button"
+        onClick={openDocument}
+        className="relative block aspect-[16/10] w-full max-w-full overflow-hidden bg-slate-950"
+      >
+        <img
+          src={cover}
+          alt={`${document.title} cover`}
+          className="block h-full w-full max-w-full object-cover"
+          loading="lazy"
+          decoding="async"
+        />
+
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-3 text-left text-white">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 shrink-0" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold">{document.title}</p>
+              <p className="text-[11px] text-white/75">
+                {document.previewPages} of {document.totalPages} page
+                {document.totalPages === 1 ? '' : 's'} preview
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {imageCount > 1 && (
+          <span className="absolute right-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white">
+            {imageCount} images
+          </span>
+        )}
+      </button>
+
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <div className="min-w-0 text-xs text-muted-foreground">
+          Document uploaded
+        </div>
+
+        {document.url && (
+          <button
+            type="button"
+            onClick={openDocument}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white dark:bg-white dark:text-black"
+          >
+            Open
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function PostCard({ post }: PostCardProps) {
+  const {
+    addComment,
+    addVoiceComment,
+    deleteComment,
+    likePost,
+    sharePost,
+    editPost,
+    deletePost,
+    inviteCollaborator,
+    acceptCollabInvite,
+    rejectCollabInvite,
+  } = usePostStore();
+
+  const [showComments, setShowComments] = useState(false);
+  const [commentComposerOpen, setCommentComposerOpen] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [editingPost, setEditingPost] = useState(false);
+  const [postDraft, setPostDraft] = useState(post.content);
+  const [saved, setSaved] = useState(false);
+  const [reposted, setReposted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [expandedPost, setExpandedPost] = useState(false);
+
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxItems, setLightboxItems] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const recordIntervalRef = useRef<number | null>(null);
+  const replyInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { addons, id: currentUserId, tier } = useUserStore();
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  const profileId = useMemo(() => getPostAuthorId(post), [post]);
+
+  const myIds = useMemo(
+    () => getMyIdentityCodes(user, currentUserId || ''),
+    [user, currentUserId]
+  );
+
+  const ownerIds = useMemo(
+    () =>
+      [
+        profileId,
+        cleanString((post as any).userId),
+        cleanString((post as any).user_id),
+        cleanString((post as any).authorId),
+        cleanString((post as any).author_id),
+        cleanString((post as any).ownerId),
+        cleanString((post as any).owner_id),
+        cleanString((post as any).user?._id),
+        cleanString((post as any).user?.id),
+        cleanString((post as any).externalId),
+      ].filter(Boolean),
+    [post, profileId]
+  );
+
+  const isOwner = useMemo(() => {
+    return ownerIds.some((ownerId) => myIds.some((myId) => idsMatch(ownerId, myId)));
+  }, [ownerIds, myIds]);
+
+  const mediaItems = useMemo(() => normalizePostMedia(post), [post]);
+  const documentItems = useMemo(() => normalizePostDocuments(post), [post]);
+  const collaboratorProfiles = useMemo(() => normalizeCollaboratorProfiles(post), [post]);
+  const pendingCollabRequests = useMemo(() => normalizePendingCollabRequests(post), [post]);
+
+  const cleanPostContent = useMemo(() => getCleanPostContent(post.content), [post.content]);
+
+  const hasMediaOrDocs = mediaItems.length > 0 || documentItems.length > 0;
+  const collapseLines = hasMediaOrDocs ? 2 : 10;
+
+  const shouldCollapsePost = hasMediaOrDocs
+    ? cleanPostContent.length > 95 || cleanPostContent.split('\n').length > 2
+    : cleanPostContent.length > 650 || cleanPostContent.split('\n').length > 10;
+
+  const lightboxSrc = lightboxItems[lightboxIndex] || null;
+
+  const collaborators = Array.isArray((post as any).collaborators)
+    ? ((post as any).collaborators as any[]).map((x) =>
+        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId)
+      )
+    : [];
+
+  const isCollaborator = myIds.some((myId) =>
+    collaborators.some((id) => idsMatch(id, myId))
+  );
+
+  const collabInvites = Array.isArray((post as any).collabInvites)
+    ? ((post as any).collabInvites as any[]).map((x) =>
+        typeof x === 'string' ? x : cleanString(x?.id || x?._id || x?.userId)
+      )
+    : [];
+
+  const hasInvite = myIds.some((myId) =>
+    collabInvites.some((id) => idsMatch(id, myId))
+  );
+
+  const canEdit = isOwner || isCollaborator;
+
+  const displayName = post.userName || (post as any).name || 'FaceMeX Member';
+  const displayAvatar =
+    post.userAvatar ||
+    (post as any).avatar ||
+    (post as any).userAvatar ||
+    '';
+
+  const isAuthorVerified =
+    (post as any)?.verified === true ||
+    (post as any)?.userVerified === true ||
+    (post as any)?.authorVerified === true ||
+    (post as any)?.accountVerified === true ||
+    (post as any)?.isVerified === true ||
+    (post as any)?.is_verified === true ||
+    (post as any)?.user?.verified === true ||
+    (post as any)?.user?.userVerified === true ||
+    (isOwner &&
+      (addons?.verified === true ||
+        (user as any)?.isVerified === true ||
+        (user as any)?.verified === true));
+
+  const openAuthorProfile = () => {
+    const targetId = profileId || getPostAuthorId(post);
+    const myRealId = cleanString(currentUserId || user?.id);
+
+    if (isOwner && myRealId) {
+      navigate(`/profile/${encodeURIComponent(myRealId)}`, {
+        state: {
+          ownProfile: true,
+          userId: myRealId,
+          profileId: myRealId,
+          userName: user?.name || displayName,
+          userAvatar: user?.avatar || displayAvatar,
+        },
+      });
+      return;
+    }
+
+    if (!targetId) {
+      alert('Profile ID not found for this post.');
+      return;
+    }
+
+    navigate(`/profile/${encodeURIComponent(targetId)}`, {
+      state: {
+        userId: targetId,
+        profileId: targetId,
+        userName: displayName,
+        userAvatar: displayAvatar,
+      },
+    });
+  };
+
+  useEffect(() => {
+    setPostDraft(post.content);
+  }, [post.content]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('faceme_saved_posts_v1');
+      const ids = raw ? (JSON.parse(raw) as string[]) : [];
+      setSaved(Array.isArray(ids) ? ids.includes(post.id) : false);
+    } catch {
+      setSaved(false);
+    }
+  }, [post.id]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('faceme_reposted_posts_v1');
+      const ids = raw ? (JSON.parse(raw) as string[]) : [];
+      setReposted(Array.isArray(ids) ? ids.includes(post.id) : false);
+    } catch {
+      setReposted(false);
+    }
+  }, [post.id]);
+
+  const requestCollaboration = async () => {
+    const myId = myIds[0] || '';
+    const myName = user?.name || 'FaceMeX user';
+    const myCode = getMyCollabCode(myName, myId);
+
+    if (!myId) {
+      alert('Please log in before requesting collaboration.');
+      return;
+    }
+
+    try {
+      await (inviteCollaborator as any)(post.id, myId, {
+        code: myCode,
+        name: myName,
+        avatar: user?.avatar || '',
+      });
+
+      alert(`Collaboration request sent. Your code: ${myCode}`);
+    } catch (err) {
+      console.error(err);
+      alert('Could not send collaboration request. Check backend route /api/posts/:id/collab/invite.');
+    }
+  };
+
+  const inviteCollaboratorByCode = async () => {
+    if (!isOwner) return;
+
+    const invitee = window.prompt('Enter collaborator user ID or unique code, example: Thabo4040');
+    const value = cleanString(invitee);
+
+    if (!value) return;
+
+    try {
+      await (inviteCollaborator as any)(post.id, value);
+    } catch (err) {
+      console.error(err);
+      alert('Could not invite collaborator. Check backend/store collaborator route.');
+    }
+  };
+
+  const acceptCollaborationRequest = async (profile: CollaboratorProfile) => {
+    if (!isOwner) return;
+
+    try {
+      await (acceptCollabInvite as any)(post.id, profile.id);
+    } catch (err) {
+      console.error(err);
+      alert('Could not accept collaborator. Backend/store may need author-accept support.');
+    }
+  };
+
+  const rejectCollaborationRequest = async (profile: CollaboratorProfile) => {
+    if (!isOwner) return;
+
+    try {
+      await (rejectCollabInvite as any)(post.id, profile.id);
+    } catch (err) {
+      console.error(err);
+      alert('Could not decline collaborator request.');
+    }
+  };
+
+const openLightbox = (items: string[] | string, startIndex = 0) => {
+    const gallery = Array.isArray(items) ? items.filter(Boolean) : [items].filter(Boolean);
+
+    if (!gallery.length) return;
+
+    const safeIndex = Math.max(0, Math.min(startIndex, gallery.length - 1));
+
+    setLightboxItems(gallery);
+    setLightboxIndex(safeIndex);
+    setLightboxOpen(true);
+  };
+
+  const closeLightbox = () => {
+    setLightboxOpen(false);
+    setLightboxItems([]);
+    setLightboxIndex(0);
+  };
+
+  const goPrevLightbox = () => {
+    if (!lightboxItems.length) return;
+    setLightboxIndex((prev) => (prev <= 0 ? lightboxItems.length - 1 : prev - 1));
+  };
+
+  const goNextLightbox = () => {
+    if (!lightboxItems.length) return;
+    setLightboxIndex((prev) => (prev >= lightboxItems.length - 1 ? 0 : prev + 1));
+  };
+
+  const openMediaLightbox = (src: string) => {
+    const imageGallery = mediaItems
+      .filter((item) => item.type === 'image')
+      .map((item) => item.src);
+
+    const startIndex = Math.max(0, imageGallery.indexOf(src));
+
+    openLightbox(imageGallery.length ? imageGallery : src, startIndex);
+  };
+
+  const saveImageToDevice = async (src: string, name = 'facemex-image') => {
+    if (!src) return;
+
+    try {
+      const response = await fetch(src, { mode: 'cors' });
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${safeFileName(name)}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch {
+      try {
+        const link = document.createElement('a');
+        link.href = src;
+        link.download = `${safeFileName(name)}.jpg`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch {
+        window.open(src, '_blank', 'noopener,noreferrer');
+      }
+    }
+  };
+
+  const saveCurrentLightboxImage = () => {
+    if (!lightboxSrc) return;
+    saveImageToDevice(lightboxSrc, `facemex-post-${post.id}-${lightboxIndex + 1}`);
+  };
+
+  const getVoiceCommentDailyLimit = () => {
+    const t = String((tier || user?.tier || '')).toLowerCase();
+
+    if (t.startsWith('creator') || t.startsWith('business') || t.startsWith('exclusive')) {
+      return Infinity;
+    }
+
+    if (t.startsWith('pro')) return 20;
+
+    return 5;
+  };
+
+  const getVoiceCommentUsageKey = () => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+
+    return `faceme:voice_comment_count:${yyyy}${mm}${dd}`;
+  };
+
+  const getVoiceCommentCountToday = () => {
+    try {
+      const raw = localStorage.getItem(getVoiceCommentUsageKey());
+      const n = raw ? Number(raw) : 0;
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const incrementVoiceCommentCountToday = () => {
+    try {
+      const key = getVoiceCommentUsageKey();
+      const current = getVoiceCommentCountToday();
+      localStorage.setItem(key, String(current + 1));
+    } catch {}
+  };
+
+  const getAudioLimitSeconds = (tierValue?: string | null) => {
+    const t = (tierValue || '').toLowerCase();
+    if (t.startsWith('creator')) return 5 * 60;
     return 30;
   };
 
-  const validateVideoFile = async (file: File) => {
-    if (!file.type.startsWith('video/')) {
-      throw new Error('Please choose a valid video file.');
-    }
-
-    const maxSeconds = getMaxVideoSeconds();
-    const duration = await getVideoDuration(file);
-
-    if (duration > maxSeconds) {
-      throw new Error(`Video is too long. Your current limit is ${maxSeconds} seconds.`);
-    }
-
-    if (file.size > 120 * 1024 * 1024) {
-      throw new Error('Video is too large. Please upload a smaller video under 120MB.');
-    }
-
-    return true;
-  };
-
-  const clearVoiceTimer = () => {
-    if (voiceTimerRef.current !== null) {
-      window.clearInterval(voiceTimerRef.current);
-      voiceTimerRef.current = null;
+  const clearRecordTimer = () => {
+    if (recordIntervalRef.current !== null) {
+      window.clearInterval(recordIntervalRef.current);
+      recordIntervalRef.current = null;
     }
   };
 
-  useEffect(() => {
-    return () => {
-      clearUploadTimer();
-      clearVoiceTimer();
+  const uploadVoiceComment = async (blob: Blob) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
 
-      try {
-        voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
-      } catch {}
-    };
-  }, []);
+      reader.onloadend = () => {
+        const base64Audio = reader.result as string;
+        resolve(base64Audio);
+      };
 
-  useEffect(() => {
-    if (content.length > 10) {
-      const suggestions = getAISuggestions(content);
-      setAiSuggestions(suggestions);
-    } else {
-      setAiSuggestions([]);
-    }
-  }, [content, getAISuggestions]);
+      reader.onerror = () => reject(new Error('Voice upload failed'));
+      reader.readAsDataURL(blob);
+    });
+  };
 
   const stopVoiceRecording = async () => {
-    const recorder = voiceRecorderRef.current;
-    const stream = voiceStreamRef.current;
-
-    if (!recorder || !stream) return;
+    if (!mediaRecorderRef.current || !audioStreamRef.current) return;
 
     return new Promise<void>((resolve) => {
+      const recorder = mediaRecorderRef.current;
+      const stream = audioStreamRef.current;
+
       recorder.onstop = async () => {
-        const blob = new Blob(voiceChunksRef.current, {
-          type: recorder.mimeType || 'audio/webm',
-        });
-
-        voiceChunksRef.current = [];
-
         try {
-          setIsUploading(true);
-          startUploadProgress();
-
-          const file = new File([blob], `voice-${Date.now()}.webm`, {
-            type: blob.type || 'audio/webm',
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: 'audio/webm',
           });
 
-          const url = await uploadMedia(file, 'posts/audio');
+          audioChunksRef.current = [];
 
-          setAudioPreview(url);
-          setImagePreviews([]);
-          setVideoPreviews([]);
-          setDocumentPreviews([]);
+          const voiceUrl = await uploadVoiceComment(audioBlob);
 
-          finishUploadProgress();
-        } catch {
-          try {
-            const reader = new FileReader();
+          await addVoiceComment(post.id, voiceUrl);
 
-            const dataUrl: string = await new Promise((res, rej) => {
-              reader.onload = () => res(String(reader.result || ''));
-              reader.onerror = () => rej(new Error('voice_read_failed'));
-              reader.readAsDataURL(blob);
-            });
-
-            setAudioPreview(dataUrl);
-            setImagePreviews([]);
-            setVideoPreviews([]);
-            setDocumentPreviews([]);
-          } catch {
-            toast({
-              title: 'Voice failed',
-              description: 'Could not upload voice note. Please try again.',
-              variant: 'destructive',
-            });
-          }
+          incrementVoiceCommentCountToday();
+          setShowComments(true);
+          setCommentComposerOpen(false);
+          setCommentText('');
+        } catch (error) {
+          console.error('Voice comment failed:', error);
+          alert('Voice comment failed. Please try again.');
         } finally {
-          setIsUploading(false);
-          stream.getTracks().forEach((t) => t.stop());
-          voiceStreamRef.current = null;
-          voiceRecorderRef.current = null;
-          clearVoiceTimer();
-          setIsRecordingVoice(false);
+          stream.getTracks().forEach((track) => track.stop());
+          audioStreamRef.current = null;
+          mediaRecorderRef.current = null;
+          clearRecordTimer();
+          setIsRecording(false);
+          setRecordSeconds(0);
           resolve();
         }
       };
@@ -378,980 +1238,993 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   };
 
   const toggleVoiceRecording = async () => {
-    if (!canUseVoiceNote) {
-      toast({
-        title: 'Voice notes are Creator+ only',
-        description: 'Upgrade to Creator+ or higher to post a voice note. Everyone can still listen.',
-        variant: 'destructive',
-      });
+    if (isRecording) {
+      await stopVoiceRecording();
       return;
     }
 
-    if (isRecordingVoice) {
-      await stopVoiceRecording();
+    const limit = getVoiceCommentDailyLimit();
+    const used = getVoiceCommentCountToday();
+
+    if (Number.isFinite(limit) && used >= limit) {
+      alert(`Daily limit reached. You can send ${limit} voice note comments per day on your plan.`);
       return;
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      voiceStreamRef.current = stream;
+      audioStreamRef.current = stream;
 
       const recorder = new MediaRecorder(stream);
-      voiceRecorderRef.current = recorder;
-      voiceChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
 
-      setVoiceSeconds(0);
-      clearVoiceTimer();
+      setRecordSeconds(0);
 
-      voiceTimerRef.current = window.setInterval(() => {
-        setVoiceSeconds((s) => s + 1);
+      const limitSeconds = getAudioLimitSeconds(user?.tier as string | undefined);
+
+      clearRecordTimer();
+
+      recordIntervalRef.current = window.setInterval(() => {
+        setRecordSeconds((prev) => {
+          const next = prev + 1;
+
+          if (next >= limitSeconds) {
+            stopVoiceRecording();
+          }
+
+          return next;
+        });
       }, 1000);
 
       recorder.ondataavailable = (event: BlobEvent) => {
         if (event.data && event.data.size > 0) {
-          voiceChunksRef.current.push(event.data);
+          audioChunksRef.current.push(event.data);
         }
       };
 
       recorder.start();
-      setIsRecordingVoice(true);
-    } catch {
-      alert('Unable to access microphone. Please allow mic permissions to record a voice note.');
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Microphone access denied or failed', err);
+      alert('Allow microphone access to record a voice note.');
     }
   };
 
-  const cancelUpload = () => {
-    uploadGenRef.current += 1;
-    setIsUploading(false);
-    setUploadProgress(0);
-    clearUploadTimer();
+  const toggleSaved = () => {
+    setSaved((prev) => {
+      const next = !prev;
 
-    setImagePreviews([]);
-    setVideoPreviews([]);
-    setDocumentPreviews([]);
-    setAudioPreview(null);
-  };
-
-  const handleImprovePostWithAI = async () => {
-    if (!canUseProAi) {
-      toast({
-        title: 'Upgrade needed',
-        description: 'AI writing improvements are available on Pro and above.',
-      });
-      return;
-    }
-
-    if (!topic.trim()) {
-      toast({
-        title: 'Add a topic first',
-        description: 'Enter a topic so AI can improve your post with the right context.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!content.trim()) {
-      toast({
-        title: 'Write something first',
-        description: 'Add some text, then use AI to improve it.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsGeneratingAIContent(true);
-
-    try {
-      const reply = await generateAIReply({
-        context: [],
-        userMessage: `Improve this ${postMode === 'professional' ? 'professional' : 'casual'} post about "${topic.trim()}", keeping the meaning but making it clearer and more engaging:\n\n${content.trim()}`,
-        tone: postMode === 'professional' ? 'professional' : 'casual',
-        maxLength: 280,
-      });
-
-      setContent(reply);
-
-      toast({
-        title: 'Improved',
-        description: 'AI refined your post. Review before posting.',
-      });
-    } catch {
-      toast({
-        title: 'AI failed',
-        description: 'Could not improve the post. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsGeneratingAIContent(false);
-    }
-  };
-
-  const handleImagesUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter((file) =>
-      file.type.startsWith('image/')
-    );
-
-    if (files.length === 0) {
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const maxImages = 5;
-    const remainingSlots = Math.max(0, maxImages - imagePreviews.length);
-
-    if (remainingSlots <= 0) {
-      alert(`You can upload up to ${maxImages} images per post.`);
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const filesToUpload = files.slice(0, remainingSlots);
-
-    const tooLarge = filesToUpload.find((f) => f.size > 15 * 1024 * 1024);
-
-    if (tooLarge) {
-      alert('One of the images is too large. Please pick files under 15MB each.');
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const myGen = ++uploadGenRef.current;
-    setAudioPreview(null);
-
-    try {
       try {
-        const local = await Promise.all(filesToUpload.map((f) => readAsDataURL(f)));
+        const raw = localStorage.getItem('faceme_saved_posts_v1');
+        const ids = raw ? (JSON.parse(raw) as string[]) : [];
+        const safe = Array.isArray(ids) ? ids : [];
+        const updated = next
+          ? Array.from(new Set([...safe, post.id]))
+          : safe.filter((id) => id !== post.id);
 
-        if (uploadGenRef.current !== myGen) return;
-
-        setImagePreviews((prev) => [...prev, ...local].slice(0, maxImages));
+        localStorage.setItem('faceme_saved_posts_v1', JSON.stringify(updated));
       } catch {}
 
-      setIsUploading(true);
-      startUploadProgress();
+      return next;
+    });
+  };
 
-      const urls = await uploadImagesToAzure(filesToUpload);
+  const handleRepost = async () => {
+    try {
+      await sharePost(post.id);
 
-      if (uploadGenRef.current !== myGen) return;
+      setReposted(true);
 
-      setImagePreviews((prev) => {
-        const withoutLocal = prev.filter((src) => !src.startsWith('data:'));
-        return [...withoutLocal, ...urls].slice(0, maxImages);
-      });
-
-      finishUploadProgress();
-    } catch (err: any) {
-      const msg = err?.code || err?.message || 'Upload failed';
-      alert(`Images upload failed: ${msg}.`);
-    } finally {
-      setIsUploading(false);
-      e.currentTarget.value = '';
+      try {
+        const raw = localStorage.getItem('faceme_reposted_posts_v1');
+        const ids = raw ? (JSON.parse(raw) as string[]) : [];
+        const safe = Array.isArray(ids) ? ids : [];
+        localStorage.setItem(
+          'faceme_reposted_posts_v1',
+          JSON.stringify(Array.from(new Set([...safe, post.id])))
+        );
+      } catch {}
+    } catch (error) {
+      console.error('Repost failed:', error);
+      alert('Could not repost. Please try again.');
     }
   };
 
-  const handleVideosUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter((file) =>
-      file.type.startsWith('video/')
-    );
-
-    if (files.length === 0) {
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const maxVideos = 4;
-    const remainingSlots = Math.max(0, maxVideos - videoPreviews.length);
-
-    if (remainingSlots <= 0) {
-      alert(`You can upload up to ${maxVideos} videos per post.`);
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const filesToUpload = files.slice(0, remainingSlots);
-
-    const myGen = ++uploadGenRef.current;
-    setAudioPreview(null);
+  const handleShareOnly = async () => {
+    const url = `${window.location.origin}/post/${post.id}`;
 
     try {
-      setIsUploading(true);
-      startUploadProgress();
+      const navAny = typeof navigator !== 'undefined' ? (navigator as any) : null;
 
-      for (const file of filesToUpload) {
-        await validateVideoFile(file);
+      if (navAny && typeof navAny.share === 'function') {
+        await navAny.share({
+          title: 'FaceMeX',
+          text: cleanPostContent || 'Check this post on FaceMeX',
+          url,
+        });
+        return;
       }
 
-      const urls = await Promise.all(
-        filesToUpload.map((file) => uploadMedia(file, 'posts/videos'))
-      );
+      if (navAny?.clipboard?.writeText) {
+        await navAny.clipboard.writeText(url);
+        return;
+      }
 
-      if (uploadGenRef.current !== myGen) return;
-
-      setVideoPreviews((prev) => [...prev, ...urls].slice(0, maxVideos));
-
-      finishUploadProgress();
-
-      toast({
-        title: 'Video uploaded',
-        description: `${urls.length} video${urls.length === 1 ? '' : 's'} added to your post.`,
-      });
-    } catch (err: any) {
-      alert(err?.message || 'Video upload failed. Please choose a shorter video.');
-    } finally {
-      setIsUploading(false);
-      e.currentTarget.value = '';
+      window.prompt('Copy post link:', url);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        window.prompt('Copy post link:', url);
+      }
     }
   };
 
-const handleDocumentsUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (!canUseDocumentPost) {
-      e.currentTarget.value = '';
+  const openCommentComposer = () => {
+    const shouldClose = showComments || commentComposerOpen;
 
-      toast({
-        title: 'Creator+ required',
-        description:
-          'Only Creator, Business and Exclusive users can post documents. Free and Pro users can view documents only.',
-        variant: 'destructive',
-      });
-
+    if (shouldClose) {
+      setShowComments(false);
+      setCommentComposerOpen(false);
+      setCommentText('');
       return;
     }
 
-    const files = Array.from(e.target.files || []);
+    setShowComments(true);
+    setCommentComposerOpen(true);
 
-    if (files.length === 0) {
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const currentTotal = documentPreviews.length + files.length;
-
-    if (currentTotal > 5) {
-      alert('You can upload up to 5 documents per post.');
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const tooLarge = files.find((f) => f.size > 30 * 1024 * 1024);
-
-    if (tooLarge) {
-      alert('One of the documents is too large. Please pick files under 30MB each.');
-      e.currentTarget.value = '';
-      return;
-    }
-
-    const myGen = ++uploadGenRef.current;
-    setAudioPreview(null);
-
-    try {
-      setIsUploading(true);
-      startUploadProgress();
-
-      const uploaded = await Promise.all(
-        files.map(async (file, index) => {
-          const url = await uploadMedia(file, 'posts/documents');
-          const extension = getFileExtension(file.name);
-          const coverUrl = createDocumentCoverDataUrl(file.name, extension);
-
-          return {
-            id: safeId(`doc-${index}`),
-            title: file.name,
-            url,
-            pages: [coverUrl],
-            coverUrl,
-            mimeType: file.type || 'application/octet-stream',
-            size: file.size,
-            totalPages: Math.max(1, documentTotalPages),
-            previewPages: Math.max(
-              1,
-              Math.min(documentPreviewPages, Math.max(1, documentTotalPages))
-            ),
-          };
-        })
-      );
-
-      if (uploadGenRef.current !== myGen) return;
-
-      setDocumentPreviews((prev) => [...prev, ...uploaded].slice(0, 5));
-      finishUploadProgress();
-
-      toast({
-        title: 'Document uploaded',
-        description: `${uploaded.length} document${uploaded.length === 1 ? '' : 's'} added to your post.`,
-      });
-    } catch (err: any) {
-      alert(err?.message || 'Document upload failed. Please try again.');
-    } finally {
-      setIsUploading(false);
-      e.currentTarget.value = '';
-    }
+    window.setTimeout(() => {
+      replyInputRef.current?.focus();
+    }, 50);
   };
 
-  const handlePost = async () => {
-    const hasMedia =
-      imagePreviews.length > 0 ||
-      videoPreviews.length > 0 ||
-      documentPreviews.length > 0 ||
-      !!audioPreview;
+  const startEditPost = () => {
+    if (!canEdit) return;
+    setPostDraft(post.content);
+    setEditingPost(true);
+  };
 
-    if (!(content.trim() || hasMedia)) return;
+  const saveEditPost = async () => {
+    const next = postDraft.trim();
 
-    if (documentPreviews.length > 0 && !canUseDocumentPost) {
-      toast({
-        title: 'Creator+ required',
-        description: 'Remove the document or upgrade to Creator+ before posting.',
-        variant: 'destructive',
-      });
-
-      return;
-    }
-
-    const scan = safetyScanText(content);
-
-    if (!pendingPostRef.current && (scan.level === 'medium' || scan.level === 'high')) {
-      pendingPostRef.current = true;
-      setPostSafetyScan(scan);
-      setPostSafetyDialogOpen(true);
-
-      reportSafetyEvent({
-        content,
-        scan,
-        context: { location: 'posts', direction: 'draft' },
-      }).catch(() => {});
-
-      return;
-    }
+    if (!next || !canEdit) return;
 
     try {
-      setIsPosting(true);
-
-      const primaryMediaType =
-        videoPreviews.length > 0
-          ? 'video'
-          : imagePreviews.length > 0
-            ? 'image'
-            : documentPreviews.length > 0
-              ? 'document'
-              : audioPreview
-                ? 'audio'
-                : 'text';
-
-      const firstDoc = documentPreviews[0];
-
-      await (addPost as any)(
-        content.trim() || content,
-        imagePreviews.length ? imagePreviews : undefined,
-        audioPreview || undefined,
-        undefined,
-        postMode,
-        {
-          image: imagePreviews[0] || '',
-          images: imagePreviews,
-
-          video: videoPreviews[0] || '',
-          videos: videoPreviews,
-          videoUrl: videoPreviews[0] || '',
-          videoUrls: videoPreviews,
-          video_url: videoPreviews[0] || '',
-          video_urls: videoPreviews,
-
-          mediaType: primaryMediaType,
-          media_type: primaryMediaType,
-
-          documents: documentPreviews,
-
-          documentUrl: firstDoc?.url || '',
-          documentTitle: firstDoc?.title || '',
-          documentPages: firstDoc?.pages || [],
-          documentTotalPages: firstDoc?.totalPages || 0,
-          documentPreviewPages: firstDoc?.previewPages || 1,
-          documentCoverUrl: firstDoc?.coverUrl || firstDoc?.pages?.[0] || '',
-
-          document_url: firstDoc?.url || '',
-          document_title: firstDoc?.title || '',
-          document_pages: firstDoc?.pages || [],
-          document_total_pages: firstDoc?.totalPages || 0,
-          document_preview_pages: firstDoc?.previewPages || 1,
-          document_cover_url: firstDoc?.coverUrl || firstDoc?.pages?.[0] || '',
-        }
-      );
-
-      setContent('');
-      setImagePreviews([]);
-      setVideoPreviews([]);
-      setDocumentPreviews([]);
-      setDocumentPreviewPages(1);
-      setDocumentTotalPages(1);
-      setAudioPreview(null);
-      setAiSuggestions([]);
-      setTopic('');
-
-      onOpenChange(false);
+      await editPost(post.id, next);
+      setEditingPost(false);
     } catch (err) {
-      console.error('Failed to create post', err);
-      alert('Failed to create post. Please ensure the API is running and configured correctly.');
-    } finally {
-      setIsPosting(false);
-      pendingPostRef.current = false;
+      console.error(err);
+      alert('Could not edit post.');
     }
   };
 
-  const removeMedia = () => {
-    setImagePreviews([]);
-    setVideoPreviews([]);
-    setDocumentPreviews([]);
-    setAudioPreview(null);
+  const handleDeletePost = async () => {
+    if (!isOwner) return;
+
+    const ok = window.confirm('Delete this post?');
+
+    if (!ok) return;
+
+    try {
+      await deletePost(post.id);
+    } catch (err) {
+      console.error(err);
+      alert('Could not delete post.');
+    }
   };
 
-  const removeImage = (index: number) => {
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  const handleComment = async () => {
+    if (!commentText.trim()) return;
+
+    await addComment(post.id, commentText.trim());
+
+    setCommentText('');
+    setShowComments(true);
+    setCommentComposerOpen(false);
   };
 
-  const removeVideo = (index: number) => {
-    setVideoPreviews((prev) => prev.filter((_, i) => i !== index));
+  const handleDeleteComment = async (commentId: string) => {
+    const ok = window.confirm('Delete this comment?');
+
+    if (!ok) return;
+
+    try {
+      await deleteComment(post.id, commentId);
+    } catch (err) {
+      console.error(err);
+      alert('Could not delete comment.');
+    }
   };
 
-  const removeDocument = (index: number) => {
-    setDocumentPreviews((prev) => prev.filter((_, i) => i !== index));
+  const handleReplyToComment = (commentUserName: string) => {
+    setShowComments(true);
+    setCommentComposerOpen(true);
+    setCommentText(`@${commentUserName} `);
+
+    window.setTimeout(() => {
+      replyInputRef.current?.focus();
+    }, 0);
   };
 
-  const addHashtag = (hashtag: string) => {
-    setContent((prev) => `${prev} ${hashtag}`.trimStart());
+  const renderMediaFrame = () => {
+    if (mediaItems.length === 0) return null;
+
+    const imageItems = mediaItems.filter((item) => item.type === 'image');
+    const videoItems = mediaItems.filter((item) => item.type === 'video');
+
+    return (
+      <div className="mt-2 w-full max-w-full min-w-0 space-y-2 overflow-hidden">
+        {videoItems.map((item, index) => (
+          <div
+            key={`${item.src}-${index}`}
+            className="w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm"
+          >
+            <div className="relative aspect-[4/5] w-full max-w-full overflow-hidden bg-black sm:aspect-[16/10]">
+              <video
+                src={item.src}
+                controls
+                playsInline
+                preload="metadata"
+                className="block h-full w-full max-w-full bg-black object-contain"
+                controlsList="nodownload"
+                onContextMenu={(e) => e.preventDefault()}
+              />
+
+              <div className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">
+                <span className="inline-flex items-center gap-1">
+                  <PlayCircle className="h-3.5 w-3.5" />
+                  Video
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {imageItems.length === 1 && (
+          <button
+            type="button"
+            onClick={() => openMediaLightbox(imageItems[0].src)}
+            className="block w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm"
+          >
+            <span className="block aspect-[4/5] w-full max-w-full overflow-hidden bg-black sm:aspect-[16/10]">
+              <img
+                src={imageItems[0].src}
+                alt="Post media"
+                className="block h-full w-full max-w-full object-contain"
+                loading="lazy"
+                decoding="async"
+              />
+            </span>
+          </button>
+        )}
+
+        {imageItems.length > 1 && (
+          <div className="w-full max-w-full min-w-0 overflow-hidden">
+            <div className="flex w-full max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {imageItems.map((item, index) => (
+                <button
+                  key={`${item.src}-${index}`}
+                  type="button"
+                  onClick={() => openMediaLightbox(item.src)}
+                  className="relative aspect-[4/5] h-auto min-w-[82%] max-w-[82%] shrink-0 overflow-hidden rounded-[22px] border border-border/60 bg-black shadow-sm sm:aspect-[16/10] sm:min-w-[58%] sm:max-w-[58%]"
+                >
+                  <img
+                    src={item.src}
+                    alt={`Post image ${index + 1}`}
+                    className="block h-full w-full max-w-full object-contain"
+                    loading="lazy"
+                    decoding="async"
+                  />
+
+                  {index === 0 && imageItems.length > 1 && (
+                    <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white">
+                      {imageItems.length} images
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
-  const hasStarted = !!(
-    content.trim() ||
-    imagePreviews.length > 0 ||
-    videoPreviews.length > 0 ||
-    documentPreviews.length > 0 ||
-    audioPreview ||
-    topic.trim()
-  );
+  const commentCount = post.comments?.length || 0;
 
-  const canPost =
-    Boolean(content.trim()) ||
-    imagePreviews.length > 0 ||
-    videoPreviews.length > 0 ||
-    documentPreviews.length > 0 ||
-    Boolean(audioPreview);
+  const reactionType = post.isLiked
+    ? ((post.reaction || 'like') as
+        | 'love'
+        | 'like'
+        | 'haha'
+        | 'wow'
+        | 'sad'
+        | 'angry')
+    : undefined;
+
+  const reactionClass = (() => {
+    if (!post.isLiked) return '';
+
+    switch (reactionType) {
+      case 'love':
+        return 'text-rose-500';
+      case 'like':
+      case 'haha':
+      case 'wow':
+        return 'text-primary';
+      case 'sad':
+        return 'text-muted-foreground';
+      case 'angry':
+        return 'text-red-500';
+      default:
+        return 'text-primary';
+    }
+  })();
+
+  const actionButton =
+    'group flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground active:scale-[0.98]';
+
+  const actionIcon = 'h-[18px] w-[18px]';
+
+  const actionCount =
+    'text-[11px] font-semibold tabular-nums text-muted-foreground';
+
+  const viewerActionButton =
+    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition-colors hover:text-white active:scale-95';
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto overflow-x-hidden rounded-2xl border bg-card p-4 sm:max-w-[640px] sm:p-6">
-        <SafetyWarningDialog
-          open={postSafetyDialogOpen}
-          onOpenChange={(v) => {
-            setPostSafetyDialogOpen(v);
-            if (!v) pendingPostRef.current = false;
-          }}
-          title="Potential scam or unsafe content"
-          scan={postSafetyScan}
-          primaryActionLabel="Post anyway"
-          onPrimaryAction={() => {
-            setPostSafetyDialogOpen(false);
-            handlePost();
-          }}
-        />
+    <div
+      className="w-full max-w-full min-w-0 transform-gpu overflow-hidden"
+      style={{
+        contain: 'layout paint style',
+        background: 'transparent',
+      }}
+    >
+      <Card className="mb-3 w-full max-w-full min-w-0 overflow-hidden rounded-[24px] border bg-card shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
+        <CardHeader className="flex min-w-0 flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
+          <button
+            type="button"
+            className="flex min-w-0 items-center space-x-2 text-left"
+            onClick={openAuthorProfile}
+          >
+            <div className="relative shrink-0 overflow-visible p-0.5">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={displayAvatar} alt={displayName} />
+                <AvatarFallback>{getInitial(displayName)}</AvatarFallback>
+              </Avatar>
 
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold tracking-tight">
-            New post
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>Posting as:</span>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className={`rounded border px-2 py-1 ${
-                  postMode === 'social'
-                    ? 'border-primary text-foreground'
-                    : 'border-muted-foreground/30'
-                }`}
-                onClick={() => setPostMode('social')}
-              >
-                Social
-              </button>
-
-              <button
-                type="button"
-                className={`rounded border px-2 py-1 ${
-                  postMode === 'professional'
-                    ? 'border-primary text-foreground'
-                    : 'border-muted-foreground/30'
-                }`}
-                onClick={() => setPostMode('professional')}
-              >
-                Professional
-              </button>
+              {isAuthorVerified && (
+                <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-slate-950 ring-2 ring-background">
+                  <CheckCircle className="h-3.5 w-3.5 text-white" />
+                </span>
+              )}
             </div>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <Avatar>
-              <AvatarImage src={user?.avatar} alt={user?.name} />
-              <AvatarFallback>{user?.name?.charAt(0) || 'U'}</AvatarFallback>
-            </Avatar>
 
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">
-                {user?.name || 'FaceMeX user'}
+              <p className="truncate text-sm font-semibold hover:underline md:text-[15px]">
+                {displayName}
               </p>
-            </div>
-          </div>
 
-          <Textarea
-            placeholder="Share an update, idea, or story..."
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="min-h-[220px] resize-none rounded-2xl border bg-background px-4 py-3 text-base leading-relaxed focus-visible:ring-2"
-          />
-
-          <AnimatePresence>
-            {hasStarted && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="space-y-3"
-              >
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      Topic for AI tools
-                    </span>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleImprovePostWithAI}
-                      disabled={isGeneratingAIContent || !canUseProAi}
-                      className="text-xs"
-                    >
-                      {isGeneratingAIContent
-                        ? 'Improving…'
-                        : canUseProAi
-                          ? 'Improve writing'
-                          : 'Upgrade for AI'}
-                    </Button>
-                  </div>
-
-                  <Input
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    placeholder="Optional topic for AI"
-                    className="h-9"
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <AnimatePresence>
-            {hasStarted && aiSuggestions.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="space-y-2"
-              >
-                <div className="text-xs text-muted-foreground">
-                  Suggested hashtags
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {aiSuggestions.map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
-                      onClick={() => addHashtag(tag)}
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setShowAISuggestions(!showAISuggestions)}
-              className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Hash className="h-4 w-4" />
-              <span>Hashtags</span>
-            </button>
-
-            <AnimatePresence>
-              {hasStarted && showAISuggestions && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="flex flex-wrap gap-2"
-                >
-                  {trendingHashtags.slice(0, 8).map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
-                      onClick={() => addHashtag(`#${tag}`)}
-                    >
-                      #{tag}
-                    </Badge>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {imagePreviews.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="relative overflow-hidden rounded-2xl bg-muted"
-            >
-              <div className="relative aspect-video w-full bg-black">
-                <div className="absolute inset-0 grid grid-cols-2 gap-1 p-1">
-                  {imagePreviews.slice(0, 4).map((src, index) => (
-                    <div
-                      key={`${src}-${index}`}
-                      className="relative overflow-hidden rounded bg-black"
-                    >
-                      <img src={src} alt="Preview" className="h-full w-full object-cover" />
-
-                      <button
-                        type="button"
-                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
-                        onClick={() => removeImage(index)}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-
-                      {index === 3 && imagePreviews.length > 4 && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-xl font-bold text-white">
-                          +{imagePreviews.length - 4}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {imagePreviews.length === 1 && (
-                    <img
-                      src={imagePreviews[0]}
-                      alt="Preview"
-                      className="col-span-2 row-span-2 h-full w-full rounded object-contain"
-                    />
-                  )}
-                </div>
-              </div>
-
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute right-2 top-2"
-                onClick={removeMedia}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </motion.div>
-          )}
-
-          {videoPreviews.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="space-y-3 rounded-2xl border bg-muted/20 p-3"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Videos selected: {videoPreviews.length}
-                </p>
-
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                 <p className="text-[11px] text-muted-foreground">
-                  Limit: {getMaxVideoSeconds()}s each
+                  {formatDistanceToNow(getPostDate(post), { addSuffix: true })}
                 </p>
+
+                {collaboratorProfiles.length > 0 && (
+                  <>
+                    <span className="text-[11px] text-muted-foreground">•</span>
+                    <CollaboratorCluster profiles={collaboratorProfiles} />
+                  </>
+                )}
               </div>
+            </div>
+          </button>
 
-              <div className="space-y-3">
-                {videoPreviews.map((src, index) => (
-                  <div
-                    key={`${src}-${index}`}
-                    className="relative overflow-hidden rounded-[22px] border bg-black shadow-sm"
-                  >
-                    <video
-                      src={src}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      className="max-h-[360px] w-full bg-black object-contain"
-                      controlsList="nodownload"
-                      onContextMenu={(e) => e.preventDefault()}
-                    />
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                aria-label="Post options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
 
-                    <button
-                      type="button"
-                      className="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white"
-                      onClick={() => removeVideo(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {documentPreviews.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="space-y-3 rounded-2xl border bg-muted/20 p-3"
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              onClick={(event) => event.stopPropagation()}
+              className="z-[80] w-64 rounded-2xl border border-border/70 bg-popover p-1 shadow-xl"
             >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Documents selected: {documentPreviews.length}
-                </p>
+              {canEdit && (
+                <DropdownMenuItem
+                  onClick={startEditPost}
+                  className="cursor-pointer rounded-xl"
+                >
+                  <PencilLine className="mr-2 h-4 w-4" />
+                  Edit post
+                </DropdownMenuItem>
+              )}
 
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Total pages</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={documentTotalPages}
-                    onChange={(e) => {
-                      const value = Math.max(1, Math.min(200, Number(e.target.value) || 1));
-                      setDocumentTotalPages(value);
-                      setDocumentPreviewPages((prev) => Math.max(1, Math.min(prev, value)));
+              {isOwner && pendingCollabRequests.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
 
-                      setDocumentPreviews((prev) =>
-                        prev.map((doc) => ({
-                          ...doc,
-                          totalPages: value,
-                          previewPages: Math.max(1, Math.min(doc.previewPages || 1, value)),
-                        }))
-                      );
-                    }}
-                    className="h-8 w-20"
-                  />
+                  <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Collaboration requests
+                  </div>
 
-                  <span className="text-muted-foreground">Show pages</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={documentTotalPages}
-                    value={documentPreviewPages}
-                    onChange={(e) => {
-                      const value = Math.max(
-                        1,
-                        Math.min(documentTotalPages, Number(e.target.value) || 1)
-                      );
+                  {pendingCollabRequests.slice(0, 4).map((profile) => (
+                    <div
+                      key={profile.id}
+                      className="rounded-xl px-2 py-2 hover:bg-muted/40"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <Avatar className="h-7 w-7">
+                          <AvatarImage src={profile.avatar} alt={profile.name} />
+                          <AvatarFallback>{getInitial(profile.name)}</AvatarFallback>
+                        </Avatar>
 
-                      setDocumentPreviewPages(value);
-
-                      setDocumentPreviews((prev) =>
-                        prev.map((doc) => ({
-                          ...doc,
-                          previewPages: value,
-                          totalPages: documentTotalPages,
-                        }))
-                      );
-                    }}
-                    className="h-8 w-20"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {documentPreviews.map((doc, index) => (
-                  <div
-                    key={doc.id}
-                    className="overflow-hidden rounded-2xl border bg-background shadow-sm"
-                  >
-                    {doc.coverUrl && (
-                      <div className="aspect-[16/9] w-full overflow-hidden bg-slate-950">
-                        <img
-                          src={doc.coverUrl}
-                          alt={doc.title}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between px-3 py-2 text-sm">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{doc.title}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Showing {doc.previewPages} of {doc.totalPages} page
-                            {doc.totalPages === 1 ? '' : 's'}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold">
+                            {profile.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Wants to collaborate
                           </p>
                         </div>
                       </div>
 
-                      <button type="button" onClick={() => removeDocument(index)}>
-                        <X className="h-4 w-4 text-muted-foreground" />
+                      <div className="grid grid-cols-2 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => acceptCollaborationRequest(profile)}
+                          className="rounded-full bg-slate-950 px-2 py-1 text-[11px] font-semibold text-white"
+                        >
+                          Accept
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => rejectCollaborationRequest(profile)}
+                          className="rounded-full border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {isOwner && (
+                <DropdownMenuItem
+                  onClick={inviteCollaboratorByCode}
+                  className="cursor-pointer rounded-xl"
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite collaborator
+                </DropdownMenuItem>
+              )}
+
+              {!isOwner && !isCollaborator && !hasInvite && (
+                <DropdownMenuItem
+                  onClick={requestCollaboration}
+                  className="cursor-pointer rounded-xl"
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Request collaboration
+                </DropdownMenuItem>
+              )}
+
+              {hasInvite && !isOwner && (
+                <DropdownMenuItem
+                  disabled
+                  className="cursor-default rounded-xl text-muted-foreground"
+                >
+                  <UsersRound className="mr-2 h-4 w-4" />
+                  Collaboration request sent
+                </DropdownMenuItem>
+              )}
+
+              {isOwner && (
+                <>
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem
+                    onClick={handleDeletePost}
+                    className="cursor-pointer rounded-xl text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete post
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </CardHeader>
+
+        <CardContent className="min-w-0 space-y-3 px-3 pb-3">
+          {editingPost ? (
+            <div className="space-y-2">
+              <textarea
+                className="min-h-[92px] w-full rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm outline-none"
+                value={postDraft}
+                onChange={(e) => setPostDraft(e.target.value)}
+              />
+
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setEditingPost(false)}>
+                  Cancel
+                </Button>
+
+                <Button size="sm" onClick={saveEditPost}>
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            cleanPostContent && (
+              <div className="min-w-0 space-y-1">
+                <p
+                  className="min-w-0 whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground"
+                  style={!expandedPost && shouldCollapsePost ? clampStyle(collapseLines) : undefined}
+                >
+                  {renderLinkedText(cleanPostContent)}
+                </p>
+
+                {shouldCollapsePost && (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedPost((v) => !v)}
+                    className="text-[13px] font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    {expandedPost ? 'Show less' : 'Show more'}
+                  </button>
+                )}
+              </div>
+            )
+          )}
+
+          {post.hashtags && post.hashtags.length > 0 && (
+            <div className="flex max-w-full flex-wrap gap-1 overflow-hidden">
+              {post.hashtags.map((tag, index) => (
+                <span
+                  key={index}
+                  className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                  onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
+                >
+                  {tag.startsWith('#') ? tag : `#${tag}`}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {renderMediaFrame()}
+
+          {documentItems.length > 0 && (
+            <div className="w-full max-w-full min-w-0 space-y-2 overflow-hidden">
+              {documentItems.map((doc) => (
+                <DocumentPreview
+                  key={doc.id}
+                  document={doc}
+                  onOpenPages={(pages, startIndex) => openLightbox(pages, startIndex)}
+                />
+              ))}
+            </div>
+          )}
+
+          {post.audio && (
+            <div className="w-full max-w-full overflow-hidden rounded-2xl border bg-background p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <AudioLines className="h-3.5 w-3.5" />
+                </span>
+                <div className="text-sm font-medium">Voice note</div>
+              </div>
+
+              <audio
+                controls
+                controlsList="nodownload noplaybackrate"
+                className="w-full max-w-full"
+                src={post.audio}
+                preload="metadata"
+                onContextMenu={(e) => e.preventDefault()}
+              />
+            </div>
+          )}
+
+          {lightboxOpen && (
+            <Dialog
+              open={lightboxOpen}
+              onOpenChange={(open) => {
+                if (!open) closeLightbox();
+                else setLightboxOpen(true);
+              }}
+            >
+              <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[9999] !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none border-0 bg-black p-0 shadow-none [&>button]:hidden">
+                <div className="relative flex h-full w-full flex-col bg-black text-white">
+                  <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-5">
+                    <button
+                      type="button"
+                      onClick={closeLightbox}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white hover:bg-white/15"
+                      aria-label="Close image"
+                    >
+                      <X className="h-6 w-6" />
+                    </button>
+
+                    {lightboxItems.length > 1 ? (
+                      <div className="rounded-full bg-black/55 px-4 py-2 text-sm font-bold text-white">
+                        {lightboxIndex + 1} / {lightboxItems.length}
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white hover:bg-white/15"
+                          aria-label="More"
+                        >
+                          <MoreHorizontal className="h-6 w-6" />
+                        </button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent align="end" className="w-44 rounded-2xl">
+                        <DropdownMenuItem onClick={saveCurrentLightboxImage}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Save image
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
+                    {lightboxSrc && (
+                      <img
+                        src={lightboxSrc}
+                        alt={`Image ${lightboxIndex + 1}`}
+                        className="block max-h-full max-w-full object-contain"
+                        draggable={false}
+                        onContextMenu={(e) => e.preventDefault()}
+                      />
+                    )}
+
+                    {lightboxItems.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={goPrevLightbox}
+                          className="absolute left-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white hover:bg-white/15"
+                          aria-label="Previous image"
+                        >
+                          <ChevronLeft className="h-7 w-7" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={goNextLightbox}
+                          className="absolute right-3 top-1/2 z-30 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white hover:bg-white/15"
+                          aria-label="Next image"
+                        >
+                          <ChevronRight className="h-7 w-7" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 px-5 py-4">
+                    <div className="mx-auto grid max-w-md grid-cols-5 gap-2 text-white">
+                      <button
+                        type="button"
+                        onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                        className={viewerActionButton}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                        <span>{post.likes || 0}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeLightbox();
+                          openCommentComposer();
+                        }}
+                        className={viewerActionButton}
+                      >
+                        <MessageSquareText className="h-5 w-5" />
+                        <span>{post.comments?.length || 0}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRepost}
+                        className={`${viewerActionButton} ${reposted ? 'text-cyan-300' : ''}`}
+                      >
+                        <Repeat2 className="h-5 w-5" />
+                        <span>{post.shares || 0}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={toggleSaved}
+                        className={`${viewerActionButton} ${saved ? 'text-cyan-300' : ''}`}
+                      >
+                        <Bookmark className="h-5 w-5" />
+                        <span>{saved ? 'Saved' : 'Save'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleShareOnly}
+                        className={viewerActionButton}
+                      >
+                        <Send className="h-5 w-5" />
+                        <span>Send</span>
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </motion.div>
+                </div>
+              </DialogContent>
+            </Dialog>
           )}
 
-          {audioPreview && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="relative overflow-hidden rounded-xl border bg-background p-3"
-            >
-              <audio controls className="w-full" src={audioPreview} />
+          <div className="space-y-2 pt-0.5">
+            <div className="flex min-w-0 items-center justify-between gap-1 border-y border-border/40 py-1">
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="React"
+                    className={`${actionButton} ${reactionClass}`}
+                    onClick={() => likePost(post.id, (post.reaction || 'like') as any)}
+                  >
+                    <Sparkles className={actionIcon} />
+                    <span className={actionCount}>{post.likes || 0}</span>
+                  </button>
+                </DropdownMenuTrigger>
 
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute right-2 top-2"
-                onClick={removeMedia}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </motion.div>
-          )}
+                <DropdownMenuContent align="start" className="flex gap-1 rounded-full px-2 py-2">
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'love')} className="rounded-full px-2">
+                    <Heart className="h-4 w-4 text-rose-500" />
+                  </DropdownMenuItem>
 
-          <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex w-full max-w-full min-w-0 flex-wrap items-center gap-2 overflow-hidden sm:flex-1">
-              <input
-                ref={imageInputRef}
-                id="images-upload"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                multiple
-                onChange={handleImagesUpload}
-              />
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'like')} className="rounded-full px-2">
+                    <ThumbsUp className="h-4 w-4 text-primary" />
+                  </DropdownMenuItem>
 
-              <input
-                ref={videoInputRef}
-                id="videos-upload"
-                type="file"
-                accept="video/*"
-                className="hidden"
-                multiple
-                onChange={handleVideosUpload}
-              />
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'haha')} className="rounded-full px-2">
+                    <Laugh className="h-4 w-4 text-primary" />
+                  </DropdownMenuItem>
 
-              <input
-                ref={documentInputRef}
-                id="documents-upload"
-                type="file"
-                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                className="hidden"
-                multiple
-                onChange={handleDocumentsUpload}
-              />
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'wow')} className="rounded-full px-2">
+                    <Smile className="h-4 w-4 text-primary" />
+                  </DropdownMenuItem>
 
-              <Button
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'sad')} className="rounded-full px-2">
+                    <Frown className="h-4 w-4 text-muted-foreground" />
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem onClick={() => likePost(post.id, 'angry')} className="rounded-full px-2">
+                    <Angry className="h-4 w-4 text-red-500" />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={isUploading}
-                className="h-9 shrink-0"
+                className={`${actionButton} ${
+                  showComments || commentComposerOpen ? 'bg-muted/55 text-foreground' : ''
+                }`}
+                onClick={openCommentComposer}
               >
-                <ImageIcon className="mr-2 h-4 w-4" />
-                Photos
-              </Button>
+                <MessageSquareText className={actionIcon} />
+                <span className={actionCount}>{commentCount}</span>
+              </button>
 
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => videoInputRef.current?.click()}
-                disabled={isUploading}
-                className="h-9 shrink-0"
+                className={`${actionButton} ${reposted ? 'text-cyan-600' : ''}`}
+                onClick={handleRepost}
               >
-                <Video className="mr-2 h-4 w-4" />
-                Video
-              </Button>
+                <Repeat2 className={actionIcon} />
+                <span className={actionCount}>{post.shares || 0}</span>
+              </button>
 
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => documentInputRef.current?.click()}
-                disabled={isUploading}
-                className="h-9 shrink-0"
+                className={`${actionButton} ${saved ? 'text-cyan-600' : ''}`}
+                onClick={toggleSaved}
               >
-                <FileText className="mr-2 h-4 w-4" />
-                Document
-              </Button>
+                <Bookmark className={actionIcon} />
+              </button>
 
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => toggleVoiceRecording().catch(() => {})}
-                disabled={isUploading || !canUseVoiceNote}
-                className="h-9 shrink-0"
+                className={actionButton}
+                onClick={handleShareOnly}
               >
-                {canUseVoiceNote ? (
-                  <Mic className={`mr-2 h-4 w-4 ${isRecordingVoice ? 'animate-pulse' : ''}`} />
-                ) : (
-                  <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
-                )}
-                {isRecordingVoice ? `Recording ${voiceSeconds}s` : 'Voice'}
-              </Button>
+                <Send className={actionIcon} />
+              </button>
             </div>
 
-            <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-end gap-2 overflow-hidden sm:w-auto sm:shrink-0">
-              {isUploading && (
-                <span className="min-w-[48px] text-right text-[11px] text-muted-foreground">
-                  {uploadProgress}%
-                </span>
-              )}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={toggleVoiceRecording}
+              disabled={(() => {
+                const limit = getVoiceCommentDailyLimit();
+                if (!Number.isFinite(limit)) return false;
+                return getVoiceCommentCountToday() >= limit;
+              })()}
+              className={`h-9 w-full rounded-full border border-fuchsia-300/30 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-cyan-400/10 text-[13px] font-semibold text-foreground transition-colors ${
+                isRecording ? 'border-red-400/40 bg-red-500/10 text-red-500' : ''
+              }`}
+            >
+              <span className="mr-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-500/20">
+                <AudioLines className={`h-3.5 w-3.5 text-purple-600 ${isRecording ? 'text-red-500' : ''}`} />
+              </span>
+              {isRecording ? `${recordSeconds}s` : 'Voice'}
+            </Button>
 
-              {isUploading && (
+            {commentComposerOpen && (
+              <div className="overflow-hidden">
+                <div className="flex items-center gap-2 pt-1">
+                  <Input
+                    ref={replyInputRef}
+                    placeholder="Reply..."
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleComment();
+                      }
+                    }}
+                    className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleComment}
+                    aria-label="Send reply"
+                    className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {isRecording && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white">
+                    <AudioLines className="h-4 w-4" />
+                  </span>
+
+                  <div>
+                    <p className="text-sm font-semibold">Recording voice reply</p>
+                    <p className="text-xs opacity-80">Tap stop when you are done.</p>
+                  </div>
+                </div>
+
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  className="h-9 max-w-full shrink-0 text-[11px]"
-                  onClick={cancelUpload}
+                  onClick={toggleVoiceRecording}
+                  className="rounded-full bg-red-500 text-white hover:bg-red-600"
                 >
-                  Cancel upload
+                  Stop {recordSeconds}s
                 </Button>
-              )}
-
-              <Button
-                onClick={handlePost}
-                disabled={!canPost || isUploading || isPosting}
-                className="h-9 min-w-[92px] shrink-0"
-              >
-                {isPosting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Posting
-                  </>
-                ) : isUploading ? (
-                  'Uploading...'
-                ) : (
-                  'Post'
-                )}
-              </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+          )}
+
+          {showComments && commentCount > 0 && (
+            <div className="w-full space-y-3 border-t border-border/60 pt-3">
+              {(post.comments || []).map((comment: any) => {
+                const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
+                const commentUserId = cleanString(comment.userId);
+                const canDeleteComment =
+                  isOwner || myIds.some((myId) => idsMatch(myId, commentUserId));
+
+                const commentTextSafe = getCommentText(comment);
+                const commentName = comment.userName || comment.name || 'User';
+                const commentAvatar = comment.userAvatar || comment.avatar || '';
+
+                return (
+                  <div key={comment.id} className="flex gap-2">
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={commentAvatar} alt={commentName} />
+                      <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {commentName}
+                        </p>
+
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 text-sm leading-relaxed text-foreground">
+                        {isVoice && comment.voiceUrl ? (
+                          <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
+                              <AudioLines className="h-4 w-4" />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                Voice reply
+                              </p>
+
+                              <audio
+                                controls
+                                controlsList="nodownload noplaybackrate"
+                                preload="metadata"
+                                className="h-8 w-full"
+                                onContextMenu={(e) => e.preventDefault()}
+                              >
+                                <source src={comment.voiceUrl} type="audio/webm" />
+                              </audio>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="break-words">{renderLinkedText(commentTextSafe)}</p>
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleReplyToComment(commentName)}
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          Reply
+                        </button>
+
+                        {canDeleteComment && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="inline-flex items-center gap-1 text-xs text-red-500 hover:underline"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
