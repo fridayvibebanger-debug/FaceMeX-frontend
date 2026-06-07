@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -22,6 +22,14 @@ import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { useUserStore } from '@/store/userStore';
 import { createYocoCheckoutSession } from '@/lib/billing';
+import { uploadImagesToAzure } from '@/lib/azureUpload';
+import {
+  Upload,
+  Trash2,
+  X,
+  Image as ImageIcon,
+  ExternalLink,
+} from 'lucide-react';
 
 type SellerCta = 'contact' | 'website' | 'whatsapp' | 'call' | 'message';
 
@@ -57,6 +65,8 @@ interface Shop {
   cta: SellerCta;
   items: ShopItem[];
   featured?: boolean;
+  ownerId?: string;
+  isLocal?: boolean;
 }
 
 interface CreatorGig {
@@ -84,9 +94,9 @@ interface BusinessProject {
 interface EscrowItem {
   id: string;
   title: string;
-  amount: number; // Total amount paid by buyer, including FaceMeX protection fee
-  serviceAmount?: number; // Original agreed service amount before fees
-  protectionFee?: number; // FaceMeX protection fee added automatically
+  amount: number;
+  serviceAmount?: number;
+  protectionFee?: number;
   status: EscrowStatus;
   createdAt: string;
   yocoCheckoutId?: string;
@@ -115,6 +125,8 @@ const STARTER_SHOPS: Shop[] = [
     location: 'Nkowankowa / Tzaneen',
     cta: 'whatsapp',
     featured: true,
+    ownerId: '',
+    isLocal: false,
     items: [
       {
         id: 'item-kota-1',
@@ -154,6 +166,8 @@ const STARTER_SHOPS: Shop[] = [
     location: 'Tzaneen',
     cta: 'whatsapp',
     featured: true,
+    ownerId: '',
+    isLocal: false,
     items: [
       {
         id: 'item-fashion-1',
@@ -192,6 +206,8 @@ const STARTER_SHOPS: Shop[] = [
     location: 'Remote / South Africa',
     cta: 'contact',
     featured: false,
+    ownerId: '',
+    isLocal: false,
     items: [
       {
         id: 'item-service-1',
@@ -343,8 +359,52 @@ function buildEscrowBreakdown(amount: number) {
   };
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Image read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadSingleMarketplaceImage(file: File) {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please select a valid image file.');
+  }
+
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error('Image is too large. Please choose an image under 15MB.');
+  }
+
+  try {
+    const urls = await uploadImagesToAzure([file]);
+
+    if (Array.isArray(urls) && urls[0]) {
+      return urls[0];
+    }
+
+    throw new Error('No image URL returned from Azure.');
+  } catch {
+    return readFileAsDataUrl(file);
+  }
+}
+
+function canDeleteThisShop(shop: Shop, currentUserId?: string) {
+  if (shop.isLocal || shop.id.startsWith('local-shop-')) return true;
+
+  const ownerId = String(shop.ownerId || '').trim();
+  const userId = String(currentUserId || '').trim();
+
+  return Boolean(ownerId && userId && ownerId === userId);
+}
+
 export default function MarketplacePage() {
-  const { tier, hasTier } = useUserStore();
+  const { tier, hasTier, id: currentUserId } = useUserStore() as any;
+
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const itemInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentTier = String(tier || 'free').toLowerCase();
 
@@ -368,6 +428,10 @@ export default function MarketplacePage() {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [itemsOpen, setItemsOpen] = useState(false);
 
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [imageViewerSrc, setImageViewerSrc] = useState('');
+  const [imageViewerTitle, setImageViewerTitle] = useState('');
+
   const [shopOpen, setShopOpen] = useState(false);
   const [shopCheckoutBusy, setShopCheckoutBusy] = useState(false);
   const [shopAddonActive, setShopAddonActive] = useState(() => {
@@ -386,6 +450,8 @@ export default function MarketplacePage() {
   const [shopTagline, setShopTagline] = useState('');
   const [shopDescription, setShopDescription] = useState('');
   const [shopCoverImage, setShopCoverImage] = useState('');
+  const [shopCoverUploading, setShopCoverUploading] = useState(false);
+  const [itemImageUploading, setItemImageUploading] = useState(false);
   const [shopPhone, setShopPhone] = useState('');
   const [shopWhatsapp, setShopWhatsapp] = useState('');
   const [shopWebsite, setShopWebsite] = useState('');
@@ -479,6 +545,13 @@ export default function MarketplacePage() {
 
   const impressionsFor = (rands: number) => Math.max(0, Number(rands || 0) * 10);
 
+  const openImageViewer = (src: string, title: string) => {
+    if (!src) return;
+    setImageViewerSrc(src);
+    setImageViewerTitle(title || 'Marketplace image');
+    setImageViewerOpen(true);
+  };
+
   const pushUsage = (event: any) => {
     const next = [{ ts: new Date().toISOString(), ...event }, ...usage].slice(
       0,
@@ -538,6 +611,115 @@ export default function MarketplacePage() {
     );
 
     saveEscrows(next);
+  };
+
+  const saveShopsToLocal = (next: Shop[]) => {
+    const deduped = dedupeShops(next);
+    const onlyLocal = deduped.filter((shop) => shop.id.startsWith('local-shop-'));
+
+    saveLS('mall:shops', onlyLocal);
+    setShops(deduped);
+  };
+
+  const handleShopCoverUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    try {
+      setShopCoverUploading(true);
+      const url = await uploadSingleMarketplaceImage(file);
+      setShopCoverImage(url);
+
+      toast({
+        title: 'Cover uploaded',
+        description: 'Your shop cover image is ready.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Upload failed',
+        description: error?.message || 'Could not upload cover image.',
+        variant: 'destructive',
+      });
+    } finally {
+      setShopCoverUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleItemImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    try {
+      setItemImageUploading(true);
+      const url = await uploadSingleMarketplaceImage(file);
+      setItemImage(url);
+
+      toast({
+        title: 'Item image uploaded',
+        description: 'Your product image is ready.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Upload failed',
+        description: error?.message || 'Could not upload item image.',
+        variant: 'destructive',
+      });
+    } finally {
+      setItemImageUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const deleteShop = async (shop: Shop) => {
+    if (!canDeleteThisShop(shop, currentUserId)) {
+      toast({
+        title: 'Not allowed',
+        description: 'Only the shop author can delete this marketplace shop.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const ok = window.confirm(`Delete "${shop.shopName}" from the marketplace?`);
+
+    if (!ok) return;
+
+    try {
+      if (!shop.id.startsWith('local-shop-')) {
+        const { error } = await supabase
+          .from('marketplace_shops')
+          .update({ is_active: false })
+          .eq('id', shop.id);
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      const next = shops.filter((item) => item.id !== shop.id);
+      saveShopsToLocal(next);
+
+      if (selectedShop?.id === shop.id) {
+        setSelectedShop(null);
+        setItemsOpen(false);
+      }
+
+      toast({
+        title: 'Shop deleted',
+        description: `${shop.shopName} was removed from the marketplace.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Delete failed',
+        description:
+          error?.message ||
+          'Could not delete this shop. Check your Supabase permissions.',
+        variant: 'destructive',
+      });
+    }
   };
 
   useEffect(() => {
@@ -610,6 +792,13 @@ export default function MarketplacePage() {
           location: shop.location || '',
           cta: (shop.cta || 'contact') as SellerCta,
           featured: Boolean(shop.featured),
+          ownerId:
+            shop.owner_id ||
+            shop.user_id ||
+            shop.seller_id ||
+            shop.created_by ||
+            '',
+          isLocal: false,
           items: itemsByShop.get(shop.id) || [],
         }));
 
@@ -750,14 +939,6 @@ export default function MarketplacePage() {
     });
   }, [shops, query]);
 
-  const saveShopsToLocal = (next: Shop[]) => {
-    const deduped = dedupeShops(next);
-    const onlyLocal = deduped.filter((shop) => shop.id.startsWith('local-shop-'));
-
-    saveLS('mall:shops', onlyLocal);
-    setShops(deduped);
-  };
-
   const openShopItems = (shop: Shop) => {
     setSelectedShop(shop);
     setItemsOpen(true);
@@ -787,7 +968,7 @@ export default function MarketplacePage() {
             monthlyBonusImpressions: String(SHOP_ADDON_BONUS_IMPRESSIONS),
             tier: currentTier,
           },
-          externalId: `marketplace-shop-${currentTier}-${Date.now()}`
+          externalId: `marketplace-shop-${currentTier}-${Date.now()}`,
         });
 
         window.location.href = checkout.redirectUrl;
@@ -948,6 +1129,8 @@ export default function MarketplacePage() {
       location: shopLocation.trim(),
       cta: shopCta,
       featured: false,
+      ownerId: currentUserId || 'local-owner',
+      isLocal: true,
       items: finalItems,
     };
 
@@ -1286,6 +1469,22 @@ export default function MarketplacePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <input
+        ref={coverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleShopCoverUpload}
+      />
+
+      <input
+        ref={itemInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleItemImageUpload}
+      />
+
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-3 pb-10 md:pt-4">
         <div className="rounded-2xl border bg-card px-4 py-3">
           <div className="text-sm font-semibold">FaceMeX Marketplace Mall</div>
@@ -1366,105 +1565,124 @@ export default function MarketplacePage() {
                   No shops found. Try another search or open your own shop.
                 </div>
               ) : (
-                filtered.map((shop) => (
-                  <Card
-                    key={shop.id}
-                    className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
-                  >
-                    <div className="relative aspect-video bg-black/5">
-                      <img
-                        src={shop.coverImage}
-                        alt={shop.shopName}
-                        className="h-full w-full object-cover"
-                      />
+                filtered.map((shop) => {
+                  const canDelete = canDeleteThisShop(shop, currentUserId);
 
-                      <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-                        {shop.featured && (
-                          <Badge className="bg-black/80 text-white hover:bg-black/80">
-                            Premium display
-                          </Badge>
-                        )}
+                  return (
+                    <Card
+                      key={shop.id}
+                      className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+                    >
+                      <div className="relative aspect-video bg-black/5">
+                        <img
+                          src={shop.coverImage}
+                          alt={shop.shopName}
+                          className="h-full w-full object-cover"
+                        />
 
-                        <Badge variant="secondary">{shop.category}</Badge>
-                      </div>
-                    </div>
+                        <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+                          {shop.featured && (
+                            <Badge className="bg-black/80 text-white hover:bg-black/80">
+                              Premium display
+                            </Badge>
+                          )}
 
-                    <CardHeader className="space-y-1">
-                      <CardTitle className="truncate text-base">
-                        {shop.shopName}
-                      </CardTitle>
+                          <Badge variant="secondary">{shop.category}</Badge>
+                        </div>
 
-                      <div className="h-9 overflow-hidden text-xs text-muted-foreground">
-                        {shop.tagline}
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="space-y-3">
-                      <div className="h-16 overflow-hidden text-sm text-muted-foreground">
-                        {shop.description}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {shop.items.slice(0, 2).map((item) => (
-                          <div
-                            key={item.id}
-                            className="overflow-hidden rounded-xl border bg-muted/20"
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => deleteShop(shop)}
+                            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-white shadow-lg transition hover:bg-red-600"
+                            aria-label="Delete shop"
                           >
-                            <div className="aspect-square bg-black/5">
-                              <img
-                                src={item.image}
-                                alt={item.title}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-
-                            <div className="space-y-1 p-2">
-                              <div className="truncate text-xs font-semibold">
-                                {item.title}
-                              </div>
-
-                              <div className="h-8 overflow-hidden text-[11px] text-muted-foreground">
-                                {item.description}
-                              </div>
-
-                              <div className="text-xs font-semibold">
-                                {item.showPrice && item.price
-                                  ? formatMoney(item.price)
-                                  : 'Ask seller'}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
 
-                      <div className="truncate text-xs text-muted-foreground">
-                        Seller: {shop.sellerName}
-                        {shop.location ? ` · ${shop.location}` : ''}
-                      </div>
-                    </CardContent>
+                      <CardHeader className="space-y-1">
+                        <CardTitle className="truncate text-base">
+                          {shop.shopName}
+                        </CardTitle>
 
-                    <CardFooter className="flex items-center justify-between gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full"
-                        onClick={() => contactSeller(shop)}
-                      >
-                        Contact seller
-                      </Button>
+                        <div className="h-9 overflow-hidden text-xs text-muted-foreground">
+                          {shop.tagline}
+                        </div>
+                      </CardHeader>
 
-                      <Button
-                        size="sm"
-                        className="rounded-full"
-                        onClick={() => secondaryShopAction(shop)}
-                      >
-                        {shop.website && shop.cta === 'website'
-                          ? 'Visit website'
-                          : 'View items'}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                ))
+                      <CardContent className="space-y-3">
+                        <div className="h-16 overflow-hidden text-sm text-muted-foreground">
+                          {shop.description}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {shop.items.slice(0, 2).map((item) => (
+                            <div
+                              key={item.id}
+                              className="overflow-hidden rounded-xl border bg-muted/20"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => openImageViewer(item.image, item.title)}
+                                className="block aspect-square w-full bg-black/5"
+                              >
+                                <img
+                                  src={item.image}
+                                  alt={item.title}
+                                  className="h-full w-full object-cover"
+                                />
+                              </button>
+
+                              <div className="space-y-1 p-2">
+                                <div className="truncate text-xs font-semibold">
+                                  {item.title}
+                                </div>
+
+                                <div className="h-8 overflow-hidden text-[11px] text-muted-foreground">
+                                  {item.description}
+                                </div>
+
+                                <div className="text-xs font-semibold">
+                                  {item.showPrice && item.price
+                                    ? formatMoney(item.price)
+                                    : 'Ask seller'}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="truncate text-xs text-muted-foreground">
+                          Seller: {shop.sellerName}
+                          {shop.location ? ` · ${shop.location}` : ''}
+                        </div>
+                      </CardContent>
+
+                      <CardFooter className="flex items-center justify-between gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => contactSeller(shop)}
+                        >
+                          Contact seller
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => secondaryShopAction(shop)}
+                        >
+                          {shop.website && shop.cta === 'website'
+                            ? 'Visit website'
+                            : 'View items'}
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })
               )}
             </div>
           </div>
@@ -1803,13 +2021,17 @@ export default function MarketplacePage() {
                         key={item.id}
                         className="overflow-hidden rounded-2xl border bg-card"
                       >
-                        <div className="aspect-square bg-black/5">
+                        <button
+                          type="button"
+                          onClick={() => openImageViewer(item.image, item.title)}
+                          className="block aspect-square w-full bg-black/5"
+                        >
                           <img
                             src={item.image}
                             alt={item.title}
                             className="h-full w-full object-cover"
                           />
-                        </div>
+                        </button>
 
                         <div className="space-y-1.5 p-2.5">
                           <div className="truncate text-xs font-semibold">
@@ -1848,6 +2070,47 @@ export default function MarketplacePage() {
                 Contact seller
               </Button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={imageViewerOpen} onOpenChange={setImageViewerOpen}>
+        <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[9999] !h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none border-0 bg-black p-0 shadow-none [&>button]:hidden">
+          <div className="relative flex h-full w-full flex-col bg-black text-white">
+            <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-4 py-5">
+              <button
+                type="button"
+                onClick={() => setImageViewerOpen(false)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white hover:bg-white/15"
+              >
+                <X className="h-6 w-6" />
+              </button>
+
+              <div className="max-w-[70vw] truncate rounded-full bg-black/55 px-4 py-2 text-sm font-semibold">
+                {imageViewerTitle || 'Marketplace image'}
+              </div>
+
+              {imageViewerSrc && (
+                <a
+                  href={imageViewerSrc}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white hover:bg-white/15"
+                >
+                  <ExternalLink className="h-5 w-5" />
+                </a>
+              )}
+            </div>
+
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2">
+              {imageViewerSrc && (
+                <img
+                  src={imageViewerSrc}
+                  alt={imageViewerTitle}
+                  className="block max-h-full max-w-full object-contain"
+                />
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1918,11 +2181,43 @@ export default function MarketplacePage() {
               onChange={(event) => setShopDescription(event.target.value)}
             />
 
-            <Input
-              placeholder="Cover image URL"
-              value={shopCoverImage}
-              onChange={(event) => setShopCoverImage(event.target.value)}
-            />
+            <div className="space-y-2">
+              <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                <Input
+                  placeholder="Cover image URL"
+                  value={shopCoverImage}
+                  onChange={(event) => setShopCoverImage(event.target.value)}
+                />
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => coverInputRef.current?.click()}
+                  disabled={shopCoverUploading}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  {shopCoverUploading ? 'Uploading...' : 'Upload'}
+                </Button>
+              </div>
+
+              {shopCoverImage && (
+                <div className="relative overflow-hidden rounded-2xl border bg-muted/20">
+                  <img
+                    src={shopCoverImage}
+                    alt="Shop cover preview"
+                    className="h-40 w-full object-cover"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShopCoverImage('')}
+                    className="absolute right-2 top-2 rounded-full bg-black/70 p-1 text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="grid gap-2 md:grid-cols-3">
               <Input
@@ -1959,12 +2254,42 @@ export default function MarketplacePage() {
                   onChange={(event) => setItemTitle(event.target.value)}
                 />
 
-                <Input
-                  placeholder="Item image URL"
-                  value={itemImage}
-                  onChange={(event) => setItemImage(event.target.value)}
-                />
+                <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                  <Input
+                    placeholder="Item image URL"
+                    value={itemImage}
+                    onChange={(event) => setItemImage(event.target.value)}
+                  />
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => itemInputRef.current?.click()}
+                    disabled={itemImageUploading}
+                  >
+                    <ImageIcon className="mr-2 h-4 w-4" />
+                    {itemImageUploading ? 'Uploading...' : 'Upload'}
+                  </Button>
+                </div>
               </div>
+
+              {itemImage && (
+                <div className="relative max-w-[220px] overflow-hidden rounded-2xl border bg-background">
+                  <img
+                    src={itemImage}
+                    alt="Item preview"
+                    className="aspect-square w-full object-cover"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setItemImage('')}
+                    className="absolute right-2 top-2 rounded-full bg-black/70 p-1 text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               <Textarea
                 placeholder="Item description"
@@ -1990,6 +2315,41 @@ export default function MarketplacePage() {
                   Show price to customers
                 </label>
               </div>
+
+              {draftItems.length > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {draftItems.map((item) => (
+                    <div key={item.id} className="flex gap-2 rounded-xl border bg-background p-2">
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="h-14 w-14 rounded-lg object-cover"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold">
+                          {item.title}
+                        </div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {item.showPrice && item.price ? formatMoney(item.price) : 'Ask seller'}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraftItems((current) =>
+                            current.filter((draft) => draft.id !== item.id)
+                          )
+                        }
+                        className="text-muted-foreground hover:text-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <Button
                 type="button"
@@ -2376,5 +2736,3 @@ export default function MarketplacePage() {
     </div>
   );
 }
-
-
