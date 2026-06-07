@@ -28,6 +28,7 @@ import {
   Sparkles,
   Repeat2,
   Download,
+  ExternalLink,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -56,9 +57,11 @@ type PostDocumentItem = {
   id: string;
   title: string;
   url: string;
+  coverUrl: string;
   pages: string[];
   totalPages: number;
   previewPages: number;
+  mimeType?: string;
 };
 
 type CollaboratorProfile = {
@@ -100,6 +103,41 @@ function normalizeStringArray(value: unknown): string[] {
   }
 
   return [];
+}
+
+function isImageUrl(value: unknown) {
+  const url = cleanString(value).toLowerCase();
+
+  if (!url) return false;
+  if (url.startsWith('data:image/')) return true;
+
+  return /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(url);
+}
+
+function isPdfUrl(value: unknown) {
+  const url = cleanString(value).toLowerCase();
+  return /\.pdf(\?|#|$)/i.test(url) || url.includes('application/pdf');
+}
+
+function getDocumentKind(document: PostDocumentItem) {
+  const mime = cleanString(document.mimeType).toLowerCase();
+  const url = cleanString(document.url).toLowerCase();
+
+  if (mime.includes('pdf') || isPdfUrl(url)) return 'PDF';
+  if (mime.includes('word') || /\.(doc|docx)(\?|#|$)/i.test(url)) return 'DOC';
+  if (mime.includes('excel') || /\.(xls|xlsx|csv)(\?|#|$)/i.test(url)) return 'SHEET';
+  if (mime.includes('powerpoint') || /\.(ppt|pptx)(\?|#|$)/i.test(url)) return 'SLIDE';
+  if (isImageUrl(url)) return 'IMAGE';
+
+  return 'DOC';
+}
+
+function mobileTextStyle(extra?: CSSProperties): CSSProperties {
+  return {
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    ...extra,
+  };
 }
 
 function getSafeDate(value: unknown) {
@@ -193,9 +231,11 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         id: `${post.id}-doc-${index}`,
         title: `Document ${index + 1}`,
         url: cleanUrl,
+        coverUrl: isImageUrl(cleanUrl) ? cleanUrl : '',
         pages: [],
         totalPages: 1,
         previewPages: 1,
+        mimeType: isPdfUrl(cleanUrl) ? 'application/pdf' : '',
       });
 
       return;
@@ -206,7 +246,9 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         raw.documentPages ||
         raw.document_pages ||
         raw.pageImages ||
-        raw.page_images
+        raw.page_images ||
+        raw.previewPagesImages ||
+        raw.preview_pages_images
     );
 
     const url = cleanString(
@@ -219,11 +261,35 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         raw.media_url
     );
 
+    const coverUrl = cleanString(
+      raw.coverUrl ||
+        raw.cover_url ||
+        raw.coverImage ||
+        raw.cover_image ||
+        raw.thumbnail ||
+        raw.thumbnailUrl ||
+        raw.thumbnail_url ||
+        raw.previewImage ||
+        raw.preview_image ||
+        raw.firstPage ||
+        raw.first_page ||
+        pages[0] ||
+        (isImageUrl(url) ? url : '')
+    );
+
     const title =
       cleanString(raw.title || raw.fileName || raw.file_name || raw.name) ||
       `Document ${index + 1}`;
 
-    if (!url && pages.length === 0) return;
+    const mimeType = cleanString(
+      raw.mimeType ||
+        raw.mime_type ||
+        raw.type ||
+        raw.contentType ||
+        raw.content_type
+    );
+
+    if (!url && pages.length === 0 && !coverUrl) return;
 
     const rawTotalPages = Number(
       raw.totalPages ||
@@ -258,9 +324,11 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
       id: cleanString(raw.id) || `${post.id}-doc-${index}`,
       title,
       url,
+      coverUrl,
       pages,
       totalPages,
       previewPages,
+      mimeType,
     });
   };
 
@@ -297,7 +365,18 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         (post as any).page_images
     );
 
-    if (directDocumentUrl || directPages.length) {
+    const directCoverUrl = cleanString(
+      (post as any).documentCoverUrl ||
+        (post as any).document_cover_url ||
+        (post as any).coverUrl ||
+        (post as any).cover_url ||
+        (post as any).coverImage ||
+        (post as any).cover_image ||
+        directPages[0] ||
+        (isImageUrl(directDocumentUrl) ? directDocumentUrl : '')
+    );
+
+    if (directDocumentUrl || directPages.length || directCoverUrl) {
       addDoc(
         {
           url: directDocumentUrl,
@@ -308,6 +387,12 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
             (post as any).file_name ||
             'Document',
           pages: directPages,
+          coverUrl: directCoverUrl,
+          mimeType:
+            (post as any).documentMimeType ||
+            (post as any).document_mime_type ||
+            (post as any).mimeType ||
+            (post as any).mime_type,
           totalPages:
             (post as any).documentTotalPages ||
             (post as any).document_total_pages ||
@@ -330,19 +415,22 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
   docs.forEach((doc, index) => {
     const url = cleanString(doc.url);
     const title = cleanString(doc.title) || `Document ${index + 1}`;
-    const key = url || title.toLowerCase();
+    const key = url || doc.coverUrl || title.toLowerCase();
 
     if (!unique.has(key)) {
+      const totalPages = Math.max(1, Number(doc.totalPages) || 1);
+
       unique.set(key, {
         ...doc,
         id: doc.id || `${post.id}-doc-${index}`,
         title,
         url,
+        coverUrl: cleanString(doc.coverUrl),
         pages: Array.isArray(doc.pages) ? doc.pages.filter(Boolean) : [],
-        totalPages: Math.max(1, Number(doc.totalPages) || 1),
+        totalPages,
         previewPages: Math.max(
           1,
-          Math.min(Number(doc.previewPages) || 1, Number(doc.totalPages) || 1)
+          Math.min(Number(doc.previewPages) || 1, totalPages)
         ),
       });
     }
@@ -514,8 +602,8 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
   if (!profiles.length) return null;
 
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex -space-x-1.5">
+    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+      <div className="flex shrink-0 -space-x-1.5">
         {profiles.slice(0, 4).map((profile) => (
           <div
             key={profile.id}
@@ -539,9 +627,9 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
         ))}
       </div>
 
-      <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-        <UsersRound className="h-3 w-3" />
-        Collab
+      <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+        <UsersRound className="h-3 w-3 shrink-0" />
+        <span className="truncate">Collab</span>
       </span>
     </div>
   );
@@ -554,38 +642,90 @@ function DocumentPreview({
   document: PostDocumentItem;
   onOpenPages: (pages: string[], startIndex: number) => void;
 }) {
-  const firstPage = document.pages[0] || '';
-  const imageCount = document.pages.filter(Boolean).length;
+  const cover = document.coverUrl || document.pages[0] || '';
+  const kind = getDocumentKind(document);
+  const hasPages = document.pages.filter(Boolean).length > 0;
+
+  const openDocument = () => {
+    if (hasPages) {
+      onOpenPages(document.pages, 0);
+      return;
+    }
+
+    if (document.url) {
+      window.open(document.url, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
-    <div className="w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
-      {firstPage ? (
-        <button
-          type="button"
-          onClick={() => onOpenPages(document.pages, 0)}
-          className="relative block aspect-[4/5] w-full max-w-full overflow-hidden bg-black sm:aspect-[16/10]"
-        >
-          <img
-            src={firstPage}
-            alt={`${document.title} preview`}
-            className="block h-full w-full max-w-full object-contain"
-            loading="lazy"
-            decoding="async"
-          />
+    <div className="w-full max-w-full min-w-0 overflow-hidden rounded-[24px] border border-border/70 bg-background shadow-[0_8px_28px_rgba(15,23,42,0.06)]">
+      <button
+        type="button"
+        onClick={openDocument}
+        className="group block w-full max-w-full min-w-0 overflow-hidden text-left"
+      >
+        <div className="relative w-full max-w-full overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
+          <div className="absolute left-3 top-3 z-10 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-[11px] font-bold text-slate-950 shadow-sm">
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{kind}</span>
+          </div>
 
-          {imageCount > 1 && (
-            <span className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white">
-              {imageCount} images
-            </span>
+          {cover ? (
+            <div className="aspect-[4/5] w-full max-w-full overflow-hidden bg-slate-950 sm:aspect-[16/10]">
+              <img
+                src={cover}
+                alt={`${document.title} cover`}
+                className="block h-full w-full max-w-full object-contain"
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+              />
+            </div>
+          ) : (
+            <div className="flex aspect-[4/5] w-full max-w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_35%),linear-gradient(135deg,#020617,#111827,#334155)] px-5 text-center sm:aspect-[16/10]">
+              <div className="flex h-20 w-20 items-center justify-center rounded-[28px] border border-white/15 bg-white/10 shadow-2xl backdrop-blur">
+                <FileText className="h-10 w-10 text-white" />
+              </div>
+
+              <p
+                className="mt-4 line-clamp-2 max-w-[85%] text-base font-bold leading-snug text-white"
+                style={mobileTextStyle()}
+              >
+                {document.title}
+              </p>
+
+              <p className="mt-2 text-xs font-medium text-white/60">
+                Tap to open document
+              </p>
+            </div>
           )}
-        </button>
-      ) : (
-        <div className="flex h-[170px] w-full max-w-full flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center">
-          <FileText className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm font-semibold">{document.title}</p>
-          <p className="text-xs text-muted-foreground">Document uploaded</p>
+
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-3 pb-3 pt-10">
+            <div className="flex min-w-0 items-end justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p
+                  className="line-clamp-2 text-sm font-bold leading-snug text-white"
+                  style={mobileTextStyle()}
+                >
+                  {document.title}
+                </p>
+
+                <p className="mt-1 text-[11px] font-medium text-white/65">
+                  {document.totalPages > 1
+                    ? `${document.totalPages} pages`
+                    : hasPages
+                      ? 'Preview available'
+                      : 'Document uploaded'}
+                </p>
+              </div>
+
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/95 text-slate-950 shadow-sm transition group-hover:scale-105">
+                <ExternalLink className="h-4 w-4" />
+              </span>
+            </div>
+          </div>
         </div>
-      )}
+      </button>
     </div>
   );
 }
@@ -1343,13 +1483,13 @@ export default function PostCard({ post }: PostCardProps) {
   const actionButton =
     'group flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground active:scale-[0.98]';
 
-  const actionIcon = 'h-[18px] w-[18px]';
+  const actionIcon = 'h-[18px] w-[18px] shrink-0';
 
   const actionCount =
-    'text-[11px] font-semibold tabular-nums text-muted-foreground';
+    'min-w-0 text-[11px] font-semibold tabular-nums text-muted-foreground';
 
   const viewerActionButton =
-    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition-colors hover:text-white active:scale-95';
+    'flex min-w-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition-colors hover:text-white active:scale-95';
 
   return (
     <div
@@ -1363,7 +1503,7 @@ export default function PostCard({ post }: PostCardProps) {
         <CardHeader className="flex min-w-0 flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
           <button
             type="button"
-            className="flex min-w-0 items-center space-x-2 text-left"
+            className="flex min-w-0 max-w-[calc(100%-2.5rem)] items-center space-x-2 overflow-hidden text-left"
             onClick={openAuthorProfile}
           >
             <div className="relative shrink-0">
@@ -1379,13 +1519,16 @@ export default function PostCard({ post }: PostCardProps) {
               )}
             </div>
 
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold hover:underline md:text-[15px]">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p
+                className="truncate text-sm font-semibold hover:underline md:text-[15px]"
+                style={mobileTextStyle()}
+              >
                 {displayName}
               </p>
 
-              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                <p className="text-[11px] text-muted-foreground">
+              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden">
+                <p className="shrink-0 text-[11px] text-muted-foreground">
                   {formatDistanceToNow(getPostDate(post), { addSuffix: true })}
                 </p>
 
@@ -1532,11 +1675,12 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="min-w-0 space-y-3 px-3 pb-3">
+        <CardContent className="min-w-0 max-w-full space-y-3 overflow-hidden px-3 pb-3">
           {editingPost ? (
-            <div className="space-y-2">
+            <div className="w-full max-w-full min-w-0 space-y-2 overflow-hidden">
               <textarea
-                className="min-h-[92px] w-full rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm outline-none"
+                className="min-h-[92px] w-full max-w-full min-w-0 resize-y rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm outline-none"
+                style={mobileTextStyle()}
                 value={postDraft}
                 onChange={(e) => setPostDraft(e.target.value)}
               />
@@ -1553,10 +1697,12 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           ) : (
             cleanPostContent && (
-              <div className="min-w-0 space-y-1">
+              <div className="w-full max-w-full min-w-0 overflow-hidden space-y-1">
                 <p
-                  className="min-w-0 whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground"
-                  style={!expandedPost && shouldCollapsePost ? clampStyle(collapseLines) : undefined}
+                  className="w-full max-w-full min-w-0 whitespace-pre-wrap text-[15px] leading-6 text-foreground"
+                  style={mobileTextStyle(
+                    !expandedPost && shouldCollapsePost ? clampStyle(collapseLines) : undefined
+                  )}
                 >
                   {cleanPostContent}
                 </p>
@@ -1579,7 +1725,8 @@ export default function PostCard({ post }: PostCardProps) {
               {post.hashtags.map((tag, index) => (
                 <span
                   key={index}
-                  className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                  className="max-w-full cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                  style={mobileTextStyle()}
                   onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
                   {tag.startsWith('#') ? tag : `#${tag}`}
@@ -1761,7 +1908,7 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           <div className="space-y-2 pt-0.5">
-            <div className="flex min-w-0 items-center justify-between gap-1 border-y border-border/40 py-1">
+            <div className="flex min-w-0 items-center justify-between gap-1 overflow-hidden border-y border-border/40 py-1">
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -1860,8 +2007,8 @@ export default function PostCard({ post }: PostCardProps) {
             </Button>
 
             {commentComposerOpen && (
-              <div className="overflow-hidden">
-                <div className="flex items-center gap-2 pt-1">
+              <div className="w-full max-w-full min-w-0 overflow-hidden">
+                <div className="flex min-w-0 items-center gap-2 pt-1">
                   <Input
                     ref={replyInputRef}
                     placeholder="Reply..."
@@ -1872,7 +2019,7 @@ export default function PostCard({ post }: PostCardProps) {
                         handleComment();
                       }
                     }}
-                    className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="h-10 min-w-0 flex-1 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
 
                   <Button
@@ -1892,12 +2039,12 @@ export default function PostCard({ post }: PostCardProps) {
           {isRecording && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500 text-white">
                     <AudioLines className="h-4 w-4" />
                   </span>
 
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold">Recording voice reply</p>
                     <p className="text-xs opacity-80">Tap stop when you are done.</p>
                   </div>
@@ -1907,7 +2054,7 @@ export default function PostCard({ post }: PostCardProps) {
                   type="button"
                   size="sm"
                   onClick={toggleVoiceRecording}
-                  className="rounded-full bg-red-500 text-white hover:bg-red-600"
+                  className="shrink-0 rounded-full bg-red-500 text-white hover:bg-red-600"
                 >
                   Stop {recordSeconds}s
                 </Button>
@@ -1916,7 +2063,7 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           {showComments && commentCount > 0 && (
-            <div className="w-full space-y-3 border-t border-border/60 pt-3">
+            <div className="w-full max-w-full min-w-0 space-y-3 overflow-hidden border-t border-border/60 pt-3">
               {(post.comments || []).map((comment: any) => {
                 const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
                 const commentUserId = cleanString(comment.userId);
@@ -1928,27 +2075,30 @@ export default function PostCard({ post }: PostCardProps) {
                 const commentAvatar = comment.userAvatar || comment.avatar || '';
 
                 return (
-                  <div key={comment.id} className="flex gap-2">
-                    <Avatar className="h-7 w-7">
+                  <div key={comment.id} className="flex w-full max-w-full min-w-0 gap-2 overflow-hidden">
+                    <Avatar className="h-7 w-7 shrink-0">
                       <AvatarImage src={commentAvatar} alt={commentName} />
                       <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
                     </Avatar>
 
-                    <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-sm font-medium text-foreground">
+                    <div className="min-w-0 flex-1 overflow-hidden rounded-2xl bg-muted/35 px-3 py-2">
+                      <div className="flex min-w-0 flex-wrap items-baseline gap-2 overflow-hidden">
+                        <p
+                          className="min-w-0 max-w-full truncate text-sm font-medium text-foreground"
+                          style={mobileTextStyle()}
+                        >
                           {commentName}
                         </p>
 
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
                           {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
                         </span>
                       </div>
 
-                      <div className="mt-1 text-sm leading-relaxed text-foreground">
+                      <div className="mt-1 min-w-0 max-w-full overflow-hidden text-sm leading-relaxed text-foreground">
                         {isVoice && comment.voiceUrl ? (
-                          <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
+                          <div className="mt-2 flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border bg-background px-3 py-2 shadow-sm">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
                               <AudioLines className="h-4 w-4" />
                             </div>
 
@@ -1961,7 +2111,7 @@ export default function PostCard({ post }: PostCardProps) {
                                 controls
                                 controlsList="nodownload noplaybackrate"
                                 preload="metadata"
-                                className="h-8 w-full"
+                                className="h-8 w-full max-w-full"
                                 onContextMenu={(e) => e.preventDefault()}
                               >
                                 <source src={comment.voiceUrl} type="audio/webm" />
@@ -1969,7 +2119,12 @@ export default function PostCard({ post }: PostCardProps) {
                             </div>
                           </div>
                         ) : (
-                          <p className="break-words">{commentTextSafe}</p>
+                          <p
+                            className="w-full max-w-full whitespace-pre-wrap"
+                            style={mobileTextStyle()}
+                          >
+                            {commentTextSafe}
+                          </p>
                         )}
                       </div>
 
