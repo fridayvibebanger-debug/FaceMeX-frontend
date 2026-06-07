@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -34,6 +34,18 @@ import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { useUserStore } from '@/store/userStore';
 
+import {
+  trackButtonClick,
+  trackError,
+  trackFeatureUse,
+  trackImageAnalysis,
+  trackLinkClick,
+  trackUpload,
+  trackWorkspaceOpen,
+  trackWorkspacePrompt,
+  trackWorkspaceResponse,
+} from '@/lib/analytics';
+
 type SearchLink = {
   label: string;
   url: string;
@@ -63,17 +75,17 @@ type ChatMessage = {
   images?: WorkspaceImage[];
 };
 
-const MAX_IMAGES = 4;
-const MAX_IMAGE_SIZE_MB = 8;
-
 const savedCategoryLabels: Record<SavedCategory, string> = {
-  career_plan: 'Career Plan',
-  cv_advice: 'CV Advice',
-  application_message: 'Application Message',
+  career_plan: 'Plan',
+  cv_advice: 'CV',
+  application_message: 'Apply',
   research: 'Research',
 };
 
-function clean(value: string) {
+const MAX_WORKSPACE_IMAGES = 4;
+const MAX_IMAGE_SIZE_MB = 12;
+
+function clean(value: unknown) {
   return String(value || '').trim();
 }
 
@@ -107,12 +119,12 @@ function isCreatorPlusTier(tier: string, hasTier?: (tier: string) => boolean) {
 
 function getDeepSeekDailyLimit(tier: string, hasTier?: (tier: string) => boolean) {
   if (isCreatorPlusTier(tier, hasTier)) return null;
-  if (tier === 'pro') return 10;
-  return null;
+  if (tier === 'pro') return 20;
+  return 5;
 }
 
 function getDeepSeekUsageKey(tier: string) {
-  return `facemex_deepseek_workspace_usage_${tier || 'free'}_${todayKey()}`;
+  return `facemex_workspace_ai_usage_${tier || 'free'}_${todayKey()}`;
 }
 
 function getDeepSeekUsage(tier: string) {
@@ -144,29 +156,28 @@ function faviconFor(url: string) {
   }
 }
 
-function formatBytes(bytes: number) {
-  if (!bytes) return '0 KB';
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${Math.round(kb)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
+function unwrapApiResponse(res: any) {
+  return res?.data || res;
 }
 
-function detectIntent(text: string) {
-  const t = text.toLowerCase();
+function detectIntent(text: string, hasImages = false) {
+  const t = clean(text).toLowerCase();
 
-  if (/(start my own|own business|business|logistics|delivery|courier|transport|customers|pricing|make money|launch|startup|side hustle|hustle)/i.test(t)) {
-    return 'business-startup';
+  if (hasImages) return 'image_or_document_analysis';
+
+  if (
+    /(fake|scam|legit|legitimate|verify|safe|pay money|registration fee|upfront|is this real|is it real|risky|check job|check this|ligit)/i.test(
+      t
+    )
+  ) {
+    return 'verify-opportunity';
   }
 
-  if (/(image|photo|picture|screenshot|poster|flyer|this image|these images|look at)/i.test(t)) {
-    return 'image-analysis';
-  }
-
-  if (/(is .* hiring|are .* hiring|is .* legit|is .* real|is .* fake|verify|scam|legit|can i trust|should i apply|job post|apply link|link in comments|whatsapp job|facebook job|telegram job)/i.test(t)) {
-    return 'company-verification';
-  }
-
-  if (/(investor|investors|funding|funder|funders|grant|grants|venture|angel|vc|raise capital|capital|pitch|partnership|networking|accelerator|incubator)/i.test(t)) {
+  if (
+    /(investor|investors|funding|funder|funders|grant|grants|venture|angel|vc|raise capital|capital|startup|pitch|business opportunity|business opportunities|partnership|networking|accelerator|incubator)/i.test(
+      t
+    )
+  ) {
     return 'investors-and-networking';
   }
 
@@ -186,7 +197,11 @@ function detectIntent(text: string) {
     return 'cv-profile';
   }
 
-  if (/(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs)/i.test(t)) {
+  if (
+    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment)/i.test(
+      t
+    )
+  ) {
     return 'job-search';
   }
 
@@ -194,13 +209,25 @@ function detectIntent(text: string) {
     return 'research';
   }
 
-  return 'general-help';
+  if (/(business|logistics|delivery|courier|transport|customer|money|sell|start my own)/i.test(t)) {
+    return 'business-advice';
+  }
+
+  return 'general-question';
 }
 
 function savedCategoryFromIntent(intent: string): SavedCategory {
   if (intent === 'cv-profile') return 'cv_advice';
   if (intent === 'email-application' || intent === 'message-application') return 'application_message';
-  if (intent === 'research' || intent === 'investors-and-networking' || intent === 'company-verification' || intent === 'image-analysis') return 'research';
+  if (
+    intent === 'research' ||
+    intent === 'investors-and-networking' ||
+    intent === 'image_or_document_analysis' ||
+    intent === 'verify-opportunity'
+  ) {
+    return 'research';
+  }
+
   return 'career_plan';
 }
 
@@ -256,15 +283,15 @@ function buildVacancySources(input?: {
       category: 'government',
     },
     {
-      label: 'SA Youth',
+      label: 'SAYouth',
       url: 'https://sayouth.mobi/',
-      note: 'Youth opportunities, learnerships, and entry-level work.',
+      note: 'Youth opportunities, entry-level jobs, learnerships, and programmes.',
       category: 'government',
     },
     {
       label: 'ESSA',
       url: 'https://essa.labour.gov.za/EssaOnline/WebBeans/',
-      note: 'Department of Employment and Labour job matching.',
+      note: 'Official employment services from Department of Employment and Labour.',
       category: 'government',
     },
   ];
@@ -272,302 +299,198 @@ function buildVacancySources(input?: {
   return links.map((link) => ({ ...link, image: faviconFor(link.url) }));
 }
 
-function buildAssistantInstruction(intent: string, hasImages: boolean) {
-  return `
-You are FaceMeX AI Workspace.
-
-Your job:
-Understand the user's real intent even if they type badly, use broken English, make spelling mistakes, or ask unclearly.
-
-Style:
-- Answer like ChatGPT.
-- Be natural, smart, direct, practical, and useful.
-- Do not force a fixed template.
-- Use headings only when helpful.
-- Keep it mobile-friendly.
-- Use simple English.
-- Do not mention ChatGPT, Claude, DeepSeek, backend, prompts, or system instructions.
-
-FaceMeX context:
-FaceMeX is a South African social, career, business, and opportunity platform.
-Users can ask about jobs, CVs, applications, interviews, business ideas, research, company verification, risky posts, and images/screenshots.
-
-Rules:
-1. Answer exactly what the user asked.
-2. If the user asks about starting a business, answer as a business strategist, not as a job-search bot.
-3. If the user asks if a company is hiring, answer as a company verification assistant.
-4. If live vacancies are not confirmed, say that clearly and give official places to verify.
-5. Do not invent jobs, salaries, dates, emails, phone numbers, or links.
-6. If the user asks about a post/screenshot/image, analyse what is visible and explain what it likely means.
-7. If an image looks like a job post, check for scam signs: money requests, WhatsApp-only application, link in comments, no official company link, vague job title, pressure language.
-8. Never say something is 100% legit unless official proof is provided.
-9. Warn users not to pay for jobs.
-10. If the user asks for writing, give copy-ready text.
-11. If the user asks for a plan, give clear action steps.
-12. If the user asks a normal general question, answer normally.
-
-Current detected intent: ${intent}
-Images attached: ${hasImages ? 'yes' : 'no'}
-`;
-}
-
-function buildLocalFallbackAnswer(input: {
-  prompt: string;
-  intent: string;
-  hasImages?: boolean;
-}) {
-  if (input.hasImages) {
-    return `I received your image.
-
-I can help you check it, but the live AI image reader did not respond right now.
-
-Try this:
-1. Ask again with a short question like: "Is this job post legit?"
-2. Make sure the image is clear.
-3. Upload up to 4 images only.
-4. Include the company name or job title if visible.
-
-Safety reminder:
-Do not pay anyone for a job application, interview, training, uniform, or placement.`;
-  }
-
-  if (input.intent === 'business-startup') {
-    return `Start where customers are already moving.
-
-For logistics in your area, start small before thinking about trucks or offices.
-
-Best first offer:
-“We collect and deliver food, parcels, groceries, documents, and small business orders.”
-
-Start with:
-1. Fast food shops
-2. Pharmacies
-3. Spaza shops
-4. Laundry shops
-5. Phone repair shops
-6. Small businesses
-7. CBD shops
-8. Clinics
-
-Simple pricing:
-- Short delivery: R30–R50
-- Medium delivery: R60–R90
-- Urgent delivery: add R30–R50
-- Waiting after 10 minutes: add R30
-
-Message to send:
-Good day. I’m starting a local delivery service. I can collect and deliver food, parcels, groceries, documents, and small business orders. Please let me know if your business needs reliable local deliveries.`;
-  }
-
-  if (input.intent === 'company-verification') {
-    return `I can help you verify this.
-
-I can’t confirm a live vacancy without the official company careers link or job post.
-
-Check this first:
-1. Is it on the official company careers page?
-2. Does the email use the company domain?
-3. Is there a clear job title, location, closing date, and job description?
-4. Are they asking for money? If yes, treat it as high risk.
-5. Are they saying “WhatsApp only”, “DM me”, or “link in comments”? Treat it as needing verification.
-
-Safe message:
-Good day. I saw a post about this opportunity. Please may you confirm the official job title, location, application link, closing date, and official email address for applications?
-
-Never pay anyone for a job.`;
-  }
-
-  return `I understand.
-
-Please send one more detail so I can answer properly:
-1. What you want to achieve
-2. Where you are
-3. What you already tried
-
-Then FaceMeX can give you the exact next steps.`;
-}
-
-function fileToImageDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('Only images are allowed.'));
-      return;
-    }
-
-    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-      reject(new Error(`Image is too large. Max ${MAX_IMAGE_SIZE_MB}MB.`));
-      return;
-    }
-
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = () => {
-      const result = String(reader.result || '');
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Could not read file.'));
 
-      const img = new Image();
+    reader.readAsDataURL(file);
+  });
+}
 
-      img.onload = () => {
-        const maxSide = 1280;
-        const ratio = Math.min(1, maxSide / Math.max(img.width, img.height));
-        const width = Math.max(1, Math.round(img.width * ratio));
-        const height = Math.max(1, Math.round(img.height * ratio));
+function resizeImageDataUrl(dataUrl: string, maxWidth = 1280, quality = 0.82) {
+  return new Promise<string>((resolve) => {
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const scale = Math.min(1, maxWidth / image.width);
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
 
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
 
         const ctx = canvas.getContext('2d');
+
         if (!ctx) {
-          resolve(result);
+          resolve(dataUrl);
           return;
         }
 
-        ctx.drawImage(img, 0, 0, width, height);
+        ctx.drawImage(image, 0, 0, width, height);
 
-        try {
-          resolve(canvas.toDataURL('image/jpeg', 0.82));
-        } catch {
-          resolve(result);
-        }
-      };
-
-      img.onerror = () => resolve(result);
-      img.src = result;
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed || dataUrl);
+      } catch {
+        resolve(dataUrl);
+      }
     };
 
-    reader.onerror = () => reject(new Error('Could not read image.'));
-    reader.readAsDataURL(file);
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
   });
 }
 
-function renderInlineText(text: string, isUser = false): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+async function imageFileToWorkspaceImage(file: File): Promise<WorkspaceImage> {
+  const raw = await readFileAsDataUrl(file);
+  const dataUrl = await resizeImageDataUrl(raw);
 
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  const pushTextWithBold = (value: string, keyPrefix: string) => {
-    const boldRegex = /\*\*([^*]+)\*\*/g;
-    let boldLast = 0;
-    let boldMatch: RegExpExecArray | null;
-    let count = 0;
-
-    while ((boldMatch = boldRegex.exec(value)) !== null) {
-      if (boldMatch.index > boldLast) {
-        nodes.push(
-          <span key={`${keyPrefix}-t-${count}`}>{value.slice(boldLast, boldMatch.index)}</span>
-        );
-      }
-
-      nodes.push(
-        <strong key={`${keyPrefix}-b-${count}`} className="font-semibold">
-          {boldMatch[1]}
-        </strong>
-      );
-
-      boldLast = boldMatch.index + boldMatch[0].length;
-      count += 1;
-    }
-
-    if (boldLast < value.length) {
-      nodes.push(<span key={`${keyPrefix}-end`}>{value.slice(boldLast)}</span>);
-    }
+  return {
+    id: safeId(),
+    name: file.name || 'image',
+    type: file.type || 'image/jpeg',
+    size: file.size,
+    dataUrl,
   };
-
-  while ((match = linkRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      pushTextWithBold(text.slice(lastIndex, match.index), `seg-${lastIndex}`);
-    }
-
-    nodes.push(
-      <a
-        key={`link-${match.index}`}
-        href={match[2]}
-        target="_blank"
-        rel="noreferrer"
-        className={`font-medium underline underline-offset-4 ${
-          isUser ? 'text-white dark:text-black' : 'text-blue-600 dark:text-blue-300'
-        }`}
-      >
-        {match[1]}
-      </a>
-    );
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    pushTextWithBold(text.slice(lastIndex), `seg-${lastIndex}`);
-  }
-
-  return nodes;
 }
 
-function MessageContent({ content, isUser }: { content: string; isUser?: boolean }) {
-  const lines = String(content || '').split(/\r?\n/);
+function createUnavailableAnswer(hasImages: boolean) {
+  if (hasImages) {
+    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly. If this continues, check that your backend image-analysis route and vision API key are configured correctly.';
+  }
+
+  return 'FaceMeX AI is temporarily unavailable. Please try again shortly.';
+}
+
+function normalizeAnswerText(raw: any, fallback: string) {
+  const answer =
+    raw?.answer ||
+    raw?.reply ||
+    raw?.response ||
+    raw?.text ||
+    raw?.content ||
+    raw?.message ||
+    (Array.isArray(raw?.suggestions) ? raw.suggestions.join('\n\n') : '') ||
+    '';
+
+  return clean(answer) || fallback;
+}
+
+function splitMarkdownLink(text: string) {
+  const match = text.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/i);
+
+  if (!match) return null;
+
+  return {
+    label: match[1],
+    url: match[2],
+  };
+}
+
+function TextWithLinks({
+  text,
+  onLinkClick,
+}: {
+  text: string;
+  onLinkClick?: (url: string, label?: string) => void;
+}) {
+  const lines = String(text || '').split('\n');
 
   return (
-    <div className="space-y-2 break-words">
-      {lines.map((line, index) => {
-        const raw = line;
-        const trimmed = raw.trim();
+    <div className="whitespace-pre-wrap break-words">
+      {lines.map((line, lineIndex) => {
+        const parts: React.ReactNode[] = [];
+        let remaining = line;
+        let key = 0;
 
-        if (!trimmed) return <div key={index} className="h-2" />;
+        const markdownRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi;
+        let lastIndex = 0;
+        let match: RegExpExecArray | null;
 
-        if (/^#{1,3}\s+/.test(trimmed)) {
-          const text = trimmed.replace(/^#{1,3}\s+/, '');
+        while ((match = markdownRegex.exec(line)) !== null) {
+          if (match.index > lastIndex) {
+            parts.push(line.slice(lastIndex, match.index));
+          }
 
-          return (
-            <h3 key={index} className="pt-2 text-[16px] font-semibold leading-snug">
-              {renderInlineText(text, isUser)}
-            </h3>
-          );
-        }
+          const label = match[1];
+          const url = match[2];
 
-        if (/^\d+\.\s+/.test(trimmed)) {
-          const number = trimmed.match(/^(\d+\.)\s+/)?.[1] || '';
-          const text = trimmed.replace(/^\d+\.\s+/, '');
-
-          return (
-            <div key={index} className="flex gap-2 leading-relaxed">
-              <span className="shrink-0 font-semibold">{number}</span>
-              <span>{renderInlineText(text, isUser)}</span>
-            </div>
-          );
-        }
-
-        if (/^[-•]\s+/.test(trimmed)) {
-          const text = trimmed.replace(/^[-•]\s+/, '');
-
-          return (
-            <div key={index} className="flex gap-2 leading-relaxed">
-              <span className="mt-[2px] shrink-0">•</span>
-              <span>{renderInlineText(text, isUser)}</span>
-            </div>
-          );
-        }
-
-        if (/^>\s*/.test(trimmed)) {
-          const text = trimmed.replace(/^>\s*/, '');
-
-          return (
-            <div
-              key={index}
-              className={`rounded-r-2xl border-l-4 px-3 py-2 ${
-                isUser
-                  ? 'border-white/40 bg-white/10'
-                  : 'border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-white/[0.05]'
-              }`}
+          parts.push(
+            <a
+              key={`md-${lineIndex}-${key++}`}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => onLinkClick?.(url, label)}
+              className="font-semibold text-blue-600 underline underline-offset-2 dark:text-blue-300"
             >
-              {renderInlineText(text, isUser)}
-            </div>
+              {label}
+            </a>
+          );
+
+          lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex < line.length) {
+          remaining = line.slice(lastIndex);
+
+          const urlRegex = /(https?:\/\/[^\s]+)/gi;
+          let urlLastIndex = 0;
+          let urlMatch: RegExpExecArray | null;
+
+          while ((urlMatch = urlRegex.exec(remaining)) !== null) {
+            if (urlMatch.index > urlLastIndex) {
+              parts.push(remaining.slice(urlLastIndex, urlMatch.index));
+            }
+
+            const url = urlMatch[1];
+
+            parts.push(
+              <a
+                key={`url-${lineIndex}-${key++}`}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => onLinkClick?.(url, url)}
+                className="break-all font-semibold text-blue-600 underline underline-offset-2 dark:text-blue-300"
+              >
+                {url}
+              </a>
+            );
+
+            urlLastIndex = urlMatch.index + url.length;
+          }
+
+          if (urlLastIndex < remaining.length) {
+            parts.push(remaining.slice(urlLastIndex));
+          }
+        }
+
+        const onlyMd = splitMarkdownLink(line.trim());
+
+        if (onlyMd) {
+          return (
+            <p key={lineIndex} className="mb-2 last:mb-0">
+              <a
+                href={onlyMd.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => onLinkClick?.(onlyMd.url, onlyMd.label)}
+                className="font-semibold text-blue-600 underline underline-offset-2 dark:text-blue-300"
+              >
+                {onlyMd.label}
+              </a>
+            </p>
           );
         }
 
         return (
-          <p key={index} className="leading-relaxed">
-            {renderInlineText(trimmed, isUser)}
+          <p key={lineIndex} className={line.trim() ? 'mb-2 last:mb-0' : 'h-3'}>
+            {parts.length ? parts : line}
           </p>
         );
       })}
@@ -576,7 +499,7 @@ function MessageContent({ content, isUser }: { content: string; isUser?: boolean
 }
 
 const premiumCard =
-  'w-full overflow-hidden rounded-[30px] border border-black/5 bg-white/95 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]';
+  'w-full overflow-hidden rounded-[28px] border border-black/5 bg-white/95 shadow-[0_18px_50px_rgba(15,23,42,0.055)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]';
 
 export default function AIJobAssistantPage() {
   const navigate = useNavigate();
@@ -592,6 +515,7 @@ export default function AIJobAssistantPage() {
   const [deepSeekUsage, setDeepSeekUsage] = useState(0);
   const [prompt, setPrompt] = useState('');
 
+  const [selectedImages, setSelectedImages] = useState<WorkspaceImage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sourceLinks, setSourceLinks] = useState<SearchLink[]>([]);
   const [radarCards, setRadarCards] = useState<SearchLink[]>([]);
@@ -601,14 +525,16 @@ export default function AIJobAssistantPage() {
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
 
-  const [pendingImages, setPendingImages] = useState<WorkspaceImage[]>([]);
-  const [imageBusy, setImageBusy] = useState(false);
-
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savedFilter, setSavedFilter] = useState<SavedCategory | 'all'>('all');
 
-  const remainingDeepSeekUses = useMemo(() => {
+  const canUseAI = useMemo(() => {
+    if (deepSeekLimit === null) return true;
+    return deepSeekUsage < deepSeekLimit;
+  }, [deepSeekLimit, deepSeekUsage]);
+
+  const remainingAIUses = useMemo(() => {
     if (deepSeekLimit === null) return null;
     return Math.max(0, deepSeekLimit - deepSeekUsage);
   }, [deepSeekLimit, deepSeekUsage]);
@@ -672,159 +598,146 @@ export default function AIJobAssistantPage() {
 
   useEffect(() => {
     if (!workspaceOpen) return;
+
+    trackWorkspaceOpen({
+      message_count: messages.length,
+      selected_image_count: selectedImages.length,
+    });
+
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [workspaceOpen]);
+
+  useEffect(() => {
+    if (!workspaceOpen) return;
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages.length, busy, workspaceOpen]);
 
-  const recordDeepSeekUse = () => {
+  const recordAIUse = () => {
     if (deepSeekLimit === null) return;
     setDeepSeekUsage(increaseDeepSeekUsage(currentTier));
   };
 
-  const openImagePicker = () => {
-    imageInputRef.current?.click();
+  const openWorkspace = () => {
+    setWorkspaceOpen(true);
   };
 
-  const handleImageFiles = async (files: FileList | File[]) => {
-    const list = Array.from(files || []);
+  const handlePickImages = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []).filter((file) =>
+      file.type.startsWith('image/')
+    );
 
-    if (!list.length) return;
+    event.currentTarget.value = '';
 
-    const availableSlots = MAX_IMAGES - pendingImages.length;
+    if (!files.length) return;
 
-    if (availableSlots <= 0) {
+    const remaining = MAX_WORKSPACE_IMAGES - selectedImages.length;
+
+    if (remaining <= 0) {
       toast({
         title: 'Image limit reached',
-        description: `You can upload up to ${MAX_IMAGES} images at once.`,
+        description: `You can upload up to ${MAX_WORKSPACE_IMAGES} images.`,
         variant: 'destructive',
       });
       return;
     }
 
-    const selected = list.slice(0, availableSlots);
+    const filesToUse = files.slice(0, remaining);
+    const tooLarge = filesToUse.find((file) => file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024);
 
-    if (list.length > availableSlots) {
+    if (tooLarge) {
       toast({
-        title: 'Only 4 images allowed',
-        description: `FaceMeX added ${availableSlots} image(s). Remove one to add more.`,
-      });
-    }
-
-    setImageBusy(true);
-
-    try {
-      const processed = await Promise.all(
-        selected.map(async (file) => {
-          const dataUrl = await fileToImageDataUrl(file);
-
-          return {
-            id: safeId(),
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            dataUrl,
-          };
-        })
-      );
-
-      setPendingImages((prev) => [...prev, ...processed].slice(0, MAX_IMAGES));
-      setWorkspaceOpen(true);
-    } catch (error: any) {
-      toast({
-        title: 'Image upload failed',
-        description: error?.message || 'Please choose a clear image under 8MB.',
+        title: 'Image too large',
+        description: `Each image must be under ${MAX_IMAGE_SIZE_MB}MB.`,
         variant: 'destructive',
       });
-    } finally {
-      setImageBusy(false);
+      return;
+    }
 
-      if (imageInputRef.current) {
-        imageInputRef.current.value = '';
-      }
+    try {
+      const converted = await Promise.all(filesToUse.map(imageFileToWorkspaceImage));
+
+      setSelectedImages((prev) => [...prev, ...converted].slice(0, MAX_WORKSPACE_IMAGES));
+
+      trackUpload({
+        uploadType: 'image',
+        count: converted.length,
+        metadata: {
+          feature: 'FaceMeX Career Workspace',
+          action: 'workspace_images_selected',
+        },
+      });
+    } catch (error: any) {
+      trackError('workspace_image_select_failed', error?.message || 'Could not select image.');
+      toast({
+        title: 'Image failed',
+        description: 'Could not prepare the image. Try another screenshot.',
+        variant: 'destructive',
+      });
     }
   };
 
-  const removePendingImage = (id: string) => {
-    setPendingImages((prev) => prev.filter((image) => image.id !== id));
+  const removeSelectedImage = (id: string) => {
+    setSelectedImages((prev) => prev.filter((image) => image.id !== id));
+  };
+
+  const clearSelectedImages = () => {
+    setSelectedImages([]);
   };
 
   const sendPrompt = async (overridePrompt?: string) => {
     const cleanPrompt = clean(overridePrompt || prompt);
-    const selectedImages = pendingImages;
+    const attachedImages = selectedImages;
+    const hasImages = attachedImages.length > 0;
 
-    if (!cleanPrompt && !selectedImages.length) {
-      setWorkspaceOpen(true);
+    if (!cleanPrompt && !hasImages) {
+      openWorkspace();
       return;
     }
 
     const finalPrompt =
       cleanPrompt ||
-      'Please analyse these images and tell me what they mean, what I should do, and whether anything looks risky.';
+      'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
 
-    const hasImages = selectedImages.length > 0;
-    const intent = detectIntent(`${finalPrompt} ${hasImages ? ' image screenshot photo' : ''}`);
+    const intent = detectIntent(finalPrompt, hasImages);
     const suggestedSavedCategory = savedCategoryFromIntent(intent);
 
-    setWorkspaceOpen(true);
+    openWorkspace();
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: safeId(),
-        role: 'user',
-        content: finalPrompt,
-        createdAt: new Date().toISOString(),
-        images: selectedImages,
-      },
-    ]);
+    const userMessage: ChatMessage = {
+      id: safeId(),
+      role: 'user',
+      content: finalPrompt,
+      createdAt: new Date().toISOString(),
+      images: attachedImages,
+    };
 
+    setMessages((prev) => [...prev, userMessage]);
     setPrompt('');
-    setPendingImages([]);
+    setSelectedImages([]);
     setBusy(true);
 
-    const fallbackAnswer = buildLocalFallbackAnswer({
+    trackWorkspacePrompt({
       prompt: finalPrompt,
       intent,
-      hasImages,
+      metadata: {
+        image_count: attachedImages.length,
+        has_images: hasImages,
+        tier: currentTier,
+      },
     });
 
-    try {
-      const res = (await api.post('/api/ai/pro/job-assistant', {
-        prompt: finalPrompt,
-        tier: currentTier,
+    if (hasImages) {
+      trackImageAnalysis(attachedImages.length, finalPrompt, undefined, {
         intent,
-        instruction: buildAssistantInstruction(intent, hasImages),
-        hasImages,
-        imageDataUrls: selectedImages.map((image) => image.dataUrl),
-        images: selectedImages.map((image) => ({
-          id: image.id,
-          name: image.name,
-          type: image.type,
-          size: image.size,
-          dataUrl: image.dataUrl,
-        })),
-      })) as any;
+        tier: currentTier,
+      });
+    }
 
-      const rawAnswer =
-        res?.answer ||
-        res?.reply ||
-        res?.response ||
-        res?.text ||
-        res?.content ||
-        (Array.isArray(res?.suggestions) ? res.suggestions.join('\n\n') : '') ||
-        fallbackAnswer;
-
-      const answer = clean(rawAnswer) || fallbackAnswer;
-
-      if (Array.isArray(res?.links) && res.links.length) {
-        const mappedLinks = res.links.map((link: SearchLink) => ({
-          ...link,
-          image: link.image || faviconFor(link.url),
-        }));
-
-        setSourceLinks(mappedLinks);
-        setRadarCards(mappedLinks);
-        setActiveCard(0);
-      }
+    if (!canUseAI) {
+      const answer =
+        currentTier === 'free'
+          ? 'Your free AI limit is finished for today. Try again tomorrow or upgrade when you are ready.'
+          : 'Your AI limit is finished for today. Try again tomorrow or upgrade when you are ready.';
 
       setMessages((prev) => [
         ...prev,
@@ -837,22 +750,84 @@ export default function AIJobAssistantPage() {
         },
       ]);
 
-      recordDeepSeekUse();
-    } catch {
+      setBusy(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        prompt: finalPrompt,
+        message: finalPrompt,
+        question: finalPrompt,
+        tier: currentTier,
+        creatorPlus,
+        intent,
+        source: 'facemex-career-workspace',
+        imageCount: attachedImages.length,
+        imageDataUrls: attachedImages.map((image) => image.dataUrl),
+        images: attachedImages.map((image) => ({
+          name: image.name,
+          type: image.type,
+          size: image.size,
+          dataUrl: image.dataUrl,
+        })),
+        attachments: attachedImages.map((image) => ({
+          type: 'image',
+          name: image.name,
+          mimeType: image.type,
+          size: image.size,
+          dataUrl: image.dataUrl,
+        })),
+      };
+
+      let data: any = null;
+
+      try {
+        const res = await api.post('/api/ai/pro/job-assistant', payload);
+        data = unwrapApiResponse(res);
+      } catch {
+        const res = await api.post('/api/ai/workspace', payload);
+        data = unwrapApiResponse(res);
+      }
+
+      const answer = normalizeAnswerText(data, createUnavailableAnswer(hasImages));
+
       setMessages((prev) => [
         ...prev,
         {
           id: safeId(),
           role: 'assistant',
-          content: fallbackAnswer,
+          content: answer,
           createdAt: new Date().toISOString(),
           savedCategory: suggestedSavedCategory,
         },
       ]);
 
-      toast({
-        title: 'FaceMeX used fallback',
-        description: 'Live AI was unavailable for a moment.',
+      recordAIUse();
+
+      trackWorkspaceResponse({
+        intent,
+        image_count: attachedImages.length,
+        source: data?.source || 'unknown',
+        answer_length: answer.length,
+      });
+    } catch (error: any) {
+      const answer = createUnavailableAnswer(hasImages);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: safeId(),
+          role: 'assistant',
+          content: answer,
+          createdAt: new Date().toISOString(),
+          savedCategory: suggestedSavedCategory,
+        },
+      ]);
+
+      trackError('workspace_ai_failed', error?.message || 'AI failed', {
+        intent,
+        image_count: attachedImages.length,
       });
     } finally {
       setBusy(false);
@@ -860,12 +835,22 @@ export default function AIJobAssistantPage() {
   };
 
   const quickAsk = (text: string) => {
+    trackButtonClick('workspace_quick_prompt', undefined, {
+      prompt_preview: text.slice(0, 80),
+    });
+
     sendPrompt(text);
   };
 
   const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+
+      trackFeatureUse({
+        feature: 'FaceMeX Career Workspace',
+        action: 'workspace_copy_message',
+      });
+
       toast({ title: 'Copied', description: 'Text copied.' });
     } catch {
       toast({ title: 'Copy failed', description: 'Please copy manually.', variant: 'destructive' });
@@ -884,6 +869,14 @@ export default function AIJobAssistantPage() {
           : message
       )
     );
+
+    trackFeatureUse({
+      feature: 'FaceMeX Career Workspace',
+      action: 'workspace_saved_answer',
+      metadata: {
+        category,
+      },
+    });
 
     toast({ title: `${savedCategoryLabels[category]} saved`, description: 'Saved in Workspace.' });
   };
@@ -918,7 +911,7 @@ export default function AIJobAssistantPage() {
 
   const researchMessage = (message: ChatMessage) => {
     setPrompt(`Research this deeper and give me a stronger practical answer:\n\n${message.content}`);
-    setWorkspaceOpen(true);
+    openWorkspace();
   };
 
   const clearSavedItems = () => {
@@ -933,28 +926,29 @@ export default function AIJobAssistantPage() {
     toast({ title: 'Saved items cleared', description: 'Your saved workspace list is now empty.' });
   };
 
+  const handleGeneratedLinkClick = (url: string, label?: string) => {
+    trackLinkClick(url, label || 'workspace_generated_link', undefined, {
+      feature: 'FaceMeX Career Workspace',
+    });
+  };
+
   const renderMessageImages = (images?: WorkspaceImage[]) => {
     if (!images?.length) return null;
 
     return (
       <div className="mb-3 grid grid-cols-2 gap-2">
-        {images.map((image) => (
-          <a
+        {images.slice(0, 4).map((image) => (
+          <div
             key={image.id}
-            href={image.dataUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/5 dark:bg-white/[0.06]"
+            className="overflow-hidden rounded-2xl border border-white/10 bg-black/20"
           >
             <img
               src={image.dataUrl}
               alt={image.name}
-              className="h-32 w-full object-cover transition group-hover:scale-[1.02]"
+              className="h-32 w-full object-cover sm:h-40"
+              loading="lazy"
             />
-            <div className="absolute inset-x-0 bottom-0 bg-black/55 px-2 py-1 text-[10px] text-white">
-              <span className="line-clamp-1">{image.name}</span>
-            </div>
-          </a>
+          </div>
         ))}
       </div>
     );
@@ -986,19 +980,19 @@ export default function AIJobAssistantPage() {
 
       {message.role === 'assistant' && (
         <div className="flex flex-wrap gap-1">
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'career_plan')} className="h-8 rounded-full px-2 text-[11px]">
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'career_plan')} className="h-8 rounded-full px-3 text-[11px]">
             Plan
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-8 rounded-full px-2 text-[11px]">
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-8 rounded-full px-3 text-[11px]">
             CV
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'application_message')} className="h-8 rounded-full px-2 text-[11px]">
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'application_message')} className="h-8 rounded-full px-3 text-[11px]">
             Apply
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'research')} className="h-8 rounded-full px-2 text-[11px]">
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'research')} className="h-8 rounded-full px-3 text-[11px]">
             Research
           </Button>
         </div>
@@ -1006,49 +1000,18 @@ export default function AIJobAssistantPage() {
     </div>
   );
 
-  const pendingImagePreview = pendingImages.length ? (
-    <div className="grid grid-cols-4 gap-2 px-2 pt-2">
-      {pendingImages.map((image) => (
-        <div key={image.id} className="relative overflow-hidden rounded-2xl border border-black/10 bg-slate-100 dark:border-white/10 dark:bg-white/[0.06]">
-          <img src={image.dataUrl} alt={image.name} className="h-20 w-full object-cover" />
-          <button
-            type="button"
-            onClick={() => removePendingImage(image.id)}
-            className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-          <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1 py-0.5 text-[9px] text-white">
-            <span className="line-clamp-1">{formatBytes(image.size)}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  ) : null;
-
   const quickButtons = [
     ['Find opportunities', 'I am looking for job opportunities. Help me find opportunities and apply smart.'],
+    ['Check fake job', 'Help me check if this job or opportunity looks fake or risky.'],
     ['Interview prep', 'Help me prepare for an interview. Give me questions and strong answers.'],
     ['Send my CV', 'Write a professional email and WhatsApp message to send my CV for an opportunity.'],
-    ['Check fake job', 'Help me check if this job or opportunity looks fake or risky.'],
     ['Find investors', 'Where can I find investors, funders, or grant opportunities in South Africa?'],
-    ['Start business', 'Where can I start my own logistics or delivery business?'],
+    ['Start business', 'Help me start a small business with low money and get customers fast.'],
   ] as const;
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0f0f0f] dark:text-white">
       <Navbar />
-
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files) handleImageFiles(e.target.files);
-        }}
-      />
 
       <main className="mx-auto w-full max-w-3xl overflow-x-hidden px-3 pb-40 pt-14 sm:px-4 md:pt-20">
         <Card className={`${premiumCard} mt-4`}>
@@ -1065,11 +1028,11 @@ export default function AIJobAssistantPage() {
                 </Badge>
               ) : currentTier === 'pro' ? (
                 <Badge className="rounded-full border border-black/5 bg-white/80 px-3 py-1 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80">
-                  Pro AI: {deepSeekUsage}/10 today
+                  Pro AI: {deepSeekUsage}/20 today
                 </Badge>
               ) : (
                 <Badge className="rounded-full border border-black/5 bg-white/80 px-3 py-1 text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80">
-                  Smart Workspace
+                  Free AI: {deepSeekUsage}/5 today
                 </Badge>
               )}
             </div>
@@ -1079,30 +1042,45 @@ export default function AIJobAssistantPage() {
             </h1>
 
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-white/55 sm:text-base">
-              Ask about jobs, CVs, interviews, business, research, company verification, or upload screenshots.
+              Ask naturally about jobs, CVs, screenshots, opportunities, business, research, and safety.
             </p>
 
             <div className="mt-5 w-full max-w-xl rounded-[24px] border border-black/5 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
-              {pendingImagePreview}
+              {selectedImages.length > 0 && (
+                <div className="mb-2 grid grid-cols-4 gap-2">
+                  {selectedImages.map((image) => (
+                    <div key={image.id} className="relative overflow-hidden rounded-2xl bg-black">
+                      <img src={image.dataUrl} alt={image.name} className="h-20 w-full object-cover" />
 
-              <div className="flex items-center gap-2 px-1 py-1">
-                <Button
+                      <button
+                        type="button"
+                        onClick={() => removeSelectedImage(image.id)}
+                        className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-end gap-2">
+                <button
                   type="button"
-                  variant="ghost"
-                  onClick={openImagePicker}
-                  disabled={imageBusy || pendingImages.length >= MAX_IMAGES}
-                  className="h-10 w-10 shrink-0 rounded-full"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/[0.08] dark:text-white"
+                  aria-label="Upload image"
                 >
-                  {imageBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                </Button>
+                  <ImagePlus className="h-5 w-5" />
+                </button>
 
-                <Input
+                <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Ask anything or upload a screenshot..."
-                  className="h-10 flex-1 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-white"
+                  placeholder="Ask about jobs, screenshots, research, business..."
+                  className="max-h-28 min-h-[44px] resize-none border-0 bg-transparent px-1 py-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-white"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       sendPrompt();
                     }
@@ -1112,16 +1090,40 @@ export default function AIJobAssistantPage() {
                 <Button
                   onClick={() => sendPrompt()}
                   disabled={busy}
-                  className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white dark:bg-white dark:text-black"
+                  className="mb-1 h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white dark:bg-white dark:text-black"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
-            </div>
 
-            <p className="mt-2 text-xs text-slate-400">
-              Upload up to 4 images.
-            </p>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handlePickImages}
+              />
+
+              <div className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-slate-500 dark:text-white/45">
+                <div className="flex min-w-0 items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    Upload up to {MAX_WORKSPACE_IMAGES} images. Verify before paying.
+                  </span>
+                </div>
+
+                {selectedImages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearSelectedImages}
+                    className="shrink-0 font-semibold text-red-500"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
 
             <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2">
               {quickButtons.map(([label, text]) => (
@@ -1137,16 +1139,16 @@ export default function AIJobAssistantPage() {
             </div>
 
             <Button
-              onClick={() => setWorkspaceOpen(true)}
+              onClick={openWorkspace}
               className="mt-6 h-12 rounded-2xl bg-slate-950 px-8 text-white shadow-lg dark:bg-white dark:text-black"
             >
               <MessageCircle className="mr-2 h-4 w-4" />
               Open workspace
             </Button>
 
-            {remainingDeepSeekUses !== null && (
+            {deepSeekLimit !== null && (
               <p className="mt-3 text-xs text-slate-400">
-                AI uses left today: {remainingDeepSeekUses}
+                AI uses left today: {remainingAIUses}
               </p>
             )}
           </CardContent>
@@ -1161,7 +1163,7 @@ export default function AIJobAssistantPage() {
               </h2>
 
               <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-white/50">
-                Trusted places to search and verify opportunities.
+                Trusted sources to start checking opportunities.
               </p>
             </div>
 
@@ -1170,6 +1172,7 @@ export default function AIJobAssistantPage() {
                 href={activeRadarCard.url}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => trackLinkClick(activeRadarCard.url, activeRadarCard.label)}
                 className="block rounded-[24px] border border-black/5 bg-white p-3 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.09]"
               >
                 <div className="flex gap-3">
@@ -1215,7 +1218,7 @@ export default function AIJobAssistantPage() {
           <CardContent className="flex flex-col gap-3 p-5 text-center text-sm text-slate-500 dark:text-white/55">
             <div className="flex items-center justify-center gap-2">
               <Building2 className="h-5 w-5 shrink-0" />
-              <span>FaceMeX helps users ask smarter questions, verify risky posts, and take action faster.</span>
+              <span>Soon users can receive alerts when new jobs and opportunities match their profile.</span>
             </div>
 
             <Button size="sm" variant="ghost" onClick={() => navigate('/pricing')} className="mx-auto rounded-full">
@@ -1261,11 +1264,11 @@ export default function AIJobAssistantPage() {
                   </div>
 
                   <h2 className="mt-5 text-2xl font-semibold">
-                    Ask anything useful
+                    What do you need help with?
                   </h2>
 
                   <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500 dark:text-white/55">
-                    Ask about jobs, business, screenshots, risky posts, company verification, or upload images.
+                    Ask naturally. FaceMeX will understand jobs, business, screenshots, CVs, research, and safety checks.
                   </p>
 
                   <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2">
@@ -1286,14 +1289,12 @@ export default function AIJobAssistantPage() {
               {messages.map((message) => (
                 <div key={message.id} className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
-                    className={`max-w-[92vw] rounded-[26px] px-4 py-3 text-sm leading-relaxed shadow-sm sm:max-w-[82%] ${
+                    className={`max-w-[92vw] rounded-[24px] px-4 py-3 text-sm leading-relaxed shadow-sm sm:max-w-[82%] ${
                       message.role === 'user'
                         ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
-                        : 'border border-black/5 bg-white text-slate-900 shadow-[0_18px_55px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
+                        : 'border border-black/5 bg-white text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
                     }`}
                   >
-                    {renderMessageImages(message.images)}
-
                     {editingMessageId === message.id ? (
                       <div className="space-y-2">
                         <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="min-h-[120px] rounded-2xl" />
@@ -1309,8 +1310,13 @@ export default function AIJobAssistantPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="max-h-[58vh] overflow-y-auto pr-1">
-                        <MessageContent content={message.content} isUser={message.role === 'user'} />
+                      <div className="max-h-[56vh] overflow-y-auto pr-1">
+                        {renderMessageImages(message.images)}
+
+                        <TextWithLinks
+                          text={message.content}
+                          onLinkClick={handleGeneratedLinkClick}
+                        />
                       </div>
                     )}
 
@@ -1333,20 +1339,30 @@ export default function AIJobAssistantPage() {
           </div>
 
           <div className="shrink-0 border-t border-black/5 bg-[#f7f7f5]/95 px-2 py-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/10 dark:bg-[#0f0f0f]/95 sm:px-4">
-            <div className="mx-auto w-full max-w-3xl rounded-[26px] border border-black/10 bg-white/95 p-2 shadow-[0_16px_45px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#1a1a1a]/95">
-              {pendingImagePreview}
+            <div className="mx-auto w-full max-w-3xl rounded-[24px] border border-black/10 bg-white/95 p-2 shadow-[0_16px_45px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#1a1a1a]/95">
+              {selectedImages.length > 0 && (
+                <div className="mb-2 grid grid-cols-4 gap-2 px-1">
+                  {selectedImages.map((image) => (
+                    <div key={image.id} className="relative overflow-hidden rounded-2xl bg-black">
+                      <img src={image.dataUrl} alt={image.name} className="h-20 w-full object-cover" />
+
+                      <button
+                        type="button"
+                        onClick={() => removeSelectedImage(image.id)}
+                        className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <Textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Ask about jobs, CVs, screenshots, research, business..."
                 className="max-h-28 min-h-[48px] resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
-                onPaste={(e) => {
-                  const imageFiles = Array.from(e.clipboardData.files || []).filter((file) => file.type.startsWith('image/'));
-                  if (imageFiles.length) {
-                    handleImageFiles(imageFiles);
-                  }
-                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -1356,21 +1372,18 @@ export default function AIJobAssistantPage() {
               />
 
               <div className="flex items-center justify-between gap-2 px-2 pb-1">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Button
+                <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-500 dark:text-white/45">
+                  <button
                     type="button"
-                    variant="ghost"
-                    onClick={openImagePicker}
-                    disabled={imageBusy || pendingImages.length >= MAX_IMAGES}
-                    className="h-10 w-10 shrink-0 rounded-full"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-white/[0.08] dark:text-white"
+                    aria-label="Upload image"
                   >
-                    {imageBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                  </Button>
+                    <ImagePlus className="h-4 w-4" />
+                  </button>
 
-                  <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-500 dark:text-white/45">
-                    <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Upload up to 4 images. Verify before paying or sending documents.</span>
-                  </div>
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Upload up to 4 images. Verify before paying.</span>
                 </div>
 
                 <Button
