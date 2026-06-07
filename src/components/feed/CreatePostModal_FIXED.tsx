@@ -1,0 +1,1297 @@
+import { useEffect, useRef, useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { uploadImagesToAzure } from '@/lib/azureUpload';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import {
+  Image as ImageIcon,
+  X,
+  Hash,
+  Mic,
+  Lock,
+  Video,
+  FileText,
+  Loader2,
+} from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
+import { usePostStore } from '@/store/postStore';
+import { useUserStore } from '@/store/userStore';
+import { motion, AnimatePresence } from 'framer-motion';
+import { uploadMedia } from '@/lib/storage';
+import { generateAIReply } from '@/lib/aiReply';
+import { toast } from '@/components/ui/use-toast';
+import SafetyWarningDialog from '@/components/safety/SafetyWarningDialog';
+import { reportSafetyEvent, safetyScanText, type SafetyScanResult } from '@/lib/safety';
+
+interface CreatePostModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+type UploadedDocument = {
+  id: string;
+  title: string;
+  url: string;
+  pages: string[];
+  totalPages: number;
+  previewPages: number;
+  previewUrl?: string;
+  mimeType?: string;
+};
+
+type PostMode = 'social' | 'professional';
+
+function cleanTier(value: unknown) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isCreatorPlusTier(value: unknown) {
+  const tier = cleanTier(value);
+
+  return (
+    tier === 'creator' ||
+    tier === 'business' ||
+    tier === 'exclusive' ||
+    tier.startsWith('creator') ||
+    tier.startsWith('business') ||
+    tier.startsWith('exclusive')
+  );
+}
+
+function makeId(prefix = 'id') {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function readAsDataURL(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Could not read file'));
+
+    reader.readAsDataURL(file);
+  });
+}
+
+function getFileExtension(name = '') {
+  const parts = String(name || '').split('.');
+  return parts.length > 1 ? parts.pop()?.toLowerCase() || '' : '';
+}
+
+function isImageFile(file: File) {
+  return file.type.startsWith('image/');
+}
+
+function isVideoFile(file: File) {
+  return file.type.startsWith('video/');
+}
+
+function isDocumentFile(file: File) {
+  const ext = getFileExtension(file.name);
+  const allowed = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'txt', 'rtf'];
+  return allowed.includes(ext) || file.type.includes('pdf') || file.type.includes('document');
+}
+
+export default function CreatePostModal({ open, onOpenChange }: CreatePostModalProps) {
+  const [content, setContent] = useState('');
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [videoPreviews, setVideoPreviews] = useState<string[]>([]);
+  const [documentPreviews, setDocumentPreviews] = useState<UploadedDocument[]>([]);
+  const [documentPreviewPages, setDocumentPreviewPages] = useState(1);
+  const [documentTotalPages, setDocumentTotalPages] = useState(1);
+
+  const [audioPreview, setAudioPreview] = useState<string | null>(null);
+  const [showAISuggestions, setShowAISuggestions] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const uploadProgressTimerRef = useRef<number | null>(null);
+  const [isPosting, setIsPosting] = useState(false);
+
+  const { user } = useAuthStore();
+  const { addPost, getAISuggestions, trendingHashtags } = usePostStore() as any;
+  const { mode, tier, addons, hasTier } = useUserStore();
+
+  const [postMode, setPostMode] = useState<PostMode>((mode as PostMode) || 'social');
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const uploadGenRef = useRef(0);
+  const [topic, setTopic] = useState('');
+  const [isGeneratingAIContent, setIsGeneratingAIContent] = useState(false);
+
+  const [postSafetyDialogOpen, setPostSafetyDialogOpen] = useState(false);
+  const [postSafetyScan, setPostSafetyScan] = useState<SafetyScanResult | null>(null);
+  const pendingPostRef = useRef(false);
+
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
+
+  const userTier = cleanTier(tier || (user as any)?.tier || 'free');
+
+  const canUseVoiceNote =
+    isCreatorPlusTier(tier || (user as any)?.tier) || addons?.verified === true;
+
+  const canUseDocumentPost = (() => {
+    if (typeof hasTier === 'function') {
+      try {
+        return Boolean(hasTier('creator') || hasTier('business') || hasTier('exclusive'));
+      } catch {
+        return isCreatorPlusTier(userTier);
+      }
+    }
+
+    return isCreatorPlusTier(userTier);
+  })();
+
+  const canUseAiImprove = (() => {
+    if (typeof hasTier === 'function') {
+      try {
+        return Boolean(hasTier('pro') || hasTier('creator') || hasTier('business') || hasTier('exclusive'));
+      } catch {
+        return userTier === 'pro' || isCreatorPlusTier(userTier);
+      }
+    }
+
+    return userTier === 'pro' || isCreatorPlusTier(userTier);
+  })();
+
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceTimerRef = useRef<number | null>(null);
+
+  const hasStarted = Boolean(
+    content.trim() ||
+      imagePreviews.length > 0 ||
+      videoPreviews.length > 0 ||
+      documentPreviews.length > 0 ||
+      audioPreview ||
+      topic.trim()
+  );
+
+  const startUploadProgress = () => {
+    setUploadProgress(3);
+
+    if (uploadProgressTimerRef.current !== null) {
+      window.clearInterval(uploadProgressTimerRef.current);
+      uploadProgressTimerRef.current = null;
+    }
+
+    uploadProgressTimerRef.current = window.setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev >= 92) return prev;
+        return Math.min(92, prev + Math.floor(Math.random() * 9) + 3);
+      });
+    }, 350);
+  };
+
+  const finishUploadProgress = () => {
+    setUploadProgress(100);
+
+    if (uploadProgressTimerRef.current !== null) {
+      window.clearInterval(uploadProgressTimerRef.current);
+      uploadProgressTimerRef.current = null;
+    }
+
+    window.setTimeout(() => {
+      setUploadProgress(0);
+    }, 500);
+  };
+
+  const clearVoiceTimer = () => {
+    if (voiceTimerRef.current !== null) {
+      window.clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
+  };
+
+  const resetDraft = () => {
+    setContent('');
+    setImagePreviews([]);
+    setVideoPreviews([]);
+    setDocumentPreviews([]);
+    setDocumentPreviewPages(1);
+    setDocumentTotalPages(1);
+    setAudioPreview(null);
+    setAiSuggestions([]);
+    setTopic('');
+    pendingPostRef.current = false;
+  };
+
+  const cancelUpload = () => {
+    uploadGenRef.current += 1;
+    setIsUploading(false);
+    setUploadProgress(0);
+
+    if (uploadProgressTimerRef.current !== null) {
+      window.clearInterval(uploadProgressTimerRef.current);
+      uploadProgressTimerRef.current = null;
+    }
+
+    setImagePreviews([]);
+    setVideoPreviews([]);
+    setDocumentPreviews([]);
+    setAudioPreview(null);
+  };
+
+  const getVideoDuration = (file: File) => {
+    return new Promise<number>((resolve, reject) => {
+      const video = document.createElement('video');
+      const url = URL.createObjectURL(file);
+
+      video.preload = 'metadata';
+
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(url);
+        resolve(video.duration || 0);
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Could not read video duration.'));
+      };
+
+      video.src = url;
+    });
+  };
+
+  const getMaxVideoSeconds = () => {
+    if (isCreatorPlusTier(tier || (user as any)?.tier)) return 60;
+    return 30;
+  };
+
+  const validateVideoFile = async (file: File) => {
+    if (!isVideoFile(file)) {
+      throw new Error('Please choose a valid video file.');
+    }
+
+    const maxSeconds = getMaxVideoSeconds();
+    const duration = await getVideoDuration(file);
+
+    if (duration > maxSeconds) {
+      throw new Error(`Video is too long. Your current limit is ${maxSeconds} seconds.`);
+    }
+
+    if (file.size > 120 * 1024 * 1024) {
+      throw new Error('Video is too large. Please upload a smaller video.');
+    }
+
+    return true;
+  };
+
+  const stopVoiceRecording = async () => {
+    const recorder = voiceRecorderRef.current;
+    const stream = voiceStreamRef.current;
+
+    if (!recorder || !stream) return;
+
+    return new Promise<void>((resolve) => {
+      recorder.onstop = async () => {
+        const blob = new Blob(voiceChunksRef.current, {
+          type: recorder.mimeType || 'audio/webm',
+        });
+
+        voiceChunksRef.current = [];
+
+        try {
+          setIsUploading(true);
+          startUploadProgress();
+
+          const file = new File([blob], `voice-${Date.now()}.webm`, {
+            type: blob.type || 'audio/webm',
+          });
+
+          const url = await uploadMedia(file, 'posts/audio');
+
+          setAudioPreview(url);
+          setImagePreviews([]);
+          setVideoPreviews([]);
+          setDocumentPreviews([]);
+
+          finishUploadProgress();
+        } catch {
+          try {
+            const dataUrl = await readAsDataURL(
+              new File([blob], `voice-${Date.now()}.webm`, {
+                type: blob.type || 'audio/webm',
+              })
+            );
+
+            setAudioPreview(dataUrl);
+            setImagePreviews([]);
+            setVideoPreviews([]);
+            setDocumentPreviews([]);
+          } catch {
+            toast({
+              title: 'Voice failed',
+              description: 'Could not save the voice note.',
+              variant: 'destructive',
+            });
+          }
+        } finally {
+          setIsUploading(false);
+          stream.getTracks().forEach((track) => track.stop());
+          voiceStreamRef.current = null;
+          voiceRecorderRef.current = null;
+          clearVoiceTimer();
+          setIsRecordingVoice(false);
+          setVoiceSeconds(0);
+          resolve();
+        }
+      };
+
+      recorder.stop();
+    });
+  };
+
+  const toggleVoiceRecording = async () => {
+    if (!canUseVoiceNote) {
+      toast({
+        title: 'Voice notes are Creator+ only',
+        description: 'Upgrade to Creator+ or higher to post a voice note. Everyone can still listen.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (isRecordingVoice) {
+      await stopVoiceRecording();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      voiceStreamRef.current = stream;
+
+      const recorder = new MediaRecorder(stream);
+      voiceRecorderRef.current = recorder;
+      voiceChunksRef.current = [];
+
+      setVoiceSeconds(0);
+
+      clearVoiceTimer();
+
+      voiceTimerRef.current = window.setInterval(() => {
+        setVoiceSeconds((seconds) => seconds + 1);
+      }, 1000);
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          voiceChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.start();
+      setIsRecordingVoice(true);
+    } catch (err) {
+      console.error('Microphone access denied or failed', err);
+      toast({
+        title: 'Microphone blocked',
+        description: 'Allow microphone access to record a voice note.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (content.length > 10 && typeof getAISuggestions === 'function') {
+      const suggestions = getAISuggestions(content);
+      setAiSuggestions(Array.isArray(suggestions) ? suggestions : []);
+    } else {
+      setAiSuggestions([]);
+    }
+  }, [content, getAISuggestions]);
+
+  useEffect(() => {
+    return () => {
+      if (uploadProgressTimerRef.current !== null) {
+        window.clearInterval(uploadProgressTimerRef.current);
+      }
+
+      clearVoiceTimer();
+
+      try {
+        voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      } catch {}
+    };
+  }, []);
+
+  const handleImprovePostWithAI = async () => {
+    if (!canUseAiImprove) {
+      toast({
+        title: 'Upgrade needed',
+        description: 'AI writing improvements are available on Pro and above.',
+      });
+      return;
+    }
+
+    if (!topic.trim()) {
+      toast({
+        title: 'Add a topic first',
+        description: 'Enter a topic so AI can improve your post with the right context.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!content.trim()) {
+      toast({
+        title: 'Write something first',
+        description: 'Add some text, then use AI to improve it.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsGeneratingAIContent(true);
+
+    try {
+      const reply = await generateAIReply({
+        context: [],
+        userMessage: `Improve this ${postMode === 'professional' ? 'professional' : 'casual'} post about "${topic.trim()}", keeping the meaning but making it clearer and more engaging:\n\n${content.trim()}`,
+        tone: postMode === 'professional' ? 'professional' : 'casual',
+        maxLength: 280,
+      });
+
+      setContent(reply);
+
+      toast({
+        title: 'Improved',
+        description: 'AI refined your post. Review before posting.',
+      });
+    } catch (error) {
+      console.error('AI improve failed:', error);
+      toast({
+        title: 'AI failed',
+        description: 'Could not improve the post. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingAIContent(false);
+    }
+  };
+
+  const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(isImageFile);
+
+    if (files.length === 0) {
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const maxImages = 5;
+    const remainingSlots = Math.max(0, maxImages - imagePreviews.length);
+
+    if (remainingSlots <= 0) {
+      alert(`You can upload up to ${maxImages} images per post.`);
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const filesToUpload = files.slice(0, remainingSlots);
+
+    if (files.length > remainingSlots) {
+      toast({
+        title: 'Image limit reached',
+        description: `Only ${remainingSlots} more image${remainingSlots === 1 ? '' : 's'} added. Maximum is ${maxImages}.`,
+      });
+    }
+
+    const tooLarge = filesToUpload.find((file) => file.size > 15 * 1024 * 1024);
+
+    if (tooLarge) {
+      alert('One of the images is too large. Please pick files under 15MB each.');
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const myGen = ++uploadGenRef.current;
+    setAudioPreview(null);
+
+    try {
+      try {
+        const local = await Promise.all(filesToUpload.map((file) => readAsDataURL(file)));
+
+        if (uploadGenRef.current !== myGen) return;
+
+        setImagePreviews((prev) => [...prev, ...local].slice(0, maxImages));
+      } catch {
+        // continue with upload
+      }
+
+      setIsUploading(true);
+      startUploadProgress();
+
+      const urls = await uploadImagesToAzure(filesToUpload);
+
+      if (uploadGenRef.current !== myGen) return;
+
+      setImagePreviews((prev) => {
+        const withoutLocal = prev.filter((src) => !src.startsWith('data:'));
+        return [...withoutLocal, ...urls].slice(0, maxImages);
+      });
+
+      finishUploadProgress();
+    } catch (err) {
+      console.error('Azure images upload failed', err);
+      const msg = (err as any)?.code || (err as any)?.message || 'Upload failed';
+      alert(`Images upload failed: ${msg}.`);
+    } finally {
+      setIsUploading(false);
+      e.currentTarget.value = '';
+    }
+  };
+
+  const handleVideosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(isVideoFile);
+
+    if (files.length === 0) {
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const currentTotal = videoPreviews.length + files.length;
+
+    if (currentTotal > 4) {
+      alert('You can upload up to 4 videos per post.');
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const myGen = ++uploadGenRef.current;
+    setAudioPreview(null);
+
+    try {
+      setIsUploading(true);
+      startUploadProgress();
+
+      for (const file of files) {
+        await validateVideoFile(file);
+      }
+
+      const urls = await Promise.all(files.map((file) => uploadMedia(file, 'posts/videos')));
+
+      if (uploadGenRef.current !== myGen) return;
+
+      setVideoPreviews((prev) => [...prev, ...urls].slice(0, 4));
+
+      finishUploadProgress();
+    } catch (err: any) {
+      console.error('Video upload failed', err);
+      alert(err?.message || 'Video upload failed. Please choose a shorter video.');
+    } finally {
+      setIsUploading(false);
+      e.currentTarget.value = '';
+    }
+  };
+
+  const handleDocumentsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canUseDocumentPost) {
+      e.currentTarget.value = '';
+
+      toast({
+        title: 'Creator+ required',
+        description: 'Only Creator, Business and Exclusive users can post documents. Free and Pro users can view documents only.',
+        variant: 'destructive',
+      });
+
+      return;
+    }
+
+    const files = Array.from(e.target.files || []).filter(isDocumentFile);
+
+    if (files.length === 0) {
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const currentTotal = documentPreviews.length + files.length;
+
+    if (currentTotal > 5) {
+      alert('You can upload up to 5 documents per post.');
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const tooLarge = files.find((file) => file.size > 30 * 1024 * 1024);
+
+    if (tooLarge) {
+      alert('One of the documents is too large. Please pick files under 30MB each.');
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const myGen = ++uploadGenRef.current;
+    setAudioPreview(null);
+
+    try {
+      setIsUploading(true);
+      startUploadProgress();
+
+      const uploaded = await Promise.all(
+        files.map(async (file, index) => {
+          const url = await uploadMedia(file, 'posts/documents');
+
+          return {
+            id: makeId(`doc-${index}`),
+            title: file.name,
+            url,
+            pages: [],
+            totalPages: Math.max(1, documentTotalPages),
+            previewPages: Math.max(
+              1,
+              Math.min(documentPreviewPages, Math.max(1, documentTotalPages))
+            ),
+            previewUrl: '',
+            mimeType: file.type || getFileExtension(file.name),
+          };
+        })
+      );
+
+      if (uploadGenRef.current !== myGen) return;
+
+      setDocumentPreviews((prev) => [...prev, ...uploaded].slice(0, 5));
+
+      finishUploadProgress();
+    } catch (err: any) {
+      console.error('Document upload failed', err);
+      alert(err?.message || 'Document upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+      e.currentTarget.value = '';
+    }
+  };
+
+  const handlePost = async () => {
+    const hasMedia =
+      imagePreviews.length > 0 ||
+      videoPreviews.length > 0 ||
+      documentPreviews.length > 0 ||
+      !!audioPreview;
+
+    if (!(content.trim() || hasMedia)) return;
+
+    if (documentPreviews.length > 0 && !canUseDocumentPost) {
+      toast({
+        title: 'Creator+ required',
+        description: 'Remove the document or upgrade to Creator+ before posting.',
+        variant: 'destructive',
+      });
+
+      return;
+    }
+
+    const scan = safetyScanText(content);
+
+    if (!pendingPostRef.current && (scan.level === 'medium' || scan.level === 'high')) {
+      pendingPostRef.current = true;
+      setPostSafetyScan(scan);
+      setPostSafetyDialogOpen(true);
+
+      reportSafetyEvent({
+        content,
+        scan,
+        context: { location: 'posts', direction: 'draft' },
+      }).catch(() => {});
+
+      return;
+    }
+
+    try {
+      setIsPosting(true);
+
+      const primaryMediaType =
+        videoPreviews.length > 0
+          ? 'video'
+          : imagePreviews.length > 0
+            ? 'image'
+            : documentPreviews.length > 0
+              ? 'document'
+              : audioPreview
+                ? 'audio'
+                : 'text';
+
+      await addPost(
+        content.trim() || content,
+        imagePreviews.length ? imagePreviews : undefined,
+        audioPreview || undefined,
+        undefined,
+        postMode,
+        {
+          image: imagePreviews[0] || '',
+          images: imagePreviews,
+
+          video: videoPreviews[0] || '',
+          videos: videoPreviews,
+          videoUrl: videoPreviews[0] || '',
+          mediaType: primaryMediaType,
+          media_type: primaryMediaType,
+
+          documents: documentPreviews,
+          documentUrl: documentPreviews[0]?.url || '',
+          documentTitle: documentPreviews[0]?.title || '',
+          documentPages: documentPreviews[0]?.pages || [],
+          documentTotalPages: documentPreviews[0]?.totalPages || 0,
+          documentPreviewPages: documentPreviews[0]?.previewPages || 1,
+
+          document_url: documentPreviews[0]?.url || '',
+          document_title: documentPreviews[0]?.title || '',
+          document_pages: documentPreviews[0]?.pages || [],
+          document_total_pages: documentPreviews[0]?.totalPages || 0,
+          document_preview_pages: documentPreviews[0]?.previewPages || 1,
+          documentPreviewUrl: documentPreviews[0]?.previewUrl || '',
+          document_preview_url: documentPreviews[0]?.previewUrl || '',
+        }
+      );
+
+      resetDraft();
+      onOpenChange(false);
+    } catch (err) {
+      console.error('Failed to create post', err);
+      alert('Failed to create post. Please ensure the API is running and configured correctly.');
+    } finally {
+      setIsPosting(false);
+      pendingPostRef.current = false;
+    }
+  };
+
+  const removeMedia = () => {
+    setImagePreviews([]);
+    setVideoPreviews([]);
+    setDocumentPreviews([]);
+    setAudioPreview(null);
+  };
+
+  const removeImage = (index: number) => {
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeVideo = (index: number) => {
+    setVideoPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeDocument = (index: number) => {
+    setDocumentPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addHashtag = (hashtag: string) => {
+    setContent((prev) => `${prev} ${hashtag}`.trimStart());
+  };
+
+  const closeModal = (nextOpen: boolean) => {
+    if (!nextOpen && (isUploading || isPosting || isRecordingVoice)) return;
+    onOpenChange(nextOpen);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={closeModal}>
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-x-hidden rounded-[28px] border bg-card p-0 shadow-2xl sm:max-w-[640px]">
+        <SafetyWarningDialog
+          open={postSafetyDialogOpen}
+          onOpenChange={(value) => {
+            setPostSafetyDialogOpen(value);
+            if (!value) pendingPostRef.current = false;
+          }}
+          title="Potential scam or unsafe content"
+          scan={postSafetyScan}
+          primaryActionLabel="Post anyway"
+          onPrimaryAction={() => {
+            setPostSafetyDialogOpen(false);
+            handlePost();
+          }}
+        />
+
+        <div className="max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold tracking-tight">New post</DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 space-y-4">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>Posting as:</span>
+
+              <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-xs ${
+                    postMode === 'social'
+                      ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
+                      : 'text-muted-foreground'
+                  }`}
+                  onClick={() => setPostMode('social')}
+                >
+                  Social
+                </button>
+
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-xs ${
+                    postMode === 'professional'
+                      ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
+                      : 'text-muted-foreground'
+                  }`}
+                  onClick={() => setPostMode('professional')}
+                >
+                  Professional
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <Avatar>
+                <AvatarImage src={user?.avatar} alt={user?.name} />
+                <AvatarFallback>{user?.name?.charAt(0) || 'U'}</AvatarFallback>
+              </Avatar>
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{user?.name || 'FaceMeX user'}</p>
+                <p className="text-xs text-muted-foreground">
+                  Share with FaceMeX
+                </p>
+              </div>
+            </div>
+
+            <Textarea
+              placeholder="Share an update, idea, link, document, video, or story..."
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              className="min-h-[190px] resize-none rounded-2xl border bg-background px-4 py-3 text-base leading-relaxed focus-visible:ring-2"
+            />
+
+            <AnimatePresence>
+              {hasStarted && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-3"
+                >
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Topic for AI tools</span>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleImprovePostWithAI}
+                        disabled={isGeneratingAIContent || !canUseAiImprove}
+                        className="rounded-full text-xs"
+                      >
+                        {isGeneratingAIContent
+                          ? 'Improving…'
+                          : canUseAiImprove
+                            ? 'Improve writing'
+                            : 'Upgrade for AI'}
+                      </Button>
+                    </div>
+
+                    <Input
+                      value={topic}
+                      onChange={(event) => setTopic(event.target.value)}
+                      placeholder="Optional topic for AI"
+                      className="h-9 rounded-full"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {hasStarted && aiSuggestions.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-2"
+                >
+                  <div className="text-xs text-muted-foreground">Suggested hashtags</div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {aiSuggestions.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="cursor-pointer rounded-full hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => addHashtag(tag)}
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowAISuggestions(!showAISuggestions)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                <Hash className="h-4 w-4" />
+                <span>Hashtags</span>
+              </button>
+
+              <AnimatePresence>
+                {hasStarted && showAISuggestions && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="flex flex-wrap gap-2"
+                  >
+                    {(trendingHashtags || []).slice(0, 8).map((tag: string) => (
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="cursor-pointer rounded-full hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => addHashtag(`#${tag}`)}
+                      >
+                        #{tag}
+                      </Badge>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {imagePreviews.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative overflow-hidden rounded-2xl bg-muted"
+              >
+                <div className="relative aspect-video w-full bg-black">
+                  <div className="absolute inset-0 grid grid-cols-2 gap-1 p-1">
+                    {imagePreviews.slice(0, 4).map((src, index) => (
+                      <div key={`${src}-${index}`} className="relative overflow-hidden rounded bg-black">
+                        <img src={src} alt="Preview" className="h-full w-full object-cover" />
+
+                        <button
+                          type="button"
+                          className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                          onClick={() => removeImage(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+
+                        {index === 3 && imagePreviews.length > 4 && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-xl font-bold text-white">
+                            +{imagePreviews.length - 4}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {imagePreviews.length === 1 && (
+                      <img
+                        src={imagePreviews[0]}
+                        alt="Preview"
+                        className="col-span-2 row-span-2 h-full w-full rounded object-contain"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute right-2 top-2 rounded-full"
+                  onClick={removeMedia}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </motion.div>
+            )}
+
+            {videoPreviews.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="space-y-2 rounded-2xl border bg-muted/20 p-3"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Videos selected: {videoPreviews.length}
+                  </p>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    Limit: {getMaxVideoSeconds()}s each
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {videoPreviews.map((src, index) => (
+                    <div key={`${src}-${index}`} className="relative overflow-hidden rounded-2xl bg-black">
+                      <video
+                        src={src}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="max-h-[320px] w-full object-contain"
+                        controlsList="nodownload"
+                        onContextMenu={(event) => event.preventDefault()}
+                      />
+
+                      <button
+                        type="button"
+                        className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white"
+                        onClick={() => removeVideo(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {documentPreviews.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="space-y-3 rounded-2xl border bg-muted/20 p-3"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Documents selected: {documentPreviews.length}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Total pages</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={documentTotalPages}
+                      onChange={(event) => {
+                        const value = Math.max(1, Math.min(200, Number(event.target.value) || 1));
+                        setDocumentTotalPages(value);
+                        setDocumentPreviewPages((prev) => Math.max(1, Math.min(prev, value)));
+
+                        setDocumentPreviews((prev) =>
+                          prev.map((doc) => ({
+                            ...doc,
+                            totalPages: value,
+                            previewPages: Math.max(1, Math.min(doc.previewPages || 1, value)),
+                          }))
+                        );
+                      }}
+                      className="h-8 w-20"
+                    />
+
+                    <span className="text-muted-foreground">Show pages</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={documentTotalPages}
+                      value={documentPreviewPages}
+                      onChange={(event) => {
+                        const value = Math.max(
+                          1,
+                          Math.min(documentTotalPages, Number(event.target.value) || 1)
+                        );
+
+                        setDocumentPreviewPages(value);
+
+                        setDocumentPreviews((prev) =>
+                          prev.map((doc) => ({
+                            ...doc,
+                            previewPages: value,
+                            totalPages: documentTotalPages,
+                          }))
+                        );
+                      }}
+                      className="h-8 w-20"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {documentPreviews.map((doc, index) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border bg-background px-3 py-2 text-sm"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+
+                        <div className="min-w-0">
+                          <p className="truncate">{doc.title}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Showing {doc.previewPages} of {doc.totalPages} page
+                            {doc.totalPages === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button type="button" onClick={() => removeDocument(index)}>
+                        <X className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {audioPreview && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative overflow-hidden rounded-xl border bg-background p-3"
+              >
+                <audio controls className="w-full" src={audioPreview} />
+
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute right-2 top-2 rounded-full"
+                  onClick={removeMedia}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </motion.div>
+            )}
+
+            <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex w-full max-w-full min-w-0 flex-wrap items-center gap-2 overflow-hidden sm:flex-1">
+                <input
+                  ref={imageInputRef}
+                  id="images-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  multiple
+                  onChange={handleImagesUpload}
+                />
+
+                <input
+                  ref={videoInputRef}
+                  id="videos-upload"
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  multiple
+                  onChange={handleVideosUpload}
+                />
+
+                <input
+                  ref={documentInputRef}
+                  id="documents-upload"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  multiple
+                  onChange={handleDocumentsUpload}
+                />
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="h-9 shrink-0 rounded-full"
+                >
+                  <ImageIcon className="mr-2 h-4 w-4" />
+                  Photos
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => videoInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="h-9 shrink-0 rounded-full"
+                >
+                  <Video className="mr-2 h-4 w-4" />
+                  Video
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => documentInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="h-9 shrink-0 rounded-full"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Document
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleVoiceRecording().catch(() => {})}
+                  disabled={isUploading || !canUseVoiceNote}
+                  className="h-9 shrink-0 rounded-full"
+                >
+                  {canUseVoiceNote ? (
+                    <Mic className={`mr-2 h-4 w-4 ${isRecordingVoice ? 'animate-pulse text-red-500' : ''}`} />
+                  ) : (
+                    <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
+                  )}
+                  {isRecordingVoice ? `${voiceSeconds}s` : 'Voice'}
+                </Button>
+              </div>
+
+              <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-end gap-2 overflow-hidden sm:w-auto sm:shrink-0">
+                {isUploading && (
+                  <span className="min-w-[48px] text-right text-[11px] text-muted-foreground">
+                    {`${uploadProgress}%`}
+                  </span>
+                )}
+
+                {isUploading && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 max-w-full shrink-0 rounded-full text-[11px]"
+                    onClick={cancelUpload}
+                  >
+                    Cancel
+                  </Button>
+                )}
+
+                <Button
+                  onClick={handlePost}
+                  disabled={
+                    (!content.trim() &&
+                      imagePreviews.length === 0 &&
+                      videoPreviews.length === 0 &&
+                      documentPreviews.length === 0 &&
+                      !audioPreview) ||
+                    isUploading ||
+                    isPosting
+                  }
+                  className="h-9 min-w-[92px] shrink-0 rounded-full"
+                >
+                  {isPosting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Posting
+                    </>
+                  ) : isUploading ? (
+                    'Uploading'
+                  ) : (
+                    'Post'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
