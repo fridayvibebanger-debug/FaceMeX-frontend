@@ -1,6 +1,4 @@
-import '@/pages/AdminAnalyticsPage';
-
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +14,7 @@ import {
   Lock,
   Video,
   FileText,
-  Link as LinkIcon,
+  Loader2,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePostStore } from '@/store/postStore';
@@ -43,7 +41,6 @@ type UploadedDocument = {
   coverUrl?: string;
   mimeType?: string;
   size?: number;
-  extension?: string;
 };
 
 type PostMode = 'social' | 'professional';
@@ -66,8 +63,11 @@ function isCreatorPlusTier(value: unknown) {
 }
 
 function safeId(prefix = 'id') {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function escapeSvgText(value: string) {
@@ -79,87 +79,52 @@ function escapeSvgText(value: string) {
 }
 
 function getFileExtension(fileName: string) {
-  const match = String(fileName || '').match(/\.([a-zA-Z0-9]+)$/);
-  return match ? match[1].toUpperCase() : 'DOC';
+  const ext = String(fileName || '').split('.').pop() || 'DOC';
+  return ext.toUpperCase().slice(0, 8);
 }
 
-function formatBytes(bytes = 0) {
-  if (!bytes) return 'Unknown size';
-
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = bytes;
-  let unit = 0;
-
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-
-  return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-function buildDocumentCoverDataUrl(file: File, totalPages: number, previewPages: number) {
-  const title = escapeSvgText(file.name || 'Document');
-  const ext = escapeSvgText(getFileExtension(file.name));
-  const size = escapeSvgText(formatBytes(file.size));
-  const pages = Math.max(1, Number(totalPages) || 1);
-  const shown = Math.max(1, Math.min(Number(previewPages) || 1, pages));
+function createDocumentCoverDataUrl(fileName: string, fileType = 'DOC') {
+  const cleanName = escapeSvgText(String(fileName || 'Document').slice(0, 60));
+  const cleanType = escapeSvgText(String(fileType || 'DOC').slice(0, 12));
 
   const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
-  <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#020617"/>
-      <stop offset="45%" stop-color="#111827"/>
-      <stop offset="100%" stop-color="#0f766e"/>
-    </linearGradient>
-    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#f8fafc"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.30"/>
-    </filter>
-  </defs>
+  <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#020617"/>
+        <stop offset="50%" stop-color="#111827"/>
+        <stop offset="100%" stop-color="#1e293b"/>
+      </linearGradient>
+      <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#ffffff"/>
+        <stop offset="100%" stop-color="#e5e7eb"/>
+      </linearGradient>
+    </defs>
 
-  <rect width="900" height="1200" rx="56" fill="url(#bg)"/>
-  <circle cx="770" cy="135" r="150" fill="#22d3ee" opacity="0.12"/>
-  <circle cx="105" cy="1040" r="210" fill="#a855f7" opacity="0.12"/>
+    <rect width="900" height="1200" fill="url(#bg)"/>
+    <circle cx="780" cy="160" r="210" fill="#38bdf8" opacity="0.18"/>
+    <circle cx="130" cy="1050" r="250" fill="#a855f7" opacity="0.18"/>
 
-  <rect x="115" y="120" width="670" height="860" rx="34" fill="url(#paper)" filter="url(#shadow)"/>
-  <rect x="165" y="188" width="190" height="52" rx="26" fill="#0f172a"/>
-  <text x="260" y="223" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="800" fill="#ffffff">${ext}</text>
+    <rect x="110" y="135" width="680" height="930" rx="54" fill="url(#paper)"/>
+    <rect x="170" y="220" width="560" height="26" rx="13" fill="#cbd5e1"/>
+    <rect x="170" y="280" width="430" height="20" rx="10" fill="#e2e8f0"/>
 
-  <rect x="165" y="300" width="570" height="18" rx="9" fill="#cbd5e1"/>
-  <rect x="165" y="350" width="500" height="18" rx="9" fill="#e2e8f0"/>
-  <rect x="165" y="400" width="545" height="18" rx="9" fill="#e2e8f0"/>
-  <rect x="165" y="450" width="420" height="18" rx="9" fill="#e2e8f0"/>
+    <rect x="285" y="410" width="330" height="380" rx="34" fill="#f8fafc" stroke="#cbd5e1" stroke-width="6"/>
+    <path d="M540 410 L615 485 L615 790 L285 790 L285 410 Z" fill="#ffffff"/>
+    <path d="M540 410 L615 485 L540 485 Z" fill="#cbd5e1"/>
 
-  <rect x="165" y="555" width="570" height="250" rx="28" fill="#f1f5f9"/>
-  <path d="M390 620h120v120H390z" fill="#0f172a" opacity="0.12"/>
-  <path d="M405 635h68l32 32v58H405z" fill="#0f766e"/>
-  <path d="M473 635v32h32" fill="#14b8a6"/>
+    <rect x="335" y="565" width="230" height="24" rx="12" fill="#94a3b8"/>
+    <rect x="335" y="620" width="180" height="18" rx="9" fill="#cbd5e1"/>
+    <rect x="335" y="665" width="210" height="18" rx="9" fill="#e2e8f0"/>
 
-  <text x="450" y="1018" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="800" fill="#ffffff">FaceMeX Document</text>
-  <text x="450" y="1062" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#cbd5e1">${shown} of ${pages} page${pages === 1 ? '' : 's'} visible • ${size}</text>
+    <rect x="180" y="860" width="540" height="76" rx="24" fill="#0f172a"/>
+    <text x="450" y="910" font-family="Arial, sans-serif" font-size="36" font-weight="700" fill="#ffffff" text-anchor="middle">${cleanType}</text>
 
-  <foreignObject x="125" y="1030" width="650" height="110">
-    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, sans-serif; color: white; font-size: 24px; font-weight: 700; line-height: 1.25; text-align: center; word-break: break-word;">
-      ${title}
-    </div>
-  </foreignObject>
-</svg>`.trim();
+    <text x="450" y="995" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#334155" text-anchor="middle">${cleanName}</text>
+    <text x="450" y="1040" font-family="Arial, sans-serif" font-size="20" font-weight="500" fill="#64748b" text-anchor="middle">FaceMeX Document</text>
+  </svg>`;
 
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
-function extractLinksFromText(text: string) {
-  const matches = String(text || '').match(/https?:\/\/[^\s)]+/gi) || [];
-
-  return Array.from(new Set(matches)).map((url) => ({
-    url,
-    label: url.replace(/^https?:\/\//i, '').replace(/\/$/, ''),
-  }));
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 export default function CreatePostModal({ open, onOpenChange }: CreatePostModalProps) {
@@ -173,7 +138,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   const [audioPreview, setAudioPreview] = useState<string | null>(null);
   const [showAISuggestions, setShowAISuggestions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const uploadProgressTimerRef = useRef<number | null>(null);
   const [isPosting, setIsPosting] = useState(false);
 
@@ -191,10 +156,31 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   const [postSafetyScan, setPostSafetyScan] = useState<SafetyScanResult | null>(null);
   const pendingPostRef = useRef(false);
 
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceTimerRef = useRef<number | null>(null);
+
   const userTier = cleanTier(tier || user?.tier || 'free');
+
+  const canUseProAi = (() => {
+    try {
+      return Boolean(
+        hasTier?.('pro') ||
+          hasTier?.('creator') ||
+          hasTier?.('business') ||
+          hasTier?.('exclusive')
+      );
+    } catch {
+      return userTier === 'pro' || isCreatorPlusTier(userTier);
+    }
+  })();
 
   const canUseVoiceNote = (() => {
     const t = cleanTier(tier || user?.tier);
@@ -208,35 +194,12 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
   })();
 
   const canUseDocumentPost = (() => {
-    if (typeof hasTier === 'function') {
-      try {
-        return hasTier('creator');
-      } catch {
-        return isCreatorPlusTier(userTier);
-      }
+    try {
+      return Boolean(hasTier?.('creator') || hasTier?.('business') || hasTier?.('exclusive'));
+    } catch {
+      return isCreatorPlusTier(userTier);
     }
-
-    return isCreatorPlusTier(userTier);
   })();
-
-  const canUseProAi = (() => {
-    if (typeof hasTier === 'function') {
-      try {
-        return hasTier('pro');
-      } catch {
-        return false;
-      }
-    }
-
-    return ['pro', 'creator', 'business', 'exclusive'].includes(userTier);
-  })();
-
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
-  const [voiceSeconds, setVoiceSeconds] = useState(0);
-  const voiceStreamRef = useRef<MediaStream | null>(null);
-  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
-  const voiceChunksRef = useRef<BlobPart[]>([]);
-  const voiceTimerRef = useRef<number | null>(null);
 
   const readAsDataURL = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -248,13 +211,16 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       reader.readAsDataURL(file);
     });
 
-  const startUploadProgress = () => {
-    setUploadProgress(3);
-
+  const clearUploadTimer = () => {
     if (uploadProgressTimerRef.current !== null) {
       window.clearInterval(uploadProgressTimerRef.current);
       uploadProgressTimerRef.current = null;
     }
+  };
+
+  const startUploadProgress = () => {
+    setUploadProgress(3);
+    clearUploadTimer();
 
     uploadProgressTimerRef.current = window.setInterval(() => {
       setUploadProgress((prev) => {
@@ -266,11 +232,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
   const finishUploadProgress = () => {
     setUploadProgress(100);
-
-    if (uploadProgressTimerRef.current !== null) {
-      window.clearInterval(uploadProgressTimerRef.current);
-      uploadProgressTimerRef.current = null;
-    }
+    clearUploadTimer();
 
     window.setTimeout(() => {
       setUploadProgress(0);
@@ -316,7 +278,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     }
 
     if (file.size > 120 * 1024 * 1024) {
-      throw new Error('Video is too large. Please upload a smaller video.');
+      throw new Error('Video is too large. Please upload a smaller video under 120MB.');
     }
 
     return true;
@@ -328,6 +290,26 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       voiceTimerRef.current = null;
     }
   };
+
+  useEffect(() => {
+    return () => {
+      clearUploadTimer();
+      clearVoiceTimer();
+
+      try {
+        voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      } catch {}
+    };
+  }, []);
+
+  useEffect(() => {
+    if (content.length > 10) {
+      const suggestions = getAISuggestions(content);
+      setAiSuggestions(suggestions);
+    } else {
+      setAiSuggestions([]);
+    }
+  }, [content, getAISuggestions]);
 
   const stopVoiceRecording = async () => {
     const recorder = voiceRecorderRef.current;
@@ -374,7 +356,11 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             setVideoPreviews([]);
             setDocumentPreviews([]);
           } catch {
-            // ignore fallback failure
+            toast({
+              title: 'Voice failed',
+              description: 'Could not upload voice note. Please try again.',
+              variant: 'destructive',
+            });
           }
         } finally {
           setIsUploading(false);
@@ -416,7 +402,6 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       voiceChunksRef.current = [];
 
       setVoiceSeconds(0);
-
       clearVoiceTimer();
 
       voiceTimerRef.current = window.setInterval(() => {
@@ -431,30 +416,16 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
       recorder.start();
       setIsRecordingVoice(true);
-    } catch (err) {
-      console.error('Microphone access denied or failed', err);
+    } catch {
       alert('Unable to access microphone. Please allow mic permissions to record a voice note.');
     }
   };
-
-  useEffect(() => {
-    if (content.length > 10) {
-      const suggestions = getAISuggestions(content);
-      setAiSuggestions(suggestions);
-    } else {
-      setAiSuggestions([]);
-    }
-  }, [content, getAISuggestions]);
 
   const cancelUpload = () => {
     uploadGenRef.current += 1;
     setIsUploading(false);
     setUploadProgress(0);
-
-    if (uploadProgressTimerRef.current !== null) {
-      window.clearInterval(uploadProgressTimerRef.current);
-      uploadProgressTimerRef.current = null;
-    }
+    clearUploadTimer();
 
     setImagePreviews([]);
     setVideoPreviews([]);
@@ -505,8 +476,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
         title: 'Improved',
         description: 'AI refined your post. Review before posting.',
       });
-    } catch (error) {
-      console.error('AI improve failed:', error);
+    } catch {
       toast({
         title: 'AI failed',
         description: 'Could not improve the post. Please try again.',
@@ -517,7 +487,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     }
   };
 
-  const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImagesUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter((file) =>
       file.type.startsWith('image/')
     );
@@ -538,13 +508,6 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
     const filesToUpload = files.slice(0, remainingSlots);
 
-    if (files.length > remainingSlots) {
-      toast({
-        title: 'Image limit reached',
-        description: `Only ${remainingSlots} more image${remainingSlots === 1 ? '' : 's'} added. Maximum is ${maxImages}.`,
-      });
-    }
-
     const tooLarge = filesToUpload.find((f) => f.size > 15 * 1024 * 1024);
 
     if (tooLarge) {
@@ -563,9 +526,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
         if (uploadGenRef.current !== myGen) return;
 
         setImagePreviews((prev) => [...prev, ...local].slice(0, maxImages));
-      } catch {
-        // instant preview failed, continue with upload
-      }
+      } catch {}
 
       setIsUploading(true);
       startUploadProgress();
@@ -580,9 +541,8 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       });
 
       finishUploadProgress();
-    } catch (err) {
-      console.error('Azure images upload failed', err);
-      const msg = (err as any)?.code || (err as any)?.message || 'Upload failed';
+    } catch (err: any) {
+      const msg = err?.code || err?.message || 'Upload failed';
       alert(`Images upload failed: ${msg}.`);
     } finally {
       setIsUploading(false);
@@ -590,18 +550,26 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     }
   };
 
-  const handleVideosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const handleVideosUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter((file) =>
+      file.type.startsWith('video/')
+    );
 
-    if (files.length === 0) return;
-
-    const currentTotal = videoPreviews.length + files.length;
-
-    if (currentTotal > 4) {
-      alert('You can upload up to 4 videos per post.');
+    if (files.length === 0) {
       e.currentTarget.value = '';
       return;
     }
+
+    const maxVideos = 4;
+    const remainingSlots = Math.max(0, maxVideos - videoPreviews.length);
+
+    if (remainingSlots <= 0) {
+      alert(`You can upload up to ${maxVideos} videos per post.`);
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const filesToUpload = files.slice(0, remainingSlots);
 
     const myGen = ++uploadGenRef.current;
     setAudioPreview(null);
@@ -610,19 +578,25 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       setIsUploading(true);
       startUploadProgress();
 
-      for (const file of files) {
+      for (const file of filesToUpload) {
         await validateVideoFile(file);
       }
 
-      const urls = await Promise.all(files.map((file) => uploadMedia(file, 'posts/videos')));
+      const urls = await Promise.all(
+        filesToUpload.map((file) => uploadMedia(file, 'posts/videos'))
+      );
 
       if (uploadGenRef.current !== myGen) return;
 
-      setVideoPreviews((prev) => [...prev, ...urls].slice(0, 4));
+      setVideoPreviews((prev) => [...prev, ...urls].slice(0, maxVideos));
 
       finishUploadProgress();
+
+      toast({
+        title: 'Video uploaded',
+        description: `${urls.length} video${urls.length === 1 ? '' : 's'} added to your post.`,
+      });
     } catch (err: any) {
-      console.error('Video upload failed', err);
       alert(err?.message || 'Video upload failed. Please choose a shorter video.');
     } finally {
       setIsUploading(false);
@@ -630,13 +604,14 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     }
   };
 
-  const handleDocumentsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+const handleDocumentsUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!canUseDocumentPost) {
       e.currentTarget.value = '';
 
       toast({
         title: 'Creator+ required',
-        description: 'Only Creator, Business and Exclusive users can post documents. Free and Pro users can view documents only.',
+        description:
+          'Only Creator, Business and Exclusive users can post documents. Free and Pro users can view documents only.',
         variant: 'destructive',
       });
 
@@ -645,7 +620,10 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
     const files = Array.from(e.target.files || []);
 
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      e.currentTarget.value = '';
+      return;
+    }
 
     const currentTotal = documentPreviews.length + files.length;
 
@@ -673,83 +651,41 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
       const uploaded = await Promise.all(
         files.map(async (file, index) => {
           const url = await uploadMedia(file, 'posts/documents');
+          const extension = getFileExtension(file.name);
+          const coverUrl = createDocumentCoverDataUrl(file.name, extension);
 
-          const totalPages = Math.max(1, documentTotalPages);
-          const previewPages = Math.max(
-            1,
-            Math.min(documentPreviewPages, totalPages)
-          );
-
-          const coverUrl = buildDocumentCoverDataUrl(file, totalPages, previewPages);
-
-          const doc: UploadedDocument = {
+          return {
             id: safeId(`doc-${index}`),
             title: file.name,
             url,
-            coverUrl,
             pages: [coverUrl],
-            totalPages,
-            previewPages,
+            coverUrl,
             mimeType: file.type || 'application/octet-stream',
             size: file.size,
-            extension: getFileExtension(file.name),
+            totalPages: Math.max(1, documentTotalPages),
+            previewPages: Math.max(
+              1,
+              Math.min(documentPreviewPages, Math.max(1, documentTotalPages))
+            ),
           };
-
-          return doc;
         })
       );
 
       if (uploadGenRef.current !== myGen) return;
 
       setDocumentPreviews((prev) => [...prev, ...uploaded].slice(0, 5));
-
       finishUploadProgress();
+
+      toast({
+        title: 'Document uploaded',
+        description: `${uploaded.length} document${uploaded.length === 1 ? '' : 's'} added to your post.`,
+      });
     } catch (err: any) {
-      console.error('Document upload failed', err);
       alert(err?.message || 'Document upload failed. Please try again.');
     } finally {
       setIsUploading(false);
       e.currentTarget.value = '';
     }
-  };
-
-  const buildDocumentPayload = () => {
-    return documentPreviews.map((doc, index) => {
-      const coverUrl = doc.coverUrl || doc.pages?.[0] || '';
-
-      return {
-        id: doc.id || safeId(`doc-${index}`),
-        type: 'document',
-        title: doc.title || `Document ${index + 1}`,
-        name: doc.title || `Document ${index + 1}`,
-        url: doc.url,
-        documentUrl: doc.url,
-        document_url: doc.url,
-        fileUrl: doc.url,
-        file_url: doc.url,
-        coverUrl,
-        cover_url: coverUrl,
-        thumbnailUrl: coverUrl,
-        thumbnail_url: coverUrl,
-        pages: doc.pages?.length ? doc.pages : coverUrl ? [coverUrl] : [],
-        documentPages: doc.pages?.length ? doc.pages : coverUrl ? [coverUrl] : [],
-        document_pages: doc.pages?.length ? doc.pages : coverUrl ? [coverUrl] : [],
-        pageImages: doc.pages?.length ? doc.pages : coverUrl ? [coverUrl] : [],
-        page_images: doc.pages?.length ? doc.pages : coverUrl ? [coverUrl] : [],
-        totalPages: Math.max(1, Number(doc.totalPages) || 1),
-        total_pages: Math.max(1, Number(doc.totalPages) || 1),
-        pageCount: Math.max(1, Number(doc.totalPages) || 1),
-        page_count: Math.max(1, Number(doc.totalPages) || 1),
-        previewPages: Math.max(1, Number(doc.previewPages) || 1),
-        preview_pages: Math.max(1, Number(doc.previewPages) || 1),
-        visiblePages: Math.max(1, Number(doc.previewPages) || 1),
-        visible_pages: Math.max(1, Number(doc.previewPages) || 1),
-        mimeType: doc.mimeType || '',
-        mime_type: doc.mimeType || '',
-        size: doc.size || 0,
-        extension: doc.extension || '',
-      };
-    });
   };
 
   const handlePost = async () => {
@@ -801,55 +737,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 ? 'audio'
                 : 'text';
 
-      const safeDocuments = buildDocumentPayload();
-      const firstDoc = safeDocuments[0];
-      const links = extractLinksFromText(content);
-
-      const postExtras = {
-        image: imagePreviews[0] || '',
-        images: imagePreviews,
-
-        video: videoPreviews[0] || '',
-        videos: videoPreviews,
-        videoUrl: videoPreviews[0] || '',
-        video_url: videoPreviews[0] || '',
-
-        mediaType: primaryMediaType,
-        media_type: primaryMediaType,
-
-        documents: safeDocuments,
-        document: firstDoc || null,
-
-        attachments: safeDocuments.map((doc) => ({
-          ...doc,
-          type: 'document',
-        })),
-
-        documentUrl: firstDoc?.url || '',
-        documentTitle: firstDoc?.title || '',
-        documentPages: firstDoc?.pages || [],
-        documentTotalPages: firstDoc?.totalPages || 0,
-        documentPreviewPages: firstDoc?.previewPages || 1,
-        documentCoverUrl: firstDoc?.coverUrl || '',
-
-        document_url: firstDoc?.url || '',
-        document_title: firstDoc?.title || '',
-        document_pages: firstDoc?.pages || [],
-        document_total_pages: firstDoc?.totalPages || 0,
-        document_preview_pages: firstDoc?.previewPages || 1,
-        document_cover_url: firstDoc?.coverUrl || '',
-
-        fileUrl: firstDoc?.url || '',
-        file_url: firstDoc?.url || '',
-        coverUrl: firstDoc?.coverUrl || '',
-        cover_url: firstDoc?.coverUrl || '',
-        thumbnailUrl: firstDoc?.coverUrl || '',
-        thumbnail_url: firstDoc?.coverUrl || '',
-
-        links,
-        linkUrls: links.map((item) => item.url),
-        link_urls: links.map((item) => item.url),
-      };
+      const firstDoc = documentPreviews[0];
 
       await (addPost as any)(
         content.trim() || content,
@@ -857,7 +745,36 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
         audioPreview || undefined,
         undefined,
         postMode,
-        postExtras
+        {
+          image: imagePreviews[0] || '',
+          images: imagePreviews,
+
+          video: videoPreviews[0] || '',
+          videos: videoPreviews,
+          videoUrl: videoPreviews[0] || '',
+          videoUrls: videoPreviews,
+          video_url: videoPreviews[0] || '',
+          video_urls: videoPreviews,
+
+          mediaType: primaryMediaType,
+          media_type: primaryMediaType,
+
+          documents: documentPreviews,
+
+          documentUrl: firstDoc?.url || '',
+          documentTitle: firstDoc?.title || '',
+          documentPages: firstDoc?.pages || [],
+          documentTotalPages: firstDoc?.totalPages || 0,
+          documentPreviewPages: firstDoc?.previewPages || 1,
+          documentCoverUrl: firstDoc?.coverUrl || firstDoc?.pages?.[0] || '',
+
+          document_url: firstDoc?.url || '',
+          document_title: firstDoc?.title || '',
+          document_pages: firstDoc?.pages || [],
+          document_total_pages: firstDoc?.totalPages || 0,
+          document_preview_pages: firstDoc?.previewPages || 1,
+          document_cover_url: firstDoc?.coverUrl || firstDoc?.pages?.[0] || '',
+        }
       );
 
       setContent('');
@@ -912,11 +829,16 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
     topic.trim()
   );
 
-  const detectedLinks = extractLinksFromText(content);
+  const canPost =
+    Boolean(content.trim()) ||
+    imagePreviews.length > 0 ||
+    videoPreviews.length > 0 ||
+    documentPreviews.length > 0 ||
+    Boolean(audioPreview);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-[640px] max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-2xl border bg-card p-4 sm:p-6">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto overflow-x-hidden rounded-2xl border bg-card p-4 sm:max-w-[640px] sm:p-6">
         <SafetyWarningDialog
           open={postSafetyDialogOpen}
           onOpenChange={(v) => {
@@ -933,7 +855,9 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
         />
 
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold tracking-tight">New post</DialogTitle>
+          <DialogTitle className="text-base font-semibold tracking-tight">
+            New post
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -943,7 +867,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                className={`px-2 py-1 rounded border ${
+                className={`rounded border px-2 py-1 ${
                   postMode === 'social'
                     ? 'border-primary text-foreground'
                     : 'border-muted-foreground/30'
@@ -955,7 +879,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
               <button
                 type="button"
-                className={`px-2 py-1 rounded border ${
+                className={`rounded border px-2 py-1 ${
                   postMode === 'professional'
                     ? 'border-primary text-foreground'
                     : 'border-muted-foreground/30'
@@ -970,43 +894,22 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
           <div className="flex items-center space-x-3">
             <Avatar>
               <AvatarImage src={user?.avatar} alt={user?.name} />
-              <AvatarFallback>{user?.name?.charAt(0)}</AvatarFallback>
+              <AvatarFallback>{user?.name?.charAt(0) || 'U'}</AvatarFallback>
             </Avatar>
 
             <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">{user?.name}</p>
+              <p className="truncate text-sm font-semibold">
+                {user?.name || 'FaceMeX user'}
+              </p>
             </div>
           </div>
 
           <Textarea
-            placeholder="Share an update, idea, link, document, or story..."
+            placeholder="Share an update, idea, or story..."
             value={content}
             onChange={(e) => setContent(e.target.value)}
             className="min-h-[220px] resize-none rounded-2xl border bg-background px-4 py-3 text-base leading-relaxed focus-visible:ring-2"
           />
-
-          {detectedLinks.length > 0 && (
-            <div className="rounded-2xl border bg-muted/20 p-3">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                <LinkIcon className="h-4 w-4" />
-                Detected clickable link{detectedLinks.length === 1 ? '' : 's'}
-              </div>
-
-              <div className="space-y-2">
-                {detectedLinks.slice(0, 3).map((link) => (
-                  <a
-                    key={link.url}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block truncate rounded-xl border bg-background px-3 py-2 text-xs font-medium text-primary hover:underline"
-                  >
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
 
           <AnimatePresence>
             {hasStarted && (
@@ -1019,7 +922,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">
-                      Topic (for AI tools)
+                      Topic for AI tools
                     </span>
 
                     <Button
@@ -1056,14 +959,16 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 exit={{ opacity: 0, height: 0 }}
                 className="space-y-2"
               >
-                <div className="text-xs text-muted-foreground">Suggested hashtags</div>
+                <div className="text-xs text-muted-foreground">
+                  Suggested hashtags
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                   {aiSuggestions.map((tag) => (
                     <Badge
                       key={tag}
                       variant="secondary"
-                      className="cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                      className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
                       onClick={() => addHashtag(tag)}
                     >
                       {tag}
@@ -1078,7 +983,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             <button
               type="button"
               onClick={() => setShowAISuggestions(!showAISuggestions)}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <Hash className="h-4 w-4" />
               <span>Hashtags</span>
@@ -1096,7 +1001,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     <Badge
                       key={tag}
                       variant="outline"
-                      className="cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+                      className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
                       onClick={() => addHashtag(`#${tag}`)}
                     >
                       #{tag}
@@ -1111,12 +1016,15 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="relative rounded-2xl overflow-hidden bg-muted"
+              className="relative overflow-hidden rounded-2xl bg-muted"
             >
-              <div className="relative w-full aspect-video bg-black">
+              <div className="relative aspect-video w-full bg-black">
                 <div className="absolute inset-0 grid grid-cols-2 gap-1 p-1">
                   {imagePreviews.slice(0, 4).map((src, index) => (
-                    <div key={`${src}-${index}`} className="relative overflow-hidden rounded bg-black">
+                    <div
+                      key={`${src}-${index}`}
+                      className="relative overflow-hidden rounded bg-black"
+                    >
                       <img src={src} alt="Preview" className="h-full w-full object-cover" />
 
                       <button
@@ -1139,13 +1047,18 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     <img
                       src={imagePreviews[0]}
                       alt="Preview"
-                      className="col-span-2 row-span-2 h-full w-full object-contain rounded"
+                      className="col-span-2 row-span-2 h-full w-full rounded object-contain"
                     />
                   )}
                 </div>
               </div>
 
-              <Button variant="destructive" size="icon" className="absolute top-2 right-2" onClick={removeMedia}>
+              <Button
+                variant="destructive"
+                size="icon"
+                className="absolute right-2 top-2"
+                onClick={removeMedia}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </motion.div>
@@ -1155,7 +1068,7 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="space-y-2 rounded-2xl border bg-muted/20 p-3"
+              className="space-y-3 rounded-2xl border bg-muted/20 p-3"
             >
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground">
@@ -1167,22 +1080,25 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 </p>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {videoPreviews.map((src, index) => (
-                  <div key={`${src}-${index}`} className="relative overflow-hidden rounded-2xl bg-black">
+                  <div
+                    key={`${src}-${index}`}
+                    className="relative overflow-hidden rounded-[22px] border bg-black shadow-sm"
+                  >
                     <video
                       src={src}
                       controls
                       playsInline
                       preload="metadata"
-                      className="max-h-[320px] w-full object-cover"
+                      className="max-h-[360px] w-full bg-black object-contain"
                       controlsList="nodownload"
                       onContextMenu={(e) => e.preventDefault()}
                     />
 
                     <button
                       type="button"
-                      className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white"
+                      className="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white"
                       onClick={() => removeVideo(index)}
                     >
                       <X className="h-4 w-4" />
@@ -1217,14 +1133,11 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                       setDocumentPreviewPages((prev) => Math.max(1, Math.min(prev, value)));
 
                       setDocumentPreviews((prev) =>
-                        prev.map((doc) => {
-                          const previewPages = Math.max(1, Math.min(doc.previewPages || 1, value));
-                          return {
-                            ...doc,
-                            totalPages: value,
-                            previewPages,
-                          };
-                        })
+                        prev.map((doc) => ({
+                          ...doc,
+                          totalPages: value,
+                          previewPages: Math.max(1, Math.min(doc.previewPages || 1, value)),
+                        }))
                       );
                     }}
                     className="h-8 w-20"
@@ -1237,7 +1150,10 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                     max={documentTotalPages}
                     value={documentPreviewPages}
                     onChange={(e) => {
-                      const value = Math.max(1, Math.min(documentTotalPages, Number(e.target.value) || 1));
+                      const value = Math.max(
+                        1,
+                        Math.min(documentTotalPages, Number(e.target.value) || 1)
+                      );
 
                       setDocumentPreviewPages(value);
 
@@ -1254,50 +1170,39 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {documentPreviews.map((doc, index) => (
                   <div
                     key={doc.id}
-                    className="flex items-center gap-3 rounded-2xl border bg-background p-3 shadow-sm"
+                    className="overflow-hidden rounded-2xl border bg-background shadow-sm"
                   >
-                    <div className="h-20 w-16 shrink-0 overflow-hidden rounded-xl border bg-black">
-                      {doc.coverUrl || doc.pages?.[0] ? (
+                    {doc.coverUrl && (
+                      <div className="aspect-[16/9] w-full overflow-hidden bg-slate-950">
                         <img
-                          src={doc.coverUrl || doc.pages?.[0]}
+                          src={doc.coverUrl}
                           alt={doc.title}
                           className="h-full w-full object-cover"
                         />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <FileText className="h-6 w-6 text-white" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{doc.title}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Showing {doc.previewPages} of {doc.totalPages} page
+                            {doc.totalPages === 1 ? '' : 's'}
+                          </p>
                         </div>
-                      )}
+                      </div>
+
+                      <button type="button" onClick={() => removeDocument(index)}>
+                        <X className="h-4 w-4 text-muted-foreground" />
+                      </button>
                     </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{doc.title}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {doc.extension || 'DOC'} • {formatBytes(doc.size || 0)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Showing {doc.previewPages} of {doc.totalPages} page{doc.totalPages === 1 ? '' : 's'}
-                      </p>
-
-                      {doc.url && (
-                        <a
-                          href={doc.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-[11px] font-semibold text-primary hover:underline"
-                        >
-                          Open uploaded document
-                        </a>
-                      )}
-                    </div>
-
-                    <button type="button" onClick={() => removeDocument(index)} className="shrink-0">
-                      <X className="h-4 w-4 text-muted-foreground" />
-                    </button>
                   </div>
                 ))}
               </div>
@@ -1308,28 +1213,25 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="relative rounded-xl overflow-hidden border bg-background p-3"
+              className="relative overflow-hidden rounded-xl border bg-background p-3"
             >
               <audio controls className="w-full" src={audioPreview} />
 
-              <Button variant="destructive" size="icon" className="absolute top-2 right-2" onClick={removeMedia}>
+              <Button
+                variant="destructive"
+                size="icon"
+                className="absolute right-2 top-2"
+                onClick={removeMedia}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </motion.div>
           )}
 
-          <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden pt-4 border-t sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex w-full max-w-full min-w-0 flex-wrap items-center gap-2 overflow-hidden sm:flex-1">
-              <label htmlFor="images-upload">
-                <Button variant="ghost" size="sm" asChild className="h-9 shrink-0">
-                  <span className="cursor-pointer">
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    Add photos
-                  </span>
-                </Button>
-              </label>
-
               <input
+                ref={imageInputRef}
                 id="images-upload"
                 type="file"
                 accept="image/*"
@@ -1362,12 +1264,24 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 type="button"
                 variant="ghost"
                 size="sm"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isUploading}
+                className="h-9 shrink-0"
+              >
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Photos
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => videoInputRef.current?.click()}
                 disabled={isUploading}
                 className="h-9 shrink-0"
               >
-                <Video className="h-4 w-4 mr-2" />
-                Add video
+                <Video className="mr-2 h-4 w-4" />
+                Video
               </Button>
 
               <Button
@@ -1378,8 +1292,8 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 disabled={isUploading}
                 className="h-9 shrink-0"
               >
-                <FileText className="h-4 w-4 mr-2" />
-                Add document
+                <FileText className="mr-2 h-4 w-4" />
+                Document
               </Button>
 
               <Button
@@ -1391,9 +1305,9 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
                 className="h-9 shrink-0"
               >
                 {canUseVoiceNote ? (
-                  <Mic className={`h-4 w-4 mr-2 ${isRecordingVoice ? 'animate-pulse' : ''}`} />
+                  <Mic className={`mr-2 h-4 w-4 ${isRecordingVoice ? 'animate-pulse' : ''}`} />
                 ) : (
-                  <Lock className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
                 )}
                 {isRecordingVoice ? `Recording ${voiceSeconds}s` : 'Voice'}
               </Button>
@@ -1401,8 +1315,8 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
             <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-end gap-2 overflow-hidden sm:w-auto sm:shrink-0">
               {isUploading && (
-                <span className="text-[11px] text-muted-foreground min-w-[48px] text-right">
-                  {`${uploadProgress}%`}
+                <span className="min-w-[48px] text-right text-[11px] text-muted-foreground">
+                  {uploadProgress}%
                 </span>
               )}
 
@@ -1420,18 +1334,19 @@ export default function CreatePostModal({ open, onOpenChange }: CreatePostModalP
 
               <Button
                 onClick={handlePost}
-                disabled={
-                  (!content.trim() &&
-                    imagePreviews.length === 0 &&
-                    videoPreviews.length === 0 &&
-                    documentPreviews.length === 0 &&
-                    !audioPreview) ||
-                  isUploading ||
-                  isPosting
-                }
+                disabled={!canPost || isUploading || isPosting}
                 className="h-9 min-w-[92px] shrink-0"
               >
-                {isPosting ? 'Posting...' : isUploading ? 'Uploading...' : 'Post'}
+                {isPosting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Posting
+                  </>
+                ) : isUploading ? (
+                  'Uploading...'
+                ) : (
+                  'Post'
+                )}
               </Button>
             </div>
           </div>
