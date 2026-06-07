@@ -73,6 +73,9 @@ export default function Navbar() {
 
   const userAny = user as any;
 
+  const mobileTopIconClass =
+    'h-10 w-10 shrink-0 rounded-full text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800';
+
   const displayName = useMemo(() => {
     return (
       userAny?.full_name ||
@@ -371,11 +374,16 @@ export default function Navbar() {
   return (
     <>
       <nav className="fixed top-0 left-0 right-0 h-14 md:h-16 z-50 border-b border-slate-200/70 dark:border-slate-800/70 bg-background">
-        <div className="h-full px-3 md:px-4 lg:px-8 flex items-center justify-between gap-3 md:gap-4">
-          <div className="flex items-center gap-2">
+        <div className="h-full px-3 md:px-4 lg:px-8 flex items-center justify-between gap-2 md:gap-4">
+          <div className="flex items-center gap-1.5">
             <Drawer>
               <DrawerTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`md:hidden ${mobileTopIconClass}`}
+                  aria-label="Open menu"
+                >
                   <Menu className="h-5 w-5" />
                 </Button>
               </DrawerTrigger>
@@ -627,7 +635,7 @@ export default function Navbar() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSearch();
                 }}
-                placeholder="Search posts, #tags, users..."
+                placeholder="Search"
                 className="pl-10 pr-10 h-9 w-full rounded-full border-slate-200 bg-slate-100/60 dark:bg-slate-800/60 dark:border-slate-700 focus-visible:ring-1 focus-visible:ring-slate-400"
               />
 
@@ -721,7 +729,7 @@ export default function Navbar() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3">
             <div className="hidden md:flex items-center gap-2 text-xs">
               <Badge variant="secondary" className="capitalize px-2 py-0.5 rounded-full">
                 {currentTier}
@@ -850,11 +858,11 @@ export default function Navbar() {
 
               <Button
                 asChild
+                variant="ghost"
                 size="sm"
-                className="h-8 rounded-full px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                className="h-8 rounded-full border border-slate-200/80 bg-slate-50 px-3 text-xs font-semibold text-slate-900 shadow-sm hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 <Link to="/ai/job-assistant">
-                  <Briefcase className="mr-1.5 h-3.5 w-3.5" />
                   Job AI
                 </Link>
               </Button>
@@ -887,11 +895,11 @@ export default function Navbar() {
             <div className="flex items-center gap-2 md:hidden">
               <Button
                 asChild
+                variant="ghost"
                 size="sm"
-                className="h-9 rounded-full px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                className="text-xs font-semibold text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 <Link to="/ai/job-assistant">
-                  <Briefcase className="mr-1.5 h-3.5 w-3.5" />
                   Job AI
                 </Link>
               </Button>
