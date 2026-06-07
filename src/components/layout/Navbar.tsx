@@ -6,6 +6,7 @@ import {
   Bookmark,
   FileText,
   LayoutGrid,
+  LogOut,
   Menu,
   Megaphone,
   Search,
@@ -189,15 +190,125 @@ export default function Navbar() {
     }
   };
 
-  const handleSearch = () => {
-    const q = searchText.trim();
+  const buildSearchPath = (rawSearch: string) => {
+    const q = rawSearch.trim();
 
-    if (!q) {
-      navigate('/feed');
-      return;
+    if (!q) return '/feed';
+
+    const lower = q.toLowerCase();
+    const encoded = encodeURIComponent(q);
+
+    if (q.startsWith('#')) {
+      const tag = q.replace(/^#+/, '').trim();
+
+      if (!tag) return '/feed';
+
+      return `/feed?tag=${encodeURIComponent(tag)}&search=${encodeURIComponent(
+        tag
+      )}&scope=tags`;
     }
 
-    navigate(`/feed?search=${encodeURIComponent(q)}`);
+    if (q.startsWith('@')) {
+      const username = q.replace(/^@+/, '').trim();
+
+      if (!username) return '/connect';
+
+      return `/connect?search=${encodeURIComponent(username)}&scope=users`;
+    }
+
+    const colonIndex = q.indexOf(':');
+
+    if (colonIndex > -1) {
+      const prefix = q.slice(0, colonIndex).trim().toLowerCase();
+      const value = q.slice(colonIndex + 1).trim();
+      const finalValue = value || q;
+      const encodedValue = encodeURIComponent(finalValue);
+      const finalValueLower = finalValue.toLowerCase();
+
+      if (['user', 'users', 'person', 'people', 'member', 'members'].includes(prefix)) {
+        return `/connect?search=${encodedValue}&scope=users`;
+      }
+
+      if (['job', 'jobs', 'work', 'vacancy', 'vacancies', 'hiring'].includes(prefix)) {
+        return `/jobs?search=${encodedValue}&scope=jobs`;
+      }
+
+      if (['group', 'groups', 'community', 'communities'].includes(prefix)) {
+        return `/groups/pro?search=${encodedValue}&scope=groups`;
+      }
+
+      if (['tag', 'tags', 'hashtag', 'hashtags'].includes(prefix)) {
+        return `/feed?tag=${encodedValue}&search=${encodedValue}&scope=tags`;
+      }
+
+      if (['feature', 'features', 'tool', 'tools', 'ai'].includes(prefix)) {
+        if (
+          finalValueLower.includes('job assistant') ||
+          finalValueLower.includes('job ai') ||
+          finalValueLower.includes('career')
+        ) {
+          return '/ai/job-assistant';
+        }
+
+        if (finalValueLower.includes('cv') || finalValueLower.includes('resume')) {
+          return `/ai/resume?search=${encodedValue}`;
+        }
+
+        if (finalValueLower.includes('cover')) {
+          return `/ai/cover-letter?search=${encodedValue}`;
+        }
+
+        return `/tools?search=${encodedValue}&scope=features`;
+      }
+    }
+
+    if (
+      lower.includes('job assistant') ||
+      lower.includes('job ai') ||
+      lower.includes('career ai') ||
+      lower.includes('interview prep') ||
+      lower.includes('application message')
+    ) {
+      return '/ai/job-assistant';
+    }
+
+    if (lower.includes('cv') || lower.includes('resume')) {
+      return `/ai/resume?search=${encoded}`;
+    }
+
+    if (lower.includes('cover letter')) {
+      return `/ai/cover-letter?search=${encoded}`;
+    }
+
+    if (
+      lower.includes('job') ||
+      lower.includes('jobs') ||
+      lower.includes('vacancy') ||
+      lower.includes('hiring') ||
+      lower.includes('apply')
+    ) {
+      return `/jobs?search=${encoded}&scope=jobs`;
+    }
+
+    if (lower.includes('group') || lower.includes('community')) {
+      return `/groups/pro?search=${encoded}&scope=groups`;
+    }
+
+    if (
+      lower.includes('market') ||
+      lower.includes('marketplace') ||
+      lower.includes('shop') ||
+      lower.includes('business') ||
+      lower.includes('promotion')
+    ) {
+      return `/marketplace?search=${encoded}`;
+    }
+
+    return `/feed?search=${encoded}&scope=all`;
+  };
+
+  const handleSearch = () => {
+    navigate(buildSearchPath(searchText));
   };
 
   const handleModeChange = (nextMode: 'social' | 'professional') => {
@@ -378,6 +489,13 @@ export default function Navbar() {
 
                       <div className="space-y-1">
                         <DrawerClose asChild>
+                          <Link to="/ai/job-assistant" className="flex items-center gap-3 rounded-2xl border border-slate-900 bg-slate-900 px-3 py-3 text-white hover:bg-slate-800 dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
+                            <Briefcase className="h-4 w-4" />
+                            <span className="text-sm font-semibold">Job AI Assistant</span>
+                          </Link>
+                        </DrawerClose>
+
+                        <DrawerClose asChild>
                           <Link to="/feed" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
                             <LayoutGrid className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm font-medium">Feed</span>
@@ -402,13 +520,6 @@ export default function Navbar() {
                           <Link to="/media-shop" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
                             <Megaphone className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm font-medium">Promotions</span>
-                          </Link>
-                        </DrawerClose>
-
-                        <DrawerClose asChild>
-                          <Link to="/ai/job-assistant" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
-                            <Briefcase className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">Job Assistant</span>
                           </Link>
                         </DrawerClose>
 
@@ -469,6 +580,23 @@ export default function Navbar() {
                         </button>
                       </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground px-1">
+                        Account
+                      </div>
+
+                      <DrawerClose asChild>
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="w-full flex items-center justify-start text-left gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent"
+                        >
+                          <LogOut className="h-4 w-4 text-muted-foreground" />
+                          <span className="flex-1 text-sm font-medium">Logout</span>
+                        </button>
+                      </DrawerClose>
+                    </div>
                   </div>
                 </ScrollArea>
               </DrawerContent>
@@ -499,9 +627,19 @@ export default function Navbar() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSearch();
                 }}
-                placeholder="Search"
-                className="pl-10 h-9 w-full rounded-full border-slate-200 bg-slate-100/60 dark:bg-slate-800/60 dark:border-slate-700 focus-visible:ring-1 focus-visible:ring-slate-400"
+                placeholder="Search posts, #tags, users..."
+                className="pl-10 pr-10 h-9 w-full rounded-full border-slate-200 bg-slate-100/60 dark:bg-slate-800/60 dark:border-slate-700 focus-visible:ring-1 focus-visible:ring-slate-400"
               />
+
+              {searchText.trim() && (
+                <button
+                  type="button"
+                  onClick={handleSearch}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 px-2 rounded-full text-[11px] font-semibold bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                >
+                  Go
+                </button>
+              )}
             </div>
           </div>
 
@@ -515,7 +653,7 @@ export default function Navbar() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSearch();
                 }}
-                placeholder="Search creators, topics, tools..."
+                placeholder="Search posts, #tags, users, jobs, groups, features..."
                 className="pl-10 h-9 rounded-full border-slate-200 bg-slate-100/60 dark:bg-slate-800/60 dark:border-slate-700 focus-visible:ring-1 focus-visible:ring-slate-400"
               />
 
@@ -550,6 +688,10 @@ export default function Navbar() {
 
             <Link to="/tools" className={linkClass('/tools')}>
               Tools
+            </Link>
+
+            <Link to="/ai/job-assistant" className={linkClass('/ai/job-assistant')}>
+              Job AI
             </Link>
 
             <div className="flex items-center gap-1 ml-2">
@@ -706,6 +848,17 @@ export default function Navbar() {
                 </PopoverContent>
               </Popover>
 
+              <Button
+                asChild
+                size="sm"
+                className="h-8 rounded-full px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+              >
+                <Link to="/ai/job-assistant">
+                  <Briefcase className="mr-1.5 h-3.5 w-3.5" />
+                  Job AI
+                </Link>
+              </Button>
+
               <Link to="/profile" className="relative">
                 <Avatar className="cursor-pointer border border-slate-200/80 dark:border-slate-700/80 bg-primary/5 h-8 w-8">
                   <AvatarImage src={avatarUrl} alt={displayName} />
@@ -733,12 +886,14 @@ export default function Navbar() {
 
             <div className="flex items-center gap-2 md:hidden">
               <Button
-                variant="ghost"
+                asChild
                 size="sm"
-                onClick={handleLogout}
-                className="text-xs"
+                className="h-9 rounded-full px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
               >
-                Logout
+                <Link to="/ai/job-assistant">
+                  <Briefcase className="mr-1.5 h-3.5 w-3.5" />
+                  Job AI
+                </Link>
               </Button>
             </div>
           </div>
