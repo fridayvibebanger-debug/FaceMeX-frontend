@@ -28,7 +28,6 @@ import {
   Sparkles,
   Repeat2,
   Download,
-  ExternalLink,
 } from 'lucide-react';
 import { usePostStore, type Post } from '@/store/postStore';
 import { formatDistanceToNow } from 'date-fns';
@@ -61,7 +60,6 @@ type PostDocumentItem = {
   pages: string[];
   totalPages: number;
   previewPages: number;
-  mimeType?: string;
 };
 
 type CollaboratorProfile = {
@@ -105,39 +103,25 @@ function normalizeStringArray(value: unknown): string[] {
   return [];
 }
 
-function isImageUrl(value: unknown) {
-  const url = cleanString(value).toLowerCase();
+function parsePossibleJson(value: unknown): any {
+  if (!value) return value;
 
-  if (!url) return false;
-  if (url.startsWith('data:image/')) return true;
+  if (typeof value !== 'string') return value;
 
-  return /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(url);
+  const raw = value.trim();
+
+  if (!raw) return '';
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
 }
 
-function isPdfUrl(value: unknown) {
-  const url = cleanString(value).toLowerCase();
-  return /\.pdf(\?|#|$)/i.test(url) || url.includes('application/pdf');
-}
-
-function getDocumentKind(document: PostDocumentItem) {
-  const mime = cleanString(document.mimeType).toLowerCase();
-  const url = cleanString(document.url).toLowerCase();
-
-  if (mime.includes('pdf') || isPdfUrl(url)) return 'PDF';
-  if (mime.includes('word') || /\.(doc|docx)(\?|#|$)/i.test(url)) return 'DOC';
-  if (mime.includes('excel') || /\.(xls|xlsx|csv)(\?|#|$)/i.test(url)) return 'SHEET';
-  if (mime.includes('powerpoint') || /\.(ppt|pptx)(\?|#|$)/i.test(url)) return 'SLIDE';
-  if (isImageUrl(url)) return 'IMAGE';
-
-  return 'DOC';
-}
-
-function mobileTextStyle(extra?: CSSProperties): CSSProperties {
-  return {
-    overflowWrap: 'anywhere',
-    wordBreak: 'break-word',
-    ...extra,
-  };
+function isImageLikeUrl(url: string) {
+  const clean = String(url || '').split('?')[0].toLowerCase();
+  return /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(clean);
 }
 
 function getSafeDate(value: unknown) {
@@ -217,10 +201,55 @@ function normalizePostMedia(post: Post): PostMediaItem[] {
   return media;
 }
 
+function getDocumentPagesFromRaw(raw: any): string[] {
+  const pages = [
+    ...normalizeStringArray(raw?.pages),
+    ...normalizeStringArray(raw?.documentPages),
+    ...normalizeStringArray(raw?.document_pages),
+    ...normalizeStringArray(raw?.pageImages),
+    ...normalizeStringArray(raw?.page_images),
+    ...normalizeStringArray(raw?.previewPages),
+    ...normalizeStringArray(raw?.preview_pages),
+    ...normalizeStringArray(raw?.coverPages),
+    ...normalizeStringArray(raw?.cover_pages),
+  ];
+
+  return Array.from(new Set(pages.filter(Boolean)));
+}
+
+function getDocumentCoverFromRaw(raw: any, pages: string[], url: string) {
+  const cover = cleanString(
+    raw?.cover ||
+      raw?.coverUrl ||
+      raw?.cover_url ||
+      raw?.thumbnail ||
+      raw?.thumbnailUrl ||
+      raw?.thumbnail_url ||
+      raw?.preview ||
+      raw?.previewUrl ||
+      raw?.preview_url ||
+      raw?.image ||
+      raw?.imageUrl ||
+      raw?.image_url ||
+      raw?.firstPage ||
+      raw?.first_page ||
+      pages[0] ||
+      ''
+  );
+
+  if (cover) return cover;
+
+  if (url && isImageLikeUrl(url)) return url;
+
+  return '';
+}
+
 function normalizePostDocuments(post: Post): PostDocumentItem[] {
   const docs: PostDocumentItem[] = [];
 
-  const addDoc = (raw: any, index: number) => {
+  const addDoc = (rawInput: any, index: number) => {
+    const raw = parsePossibleJson(rawInput);
+
     if (!raw) return;
 
     if (typeof raw === 'string') {
@@ -231,25 +260,16 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         id: `${post.id}-doc-${index}`,
         title: `Document ${index + 1}`,
         url: cleanUrl,
-        coverUrl: isImageUrl(cleanUrl) ? cleanUrl : '',
+        coverUrl: isImageLikeUrl(cleanUrl) ? cleanUrl : '',
         pages: [],
         totalPages: 1,
         previewPages: 1,
-        mimeType: isPdfUrl(cleanUrl) ? 'application/pdf' : '',
       });
 
       return;
     }
 
-    const pages = normalizeStringArray(
-      raw.pages ||
-        raw.documentPages ||
-        raw.document_pages ||
-        raw.pageImages ||
-        raw.page_images ||
-        raw.previewPagesImages ||
-        raw.preview_pages_images
-    );
+    const pages = getDocumentPagesFromRaw(raw);
 
     const url = cleanString(
       raw.url ||
@@ -258,38 +278,29 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
         raw.fileUrl ||
         raw.file_url ||
         raw.mediaUrl ||
-        raw.media_url
-    );
-
-    const coverUrl = cleanString(
-      raw.coverUrl ||
-        raw.cover_url ||
-        raw.coverImage ||
-        raw.cover_image ||
-        raw.thumbnail ||
-        raw.thumbnailUrl ||
-        raw.thumbnail_url ||
-        raw.previewImage ||
-        raw.preview_image ||
-        raw.firstPage ||
-        raw.first_page ||
-        pages[0] ||
-        (isImageUrl(url) ? url : '')
+        raw.media_url ||
+        raw.src ||
+        raw.href ||
+        raw.path ||
+        raw.downloadUrl ||
+        raw.download_url
     );
 
     const title =
-      cleanString(raw.title || raw.fileName || raw.file_name || raw.name) ||
-      `Document ${index + 1}`;
+      cleanString(
+        raw.title ||
+          raw.fileName ||
+          raw.file_name ||
+          raw.name ||
+          raw.originalName ||
+          raw.original_name ||
+          raw.documentTitle ||
+          raw.document_title
+      ) || `Document ${index + 1}`;
 
-    const mimeType = cleanString(
-      raw.mimeType ||
-        raw.mime_type ||
-        raw.type ||
-        raw.contentType ||
-        raw.content_type
-    );
+    const coverUrl = getDocumentCoverFromRaw(raw, pages, url);
 
-    if (!url && pages.length === 0 && !coverUrl) return;
+    if (!url && !coverUrl && pages.length === 0) return;
 
     const rawTotalPages = Number(
       raw.totalPages ||
@@ -306,12 +317,12 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
     );
 
     const rawPreviewPages = Number(
-      raw.previewPages ||
-        raw.preview_pages ||
-        raw.unlockedPages ||
+      raw.unlockedPages ||
         raw.unlocked_pages ||
         raw.visiblePages ||
         raw.visible_pages ||
+        raw.previewPageCount ||
+        raw.preview_page_count ||
         Math.min(1, totalPages)
     );
 
@@ -328,58 +339,78 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
       pages,
       totalPages,
       previewPages,
-      mimeType,
     });
   };
 
-  const rawDocuments = (post as any).documents;
+  const possibleDocumentSources = [
+    (post as any).documents,
+    (post as any).document,
+    (post as any).files,
+    (post as any).file,
+    (post as any).attachments,
+    (post as any).attachment,
+    (post as any).uploadedDocuments,
+    (post as any).uploaded_documents,
+    (post as any).postDocuments,
+    (post as any).post_documents,
+  ];
 
-  if (Array.isArray(rawDocuments)) {
-    rawDocuments.forEach((doc, index) => addDoc(doc, index));
-  } else if (typeof rawDocuments === 'string' && rawDocuments.trim()) {
-    try {
-      const parsed = JSON.parse(rawDocuments);
+  possibleDocumentSources.forEach((source) => {
+    const parsed = parsePossibleJson(source);
 
-      if (Array.isArray(parsed)) {
-        parsed.forEach((doc, index) => addDoc(doc, index));
-      } else {
-        addDoc(parsed, 0);
-      }
-    } catch {
-      addDoc(rawDocuments, 0);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((doc, index) => addDoc(doc, docs.length + index));
+      return;
     }
-  }
+
+    if (parsed && typeof parsed === 'object') {
+      addDoc(parsed, docs.length);
+      return;
+    }
+
+    if (typeof parsed === 'string' && parsed.trim()) {
+      addDoc(parsed, docs.length);
+    }
+  });
 
   if (docs.length === 0) {
-    const directDocumentUrl =
-      (post as any).documentUrl ||
-      (post as any).document_url ||
-      (post as any).document ||
-      (post as any).fileUrl ||
-      (post as any).file_url;
+    const directPages = [
+      ...normalizeStringArray((post as any).documentPages),
+      ...normalizeStringArray((post as any).document_pages),
+      ...normalizeStringArray((post as any).pageImages),
+      ...normalizeStringArray((post as any).page_images),
+      ...normalizeStringArray((post as any).previewPages),
+      ...normalizeStringArray((post as any).preview_pages),
+    ];
 
-    const directPages = normalizeStringArray(
-      (post as any).documentPages ||
-        (post as any).document_pages ||
-        (post as any).pageImages ||
-        (post as any).page_images
+    const directDocumentUrl = cleanString(
+      (post as any).documentUrl ||
+        (post as any).document_url ||
+        (post as any).document ||
+        (post as any).fileUrl ||
+        (post as any).file_url ||
+        (post as any).attachmentUrl ||
+        (post as any).attachment_url
     );
 
     const directCoverUrl = cleanString(
-      (post as any).documentCoverUrl ||
+      (post as any).documentCover ||
+        (post as any).document_cover ||
+        (post as any).documentCoverUrl ||
         (post as any).document_cover_url ||
         (post as any).coverUrl ||
         (post as any).cover_url ||
-        (post as any).coverImage ||
-        (post as any).cover_image ||
+        (post as any).thumbnailUrl ||
+        (post as any).thumbnail_url ||
         directPages[0] ||
-        (isImageUrl(directDocumentUrl) ? directDocumentUrl : '')
+        ''
     );
 
-    if (directDocumentUrl || directPages.length || directCoverUrl) {
+    if (directDocumentUrl || directCoverUrl || directPages.length) {
       addDoc(
         {
           url: directDocumentUrl,
+          coverUrl: directCoverUrl,
           title:
             (post as any).documentTitle ||
             (post as any).document_title ||
@@ -387,12 +418,6 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
             (post as any).file_name ||
             'Document',
           pages: directPages,
-          coverUrl: directCoverUrl,
-          mimeType:
-            (post as any).documentMimeType ||
-            (post as any).document_mime_type ||
-            (post as any).mimeType ||
-            (post as any).mime_type,
           totalPages:
             (post as any).documentTotalPages ||
             (post as any).document_total_pages ||
@@ -401,8 +426,6 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
           previewPages:
             (post as any).documentPreviewPages ||
             (post as any).document_preview_pages ||
-            (post as any).previewPages ||
-            (post as any).preview_pages ||
             Math.min(1, directPages.length || 1),
         },
         docs.length
@@ -414,23 +437,22 @@ function normalizePostDocuments(post: Post): PostDocumentItem[] {
 
   docs.forEach((doc, index) => {
     const url = cleanString(doc.url);
+    const coverUrl = cleanString(doc.coverUrl);
     const title = cleanString(doc.title) || `Document ${index + 1}`;
-    const key = url || doc.coverUrl || title.toLowerCase();
+    const key = url || coverUrl || title.toLowerCase();
 
     if (!unique.has(key)) {
-      const totalPages = Math.max(1, Number(doc.totalPages) || 1);
-
       unique.set(key, {
         ...doc,
         id: doc.id || `${post.id}-doc-${index}`,
         title,
         url,
-        coverUrl: cleanString(doc.coverUrl),
+        coverUrl,
         pages: Array.isArray(doc.pages) ? doc.pages.filter(Boolean) : [],
-        totalPages,
+        totalPages: Math.max(1, Number(doc.totalPages) || 1),
         previewPages: Math.max(
           1,
-          Math.min(Number(doc.previewPages) || 1, totalPages)
+          Math.min(Number(doc.previewPages) || 1, Number(doc.totalPages) || 1)
         ),
       });
     }
@@ -602,8 +624,8 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
   if (!profiles.length) return null;
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-      <div className="flex shrink-0 -space-x-1.5">
+    <div className="flex items-center gap-1.5">
+      <div className="flex -space-x-1.5">
         {profiles.slice(0, 4).map((profile) => (
           <div
             key={profile.id}
@@ -627,9 +649,9 @@ function CollaboratorCluster({ profiles }: { profiles: CollaboratorProfile[] }) 
         ))}
       </div>
 
-      <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-        <UsersRound className="h-3 w-3 shrink-0" />
-        <span className="truncate">Collab</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+        <UsersRound className="h-3 w-3" />
+        Collab
       </span>
     </div>
   );
@@ -642,90 +664,77 @@ function DocumentPreview({
   document: PostDocumentItem;
   onOpenPages: (pages: string[], startIndex: number) => void;
 }) {
-  const cover = document.coverUrl || document.pages[0] || '';
-  const kind = getDocumentKind(document);
-  const hasPages = document.pages.filter(Boolean).length > 0;
+  const coverImage = document.coverUrl || document.pages[0] || '';
+  const imagePages = document.pages.filter(Boolean);
+  const canOpenGallery = imagePages.length > 0;
+  const canOpenUrl = Boolean(document.url);
 
-  const openDocument = () => {
-    if (hasPages) {
-      onOpenPages(document.pages, 0);
+  const handleOpen = () => {
+    if (canOpenGallery) {
+      onOpenPages(imagePages, 0);
       return;
     }
 
-    if (document.url) {
+    if (canOpenUrl) {
       window.open(document.url, '_blank', 'noopener,noreferrer');
     }
   };
 
   return (
-    <div className="w-full max-w-full min-w-0 overflow-hidden rounded-[24px] border border-border/70 bg-background shadow-[0_8px_28px_rgba(15,23,42,0.06)]">
-      <button
-        type="button"
-        onClick={openDocument}
-        className="group block w-full max-w-full min-w-0 overflow-hidden text-left"
-      >
-        <div className="relative w-full max-w-full overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
-          <div className="absolute left-3 top-3 z-10 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-[11px] font-bold text-slate-950 shadow-sm">
-            <FileText className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{kind}</span>
+    <div className="w-full max-w-full min-w-0 overflow-hidden rounded-[22px] border border-border/70 bg-background shadow-sm">
+      {coverImage ? (
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="relative block aspect-[4/5] w-full max-w-full overflow-hidden bg-black sm:aspect-[16/10]"
+        >
+          <img
+            src={coverImage}
+            alt={`${document.title} cover`}
+            className="block h-full w-full max-w-full object-contain"
+            loading="lazy"
+            decoding="async"
+          />
+
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent p-3 text-left">
+            <div className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-950 shadow-sm">
+              <FileText className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{document.title}</span>
+            </div>
           </div>
 
-          {cover ? (
-            <div className="aspect-[4/5] w-full max-w-full overflow-hidden bg-slate-950 sm:aspect-[16/10]">
-              <img
-                src={cover}
-                alt={`${document.title} cover`}
-                className="block h-full w-full max-w-full object-contain"
-                loading="lazy"
-                decoding="async"
-                draggable={false}
-              />
-            </div>
-          ) : (
-            <div className="flex aspect-[4/5] w-full max-w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_35%),linear-gradient(135deg,#020617,#111827,#334155)] px-5 text-center sm:aspect-[16/10]">
-              <div className="flex h-20 w-20 items-center justify-center rounded-[28px] border border-white/15 bg-white/10 shadow-2xl backdrop-blur">
-                <FileText className="h-10 w-10 text-white" />
-              </div>
-
-              <p
-                className="mt-4 line-clamp-2 max-w-[85%] text-base font-bold leading-snug text-white"
-                style={mobileTextStyle()}
-              >
-                {document.title}
-              </p>
-
-              <p className="mt-2 text-xs font-medium text-white/60">
-                Tap to open document
-              </p>
-            </div>
+          {(imagePages.length > 1 || document.totalPages > 1) && (
+            <span className="absolute right-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-white">
+              {document.totalPages} pages
+            </span>
           )}
-
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-3 pb-3 pt-10">
-            <div className="flex min-w-0 items-end justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p
-                  className="line-clamp-2 text-sm font-bold leading-snug text-white"
-                  style={mobileTextStyle()}
-                >
-                  {document.title}
-                </p>
-
-                <p className="mt-1 text-[11px] font-medium text-white/65">
-                  {document.totalPages > 1
-                    ? `${document.totalPages} pages`
-                    : hasPages
-                      ? 'Preview available'
-                      : 'Document uploaded'}
-                </p>
-              </div>
-
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/95 text-slate-950 shadow-sm transition group-hover:scale-105">
-                <ExternalLink className="h-4 w-4" />
-              </span>
-            </div>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="flex h-[190px] w-full max-w-full flex-col items-center justify-center gap-3 bg-gradient-to-br from-slate-50 via-white to-slate-100 px-4 text-center dark:from-white/[0.08] dark:via-white/[0.04] dark:to-white/[0.08]"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-black">
+            <FileText className="h-7 w-7" />
           </div>
-        </div>
-      </button>
+
+          <div className="max-w-full">
+            <p className="truncate text-sm font-bold text-foreground">
+              {document.title}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Document uploaded
+            </p>
+          </div>
+
+          {canOpenUrl && (
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
+              Tap to open
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -1483,13 +1492,13 @@ export default function PostCard({ post }: PostCardProps) {
   const actionButton =
     'group flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground active:scale-[0.98]';
 
-  const actionIcon = 'h-[18px] w-[18px] shrink-0';
+  const actionIcon = 'h-[18px] w-[18px]';
 
   const actionCount =
-    'min-w-0 text-[11px] font-semibold tabular-nums text-muted-foreground';
+    'text-[11px] font-semibold tabular-nums text-muted-foreground';
 
   const viewerActionButton =
-    'flex min-w-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition-colors hover:text-white active:scale-95';
+    'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-white/85 transition-colors hover:text-white active:scale-95';
 
   return (
     <div
@@ -1500,35 +1509,32 @@ export default function PostCard({ post }: PostCardProps) {
       }}
     >
       <Card className="mb-3 w-full max-w-full min-w-0 overflow-hidden rounded-[24px] border bg-card shadow-[0_4px_14px_rgba(15,23,42,0.05)]">
-        <CardHeader className="flex min-w-0 flex-row items-start justify-between space-y-0 px-3 pb-2 pt-3">
+        <CardHeader className="flex min-w-0 flex-row items-start justify-between space-y-0 overflow-visible px-3 pb-2 pt-3">
           <button
             type="button"
-            className="flex min-w-0 max-w-[calc(100%-2.5rem)] items-center space-x-2 overflow-hidden text-left"
+            className="flex min-w-0 items-center space-x-2 overflow-visible text-left"
             onClick={openAuthorProfile}
           >
-            <div className="relative shrink-0">
-              <Avatar className="h-10 w-10">
+            <div className="relative h-12 w-12 shrink-0 overflow-visible">
+              <Avatar className="absolute left-0 top-0 h-10 w-10">
                 <AvatarImage src={displayAvatar} alt={displayName} />
                 <AvatarFallback>{getInitial(displayName)}</AvatarFallback>
               </Avatar>
 
               {isAuthorVerified && (
-                <span className="absolute -bottom-1 -right-1 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-slate-950 ring-2 ring-background">
-                  <CheckCircle className="h-3.5 w-3.5 text-white" />
+                <span className="absolute bottom-1 right-1 z-20 inline-flex h-[19px] w-[19px] items-center justify-center rounded-full bg-slate-950 ring-2 ring-background dark:bg-white">
+                  <CheckCircle className="h-3.5 w-3.5 text-white dark:text-black" />
                 </span>
               )}
             </div>
 
-            <div className="min-w-0 flex-1 overflow-hidden">
-              <p
-                className="truncate text-sm font-semibold hover:underline md:text-[15px]"
-                style={mobileTextStyle()}
-              >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold hover:underline md:text-[15px]">
                 {displayName}
               </p>
 
-              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden">
-                <p className="shrink-0 text-[11px] text-muted-foreground">
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                <p className="text-[11px] text-muted-foreground">
                   {formatDistanceToNow(getPostDate(post), { addSuffix: true })}
                 </p>
 
@@ -1675,12 +1681,11 @@ export default function PostCard({ post }: PostCardProps) {
           </DropdownMenu>
         </CardHeader>
 
-        <CardContent className="min-w-0 max-w-full space-y-3 overflow-hidden px-3 pb-3">
+        <CardContent className="min-w-0 space-y-3 px-3 pb-3">
           {editingPost ? (
-            <div className="w-full max-w-full min-w-0 space-y-2 overflow-hidden">
+            <div className="space-y-2">
               <textarea
-                className="min-h-[92px] w-full max-w-full min-w-0 resize-y rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm outline-none"
-                style={mobileTextStyle()}
+                className="min-h-[92px] w-full rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-sm outline-none"
                 value={postDraft}
                 onChange={(e) => setPostDraft(e.target.value)}
               />
@@ -1697,12 +1702,10 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
           ) : (
             cleanPostContent && (
-              <div className="w-full max-w-full min-w-0 overflow-hidden space-y-1">
+              <div className="min-w-0 space-y-1">
                 <p
-                  className="w-full max-w-full min-w-0 whitespace-pre-wrap text-[15px] leading-6 text-foreground"
-                  style={mobileTextStyle(
-                    !expandedPost && shouldCollapsePost ? clampStyle(collapseLines) : undefined
-                  )}
+                  className="min-w-0 whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground"
+                  style={!expandedPost && shouldCollapsePost ? clampStyle(collapseLines) : undefined}
                 >
                   {cleanPostContent}
                 </p>
@@ -1725,8 +1728,7 @@ export default function PostCard({ post }: PostCardProps) {
               {post.hashtags.map((tag, index) => (
                 <span
                   key={index}
-                  className="max-w-full cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                  style={mobileTextStyle()}
+                  className="cursor-pointer rounded-full bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                   onClick={() => navigate(`/hashtag/${tag.replace('#', '')}`)}
                 >
                   {tag.startsWith('#') ? tag : `#${tag}`}
@@ -1908,7 +1910,7 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           <div className="space-y-2 pt-0.5">
-            <div className="flex min-w-0 items-center justify-between gap-1 overflow-hidden border-y border-border/40 py-1">
+            <div className="flex min-w-0 items-center justify-between gap-1 border-y border-border/40 py-1">
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -2007,8 +2009,8 @@ export default function PostCard({ post }: PostCardProps) {
             </Button>
 
             {commentComposerOpen && (
-              <div className="w-full max-w-full min-w-0 overflow-hidden">
-                <div className="flex min-w-0 items-center gap-2 pt-1">
+              <div className="overflow-hidden">
+                <div className="flex items-center gap-2 pt-1">
                   <Input
                     ref={replyInputRef}
                     placeholder="Reply..."
@@ -2019,7 +2021,7 @@ export default function PostCard({ post }: PostCardProps) {
                         handleComment();
                       }
                     }}
-                    className="h-10 min-w-0 flex-1 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="h-10 rounded-2xl border-border/60 bg-muted/20 px-4 text-[14px] shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
 
                   <Button
@@ -2039,12 +2041,12 @@ export default function PostCard({ post }: PostCardProps) {
           {isRecording && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 shadow-sm dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500 text-white">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white">
                     <AudioLines className="h-4 w-4" />
                   </span>
 
-                  <div className="min-w-0">
+                  <div>
                     <p className="text-sm font-semibold">Recording voice reply</p>
                     <p className="text-xs opacity-80">Tap stop when you are done.</p>
                   </div>
@@ -2054,7 +2056,7 @@ export default function PostCard({ post }: PostCardProps) {
                   type="button"
                   size="sm"
                   onClick={toggleVoiceRecording}
-                  className="shrink-0 rounded-full bg-red-500 text-white hover:bg-red-600"
+                  className="rounded-full bg-red-500 text-white hover:bg-red-600"
                 >
                   Stop {recordSeconds}s
                 </Button>
@@ -2063,7 +2065,7 @@ export default function PostCard({ post }: PostCardProps) {
           )}
 
           {showComments && commentCount > 0 && (
-            <div className="w-full max-w-full min-w-0 space-y-3 overflow-hidden border-t border-border/60 pt-3">
+            <div className="w-full space-y-3 border-t border-border/60 pt-3">
               {(post.comments || []).map((comment: any) => {
                 const isVoice = comment.type === 'voice' || !!comment.voiceUrl;
                 const commentUserId = cleanString(comment.userId);
@@ -2075,30 +2077,27 @@ export default function PostCard({ post }: PostCardProps) {
                 const commentAvatar = comment.userAvatar || comment.avatar || '';
 
                 return (
-                  <div key={comment.id} className="flex w-full max-w-full min-w-0 gap-2 overflow-hidden">
-                    <Avatar className="h-7 w-7 shrink-0">
+                  <div key={comment.id} className="flex gap-2">
+                    <Avatar className="h-7 w-7">
                       <AvatarImage src={commentAvatar} alt={commentName} />
                       <AvatarFallback>{getInitial(commentName)}</AvatarFallback>
                     </Avatar>
 
-                    <div className="min-w-0 flex-1 overflow-hidden rounded-2xl bg-muted/35 px-3 py-2">
-                      <div className="flex min-w-0 flex-wrap items-baseline gap-2 overflow-hidden">
-                        <p
-                          className="min-w-0 max-w-full truncate text-sm font-medium text-foreground"
-                          style={mobileTextStyle()}
-                        >
+                    <div className="min-w-0 flex-1 rounded-2xl bg-muted/35 px-3 py-2">
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-sm font-medium text-foreground">
                           {commentName}
                         </p>
 
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                        <span className="text-[10px] text-muted-foreground">
                           {formatDistanceToNow(getCommentDate(comment), { addSuffix: true })}
                         </span>
                       </div>
 
-                      <div className="mt-1 min-w-0 max-w-full overflow-hidden text-sm leading-relaxed text-foreground">
+                      <div className="mt-1 text-sm leading-relaxed text-foreground">
                         {isVoice && comment.voiceUrl ? (
-                          <div className="mt-2 flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border bg-background px-3 py-2 shadow-sm">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
+                          <div className="mt-2 flex items-center gap-2 rounded-2xl border bg-background px-3 py-2 shadow-sm">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-sm">
                               <AudioLines className="h-4 w-4" />
                             </div>
 
@@ -2111,7 +2110,7 @@ export default function PostCard({ post }: PostCardProps) {
                                 controls
                                 controlsList="nodownload noplaybackrate"
                                 preload="metadata"
-                                className="h-8 w-full max-w-full"
+                                className="h-8 w-full"
                                 onContextMenu={(e) => e.preventDefault()}
                               >
                                 <source src={comment.voiceUrl} type="audio/webm" />
@@ -2119,12 +2118,7 @@ export default function PostCard({ post }: PostCardProps) {
                             </div>
                           </div>
                         ) : (
-                          <p
-                            className="w-full max-w-full whitespace-pre-wrap"
-                            style={mobileTextStyle()}
-                          >
-                            {commentTextSafe}
-                          </p>
+                          <p className="break-words">{commentTextSafe}</p>
                         )}
                       </div>
 
