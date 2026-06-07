@@ -237,7 +237,7 @@ export default function NewsFeed() {
   const visibleCountRef = useRef(5);
 
   const [hiddenNewPostIds, setHiddenNewPostIds] = useState<Set<string>>(
-    () => new Set()
+    () => new Set<string>()
   );
 
   const activeSkill = mode === 'professional' ? skillQuery.trim() : '';
@@ -446,7 +446,7 @@ export default function NewsFeed() {
 
     switch (filter) {
       case 'ai-curated':
-        filtered.sort((a, b) => {
+        filtered.sort((a: any, b: any) => {
           const bScore = b.aiScore || safePostTime(b);
           const aScore = a.aiScore || safePostTime(a);
           return bScore - aScore;
@@ -459,7 +459,7 @@ export default function NewsFeed() {
 
       case 'trending':
         filtered.sort(
-          (a, b) => b.likes + b.shares * 2 - (a.likes + a.shares * 2)
+          (a: any, b: any) => b.likes + b.shares * 2 - (a.likes + a.shares * 2)
         );
         break;
 
@@ -514,7 +514,7 @@ export default function NewsFeed() {
         latestKnownPostIdRef.current = data[0].id;
       }
 
-      setHiddenNewPostIds(new Set());
+      setHiddenNewPostIds(new Set<string>());
       setNewPostsAvailable(false);
     } catch (error) {
       console.log('Load new posts failed:', error);
@@ -921,8 +921,8 @@ export default function NewsFeed() {
       )}
 
       <CreatePostModal
-        open={CreatePostOpen}
-        onOpenChange={setIsCreatePostOpen}
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
       />
     </div>
   );
