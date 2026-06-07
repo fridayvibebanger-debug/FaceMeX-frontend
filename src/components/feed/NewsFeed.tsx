@@ -921,7 +921,7 @@ export default function NewsFeed() {
       )}
 
       <CreatePostModal
-        open={isCreateModalOpen}
+        open={CreateModalOpen}
         onOpenChange={setIsCreateModalOpen}
       />
     </div>
