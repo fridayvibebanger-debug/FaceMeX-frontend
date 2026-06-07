@@ -23,7 +23,6 @@ import {
   X,
 } from 'lucide-react';
 
-import Navbar from '@/components/layout/Navbar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +80,24 @@ const savedCategoryLabels: Record<SavedCategory, string> = {
 
 const MAX_WORKSPACE_IMAGES = 4;
 const MAX_IMAGE_SIZE_MB = 12;
+
+const FACE_MEX_ANSWER_STYLE = `
+Respond like ChatGPT in a clean, premium, professional style.
+Use short clear sections.
+Use bold headings.
+Use numbered lists for options, steps, or job listings.
+Use bullet points only when helpful.
+Give direct answers first.
+Avoid messy long paragraphs.
+When giving jobs or opportunities, show:
+1. Role/title
+2. Location/company
+3. Why it fits
+4. Action to take
+5. Link/source if available
+When helping with applications, include copy-ready messages.
+End with a simple next step.
+`;
 
 const quickPrompts = [
   {
@@ -380,18 +397,73 @@ function normalizeAnswerText(raw: any, fallback: string) {
   return clean(answer) || fallback;
 }
 
-function splitMarkdownLink(text: string) {
-  const match = text.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/i);
+function renderInlineText(
+  text: string,
+  onLinkClick?: (url: string, label?: string) => void
+) {
+  const nodes: ReactNode[] = [];
+  const regex =
+    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+)/gi;
 
-  if (!match) return null;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
 
-  return {
-    label: match[1],
-    url: match[2],
-  };
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[2]) {
+      nodes.push(
+        <strong key={`bold-${key++}`} className="font-semibold text-slate-950 dark:text-white">
+          {match[2]}
+        </strong>
+      );
+    } else if (match[3] && match[4]) {
+      const label = match[3];
+      const url = match[4];
+
+      nodes.push(
+        <a
+          key={`md-link-${key++}`}
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => onLinkClick?.(url, label)}
+          className="font-semibold text-slate-950 underline underline-offset-4 dark:text-white"
+        >
+          {label}
+        </a>
+      );
+    } else if (match[5]) {
+      const url = match[5];
+
+      nodes.push(
+        <a
+          key={`url-${key++}`}
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => onLinkClick?.(url, url)}
+          className="break-all font-semibold text-slate-950 underline underline-offset-4 dark:text-white"
+        >
+          {url}
+        </a>
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes.length ? nodes : text;
 }
 
-function TextWithLinks({
+function ChatGPTStyleText({
   text,
   onLinkClick,
 }: {
@@ -401,96 +473,56 @@ function TextWithLinks({
   const lines = String(text || '').split('\n');
 
   return (
-    <div className="whitespace-pre-wrap break-words">
-      {lines.map((line, lineIndex) => {
-        const parts: ReactNode[] = [];
-        let remaining = line;
-        let key = 0;
+    <div className="space-y-3 text-[15px] leading-7 text-slate-800 dark:text-white/85">
+      {lines.map((rawLine, index) => {
+        const line = rawLine.trim();
 
-        const markdownRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi;
-        let lastIndex = 0;
-        let match: RegExpExecArray | null;
-
-        while ((match = markdownRegex.exec(line)) !== null) {
-          if (match.index > lastIndex) {
-            parts.push(line.slice(lastIndex, match.index));
-          }
-
-          const label = match[1];
-          const url = match[2];
-
-          parts.push(
-            <a
-              key={`md-${lineIndex}-${key++}`}
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => onLinkClick?.(url, label)}
-              className="font-semibold text-slate-950 underline underline-offset-4 dark:text-white"
-            >
-              {label}
-            </a>
-          );
-
-          lastIndex = match.index + match[0].length;
+        if (!line) {
+          return <div key={`space-${index}`} className="h-1" />;
         }
 
-        if (lastIndex < line.length) {
-          remaining = line.slice(lastIndex);
-
-          const urlRegex = /(https?:\/\/[^\s]+)/gi;
-          let urlLastIndex = 0;
-          let urlMatch: RegExpExecArray | null;
-
-          while ((urlMatch = urlRegex.exec(remaining)) !== null) {
-            if (urlMatch.index > urlLastIndex) {
-              parts.push(remaining.slice(urlLastIndex, urlMatch.index));
-            }
-
-            const url = urlMatch[1];
-
-            parts.push(
-              <a
-                key={`url-${lineIndex}-${key++}`}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => onLinkClick?.(url, url)}
-                className="break-all font-semibold text-slate-950 underline underline-offset-4 dark:text-white"
-              >
-                {url}
-              </a>
-            );
-
-            urlLastIndex = urlMatch.index + url.length;
-          }
-
-          if (urlLastIndex < remaining.length) {
-            parts.push(remaining.slice(urlLastIndex));
-          }
-        }
-
-        const onlyMd = splitMarkdownLink(line.trim());
-
-        if (onlyMd) {
+        const heading = line.match(/^#{1,4}\s+(.+)$/);
+        if (heading) {
           return (
-            <p key={lineIndex} className="mb-2 last:mb-0">
-              <a
-                href={onlyMd.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => onLinkClick?.(onlyMd.url, onlyMd.label)}
-                className="font-semibold text-slate-950 underline underline-offset-4 dark:text-white"
-              >
-                {onlyMd.label}
-              </a>
-            </p>
+            <h3
+              key={`heading-${index}`}
+              className="pt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-white"
+            >
+              {renderInlineText(heading[1], onLinkClick)}
+            </h3>
+          );
+        }
+
+        const numbered = line.match(/^(\d+)\.\s+(.+)$/);
+        if (numbered) {
+          return (
+            <div key={`number-${index}`} className="flex gap-3">
+              <span className="mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/70">
+                {numbered[1]}
+              </span>
+
+              <div className="min-w-0 flex-1">
+                {renderInlineText(numbered[2], onLinkClick)}
+              </div>
+            </div>
+          );
+        }
+
+        const bullet = line.match(/^[-•*]\s+(.+)$/);
+        if (bullet) {
+          return (
+            <div key={`bullet-${index}`} className="flex gap-3">
+              <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 dark:bg-white/50" />
+              <div className="min-w-0 flex-1">
+                {renderInlineText(bullet[1], onLinkClick)}
+              </div>
+            </div>
           );
         }
 
         return (
-          <p key={lineIndex} className={line.trim() ? 'mb-2 last:mb-0' : 'h-3'}>
-            {parts.length ? parts : line}
+          <p key={`p-${index}`} className="text-slate-800 dark:text-white/85">
+            {renderInlineText(line, onLinkClick)}
           </p>
         );
       })}
@@ -728,6 +760,9 @@ export default function AIJobAssistantPage() {
         creatorPlus,
         intent,
         source: 'facemex-career-workspace',
+        responseStyle: 'chatgpt-premium',
+        answerStyle: FACE_MEX_ANSWER_STYLE,
+        systemInstruction: FACE_MEX_ANSWER_STYLE,
         imageCount: attachedImages.length,
         imageDataUrls: attachedImages.map((image) => image.dataUrl),
         images: attachedImages.map((image) => ({
@@ -846,6 +881,22 @@ export default function AIJobAssistantPage() {
     toast({ title: `${savedCategoryLabels[category]} saved`, description: 'Saved in Workspace.' });
   };
 
+  const removeFromSaved = (id: string) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === id
+          ? {
+              ...message,
+              saved: false,
+              savedCategory: undefined,
+            }
+          : message
+      )
+    );
+
+    toast({ title: 'Removed', description: 'Item removed from Saved.' });
+  };
+
   const togglePin = (id: string) => {
     setMessages((prev) =>
       prev.map((message) =>
@@ -856,6 +907,11 @@ export default function AIJobAssistantPage() {
 
   const deleteMessage = (id: string) => {
     setMessages((prev) => prev.filter((message) => message.id !== id));
+
+    toast({
+      title: 'Deleted',
+      description: 'Response deleted. If it was saved, it was also removed from Saved.',
+    });
   };
 
   const startEdit = (message: ChatMessage) => {
@@ -954,67 +1010,65 @@ export default function AIJobAssistantPage() {
   );
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white">
-      <Navbar />
+    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen max-w-full flex-col overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white/95 px-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:h-16 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/feed')}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
+            aria-label="Back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
 
-      <main className="mx-auto flex min-h-[calc(100dvh-56px)] w-full max-w-4xl flex-col px-2 pb-[calc(env(safe-area-inset-bottom)+7rem)] pt-16 sm:px-4 md:pt-20">
-        <section className="flex min-h-[calc(100dvh-150px)] flex-1 flex-col overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.045] sm:rounded-[30px] md:min-h-[calc(100dvh-120px)]">
-          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 px-3 dark:border-white/10 sm:h-16 sm:px-5">
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => navigate('/feed')}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
-                aria-label="Back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-sm font-semibold sm:text-base">
+                FaceMeX Job AI
+              </h1>
 
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="truncate text-sm font-semibold sm:text-base">
-                    FaceMeX Job AI
-                  </h1>
-
-                  <Badge className="hidden rounded-full border border-black/5 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 shadow-none hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/50 sm:inline-flex">
-                    {creatorPlus && <Crown className="mr-1 h-3 w-3" />}
-                    {usageLabel}
-                  </Badge>
-                </div>
-
-                <p className="truncate text-[11px] text-slate-500 dark:text-white/45">
-                  Jobs, CVs, interviews, screenshots
-                </p>
-              </div>
+              <Badge className="hidden rounded-full border border-black/5 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 shadow-none hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/50 sm:inline-flex">
+                {creatorPlus && <Crown className="mr-1 h-3 w-3" />}
+                {usageLabel}
+              </Badge>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setSourcesOpen(true)}
-                className="h-9 w-9 rounded-full"
-                aria-label="Sources"
-              >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
+            <p className="truncate text-[11px] text-slate-500 dark:text-white/45">
+              Jobs, CVs, interviews, screenshots
+            </p>
+          </div>
+        </div>
 
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setSavedOpen(true)}
-                className="h-9 w-9 rounded-full"
-                aria-label="Saved"
-              >
-                <Save className="h-4 w-4" />
-              </Button>
-            </div>
-          </header>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setSourcesOpen(true)}
+            className="h-9 w-9 rounded-full"
+            aria-label="Sources"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Button>
 
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setSavedOpen(true)}
+            className="h-9 w-9 rounded-full"
+            aria-label="Saved"
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
+
+      <main className="min-h-0 flex-1 overflow-hidden px-2 py-2 sm:px-4 sm:py-4">
+        <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.045] sm:rounded-[30px]">
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
               {messages.length === 0 && !busy && (
-                <div className="mx-auto flex min-h-[40vh] max-w-xl flex-col items-center justify-center text-center sm:min-h-[46vh]">
+                <div className="mx-auto flex min-h-[48vh] max-w-xl flex-col items-center justify-center text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-black">
                     <Sparkles className="h-5 w-5" />
                   </div>
@@ -1082,14 +1136,26 @@ export default function AIJobAssistantPage() {
                         </div>
                       </div>
                     ) : (
-                      <>
+                      <div
+                        className={
+                          message.role === 'assistant'
+                            ? 'max-h-[52vh] overflow-y-auto pr-1'
+                            : ''
+                        }
+                      >
                         {renderMessageImages(message.images)}
 
-                        <TextWithLinks
-                          text={message.content}
-                          onLinkClick={handleGeneratedLinkClick}
-                        />
-                      </>
+                        {message.role === 'assistant' ? (
+                          <ChatGPTStyleText
+                            text={message.content}
+                            onLinkClick={handleGeneratedLinkClick}
+                          />
+                        ) : (
+                          <div className="whitespace-pre-wrap break-words">
+                            {message.content}
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {editingMessageId !== message.id && messageActions(message)}
@@ -1114,7 +1180,7 @@ export default function AIJobAssistantPage() {
             </div>
           </div>
 
-          <footer className="shrink-0 border-t border-black/5 bg-white/95 p-2 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:p-4">
+          <footer className="shrink-0 border-t border-black/5 bg-white/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:p-4">
             <div className="mx-auto w-full max-w-3xl">
               {selectedImages.length > 0 && (
                 <div className="mb-2 grid grid-cols-4 gap-2">
@@ -1255,18 +1321,20 @@ export default function AIJobAssistantPage() {
                 ) : (
                   <div className="space-y-3">
                     {visibleSavedMessages.map((item) => (
-                      <button
+                      <div
                         key={item.id}
-                        type="button"
-                        onClick={() => setSavedOpen(false)}
-                        className="block w-full rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
                       >
                         <div className="flex items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
                             <FileText className="h-4 w-4 text-slate-500" />
                           </div>
 
-                          <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => setSavedOpen(false)}
+                            className="min-w-0 flex-1 text-left"
+                          >
                             <div className="line-clamp-1 text-sm font-semibold">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item'}
                             </div>
@@ -1274,11 +1342,20 @@ export default function AIJobAssistantPage() {
                             <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50">
                               {item.content}
                             </div>
-                          </div>
+                          </button>
 
-                          <MoreVertical className="h-4 w-4 shrink-0 text-slate-400" />
+                          <button
+                            type="button"
+                            onClick={() => removeFromSaved(item.id)}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-red-500 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                            aria-label="Delete saved item"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+
+                          <MoreVertical className="hidden h-4 w-4 shrink-0 text-slate-400" />
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
