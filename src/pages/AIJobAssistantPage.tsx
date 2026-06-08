@@ -88,6 +88,7 @@ Use short clear sections.
 Use bold headings.
 Use numbered lists for options, steps, or job listings.
 Use bullet points only when helpful.
+When a table is useful, write a proper markdown table using pipes and a separator row.
 Give direct answers first.
 Avoid messy long paragraphs.
 When giving jobs or opportunities, show:
@@ -97,6 +98,7 @@ When giving jobs or opportunities, show:
 4. Action to take
 5. Link/source if available
 When helping with applications, include copy-ready messages.
+If the user replies with a short answer like "yes", "okay", "continue", "do it", or "no", use the previous conversation context and continue from the last assistant question. Do not ask what they mean unless the previous context is missing.
 End with a simple next step.
 `;
 
@@ -569,6 +571,88 @@ function renderInlineText(
   return nodes.length ? nodes : safeText;
 }
 
+function isTableSeparator(line: string) {
+  const value = line.trim();
+
+  if (!value.includes('|')) return false;
+
+  const cells = value
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+  if (cells.length < 2) return false;
+
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isLikelyTableRow(line: string) {
+  const value = line.trim();
+  if (!value.includes('|')) return false;
+
+  const cells = value
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+  return cells.length >= 2;
+}
+
+function parseTableRow(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+}
+
+function renderMarkdownTable(
+  tableLines: string[],
+  key: string,
+  onLinkClick?: (url: string, label?: string) => void
+) {
+  const header = parseTableRow(tableLines[0]);
+  const body = tableLines.slice(2).map(parseTableRow);
+  const columnCount = Math.max(header.length, ...body.map((row) => row.length));
+
+  return (
+    <div key={key} className="my-4 w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.03]">
+      <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+        <thead className="bg-slate-100 dark:bg-white/[0.06]">
+          <tr>
+            {Array.from({ length: columnCount }).map((_, index) => (
+              <th
+                key={`head-${index}`}
+                className="border-b border-slate-200 px-3 py-3 font-semibold text-slate-950 dark:border-white/10 dark:text-white"
+              >
+                {renderInlineText(header[index] || '', onLinkClick)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {body.map((row, rowIndex) => (
+            <tr key={`row-${rowIndex}`} className="border-b border-slate-100 last:border-0 dark:border-white/10">
+              {Array.from({ length: columnCount }).map((_, cellIndex) => (
+                <td
+                  key={`cell-${rowIndex}-${cellIndex}`}
+                  className="align-top px-3 py-3 text-slate-700 dark:text-white/75"
+                >
+                  {renderInlineText(row[cellIndex] || '', onLinkClick)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ChatGPTStyleText({
   text,
   onLinkClick,
@@ -578,63 +662,104 @@ function ChatGPTStyleText({
 }) {
   const safeText = normalizeBrokenMarkdownLinks(text);
   const lines = safeText.split('\n');
+  const blocks: ReactNode[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const line = rawLine.trim();
+
+    if (
+      isLikelyTableRow(line) &&
+      index + 1 < lines.length &&
+      isTableSeparator(lines[index + 1])
+    ) {
+      const tableLines = [lines[index], lines[index + 1]];
+      index += 2;
+
+      while (index < lines.length && isLikelyTableRow(lines[index])) {
+        tableLines.push(lines[index]);
+        index += 1;
+      }
+
+      index -= 1;
+
+      blocks.push(renderMarkdownTable(tableLines, `table-${index}`, onLinkClick));
+      continue;
+    }
+
+    if (!line) {
+      blocks.push(<div key={`space-${index}`} className="h-1" />);
+      continue;
+    }
+
+    const heading = line.match(/^#{1,4}\s+(.+)$/);
+    if (heading) {
+      blocks.push(
+        <h3
+          key={`heading-${index}`}
+          className="pt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-white"
+        >
+          {renderInlineText(heading[1], onLinkClick)}
+        </h3>
+      );
+      continue;
+    }
+
+    const numbered = line.match(/^(\d+)\.\s+(.+)$/);
+    if (numbered) {
+      blocks.push(
+        <div key={`number-${index}`} className="flex gap-3">
+          <span className="mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/70">
+            {numbered[1]}
+          </span>
+
+          <div className="min-w-0 flex-1">
+            {renderInlineText(numbered[2], onLinkClick)}
+          </div>
+        </div>
+      );
+      continue;
+    }
+
+    const bullet = line.match(/^[-•*]\s+(.+)$/);
+    if (bullet) {
+      blocks.push(
+        <div key={`bullet-${index}`} className="flex gap-3">
+          <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 dark:bg-white/50" />
+          <div className="min-w-0 flex-1">
+            {renderInlineText(bullet[1], onLinkClick)}
+          </div>
+        </div>
+      );
+      continue;
+    }
+
+    blocks.push(
+      <p key={`p-${index}`} className="text-slate-800 dark:text-white/85">
+        {renderInlineText(line, onLinkClick)}
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-3 text-[15px] leading-7 text-slate-800 dark:text-white/85">
-      {lines.map((rawLine, index) => {
-        const line = rawLine.trim();
-
-        if (!line) {
-          return <div key={`space-${index}`} className="h-1" />;
-        }
-
-        const heading = line.match(/^#{1,4}\s+(.+)$/);
-        if (heading) {
-          return (
-            <h3
-              key={`heading-${index}`}
-              className="pt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-white"
-            >
-              {renderInlineText(heading[1], onLinkClick)}
-            </h3>
-          );
-        }
-
-        const numbered = line.match(/^(\d+)\.\s+(.+)$/);
-        if (numbered) {
-          return (
-            <div key={`number-${index}`} className="flex gap-3">
-              <span className="mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/70">
-                {numbered[1]}
-              </span>
-
-              <div className="min-w-0 flex-1">
-                {renderInlineText(numbered[2], onLinkClick)}
-              </div>
-            </div>
-          );
-        }
-
-        const bullet = line.match(/^[-•*]\s+(.+)$/);
-        if (bullet) {
-          return (
-            <div key={`bullet-${index}`} className="flex gap-3">
-              <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 dark:bg-white/50" />
-              <div className="min-w-0 flex-1">
-                {renderInlineText(bullet[1], onLinkClick)}
-              </div>
-            </div>
-          );
-        }
-
-        return (
-          <p key={`p-${index}`} className="text-slate-800 dark:text-white/85">
-            {renderInlineText(line, onLinkClick)}
-          </p>
-        );
-      })}
+      {blocks}
     </div>
   );
+}
+
+function isShortContextReply(text: string) {
+  return /^(yes|yebo|yeah|yep|ok|okay|sure|continue|do it|please do|go ahead|no|not now|send it|draft it)$/i.test(
+    clean(text)
+  );
+}
+
+function buildConversationContext(messages: ChatMessage[]) {
+  return messages
+    .filter((message) => !message.deletedFromChat)
+    .slice(-10)
+    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
+    .join('\n\n');
 }
 
 export default function AIJobAssistantPage() {
@@ -808,6 +933,21 @@ export default function AIJobAssistantPage() {
       cleanPrompt ||
       'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
 
+    const conversationContext = buildConversationContext(messages);
+    const shouldUseContext = isShortContextReply(finalPrompt) && conversationContext;
+
+    const contextualPrompt = shouldUseContext
+      ? `Use the recent conversation to understand this short reply and continue from the last assistant question.
+
+Recent conversation:
+${conversationContext}
+
+Latest user reply:
+${finalPrompt}
+
+Respond based on the previous question/task. Do not ask what the user means if the context is clear.`
+      : finalPrompt;
+
     const intent = detectIntent(finalPrompt, hasImages);
     const suggestedSavedCategory = savedCategoryFromIntent(intent);
 
@@ -864,9 +1004,19 @@ export default function AIJobAssistantPage() {
 
     try {
       const payload = {
-        prompt: finalPrompt,
-        message: finalPrompt,
-        question: finalPrompt,
+        prompt: contextualPrompt,
+        message: contextualPrompt,
+        question: contextualPrompt,
+        originalPrompt: finalPrompt,
+        conversationContext,
+        conversationMessages: messages
+          .filter((message) => !message.deletedFromChat)
+          .slice(-10)
+          .map((message) => ({
+            role: message.role,
+            content: message.content,
+            createdAt: message.createdAt,
+          })),
         tier: currentTier,
         creatorPlus,
         intent,
