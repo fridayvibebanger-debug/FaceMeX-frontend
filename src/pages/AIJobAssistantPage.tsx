@@ -291,13 +291,43 @@ function buildVacancySources() {
     {
       label: 'Indeed',
       url: `https://za.indeed.com/jobs?q=${query}`,
-      note: 'General jobs, retail, admin, drivers, and entry-level roles.',
+      note: 'General jobs, retail, admin, drivers, cleaning, restaurants, and entry-level roles.',
       category: 'jobs',
     },
     {
-      label: 'LinkedIn',
+      label: 'LinkedIn Jobs',
       url: `https://www.linkedin.com/jobs/search/?keywords=${query}`,
-      note: 'Professional jobs, internships, admin, sales, and tech roles.',
+      note: 'Company-posted jobs, office roles, sales, internships, and professional roles.',
+      category: 'jobs',
+    },
+    {
+      label: 'PNet',
+      url: `https://www.pnet.co.za/jobs/${query}`,
+      note: 'Trusted South African job board for formal vacancies and professional roles.',
+      category: 'jobs',
+    },
+    {
+      label: 'Careers24',
+      url: `https://www.careers24.com/jobs/?query=${query}`,
+      note: 'South African job listings across provinces and industries.',
+      category: 'jobs',
+    },
+    {
+      label: 'CareerJunction',
+      url: `https://www.careerjunction.co.za/jobs/results?keywords=${query}`,
+      note: 'Established South African job board for company vacancies.',
+      category: 'jobs',
+    },
+    {
+      label: 'Job Mail',
+      url: `https://www.jobmail.co.za/jobs/south-africa?search=${query}`,
+      note: 'Local job listings including general work, driving, sales, and admin roles.',
+      category: 'jobs',
+    },
+    {
+      label: 'Adzuna SA',
+      url: `https://www.adzuna.co.za/search?q=${query}`,
+      note: 'Job search engine that gathers vacancies from different sources.',
       category: 'jobs',
     },
     {
@@ -310,6 +340,18 @@ function buildVacancySources() {
       label: 'SAYouth',
       url: 'https://sayouth.mobi/',
       note: 'Youth opportunities, entry-level jobs, learnerships, and programmes.',
+      category: 'government',
+    },
+    {
+      label: 'ESSA Labour',
+      url: 'https://essa.labour.gov.za/EssaOnline/WebBeans/',
+      note: 'Official employment services from the Department of Employment and Labour.',
+      category: 'government',
+    },
+    {
+      label: 'Youth Employment Service',
+      url: 'https://www.yes4youth.co.za/',
+      note: 'Youth work experience and employment pathway opportunities.',
       category: 'government',
     },
   ];
@@ -398,6 +440,12 @@ function normalizeAnswerText(raw: any, fallback: string) {
   return clean(answer) || fallback;
 }
 
+function normalizeBrokenMarkdownLinks(text: string) {
+  return String(text || '')
+    .replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/gi, '[$1]($2)')
+    .replace(/\[([^\]]+)\]\s*\(\s*((?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^)\s]*)?)\s*\)/gi, '[$1]($2)');
+}
+
 function stripTrailingPunctuation(value: string) {
   const trimmed = value.trim();
   const trailing = trimmed.match(/[),.;:!?]+$/)?.[0] || '';
@@ -445,7 +493,7 @@ function SourceChip({
       target="_blank"
       rel="noreferrer"
       onClick={() => onClick?.(url, label)}
-      className="mx-1 inline-flex max-w-full translate-y-[-1px] items-center rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold leading-none text-slate-700 no-underline transition hover:bg-slate-300 dark:bg-white/12 dark:text-white/70 dark:hover:bg-white/20"
+      className="mx-1 inline-flex max-w-full translate-y-[-1px] items-center rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold leading-none text-slate-700 no-underline transition hover:bg-slate-300 dark:bg-white/[0.12] dark:text-white/70 dark:hover:bg-white/[0.2]"
     >
       <span className="max-w-[140px] truncate">{label}</span>
     </a>
@@ -457,17 +505,18 @@ function renderInlineText(
   onLinkClick?: (url: string, label?: string) => void
 ) {
   const nodes: ReactNode[] = [];
+  const safeText = normalizeBrokenMarkdownLinks(text);
 
   const regex =
-    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|((?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
+    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+|(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s)]*)?)\)|((?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
 
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(safeText)) !== null) {
     if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
+      nodes.push(safeText.slice(lastIndex, match.index));
     }
 
     if (match[2]) {
@@ -513,11 +562,11 @@ function renderInlineText(
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
+  if (lastIndex < safeText.length) {
+    nodes.push(safeText.slice(lastIndex));
   }
 
-  return nodes.length ? nodes : text;
+  return nodes.length ? nodes : safeText;
 }
 
 function ChatGPTStyleText({
@@ -527,7 +576,8 @@ function ChatGPTStyleText({
   text: string;
   onLinkClick?: (url: string, label?: string) => void;
 }) {
-  const lines = String(text || '').split('\n');
+  const safeText = normalizeBrokenMarkdownLinks(text);
+  const lines = safeText.split('\n');
 
   return (
     <div className="space-y-3 text-[15px] leading-7 text-slate-800 dark:text-white/85">
