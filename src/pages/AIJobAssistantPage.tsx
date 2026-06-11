@@ -47,7 +47,7 @@ type SearchLink = {
   url: string;
   note?: string;
   image?: string;
-  category?: 'jobs' | 'social' | 'government' | 'nearby' | 'business';
+  category?: 'jobs' | 'social' | 'government' | 'nearby' | 'business' | 'source';
 };
 
 type SavedCategory = 'career_plan' | 'cv_advice' | 'application_message' | 'research';
@@ -72,6 +72,19 @@ type ChatMessage = {
   images?: WorkspaceImage[];
 };
 
+type SourceCategoryKey =
+  | 'facemex_verified_tzaneen_employer'
+  | 'official_company_source'
+  | 'government_public_institution'
+  | 'community_advert_needs_verification'
+  | 'high_risk_avoid';
+
+type SourceVerificationCategory = {
+  key: SourceCategoryKey;
+  title: string;
+  note: string;
+};
+
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
   cv_advice: 'CV',
@@ -79,11 +92,80 @@ const savedCategoryLabels: Record<SavedCategory, string> = {
   research: 'Research',
 };
 
+const sourceVerificationCategories: SourceVerificationCategory[] = [
+  {
+    key: 'facemex_verified_tzaneen_employer',
+    title: 'FaceMeX Verified Tzaneen Employer',
+    note: 'Directly confirmed by FaceMeX or posted by a known local employer.',
+  },
+  {
+    key: 'official_company_source',
+    title: 'Official Company Source',
+    note: 'Company website, official career page, or official company email.',
+  },
+  {
+    key: 'government_public_institution',
+    title: 'Government / Public Institution',
+    note: 'Municipality, department, school, TVET, SETA, or public programme.',
+  },
+  {
+    key: 'community_advert_needs_verification',
+    title: 'Community Advert — Needs verification',
+    note: 'Facebook, WhatsApp, screenshot, or public advert shared by the community.',
+  },
+  {
+    key: 'high_risk_avoid',
+    title: 'High Risk / Avoid',
+    note: 'Missing employer details, payment requested, or suspicious application process.',
+  },
+];
+
 const MAX_WORKSPACE_IMAGES = 4;
 const MAX_IMAGE_SIZE_MB = 12;
 
+const SOURCE_VERIFICATION_SYSTEM = `
+FaceMeX Job AI must prioritize Tzaneen first, then nearby areas:
+Tzaneen, Lenyenye, Nkowankowa, Maake, Dan, Burgersdorp, Haenertsburg, Modjadjiskloof, Giyani, Phalaborwa, and Polokwane.
+
+When checking or displaying job posts, use this Source & Verification system:
+
+1. FaceMeX Verified Tzaneen Employer
+- The employer is local and directly confirmed by FaceMeX.
+- This is the highest trust source.
+
+2. Official Company Source
+- The job comes from an official website, official career page, official company social page, or official company email.
+
+3. Government / Public Institution
+- Municipality, department, school, TVET, SETA, public programme, or government platform.
+
+4. Community Advert — Needs verification
+- Facebook post, WhatsApp post, screenshot, poster, or public advert.
+- These can be useful, but users must verify before applying.
+
+5. High Risk / Avoid
+- Payment requested.
+- No company name.
+- No location.
+- No contact person.
+- Suspicious email.
+- Job promises are unrealistic.
+- User is asked to pay for training, uniform, interview, placement, or registration.
+
+When responding about a job post, always include:
+- Verdict
+- Why
+- Source & Verification
+- Next step
+- Copy-ready action if useful
+
+Never say something is verified unless the source is clearly official or directly confirmed.
+If the source is only a screenshot, say it needs verification.
+Always warn users not to pay money to apply for jobs.
+`;
+
 const FACE_MEX_ANSWER_STYLE = `
-Respond like ChatGPT in a clean, premium, professional style.
+Respond like ChatGPT in a clean, calm, premium, professional style.
 Use short clear sections.
 Use bold headings.
 Use numbered lists for options, steps, or job listings.
@@ -91,12 +173,38 @@ Use bullet points only when helpful.
 When a table is useful, write a proper markdown table using pipes and a separator row.
 Give direct answers first.
 Avoid messy long paragraphs.
+
+FaceMeX is Tzaneen-first.
+When the user asks for jobs, prioritize Tzaneen, Lenyenye, Nkowankowa, Maake, Dan, Burgersdorp, Haenertsburg, Modjadjiskloof, Giyani, Phalaborwa, and Polokwane before broader Limpopo or South Africa.
+
 When giving jobs or opportunities, show:
 1. Role/title
 2. Location/company
-3. Why it fits
-4. Action to take
-5. Link/source if available
+3. Source & Verification
+4. Why it fits
+5. Action to take
+6. Link/source if available
+
+When checking a job advert or screenshot, respond in this structure:
+
+**Verdict:** Verified / Needs verification / Avoid
+
+Short explanation.
+
+**Why**
+- Main reason
+- Main reason
+- Main reason
+
+**Source & Verification**
+Source type: FaceMeX Verified Tzaneen Employer / Official Company Source / Government/Public Institution / Community Advert — Needs verification / High Risk/Avoid
+Verification status: Verified / Needs verification / Avoid
+Apply method: Email / Website / WhatsApp / In person / Not clear
+Safety note: Never pay money to apply.
+
+**Next step**
+Give one clear action.
+
 When helping with applications, include copy-ready messages.
 If the user replies with a short answer like "yes", "okay", "continue", "do it", or "no", use the previous conversation context and continue from the last assistant question. Do not ask what they mean unless the previous context is missing.
 End with a simple next step.
@@ -104,12 +212,13 @@ End with a simple next step.
 
 const quickPrompts = [
   {
-    label: 'Find jobs',
-    prompt: 'I am looking for job opportunities. Help me find opportunities and apply smart.',
+    label: 'Tzaneen jobs',
+    prompt:
+      'I am looking for job opportunities around Tzaneen, Lenyenye, Nkowankowa, Maake, and nearby areas. Help me find opportunities and apply smart.',
   },
   {
     label: 'Check fake job',
-    prompt: 'Help me check if this job or opportunity looks fake or risky.',
+    prompt: 'Help me check if this job or opportunity looks fake or risky. Use Source & Verification.',
   },
   {
     label: 'Send CV',
@@ -120,12 +229,13 @@ const quickPrompts = [
     prompt: 'Help me prepare for an interview. Give me questions and strong answers.',
   },
   {
-    label: 'Business',
-    prompt: 'Help me start a small business with low money and get customers fast.',
+    label: 'Submit job',
+    prompt:
+      'Help me clean and prepare a local Tzaneen job post for FaceMeX Jobs. Include source type, verification status, apply method, and safety note.',
   },
   {
-    label: 'Investors',
-    prompt: 'Where can I find investors, funders, or grant opportunities in South Africa?',
+    label: 'Business',
+    prompt: 'Help me start a small business with low money and get customers fast.',
   },
 ];
 
@@ -210,7 +320,7 @@ function detectIntent(text: string, hasImages = false) {
   if (hasImages) return 'image_or_document_analysis';
 
   if (
-    /(fake|scam|legit|legitimate|verify|safe|pay money|registration fee|upfront|is this real|is it real|risky|check job|check this|ligit)/i.test(
+    /(fake|scam|legit|legitimate|verify|verified|verification|safe|pay money|registration fee|upfront|is this real|is it real|risky|check job|check this|ligit|source)/i.test(
       t
     )
   ) {
@@ -242,7 +352,7 @@ function detectIntent(text: string, hasImages = false) {
   }
 
   if (
-    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment)/i.test(
+    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment|tzaneen|lenyenye|nkowankowa|maake|polokwane)/i.test(
       t
     )
   ) {
@@ -280,63 +390,43 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
 }
 
 function buildVacancySources() {
-  const query = encodeSearchQuery(['jobs', 'South Africa', 'vacancies hiring apply']);
-  const recentQuery = encodeSearchQuery(['jobs', 'South Africa', 'vacancies apply now']);
+  const tzaneenJobsQuery = encodeSearchQuery([
+    'Tzaneen Lenyenye Nkowankowa Maake jobs vacancies apply now',
+  ]);
+  const tzaneenDriverQuery = encodeSearchQuery([
+    'Tzaneen driver general worker cashier cleaner admin jobs',
+  ]);
+  const governmentTzaneenQuery = encodeSearchQuery([
+    'Tzaneen municipality vacancies government jobs learnerships',
+  ]);
+  const localBusinessQuery = encodeSearchQuery([
+    'Tzaneen businesses hiring jobs vacancies',
+  ]);
 
   const links: SearchLink[] = [
     {
-      label: 'Google Jobs',
-      url: `https://www.google.com/search?q=${recentQuery}&tbs=qdr:w`,
-      note: 'Recent vacancies from company pages and job boards.',
-      category: 'jobs',
+      label: 'Tzaneen Jobs Search',
+      url: `https://www.google.com/search?q=${tzaneenJobsQuery}&tbs=qdr:w`,
+      note: 'Fresh local vacancies around Tzaneen, Lenyenye, Nkowankowa, and Maake.',
+      category: 'nearby',
     },
     {
-      label: 'Indeed',
-      url: `https://za.indeed.com/jobs?q=${query}`,
-      note: 'General jobs, retail, admin, drivers, cleaning, restaurants, and entry-level roles.',
-      category: 'jobs',
+      label: 'Driver & General Work',
+      url: `https://www.google.com/search?q=${tzaneenDriverQuery}&tbs=qdr:w`,
+      note: 'Useful for drivers, general workers, cleaners, cashiers, and admin roles.',
+      category: 'nearby',
     },
     {
-      label: 'LinkedIn Jobs',
-      url: `https://www.linkedin.com/jobs/search/?keywords=${query}`,
-      note: 'Company-posted jobs, office roles, sales, internships, and professional roles.',
-      category: 'jobs',
-    },
-    {
-      label: 'PNet',
-      url: `https://www.pnet.co.za/jobs/${query}`,
-      note: 'Trusted South African job board for formal vacancies and professional roles.',
-      category: 'jobs',
-    },
-    {
-      label: 'Careers24',
-      url: `https://www.careers24.com/jobs/?query=${query}`,
-      note: 'South African job listings across provinces and industries.',
-      category: 'jobs',
-    },
-    {
-      label: 'CareerJunction',
-      url: `https://www.careerjunction.co.za/jobs/results?keywords=${query}`,
-      note: 'Established South African job board for company vacancies.',
-      category: 'jobs',
-    },
-    {
-      label: 'Job Mail',
-      url: `https://www.jobmail.co.za/jobs/south-africa?search=${query}`,
-      note: 'Local job listings including general work, driving, sales, and admin roles.',
-      category: 'jobs',
-    },
-    {
-      label: 'Adzuna SA',
-      url: `https://www.adzuna.co.za/search?q=${query}`,
-      note: 'Job search engine that gathers vacancies from different sources.',
-      category: 'jobs',
-    },
-    {
-      label: 'DPSA',
-      url: 'https://www.dpsa.gov.za/newsroom/psvc/',
-      note: 'Official South African government vacancy circular.',
+      label: 'Government / Municipality',
+      url: `https://www.google.com/search?q=${governmentTzaneenQuery}&tbs=qdr:m`,
+      note: 'Municipality, public institution, learnerships, and government-related vacancies.',
       category: 'government',
+    },
+    {
+      label: 'Local Businesses Hiring',
+      url: `https://www.google.com/search?q=${localBusinessQuery}&tbs=qdr:w`,
+      note: 'Find local shops, lodges, farms, restaurants, and transport businesses hiring.',
+      category: 'business',
     },
     {
       label: 'SAYouth',
@@ -351,10 +441,46 @@ function buildVacancySources() {
       category: 'government',
     },
     {
-      label: 'Youth Employment Service',
-      url: 'https://www.yes4youth.co.za/',
-      note: 'Youth work experience and employment pathway opportunities.',
+      label: 'DPSA',
+      url: 'https://www.dpsa.gov.za/newsroom/psvc/',
+      note: 'Official South African government vacancy circular.',
       category: 'government',
+    },
+    {
+      label: 'Indeed Tzaneen',
+      url: `https://za.indeed.com/jobs?q=${encodeURIComponent('jobs')}&l=${encodeURIComponent(
+        'Tzaneen, Limpopo'
+      )}`,
+      note: 'General local vacancies from employers and job boards.',
+      category: 'jobs',
+    },
+    {
+      label: 'LinkedIn Jobs Tzaneen',
+      url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(
+        'jobs'
+      )}&location=${encodeURIComponent('Tzaneen, Limpopo, South Africa')}`,
+      note: 'Company-posted jobs, sales, office roles, internships, and professional roles.',
+      category: 'jobs',
+    },
+    {
+      label: 'PNet Limpopo',
+      url: `https://www.pnet.co.za/jobs/limpopo`,
+      note: 'Formal vacancies and professional roles across Limpopo.',
+      category: 'jobs',
+    },
+    {
+      label: 'Careers24 Limpopo',
+      url: `https://www.careers24.com/jobs/lc-limpopo/`,
+      note: 'South African job listings across Limpopo industries.',
+      category: 'jobs',
+    },
+    {
+      label: 'Google Jobs South Africa',
+      url: `https://www.google.com/search?q=${encodeSearchQuery([
+        'jobs South Africa vacancies hiring apply',
+      ])}&tbs=qdr:w`,
+      note: 'Use when Tzaneen results are too limited.',
+      category: 'jobs',
     },
   ];
 
@@ -445,7 +571,10 @@ function normalizeAnswerText(raw: any, fallback: string) {
 function normalizeBrokenMarkdownLinks(text: string) {
   return String(text || '')
     .replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/gi, '[$1]($2)')
-    .replace(/\[([^\]]+)\]\s*\(\s*((?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^)\s]*)?)\s*\)/gi, '[$1]($2)');
+    .replace(
+      /\[([^\]]+)\]\s*\(\s*((?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^)\s]*)?)\s*\)/gi,
+      '[$1]($2)'
+    );
 }
 
 function stripTrailingPunctuation(value: string) {
@@ -502,10 +631,7 @@ function SourceChip({
   );
 }
 
-function renderInlineText(
-  text: string,
-  onLinkClick?: (url: string, label?: string) => void
-) {
+function renderInlineText(text: string, onLinkClick?: (url: string, label?: string) => void) {
   const nodes: ReactNode[] = [];
   const safeText = normalizeBrokenMarkdownLinks(text);
 
@@ -534,12 +660,7 @@ function renderInlineText(
       const { trailing } = stripTrailingPunctuation(rawUrl);
 
       nodes.push(
-        <SourceChip
-          key={`md-link-${key++}`}
-          label={label}
-          url={href}
-          onClick={onLinkClick}
-        />
+        <SourceChip key={`md-link-${key++}`} label={label} url={href} onClick={onLinkClick} />
       );
 
       if (trailing) nodes.push(trailing);
@@ -550,12 +671,7 @@ function renderInlineText(
       const { trailing } = stripTrailingPunctuation(rawUrl);
 
       nodes.push(
-        <SourceChip
-          key={`domain-link-${key++}`}
-          label={label}
-          url={href}
-          onClick={onLinkClick}
-        />
+        <SourceChip key={`domain-link-${key++}`} label={label} url={href} onClick={onLinkClick} />
       );
 
       if (trailing) nodes.push(trailing);
@@ -619,7 +735,10 @@ function renderMarkdownTable(
   const columnCount = Math.max(header.length, ...body.map((row) => row.length));
 
   return (
-    <div key={key} className="my-4 w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.03]">
+    <div
+      key={key}
+      className="my-4 w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.03]"
+    >
       <table className="w-full min-w-[520px] border-collapse text-left text-sm">
         <thead className="bg-slate-100 dark:bg-white/[0.06]">
           <tr>
@@ -636,7 +755,10 @@ function renderMarkdownTable(
 
         <tbody>
           {body.map((row, rowIndex) => (
-            <tr key={`row-${rowIndex}`} className="border-b border-slate-100 last:border-0 dark:border-white/10">
+            <tr
+              key={`row-${rowIndex}`}
+              className="border-b border-slate-100 last:border-0 dark:border-white/10"
+            >
               {Array.from({ length: columnCount }).map((_, cellIndex) => (
                 <td
                   key={`cell-${rowIndex}-${cellIndex}`}
@@ -713,9 +835,7 @@ function ChatGPTStyleText({
             {numbered[1]}
           </span>
 
-          <div className="min-w-0 flex-1">
-            {renderInlineText(numbered[2], onLinkClick)}
-          </div>
+          <div className="min-w-0 flex-1">{renderInlineText(numbered[2], onLinkClick)}</div>
         </div>
       );
       continue;
@@ -726,9 +846,7 @@ function ChatGPTStyleText({
       blocks.push(
         <div key={`bullet-${index}`} className="flex gap-3">
           <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 dark:bg-white/50" />
-          <div className="min-w-0 flex-1">
-            {renderInlineText(bullet[1], onLinkClick)}
-          </div>
+          <div className="min-w-0 flex-1">{renderInlineText(bullet[1], onLinkClick)}</div>
         </div>
       );
       continue;
@@ -741,11 +859,7 @@ function ChatGPTStyleText({
     );
   }
 
-  return (
-    <div className="space-y-3 text-[15px] leading-7 text-slate-800 dark:text-white/85">
-      {blocks}
-    </div>
-  );
+  return <div className="space-y-3 text-[15px] leading-7 text-slate-800 dark:text-white/85">{blocks}</div>;
 }
 
 function isShortContextReply(text: string) {
@@ -760,6 +874,46 @@ function buildConversationContext(messages: ChatMessage[]) {
     .slice(-10)
     .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
     .join('\n\n');
+}
+
+function sourceCategoryIconStyle(key: SourceCategoryKey) {
+  if (key === 'facemex_verified_tzaneen_employer') {
+    return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300';
+  }
+
+  if (key === 'official_company_source') {
+    return 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300';
+  }
+
+  if (key === 'government_public_institution') {
+    return 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-300';
+  }
+
+  if (key === 'community_advert_needs_verification') {
+    return 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-300';
+  }
+
+  return 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300';
+}
+
+function SourceCategoryIcon({ categoryKey }: { categoryKey: SourceCategoryKey }) {
+  if (categoryKey === 'facemex_verified_tzaneen_employer') {
+    return <ShieldCheck className="h-4 w-4" />;
+  }
+
+  if (categoryKey === 'official_company_source') {
+    return <Briefcase className="h-4 w-4" />;
+  }
+
+  if (categoryKey === 'government_public_institution') {
+    return <ExternalLink className="h-4 w-4" />;
+  }
+
+  if (categoryKey === 'community_advert_needs_verification') {
+    return <Search className="h-4 w-4" />;
+  }
+
+  return <X className="h-4 w-4" />;
 }
 
 export default function AIJobAssistantPage() {
@@ -859,9 +1013,7 @@ export default function AIJobAssistantPage() {
   };
 
   const handlePickImages = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []).filter((file) =>
-      file.type.startsWith('image/')
-    );
+    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
 
     event.currentTarget.value = '';
 
@@ -971,6 +1123,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
         image_count: attachedImages.length,
         has_images: hasImages,
         tier: currentTier,
+        local_focus: 'tzaneen_first',
       },
     });
 
@@ -978,6 +1131,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
       trackImageAnalysis(attachedImages.length, finalPrompt, undefined, {
         intent,
         tier: currentTier,
+        local_focus: 'tzaneen_first',
       });
     }
 
@@ -1003,6 +1157,8 @@ Respond based on the previous question/task. Do not ask what the user means if t
     }
 
     try {
+      const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}\n\n${SOURCE_VERIFICATION_SYSTEM}`;
+
       const payload = {
         prompt: contextualPrompt,
         message: contextualPrompt,
@@ -1022,8 +1178,23 @@ Respond based on the previous question/task. Do not ask what the user means if t
         intent,
         source: 'facemex-career-workspace',
         responseStyle: 'chatgpt-premium',
-        answerStyle: FACE_MEX_ANSWER_STYLE,
-        systemInstruction: FACE_MEX_ANSWER_STYLE,
+        answerStyle: fullSystemInstruction,
+        systemInstruction: fullSystemInstruction,
+        localFocus: 'tzaneen_first',
+        priorityAreas: [
+          'Tzaneen',
+          'Lenyenye',
+          'Nkowankowa',
+          'Maake',
+          'Dan',
+          'Burgersdorp',
+          'Haenertsburg',
+          'Modjadjiskloof',
+          'Giyani',
+          'Phalaborwa',
+          'Polokwane',
+        ],
+        sourceVerificationCategories,
         imageCount: attachedImages.length,
         imageDataUrls: attachedImages.map((image) => image.dataUrl),
         images: attachedImages.map((image) => ({
@@ -1164,9 +1335,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
 
   const togglePin = (id: string) => {
     setMessages((prev) =>
-      prev.map((message) =>
-        message.id === id ? { ...message, pinned: !message.pinned } : message
-      )
+      prev.map((message) => (message.id === id ? { ...message, pinned: !message.pinned } : message))
     );
   };
 
@@ -1201,9 +1370,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
 
   const saveEdit = () => {
     setMessages((prev) =>
-      prev.map((message) =>
-        message.id === editingMessageId ? { ...message, content: editText } : message
-      )
+      prev.map((message) => (message.id === editingMessageId ? { ...message, content: editText } : message))
     );
 
     setEditingMessageId(null);
@@ -1291,7 +1458,12 @@ Respond based on the previous question/task. Do not ask what the user means if t
         </Button>
       )}
 
-      <Button size="sm" variant="ghost" onClick={() => deleteMessage(message.id)} className="ml-auto h-8 rounded-full px-2 text-red-500">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => deleteMessage(message.id)}
+        className="ml-auto h-8 rounded-full px-2 text-red-500"
+      >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
     </div>
@@ -1312,9 +1484,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-sm font-semibold sm:text-base">
-                FaceMeX Job AI
-              </h1>
+              <h1 className="truncate text-sm font-semibold sm:text-base">FaceMeX Job AI</h1>
 
               <Badge className="hidden rounded-full border border-black/5 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 shadow-none hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/50 sm:inline-flex">
                 {creatorPlus && <Crown className="mr-1 h-3 w-3" />}
@@ -1334,7 +1504,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
             variant="ghost"
             onClick={() => setSourcesOpen(true)}
             className="h-9 w-9 rounded-full"
-            aria-label="Sources"
+            aria-label="Source and verification"
           >
             <ExternalLink className="h-4 w-4" />
           </Button>
@@ -1424,24 +1594,13 @@ Respond based on the previous question/task. Do not ask what the user means if t
                         </div>
                       </div>
                     ) : (
-                      <div
-                        className={
-                          message.role === 'assistant'
-                            ? 'max-h-[52vh] overflow-y-auto pr-1'
-                            : ''
-                        }
-                      >
+                      <div className={message.role === 'assistant' ? 'max-h-[52vh] overflow-y-auto pr-1' : ''}>
                         {renderMessageImages(message.images)}
 
                         {message.role === 'assistant' ? (
-                          <ChatGPTStyleText
-                            text={message.content}
-                            onLinkClick={handleGeneratedLinkClick}
-                          />
+                          <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
                         ) : (
-                          <div className="whitespace-pre-wrap break-words">
-                            {message.content}
-                          </div>
+                          <div className="whitespace-pre-wrap break-words">{message.content}</div>
                         )}
                       </div>
                     )}
@@ -1517,15 +1676,11 @@ Respond based on the previous question/task. Do not ask what the user means if t
                     <div className="min-w-0 text-[11px] text-slate-500 dark:text-white/45">
                       <div className="flex min-w-0 items-center gap-1">
                         <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">Upload screenshots. Verify before paying.</span>
+                        <span className="truncate">Upload screenshots. Verify before acting.</span>
                       </div>
 
                       {selectedImages.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={clearSelectedImages}
-                          className="font-semibold text-red-500"
-                        >
+                        <button type="button" onClick={clearSelectedImages} className="font-semibold text-red-500">
                           Clear images
                         </button>
                       )}
@@ -1589,16 +1744,18 @@ Respond based on the previous question/task. Do not ask what the user means if t
                   All
                 </Button>
 
-                {(['career_plan', 'cv_advice', 'application_message', 'research'] as SavedCategory[]).map((category) => (
-                  <Button
-                    key={category}
-                    variant={savedFilter === category ? 'default' : 'outline'}
-                    onClick={() => setSavedFilter(category)}
-                    className="h-9 rounded-full px-4 text-xs"
-                  >
-                    {savedCategoryLabels[category]} ({savedStats[category]})
-                  </Button>
-                ))}
+                {(['career_plan', 'cv_advice', 'application_message', 'research'] as SavedCategory[]).map(
+                  (category) => (
+                    <Button
+                      key={category}
+                      variant={savedFilter === category ? 'default' : 'outline'}
+                      onClick={() => setSavedFilter(category)}
+                      className="h-9 rounded-full px-4 text-xs"
+                    >
+                      {savedCategoryLabels[category]} ({savedStats[category]})
+                    </Button>
+                  )
+                )}
               </div>
 
               <div className="mt-5">
@@ -1618,11 +1775,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
                             <FileText className="h-4 w-4 text-slate-500" />
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => setSavedOpen(false)}
-                            className="min-w-0 flex-1 text-left"
-                          >
+                          <button type="button" onClick={() => setSavedOpen(false)} className="min-w-0 flex-1 text-left">
                             <div className="line-clamp-1 text-sm font-semibold">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item'}
                             </div>
@@ -1672,8 +1825,10 @@ Respond based on the previous question/task. Do not ask what the user means if t
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90">
               <div>
-                <h2 className="text-base font-semibold">Sources</h2>
-                <p className="text-[11px] text-slate-500 dark:text-white/45">Trusted opportunity links</p>
+                <h2 className="text-base font-semibold">Source & Verification</h2>
+                <p className="text-[11px] text-slate-500 dark:text-white/45">
+                  Tzaneen-first trusted source system
+                </p>
               </div>
 
               <Button size="icon" variant="ghost" onClick={() => setSourcesOpen(false)} className="h-10 w-10 rounded-full">
@@ -1682,32 +1837,84 @@ Respond based on the previous question/task. Do not ask what the user means if t
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="space-y-3">
-                {sourceLinks.map((link) => (
-                  <a
-                    key={link.url}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={() => trackLinkClick(link.url, link.label)}
-                    className="flex items-center gap-3 rounded-2xl border border-black/5 bg-white p-3 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.05]"
-                  >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-                      {link.image ? (
-                        <img src={link.image} alt={link.label} className="h-6 w-6 rounded-lg object-contain" />
-                      ) : (
-                        <Briefcase className="h-4 w-4 text-slate-400" />
-                      )}
-                    </span>
+              <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-white dark:text-black">
+                    <ShieldCheck className="h-4 w-4" />
+                  </div>
 
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{link.label}</span>
-                      <span className="line-clamp-2 text-xs text-slate-500 dark:text-white/50">{link.note}</span>
-                    </span>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold">How FaceMeX checks jobs</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
+                      Every job should show where it came from, how safe it is, and what action the user should take before applying.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-                    <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
-                  </a>
-                ))}
+              <div className="mt-5">
+                <h3 className="mb-3 text-sm font-semibold">Better source categories</h3>
+
+                <div className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+                  {sourceVerificationCategories.map((category) => (
+                    <div
+                      key={category.key}
+                      className="flex items-center gap-3 border-b border-black/5 p-3 last:border-0 dark:border-white/10"
+                    >
+                      <span
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${sourceCategoryIconStyle(
+                          category.key
+                        )}`}
+                      >
+                        <SourceCategoryIcon categoryKey={category.key} />
+                      </span>
+
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">{category.title}</span>
+                        <span className="line-clamp-2 text-xs leading-5 text-slate-500 dark:text-white/50">
+                          {category.note}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <h3 className="mb-3 text-sm font-semibold">Local source links</h3>
+
+                <div className="space-y-3">
+                  {sourceLinks.map((link) => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => trackLinkClick(link.url, link.label)}
+                      className="flex items-center gap-3 rounded-2xl border border-black/5 bg-white p-3 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.05]"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                        {link.image ? (
+                          <img src={link.image} alt={link.label} className="h-6 w-6 rounded-lg object-contain" />
+                        ) : (
+                          <Briefcase className="h-4 w-4 text-slate-400" />
+                        )}
+                      </span>
+
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{link.label}</span>
+                        <span className="line-clamp-2 text-xs text-slate-500 dark:text-white/50">{link.note}</span>
+                      </span>
+
+                      <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+                <strong className="block text-sm">Safety rule</strong>
+                FaceMeX should not mark community screenshots as verified unless the employer, official source, or application method is confirmed. Users must never pay money to apply.
               </div>
             </div>
           </div>
