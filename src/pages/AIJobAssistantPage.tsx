@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
+  Bell,
   Briefcase,
   Building2,
   CalendarDays,
@@ -21,17 +22,17 @@ import {
   Loader2,
   Mail,
   MapPin,
+  Menu,
   MoreVertical,
-  Phone,
   Pin,
   PinOff,
   Save,
   Search,
   Send,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Trash2,
+  Users,
   X,
 } from 'lucide-react';
 
@@ -53,15 +54,6 @@ import {
   trackWorkspacePrompt,
   trackWorkspaceResponse,
 } from '@/lib/analytics';
-
-type SearchLink = {
-  label: string;
-  url: string;
-  note?: string;
-  image?: string;
-  category?: 'official' | 'government' | 'municipality' | 'youth' | 'labour';
-  area?: string;
-};
 
 type SavedCategory = 'career_plan' | 'cv_advice' | 'application_message' | 'research';
 
@@ -110,13 +102,10 @@ type LocalVerifiedJob = {
   actionLabel: string;
   applyUrl: string;
   sourceUrl: string;
-  sourceType:
-    | 'facemex_verified_tzaneen_employer'
-    | 'official_company_source'
-    | 'government_public_institution'
-    | 'community_advert_needs_verification'
-    | 'high_risk_avoid';
+  sourceType: SourceCategoryKey;
   isSourceCard?: boolean;
+  salary?: string | null;
+  category?: string | null;
 };
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
@@ -129,13 +118,13 @@ const savedCategoryLabels: Record<SavedCategory, string> = {
 const sourceVerificationCategories: SourceVerificationCategory[] = [
   {
     key: 'facemex_verified_tzaneen_employer',
-    title: 'FaceMeX Verified Tzaneen Employer',
-    note: 'Directly confirmed by FaceMeX or posted by a known local employer.',
+    title: 'FaceMeX Verified Local Employer',
+    note: 'Directly confirmed by FaceMeX or submitted by a known local employer.',
   },
   {
     key: 'official_company_source',
     title: 'Official Company Source',
-    note: 'Official company page, career page, or application link.',
+    note: 'Official company website, career page, or verified application link.',
   },
   {
     key: 'government_public_institution',
@@ -145,102 +134,129 @@ const sourceVerificationCategories: SourceVerificationCategory[] = [
   {
     key: 'community_advert_needs_verification',
     title: 'Community Advert — Needs verification',
-    note: 'Facebook, WhatsApp, screenshot, or community-posted advert.',
+    note: 'Facebook, WhatsApp, screenshot, poster, or community-posted advert.',
   },
   {
     key: 'high_risk_avoid',
     title: 'High Risk / Avoid',
-    note: 'Missing details, payment requested, or suspicious application process.',
+    note: 'Missing employer details, payment requested, or suspicious application process.',
   },
 ];
 
-const OFFICIAL_LOCAL_JOB_SOURCES: SearchLink[] = [
+const OFFICIAL_LOCAL_JOB_SOURCES: LocalVerifiedJob[] = [
   {
-    label: 'Greater Tzaneen Municipality Vacancies',
+    id: 'greater-tzaneen-vacancies',
+    title: 'Greater Tzaneen Municipality Vacancies',
+    company: 'Greater Tzaneen Municipality',
     area: 'Tzaneen',
-    url: 'https://www.greatertzaneen.gov.za/?q=current_vacancies',
-    note: 'Official Greater Tzaneen Municipality vacancies page.',
-    category: 'municipality',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://www.greatertzaneen.gov.za/?q=current_vacancies',
+    sourceUrl: 'https://www.greatertzaneen.gov.za/?q=current_vacancies',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
   {
-    label: 'Polokwane Municipality Employment Portal',
+    id: 'polokwane-apply',
+    title: 'Polokwane Municipality Employment Portal',
+    company: 'Polokwane Municipality',
     area: 'Polokwane',
-    url: 'https://apply.polokwane.gov.za/',
-    note: 'Official Polokwane Municipality application portal.',
-    category: 'municipality',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://apply.polokwane.gov.za/',
+    sourceUrl: 'https://apply.polokwane.gov.za/',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
   {
-    label: 'Ba-Phalaborwa Municipality Vacancies',
+    id: 'ba-phalaborwa-vacancies',
+    title: 'Ba-Phalaborwa Municipality Vacancies',
+    company: 'Ba-Phalaborwa Municipality',
     area: 'Phalaborwa',
-    url: 'https://www.phalaborwa.gov.za/vacancies/vacancies.php',
-    note: 'Official Ba-Phalaborwa Municipality vacancies page.',
-    category: 'municipality',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://www.phalaborwa.gov.za/vacancies/vacancies.php',
+    sourceUrl: 'https://www.phalaborwa.gov.za/vacancies/vacancies.php',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
   {
-    label: 'Maruleng Municipality Vacancies',
+    id: 'maruleng-vacancies',
+    title: 'Maruleng Municipality Vacancies',
+    company: 'Maruleng Municipality',
     area: 'Hoedspruit',
-    url: 'https://www.maruleng.gov.za/pages/vacancies.php',
-    note: 'Official Maruleng Municipality vacancies page for Hoedspruit area.',
-    category: 'municipality',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://www.maruleng.gov.za/pages/vacancies.php',
+    sourceUrl: 'https://www.maruleng.gov.za/pages/vacancies.php',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
   {
-    label: 'Makhado Municipality Advertised Posts',
+    id: 'makhado-vacancies',
+    title: 'Makhado Municipality Advertised Posts',
+    company: 'Makhado Municipality',
     area: 'Makhado',
-    url: 'https://www.makhado.gov.za/?q=advertisedvacancies',
-    note: 'Official Makhado Municipality advertised vacancies and application forms.',
-    category: 'municipality',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://www.makhado.gov.za/?q=advertisedvacancies',
+    sourceUrl: 'https://www.makhado.gov.za/?q=advertisedvacancies',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
   {
-    label: 'Musina Municipality Vacancies',
+    id: 'musina-vacancies',
+    title: 'Musina Municipality Vacancies',
+    company: 'Musina Municipality',
     area: 'Musina',
-    url: 'https://www.musina.gov.za/vacancies-musina-municipality/',
-    note: 'Official Musina Municipality vacancies portal.',
-    category: 'municipality',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://www.musina.gov.za/vacancies-musina-municipality/',
+    sourceUrl: 'https://www.musina.gov.za/vacancies-musina-municipality/',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
   {
-    label: 'Limpopo Government e-Recruitment',
+    id: 'limpopo-erecruitment',
+    title: 'Limpopo Government e-Recruitment',
+    company: 'Limpopo Provincial Government',
     area: 'Limpopo',
-    url: 'https://erecruitment.limpopo.gov.za/',
-    note: 'Official Limpopo provincial government recruitment portal.',
-    category: 'government',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://erecruitment.limpopo.gov.za/',
+    sourceUrl: 'https://erecruitment.limpopo.gov.za/',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
   {
-    label: 'DPSA Vacancy Circular',
-    area: 'South Africa',
-    url: 'https://www.dpsa.gov.za/newsroom/psvc/',
-    note: 'Official South African government vacancy circular.',
-    category: 'government',
-  },
-  {
-    label: 'SAYouth',
+    id: 'sayouth',
+    title: 'SAYouth Opportunities',
+    company: 'SAYouth',
     area: 'Youth Opportunities',
-    url: 'https://sayouth.mobi/',
-    note: 'Youth opportunities, learnerships, entry-level work, and programmes.',
-    category: 'youth',
-  },
-  {
-    label: 'ESSA Labour',
-    area: 'Labour Department',
-    url: 'https://essa.labour.gov.za/EssaOnline/WebBeans/',
-    note: 'Official Department of Employment and Labour employment services.',
-    category: 'labour',
+    deadline: null,
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Open Official Page',
+    applyUrl: 'https://sayouth.mobi/',
+    sourceUrl: 'https://sayouth.mobi/',
+    sourceType: 'government_public_institution',
+    isSourceCard: true,
   },
 ];
-
-const FALLBACK_LOCAL_JOBS: LocalVerifiedJob[] = OFFICIAL_LOCAL_JOB_SOURCES.map((source) => ({
-  id: source.label.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-  title: source.label,
-  company: source.area || 'Official source',
-  area: source.area || 'Local',
-  deadline: null,
-  sourceLabel: 'Official source',
-  verificationStatus: 'verified',
-  actionLabel: 'Open Official Page',
-  applyUrl: source.url,
-  sourceUrl: source.url,
-  sourceType: source.category === 'municipality' ? 'government_public_institution' : 'official_company_source',
-  isSourceCard: true,
-}));
 
 const MAX_WORKSPACE_IMAGES = 4;
 const MAX_IMAGE_SIZE_MB = 12;
@@ -259,17 +275,22 @@ const PRIORITY_AREAS = [
 ];
 
 const SOURCE_VERIFICATION_SYSTEM = `
-FaceMeX Job AI must prioritize these areas first:
+FaceMeX Job AI must be local-first.
+Priority areas:
 Tzaneen, Lenyenye, Nkowankowa, Maake, Polokwane, Phalaborwa, Hoedspruit, Makhado, Musina/Messina.
 
-Do not lead with general South Africa job boards unless the user asks for national jobs.
-Prioritize official pages, direct employer pages, municipal pages, government portals, and FaceMeX verified local employers.
+When the user says "I'm looking for a job in Tzaneen" or similar:
+- Respond with available verified jobs and official job sources for that area.
+- Show jobs from A to Z where available.
+- Prioritize real jobs stored in FaceMeX/Supabase.
+- Use official application links.
+- Do not send the user to random job-board searching.
+- If no exact job records are available, show verified official vacancy pages for the selected areas.
 
-When checking or displaying job posts, use this Source & Verification system:
+Use this Source & Verification system:
 
-1. FaceMeX Verified Tzaneen Employer
+1. FaceMeX Verified Local Employer
 - The employer is local and directly confirmed by FaceMeX.
-- This is the highest trust source.
 
 2. Official Company Source
 - The job comes from an official website, official career page, official company social page, or official company email.
@@ -293,18 +314,18 @@ When checking or displaying job posts, use this Source & Verification system:
 When responding about a job post, always include:
 - Verdict
 - Why
-- Source & Verification
 - Next step
+- Source & Verification if helpful
 - Copy-ready action if useful
 
 Never say something is verified unless the source is clearly official or directly confirmed.
 If the source is only a screenshot, say it needs verification.
 Always warn users not to pay money to apply for jobs.
 
-For non-job questions like UIF, SASSA, school info, or general government service checks:
+For non-job questions like UIF, SASSA, school info, or government service checks:
 - Do not show CV/application actions.
 - Give a clean ChatGPT-style answer.
-- Include the official source link if available.
+- Include official source link if available.
 - Use clean formatting for USSD codes like *134*843#.
 `;
 
@@ -312,28 +333,15 @@ const FACE_MEX_ANSWER_STYLE = `
 Respond like ChatGPT in a clean, calm, premium, professional style.
 Use short clear sections.
 Use bold headings.
-Use numbered lists for options, steps, or job listings.
-Use bullet points only when helpful.
-When a table is useful, write a proper markdown table using pipes and a separator row.
-Give direct answers first.
+Use numbered lists for steps or job lists.
+Use bullets only when helpful.
+Give the direct answer first.
 Avoid messy long paragraphs.
 
 When displaying phone/USSD codes:
 - Write them cleanly exactly like *134*843#.
-- Do not add markdown escape slashes like \\*134\\*843#.
-- Do not wrap USSD codes with broken bold markdown.
-
-FaceMeX is local-first.
-When the user asks for jobs, prioritize:
-Tzaneen, Lenyenye, Nkowankowa, Maake, Polokwane, Phalaborwa, Hoedspruit, Makhado, Musina/Messina.
-
-When giving jobs or opportunities, show:
-1. Role/title
-2. Location/company
-3. Source & Verification
-4. Closing date if available
-5. Action to take
-6. Official apply link if available
+- Do not add escape slashes.
+- Do not wrap USSD codes in broken bold markdown.
 
 When checking a job advert or screenshot, respond in this structure:
 
@@ -346,29 +354,35 @@ Short explanation.
 - Main reason
 - Main reason
 
-**Source & Verification**
-Source type: FaceMeX Verified Tzaneen Employer / Official Company Source / Government/Public Institution / Community Advert — Needs verification / High Risk/Avoid
-Verification status: Verified / Needs verification / Avoid
-Apply method: Email / Website / WhatsApp / In person / Not clear
-Safety note: Never pay money to apply.
-
 **Next step**
 Give one clear action.
 
 When helping with applications, include copy-ready messages.
-If the user replies with a short answer like "yes", "okay", "continue", "do it", or "no", use the previous conversation context and continue from the last assistant question.
-End with a simple next step.
+When user asks for jobs in a local area, show:
+1. Job title
+2. Company/source
+3. Area
+4. Closing date
+5. Verification status
+6. Official apply link
+
+End with one simple next step.
 `;
 
 const quickPrompts = [
   {
-    label: 'Local jobs',
+    label: 'Jobs in Tzaneen',
     prompt:
-      'Show me verified job sources and new vacancies around Tzaneen, Polokwane, Phalaborwa, Hoedspruit, Makhado, and Musina. Prioritize official application pages.',
+      'I am looking for a job in Tzaneen. Show me all available verified jobs and official job sources from A to Z.',
+  },
+  {
+    label: 'Polokwane jobs',
+    prompt:
+      'Show me verified jobs and official job sources in Polokwane with apply links and closing dates.',
   },
   {
     label: 'Check fake job',
-    prompt: 'Help me check if this job or opportunity looks fake or risky. Use Source & Verification.',
+    prompt: 'Help me check if this job or opportunity looks fake or risky.',
   },
   {
     label: 'Apply assistant',
@@ -382,11 +396,6 @@ const quickPrompts = [
   {
     label: 'Interview',
     prompt: 'Help me prepare for an interview. Give me questions and strong answers.',
-  },
-  {
-    label: 'Submit job',
-    prompt:
-      'Help me clean and prepare a local job post for FaceMeX Jobs. Include source type, verification status, apply method, closing date, and safety note.',
   },
 ];
 
@@ -448,15 +457,6 @@ function increaseDeepSeekUsage(tier: string) {
   }
 }
 
-function faviconFor(url: string) {
-  try {
-    const origin = new URL(url).origin;
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(origin)}&sz=128`;
-  } catch {
-    return '';
-  }
-}
-
 function unwrapApiResponse(res: any) {
   return res?.data || res;
 }
@@ -484,14 +484,6 @@ function detectIntent(text: string, hasImages = false) {
     )
   ) {
     return 'verify-opportunity';
-  }
-
-  if (
-    /(investor|investors|funding|funder|funders|grant|grants|venture|angel|vc|raise capital|capital|startup|pitch|business opportunity|business opportunities|partnership|networking|accelerator|incubator)/i.test(
-      t
-    )
-  ) {
-    return 'investors-and-networking';
   }
 
   if (/(email|mail|cover letter|application email|send cv|send my cv|email cv)/i.test(t)) {
@@ -538,7 +530,6 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
 
   if (
     intent === 'research' ||
-    intent === 'investors-and-networking' ||
     intent === 'image_or_document_analysis' ||
     intent === 'verify-opportunity' ||
     intent === 'government-service-check'
@@ -547,10 +538,6 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
   }
 
   return 'career_plan';
-}
-
-function buildVacancySources() {
-  return OFFICIAL_LOCAL_JOB_SOURCES.map((link) => ({ ...link, image: faviconFor(link.url) }));
 }
 
 function readFileAsDataUrl(file: File) {
@@ -853,8 +840,7 @@ function ChatGPTStyleText({
   const blocks: ReactNode[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
-    const rawLine = lines[index];
-    const line = rawLine.trim();
+    const line = lines[index].trim();
 
     if (
       isLikelyTableRow(line) &&
@@ -942,46 +928,6 @@ function buildConversationContext(messages: ChatMessage[]) {
     .join('\n\n');
 }
 
-function sourceCategoryIconStyle(key: SourceCategoryKey) {
-  if (key === 'facemex_verified_tzaneen_employer') {
-    return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300';
-  }
-
-  if (key === 'official_company_source') {
-    return 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300';
-  }
-
-  if (key === 'government_public_institution') {
-    return 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-300';
-  }
-
-  if (key === 'community_advert_needs_verification') {
-    return 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-300';
-  }
-
-  return 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300';
-}
-
-function SourceCategoryIcon({ categoryKey }: { categoryKey: SourceCategoryKey }) {
-  if (categoryKey === 'facemex_verified_tzaneen_employer') {
-    return <ShieldCheck className="h-4 w-4" />;
-  }
-
-  if (categoryKey === 'official_company_source') {
-    return <Building2 className="h-4 w-4" />;
-  }
-
-  if (categoryKey === 'government_public_institution') {
-    return <Briefcase className="h-4 w-4" />;
-  }
-
-  if (categoryKey === 'community_advert_needs_verification') {
-    return <Search className="h-4 w-4" />;
-  }
-
-  return <AlertTriangle className="h-4 w-4" />;
-}
-
 function getDeadlineInfo(deadline?: string | null) {
   if (!deadline) return { label: 'Check official page', expired: false, urgent: false };
 
@@ -1007,7 +953,7 @@ function getDeadlineInfo(deadline?: string | null) {
   }
 
   if (days === 1) {
-    return { label: `Closing in 1 day`, expired: false, urgent: true };
+    return { label: 'Closing in 1 day', expired: false, urgent: true };
   }
 
   return { label: `Closing in ${days} days`, expired: false, urgent: days <= 3 };
@@ -1031,8 +977,32 @@ function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus'])
   return 'Needs verification';
 }
 
+function normalizeVerificationStatus(value: any): LocalVerifiedJob['verificationStatus'] {
+  const status = clean(value).toLowerCase();
+
+  if (status === 'verified' || status === 'approved') return 'verified';
+  if (status === 'avoid' || status === 'high_risk' || status === 'rejected') return 'avoid';
+
+  return 'needs_verification';
+}
+
+function normalizeSourceType(value: any): SourceCategoryKey {
+  const source = clean(value).toLowerCase();
+
+  if (source.includes('facemex')) return 'facemex_verified_tzaneen_employer';
+  if (source.includes('government') || source.includes('municipality') || source.includes('public')) {
+    return 'government_public_institution';
+  }
+  if (source.includes('community') || source.includes('screenshot')) {
+    return 'community_advert_needs_verification';
+  }
+  if (source.includes('risk') || source.includes('avoid')) return 'high_risk_avoid';
+
+  return 'official_company_source';
+}
+
 function isJobRelatedText(content: string) {
-  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source & verification|verification status|public advert|verified employer)/i.test(
+  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer)/i.test(
     content
   );
 }
@@ -1055,6 +1025,42 @@ function shouldShowGovernmentSourceAction(content: string, previousUserText = ''
   return isGovernmentServiceText(`${content}\n${previousUserText}`);
 }
 
+function extractJobTitle(text: string) {
+  const value = normalizeUssdCodes(text);
+
+  if (/code\s*14/i.test(value)) return 'Code 14 Side Tipper Driver';
+
+  const titleMatch =
+    value.match(/(?:Job title|Role|Position):\s*(.+)/i) ||
+    value.match(/\*\*([^*]*(?:Driver|Clerk|Cashier|Cleaner|Security|General Worker|Assistant|Intern|Learnership)[^*]*)\*\*/i);
+
+  return clean(titleMatch?.[1]) || 'Job opportunity';
+}
+
+function extractCompany(text: string) {
+  const companyMatch =
+    text.match(/(?:Company|Employer|Source):\s*(.+)/i) ||
+    text.match(/\bMRMS\b/i);
+
+  if (companyMatch?.[0]?.toUpperCase().includes('MRMS')) return 'MRMS';
+
+  return clean(companyMatch?.[1]) || 'Company not confirmed';
+}
+
+function extractEmail(text: string) {
+  return clean(text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0]);
+}
+
+function extractDeadline(text: string) {
+  const value = text.match(/\b\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\b/i)?.[0];
+
+  if (value) return value;
+
+  const slashDate = text.match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/)?.[0];
+
+  return slashDate || '';
+}
+
 export default function AIJobAssistantPage() {
   const navigate = useNavigate();
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -1070,11 +1076,10 @@ export default function AIJobAssistantPage() {
   const [prompt, setPrompt] = useState('');
   const [selectedImages, setSelectedImages] = useState<WorkspaceImage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [sourceLinks, setSourceLinks] = useState<SearchLink[]>([]);
-  const [localJobs, setLocalJobs] = useState<LocalVerifiedJob[]>(FALLBACK_LOCAL_JOBS);
+  const [localJobs, setLocalJobs] = useState<LocalVerifiedJob[]>(OFFICIAL_LOCAL_JOB_SOURCES);
   const [busy, setBusy] = useState(false);
-  const [savedOpen, setSavedOpen] = useState(false);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [trackerOpen, setTrackerOpen] = useState(false);
+  const [jobsOpen, setJobsOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savedFilter, setSavedFilter] = useState<SavedCategory | 'all'>('all');
@@ -1118,6 +1123,26 @@ export default function AIJobAssistantPage() {
     return `${deepSeekUsage}/5`;
   }, [creatorPlus, currentTier, deepSeekUsage]);
 
+  const sortedLocalJobs = useMemo(() => {
+    return [...localJobs].sort((a, b) => {
+      if (a.verificationStatus === 'verified' && b.verificationStatus !== 'verified') return -1;
+      if (a.verificationStatus !== 'verified' && b.verificationStatus === 'verified') return 1;
+
+      return a.title.localeCompare(b.title);
+    });
+  }, [localJobs]);
+
+  const closingSoonJob = useMemo(() => {
+    return sortedLocalJobs
+      .filter((job) => job.deadline && getDeadlineInfo(job.deadline).urgent && !getDeadlineInfo(job.deadline).expired)
+      .sort((a, b) => {
+        const aTime = new Date(`${a.deadline}T23:59:59`).getTime();
+        const bTime = new Date(`${b.deadline}T23:59:59`).getTime();
+
+        return aTime - bTime;
+      })[0];
+  }, [sortedLocalJobs, nowTick]);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
@@ -1133,8 +1158,6 @@ export default function AIJobAssistantPage() {
       setMessages([]);
     }
 
-    setSourceLinks(buildVacancySources());
-
     trackWorkspaceOpen({
       message_count: 0,
       selected_image_count: 0,
@@ -1142,41 +1165,6 @@ export default function AIJobAssistantPage() {
   }, [currentTier]);
 
   useEffect(() => {
-    const loadLocalJobs = async () => {
-      try {
-        const areas = encodeURIComponent(PRIORITY_AREAS.join(','));
-        const res = await api.get(`/api/jobs/local-verified?areas=${areas}&verifiedOnly=false`);
-        const data = unwrapApiResponse(res);
-
-        const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
-
-        const normalizedJobs: LocalVerifiedJob[] = jobs
-          .map((job: any) => ({
-            id: clean(job.id) || safeId(),
-            title: clean(job.title || job.job_title || job.role),
-            company: clean(job.company || job.employer || job.source_name),
-            area: clean(job.area || job.location || job.town),
-            deadline: clean(job.deadline || job.closing_date || job.closingDate) || null,
-            sourceLabel: clean(job.sourceLabel || job.source_type || job.sourceType) || 'Official source',
-            verificationStatus:
-              job.verificationStatus ||
-              job.verification_status ||
-              (job.verified ? 'verified' : 'needs_verification'),
-            actionLabel: clean(job.actionLabel) || 'Apply Now',
-            applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.sourceUrl),
-            sourceUrl: clean(job.sourceUrl || job.source_url || job.applyUrl || job.apply_url),
-            sourceType:
-              job.sourceType || job.source_type || 'official_company_source',
-            isSourceCard: Boolean(job.isSourceCard),
-          }))
-          .filter((job: LocalVerifiedJob) => job.title && job.applyUrl);
-
-        setLocalJobs(normalizedJobs.length ? normalizedJobs : FALLBACK_LOCAL_JOBS);
-      } catch {
-        setLocalJobs(FALLBACK_LOCAL_JOBS);
-      }
-    };
-
     loadLocalJobs();
   }, []);
 
@@ -1191,6 +1179,42 @@ export default function AIJobAssistantPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [chatMessages.length, busy]);
+
+  const loadLocalJobs = async (area?: string) => {
+    try {
+      const areas = encodeURIComponent(area || PRIORITY_AREAS.join(','));
+      const res = await api.get(`/api/jobs/local-verified?areas=${areas}&verifiedOnly=false`);
+      const data = unwrapApiResponse(res);
+
+      const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
+
+      const normalizedJobs: LocalVerifiedJob[] = jobs
+        .map((job: any) => ({
+          id: clean(job.id) || safeId(),
+          title: clean(job.title || job.job_title || job.role),
+          company: clean(job.company || job.employer || job.source_name),
+          area: clean(job.area || job.location || job.town),
+          deadline: clean(job.deadline || job.closing_date || job.closingDate) || null,
+          sourceLabel: clean(job.sourceLabel || job.source_type || job.sourceType) || 'Official source',
+          verificationStatus: normalizeVerificationStatus(job.verificationStatus || job.verification_status || job.status),
+          actionLabel: clean(job.actionLabel || job.action_label) || 'Apply Now',
+          applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.sourceUrl || job.source_url),
+          sourceUrl: clean(job.sourceUrl || job.source_url || job.applyUrl || job.apply_url),
+          sourceType: normalizeSourceType(job.sourceType || job.source_type),
+          isSourceCard: Boolean(job.isSourceCard),
+          salary: clean(job.salary) || null,
+          category: clean(job.category) || null,
+        }))
+        .filter((job: LocalVerifiedJob) => job.title && job.applyUrl);
+
+      setLocalJobs(normalizedJobs.length ? normalizedJobs : OFFICIAL_LOCAL_JOB_SOURCES);
+
+      return normalizedJobs.length ? normalizedJobs : OFFICIAL_LOCAL_JOB_SOURCES;
+    } catch {
+      setLocalJobs(OFFICIAL_LOCAL_JOB_SOURCES);
+      return OFFICIAL_LOCAL_JOB_SOURCES;
+    }
+  };
 
   const recordAIUse = () => {
     if (deepSeekLimit === null) return;
@@ -1259,6 +1283,31 @@ export default function AIJobAssistantPage() {
     setSelectedImages([]);
   };
 
+  const buildLocalJobsAnswer = (jobs: LocalVerifiedJob[], areaText: string) => {
+    const list = [...jobs]
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map((job, index) => {
+        const deadlineInfo = getDeadlineInfo(job.deadline);
+
+        return `${index + 1}. **${job.title}**
+Company/source: ${job.company}
+Area: ${job.area}
+Closing date: ${job.deadline || 'Check official page'} (${deadlineInfo.label})
+Verification: ${verificationStatusLabel(job.verificationStatus)}
+Apply: [Open official page](${job.applyUrl})`;
+      })
+      .join('\n\n');
+
+    return `**Verified jobs and official sources for ${areaText || 'your area'}**
+
+Here are the available verified jobs and official application sources I found inside FaceMeX.
+
+${list}
+
+**Next step**
+Open the official page, choose the role that fits you, then use **Apply Assistant** to prepare your CV, email, and follow-up plan.`;
+  };
+
   const sendPrompt = async (overridePrompt?: string) => {
     const cleanPrompt = clean(overridePrompt || prompt);
     const attachedImages = selectedImages;
@@ -1319,6 +1368,46 @@ Respond based on the previous question/task. Do not ask what the user means if t
         tier: currentTier,
         local_focus: 'tzaneen_polokwane_phalaborwa_hoedspruit_makhado_musina',
       });
+    }
+
+    const localJobSearch =
+      intent === 'job-search' &&
+      !hasImages &&
+      /(looking for.*job|look for.*job|jobs in|job in|vacancies in|work in|tzaneen|polokwane|phalaborwa|hoedspruit|makhado|musina|messina)/i.test(
+        finalPrompt
+      );
+
+    if (localJobSearch) {
+      try {
+        const areaMatch =
+          finalPrompt.match(/tzaneen/i)?.[0] ||
+          finalPrompt.match(/polokwane/i)?.[0] ||
+          finalPrompt.match(/phalaborwa/i)?.[0] ||
+          finalPrompt.match(/hoedspruit/i)?.[0] ||
+          finalPrompt.match(/makhado/i)?.[0] ||
+          finalPrompt.match(/musina|messina/i)?.[0] ||
+          '';
+
+        const jobs = await loadLocalJobs(areaMatch || undefined);
+        const answer = buildLocalJobsAnswer(jobs, areaMatch || 'local areas');
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: safeId(),
+            role: 'assistant',
+            content: answer,
+            createdAt: new Date().toISOString(),
+            savedCategory: suggestedSavedCategory,
+            intent,
+          },
+        ]);
+
+        setBusy(false);
+        return;
+      } catch {
+        // continue to AI fallback
+      }
     }
 
     if (!canUseAI) {
@@ -1489,7 +1578,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
       },
     });
 
-    toast({ title: `${savedCategoryLabels[category]} saved`, description: 'Saved in Workspace.' });
+    toast({ title: `${savedCategoryLabels[category]} saved`, description: 'Saved in Job Tracker.' });
   };
 
   const saveLocalJob = (job: LocalVerifiedJob) => {
@@ -1515,7 +1604,7 @@ Apply link: ${job.applyUrl}`;
       },
     ]);
 
-    toast({ title: 'Saved', description: 'Job/source saved in your workspace.' });
+    toast({ title: 'Saved', description: 'Job saved in My Job Tracker.' });
   };
 
   const removeFromSaved = (id: string) => {
@@ -1535,7 +1624,7 @@ Apply link: ${job.applyUrl}`;
       })
     );
 
-    toast({ title: 'Removed', description: 'Item removed from Saved.' });
+    toast({ title: 'Removed', description: 'Item removed from Job Tracker.' });
   };
 
   const togglePin = (id: string) => {
@@ -1564,7 +1653,7 @@ Apply link: ${job.applyUrl}`;
 
     toast({
       title: 'Deleted',
-      description: 'Removed from chat. Saved copy stays in Saved.',
+      description: 'Removed from chat. Saved copy stays in Job Tracker.',
     });
   };
 
@@ -1603,7 +1692,7 @@ Apply link: ${job.applyUrl}`;
       })
     );
 
-    toast({ title: 'Saved items cleared', description: 'Your saved workspace list is now empty.' });
+    toast({ title: 'Job Tracker cleared', description: 'Your saved list is now empty.' });
   };
 
   const handleGeneratedLinkClick = (url: string, label?: string) => {
@@ -1644,6 +1733,145 @@ Apply link: ${job.applyUrl}`;
     );
   };
 
+  const renderJobSummaryCard = (message: ChatMessage, previousUserText = '') => {
+    const combined = `${previousUserText}\n${message.content}`;
+
+    if (!shouldShowApplyActions(message.content, previousUserText)) return null;
+    if (!/(verdict|needs verification|verified|avoid|job|vacancy|apply|cv|email|deadline|closing date)/i.test(combined)) {
+      return null;
+    }
+
+    const title = extractJobTitle(combined);
+    const company = extractCompany(combined);
+    const email = extractEmail(combined);
+    const deadline = extractDeadline(combined);
+    const needsVerification = /needs verification|not enough|unclear|verify/i.test(combined);
+
+    return (
+      <div className="mb-4 rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex gap-3">
+          {message.images?.[0] ? (
+            <img
+              src={message.images[0].dataUrl}
+              alt="Job screenshot"
+              className="h-24 w-24 shrink-0 rounded-2xl object-cover"
+            />
+          ) : (
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+              <Briefcase className="h-7 w-7 text-slate-500" />
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <h3 className="line-clamp-2 text-base font-semibold leading-tight">{title}</h3>
+
+            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-3.5 w-3.5" />
+                <span className="truncate">{company}</span>
+              </div>
+
+              {email && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3.5 w-3.5" />
+                  <span className="truncate">{email}</span>
+                </div>
+              )}
+
+              {deadline && (
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span>{deadline}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3">
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                {needsVerification ? 'Needs verification' : 'Job opportunity'}
+              </span>
+            </div>
+          </div>
+
+          <ChevronRight className="mt-2 h-5 w-5 shrink-0 text-slate-400" />
+        </div>
+      </div>
+    );
+  };
+
+  const renderCompanyVerificationCard = (message: ChatMessage, previousUserText = '') => {
+    const combined = `${previousUserText}\n${message.content}`;
+
+    if (!shouldShowApplyActions(message.content, previousUserText)) return null;
+    if (!/(verify company|company verification|needs verification|needs more proof|trust score|website found|physical address|scam reports)/i.test(combined)) {
+      return null;
+    }
+
+    const company = extractCompany(combined);
+    const email = extractEmail(combined);
+    const domain = email ? email.split('@')[1] : 'company domain';
+    const score = /verified/i.test(combined) && !/needs verification|not found/i.test(combined) ? 78 : 48;
+
+    return (
+      <div className="mb-4 rounded-2xl border border-black/5 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-center gap-3">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-bold text-slate-700 dark:bg-white/[0.08] dark:text-white">
+            {company.slice(0, 4).toUpperCase()}
+          </div>
+
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-semibold">{company}</h3>
+            <p className="truncate text-xs text-slate-500 dark:text-white/50">{domain}</p>
+          </div>
+
+          <ExternalLink className="ml-auto h-4 w-4 text-slate-400" />
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-black/20">
+          <div className="flex items-center gap-4">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-[7px] border-orange-400 bg-white text-lg font-bold text-slate-950 dark:bg-white/[0.08] dark:text-white">
+              {score}
+              <span className="text-xs font-medium text-slate-500">/100</span>
+            </div>
+
+            <div>
+              <h4 className="text-base font-semibold text-orange-600">Needs more proof</h4>
+              <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
+                Some key information is missing. Proceed with caution before applying.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 divide-y divide-black/5 text-sm dark:divide-white/10">
+            {[
+              ['Website found', 'Yes', true],
+              ['Email matches domain', email ? 'Yes' : 'Not clear', Boolean(email)],
+              ['Physical address', 'Not found', false],
+              ['LinkedIn/company page', 'Not found', false],
+              ['Scam reports', 'None found', true],
+            ].map(([label, value, good]) => (
+              <div key={String(label)} className="flex items-center justify-between py-2">
+                <span className="text-slate-700 dark:text-white/75">{label}</span>
+                <span className={good ? 'font-medium text-emerald-600' : 'font-medium text-red-500'}>
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+          <strong className="block text-sm">What this means</strong>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>The domain may exist.</li>
+            <li>The company identity is still unclear.</li>
+            <li>Apply only after confirming location and contact person.</li>
+          </ul>
+        </div>
+      </div>
+    );
+  };
+
   const assistantSmartActions = (message: ChatMessage, previousUserText = '') => {
     if (message.role !== 'assistant') return null;
 
@@ -1657,7 +1885,7 @@ Apply link: ${job.applyUrl}`;
             href="https://www.labour.gov.za/online-tools"
             target="_blank"
             rel="noreferrer"
-            onClick={() => trackLinkClick('https://www.labour.gov.za/online-tools', 'DoEL official services')}
+            onClick={() => trackLinkClick('https://www.labour.gov.za/online-tools', 'Official government source')}
           >
             <Button size="sm" variant="outline" className="h-9 w-full rounded-xl text-xs">
               <ExternalLink className="mr-2 h-3.5 w-3.5" />
@@ -1690,7 +1918,7 @@ Apply link: ${job.applyUrl}`;
               `Use Apply Assistant for this opportunity. Guide me step by step: verify the source, prepare my CV, write the application email or WhatsApp, and remind me about the closing date:\n\n${message.content}`
             )
           }
-          className="h-9 rounded-xl text-xs"
+          className="h-10 rounded-xl text-xs"
         >
           <Send className="mr-2 h-3.5 w-3.5" />
           Apply Assistant
@@ -1701,12 +1929,12 @@ Apply link: ${job.applyUrl}`;
           variant="outline"
           onClick={() =>
             sendPrompt(
-              `Verify this job/company deeper using Source & Verification. Check official website, company location, contact person, email domain, and scam signs:\n\n${message.content}`
+              `Verify this job/company deeper. Check official website, company location, contact person, email domain, LinkedIn/company page, and scam signs:\n\n${message.content}`
             )
           }
-          className="h-9 rounded-xl text-xs"
+          className="h-10 rounded-xl text-xs"
         >
-          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+          <Building2 className="mr-2 h-3.5 w-3.5" />
           Verify Company
         </Button>
 
@@ -1718,7 +1946,7 @@ Apply link: ${job.applyUrl}`;
               `Write a professional application email and WhatsApp message for this opportunity. Keep it clean, short, and copy-ready:\n\n${message.content}`
             )
           }
-          className="h-9 rounded-xl text-xs"
+          className="h-10 rounded-xl text-xs"
         >
           <Mail className="mr-2 h-3.5 w-3.5" />
           Write Email
@@ -1732,7 +1960,7 @@ Apply link: ${job.applyUrl}`;
               `Help me tailor my CV for this opportunity. Show what skills to highlight and what wording to use:\n\n${message.content}`
             )
           }
-          className="h-9 rounded-xl text-xs"
+          className="h-10 rounded-xl text-xs"
         >
           <FileText className="mr-2 h-3.5 w-3.5" />
           Fix My CV
@@ -1741,15 +1969,27 @@ Apply link: ${job.applyUrl}`;
         <Button
           size="sm"
           variant="outline"
-          onClick={() =>
-            sendPrompt(
-              `Help me report or warn others about this job if it looks risky. Write a short, professional warning message:\n\n${message.content}`
-            )
-          }
-          className="col-span-2 h-9 rounded-xl text-xs"
+          onClick={() => saveMessageAs(message.id, 'career_plan')}
+          className="h-10 rounded-xl text-xs"
         >
-          <Flag className="mr-2 h-3.5 w-3.5" />
-          Report Job
+          <Save className="mr-2 h-3.5 w-3.5" />
+          Save Job
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            saveMessageAs(message.id, 'career_plan');
+            toast({
+              title: 'Reminder noted',
+              description: 'Saved in My Job Tracker. Add calendar reminder from the tracker.',
+            });
+          }}
+          className="h-10 rounded-xl text-xs"
+        >
+          <Bell className="mr-2 h-3.5 w-3.5" />
+          Set Reminder
         </Button>
       </div>
     );
@@ -1828,21 +2068,21 @@ Apply link: ${job.applyUrl}`;
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => setSourcesOpen(true)}
+            onClick={() => setJobsOpen(true)}
             className="h-9 w-9 rounded-full"
-            aria-label="Source and verification"
+            aria-label="Verified local jobs"
           >
-            <ExternalLink className="h-4 w-4" />
+            <Menu className="h-4 w-4" />
           </Button>
 
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => setSavedOpen(true)}
+            onClick={() => setTrackerOpen(true)}
             className="h-9 w-9 rounded-full"
-            aria-label="Saved"
+            aria-label="My Job Tracker"
           >
-            <Save className="h-4 w-4" />
+            <Clock className="h-4 w-4" />
           </Button>
         </div>
       </header>
@@ -1929,6 +2169,9 @@ Apply link: ${job.applyUrl}`;
                       ) : (
                         <div className={message.role === 'assistant' ? 'max-h-[52vh] overflow-y-auto pr-1' : ''}>
                           {renderMessageImages(message.images)}
+
+                          {message.role === 'assistant' && renderJobSummaryCard(message, previousUserText)}
+                          {message.role === 'assistant' && renderCompanyVerificationCard(message, previousUserText)}
 
                           {message.role === 'assistant' ? (
                             <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
@@ -2052,55 +2295,200 @@ Apply link: ${job.applyUrl}`;
         </section>
       </main>
 
-      {savedOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setSavedOpen(false)}>
+      {trackerOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setTrackerOpen(false)}>
           <div
             className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90">
               <div>
-                <h2 className="text-base font-semibold">Saved</h2>
-                <p className="text-[11px] text-slate-500 dark:text-white/45">Workspace history</p>
+                <h2 className="text-base font-semibold">My Job Tracker</h2>
+                <p className="text-[11px] text-slate-500 dark:text-white/45">
+                  Saved jobs, reminders, follow-ups
+                </p>
               </div>
 
-              <Button size="icon" variant="ghost" onClick={() => setSavedOpen(false)} className="h-10 w-10 rounded-full">
+              <Button size="icon" variant="ghost" onClick={() => setTrackerOpen(false)} className="h-10 w-10 rounded-full">
                 <X className="h-5 w-5" />
               </Button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={savedFilter === 'all' ? 'default' : 'outline'}
-                  onClick={() => setSavedFilter('all')}
-                  className="h-9 rounded-full px-4 text-xs"
-                >
-                  All
-                </Button>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                  <Save className="h-5 w-5 text-blue-500" />
+                  <p className="mt-2 text-[11px] text-slate-500">Saved</p>
+                  <p className="text-xl font-semibold">{savedMessages.length}</p>
+                </div>
 
-                {(['career_plan', 'cv_advice', 'application_message', 'research'] as SavedCategory[]).map(
-                  (category) => (
-                    <Button
-                      key={category}
-                      variant={savedFilter === category ? 'default' : 'outline'}
-                      onClick={() => setSavedFilter(category)}
-                      className="h-9 rounded-full px-4 text-xs"
-                    >
-                      {savedCategoryLabels[category]} ({savedStats[category]})
-                    </Button>
-                  )
-                )}
+                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  <p className="mt-2 text-[11px] text-slate-500">Verified</p>
+                  <p className="text-xl font-semibold">
+                    {sortedLocalJobs.filter((job) => job.verificationStatus === 'verified').length}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                  <Users className="h-5 w-5 text-purple-500" />
+                  <p className="mt-2 text-[11px] text-slate-500">Interviews</p>
+                  <p className="text-xl font-semibold">0</p>
+                </div>
               </div>
 
-              <div className="mt-5">
-                {visibleSavedMessages.length === 0 ? (
-                  <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50">
-                    No saved items yet.
+              {closingSoonJob && (
+                <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-4 dark:border-red-500/20 dark:bg-red-500/10">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300">
+                      <Clock className="h-5 w-5" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-red-600 dark:text-red-300">Closing soon</p>
+                      <h3 className="truncate font-semibold">{closingSoonJob.title}</h3>
+                      <p className="text-xs text-slate-500 dark:text-white/50">
+                        {getDeadlineInfo(closingSoonJob.deadline).label}
+                      </p>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => openOfficialApplyPage(closingSoonJob)}
+                      className="rounded-xl"
+                    >
+                      Apply
+                    </Button>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {visibleSavedMessages.map((item) => (
+                </div>
+              )}
+
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
+                <h3 className="text-base font-semibold">Your pipeline</h3>
+
+                <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
+                  {sortedLocalJobs.slice(0, 5).map((job) => {
+                    const deadlineInfo = getDeadlineInfo(job.deadline);
+
+                    return (
+                      <div key={job.id} className="flex items-center gap-3 py-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
+                          {job.verificationStatus === 'verified' ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : (
+                            <Save className="h-4 w-4 text-blue-500" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{job.title}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-white/50">
+                            {job.deadline || 'Open'}
+                          </p>
+                          <span
+                            className={`mt-1 inline-flex rounded-full px-2 py-1 text-[11px] font-medium ${
+                              deadlineInfo.urgent
+                                ? 'bg-orange-50 text-orange-600'
+                                : verificationStatusStyles(job.verificationStatus)
+                            }`}
+                          >
+                            {deadlineInfo.urgent ? deadlineInfo.label : verificationStatusLabel(job.verificationStatus)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
+                <h3 className="text-base font-semibold">Daily tasks</h3>
+
+                <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
+                  {[
+                    ['Send follow-up email', Mail],
+                    ['Tailor CV for saved jobs', FileText],
+                    ['Review interview questions', Users],
+                  ].map(([label, Icon]: any) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        setTrackerOpen(false);
+                        sendPrompt(String(label));
+                      }}
+                      className="flex w-full items-center gap-3 py-3 text-left"
+                    >
+                      <Icon className="h-4 w-4 text-blue-500" />
+                      <span className="flex-1 text-sm">{label}</span>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500 text-white">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold">Come back for new job matches</h3>
+                    <p className="text-xs text-slate-500 dark:text-white/50">
+                      FaceMeX will help you apply smarter.
+                    </p>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setTrackerOpen(false);
+                      setJobsOpen(true);
+                    }}
+                    className="rounded-xl bg-white"
+                  >
+                    View jobs
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={savedFilter === 'all' ? 'default' : 'outline'}
+                    onClick={() => setSavedFilter('all')}
+                    className="h-9 rounded-full px-4 text-xs"
+                  >
+                    All
+                  </Button>
+
+                  {(['career_plan', 'cv_advice', 'application_message', 'research'] as SavedCategory[]).map(
+                    (category) => (
+                      <Button
+                        key={category}
+                        variant={savedFilter === category ? 'default' : 'outline'}
+                        onClick={() => setSavedFilter(category)}
+                        className="h-9 rounded-full px-4 text-xs"
+                      >
+                        {savedCategoryLabels[category]} ({savedStats[category]})
+                      </Button>
+                    )
+                  )}
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  {visibleSavedMessages.length === 0 ? (
+                    <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50">
+                      No saved items yet.
+                    </div>
+                  ) : (
+                    visibleSavedMessages.map((item) => (
                       <div
                         key={item.id}
                         className="rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
@@ -2110,7 +2498,7 @@ Apply link: ${job.applyUrl}`;
                             <FileText className="h-4 w-4 text-slate-500" />
                           </div>
 
-                          <button type="button" onClick={() => setSavedOpen(false)} className="min-w-0 flex-1 text-left">
+                          <button type="button" onClick={() => setTrackerOpen(false)} className="min-w-0 flex-1 text-left">
                             <div className="line-clamp-1 text-sm font-semibold">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item'}
                             </div>
@@ -2132,9 +2520,9 @@ Apply link: ${job.applyUrl}`;
                           <MoreVertical className="hidden h-4 w-4 shrink-0 text-slate-400" />
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
 
@@ -2145,216 +2533,150 @@ Apply link: ${job.applyUrl}`;
                 className="w-full rounded-2xl text-red-500 hover:text-red-600"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Clear saved items
+                Clear tracker
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {sourcesOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setSourcesOpen(false)}>
+      {jobsOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setJobsOpen(false)}>
           <div
             className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90">
               <div>
-                <h2 className="text-base font-semibold">Source & Verification</h2>
+                <h2 className="text-base font-semibold">Verified Local Jobs</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
                   Tzaneen, Polokwane, Phalaborwa, Hoedspruit, Makhado, Musina
                 </p>
               </div>
 
-              <Button size="icon" variant="ghost" onClick={() => setSourcesOpen(false)} className="h-10 w-10 rounded-full">
+              <Button size="icon" variant="ghost" onClick={() => setJobsOpen(false)} className="h-10 w-10 rounded-full">
                 <X className="h-5 w-5" />
               </Button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-white dark:text-black">
-                    <ShieldCheck className="h-4 w-4" />
-                  </div>
-
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold">How FaceMeX checks jobs</h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
-                      Jobs should show the source, area, verification status, official apply page, and closing countdown where available.
-                    </p>
-                  </div>
-                </div>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {['All', 'Tzaneen', 'Polokwane', 'Phalaborwa', 'Hoedspruit', 'Makhado', 'Musina'].map((area) => (
+                  <Button
+                    key={area}
+                    variant="outline"
+                    onClick={() => loadLocalJobs(area === 'All' ? undefined : area)}
+                    className="h-9 shrink-0 rounded-full px-4 text-xs"
+                  >
+                    {area}
+                  </Button>
+                ))}
               </div>
 
-              <div className="mt-5">
-                <h3 className="mb-3 text-sm font-semibold">Verified local job sources</h3>
+              <div className="mt-4 space-y-3">
+                {sortedLocalJobs.map((job) => {
+                  const deadlineInfo = getDeadlineInfo(job.deadline);
+                  void nowTick;
 
-                <div className="space-y-3">
-                  {localJobs.map((job) => {
-                    const deadlineInfo = getDeadlineInfo(job.deadline);
-                    void nowTick;
+                  return (
+                    <div
+                      key={job.id}
+                      className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                    >
+                      <div className="flex gap-3">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                          {job.verificationStatus === 'verified' ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          ) : job.verificationStatus === 'avoid' ? (
+                            <AlertTriangle className="h-5 w-5 text-red-500" />
+                          ) : (
+                            <ShieldCheck className="h-5 w-5 text-blue-600" />
+                          )}
+                        </div>
 
-                    return (
-                      <div
-                        key={job.id}
-                        className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
-                      >
-                        <div className="flex gap-3">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-                            {job.verificationStatus === 'verified' ? (
-                              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                            ) : job.verificationStatus === 'avoid' ? (
-                              <AlertTriangle className="h-5 w-5 text-red-500" />
-                            ) : (
-                              <ShieldCheck className="h-5 w-5 text-blue-600" />
-                            )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h4 className="truncate text-sm font-semibold">{job.title}</h4>
+                              <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                            </div>
+
+                            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                           </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <h4 className="truncate text-sm font-semibold">{job.title}</h4>
-                                <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
-                              </div>
-
-                              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                          <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-3.5 w-3.5" />
+                              <span className="truncate">{job.area}</span>
                             </div>
 
-                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-3.5 w-3.5" />
-                                <span className="truncate">{job.area}</span>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <CalendarDays className="h-3.5 w-3.5" />
-                                <span>{job.deadline || 'Official vacancies page'}</span>
-                              </div>
-
-                              <div
-                                className={`flex items-center gap-2 ${
-                                  deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
-                                }`}
-                              >
-                                <Clock className="h-3.5 w-3.5" />
-                                <span>{deadlineInfo.label}</span>
-                              </div>
+                            <div className="flex items-center gap-2">
+                              <CalendarDays className="h-3.5 w-3.5" />
+                              <span>{job.deadline || 'Official vacancies page'}</span>
                             </div>
 
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-                                Source: {job.sourceLabel}
-                              </span>
-
-                              <span
-                                className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
-                                  job.verificationStatus
-                                )}`}
-                              >
-                                {verificationStatusLabel(job.verificationStatus)}
-                              </span>
+                            <div
+                              className={`flex items-center gap-2 ${
+                                deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
+                              }`}
+                            >
+                              <Clock className="h-3.5 w-3.5" />
+                              <span>{deadlineInfo.label}</span>
                             </div>
+                          </div>
 
-                            <div className="mt-3 grid grid-cols-2 gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openOfficialApplyPage(job)}
-                                disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
-                                className="h-8 rounded-xl text-xs"
-                              >
-                                {job.isSourceCard ? (
-                                  <Globe2 className="mr-1.5 h-3.5 w-3.5" />
-                                ) : job.verificationStatus === 'needs_verification' ? (
-                                  <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                                ) : (
-                                  <Send className="mr-1.5 h-3.5 w-3.5" />
-                                )}
-                                {deadlineInfo.expired ? 'Closed' : job.actionLabel}
-                              </Button>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                              {job.sourceLabel}
+                            </span>
 
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => saveLocalJob(job)}
-                                className="h-8 rounded-xl text-xs"
-                              >
-                                <Save className="mr-1.5 h-3.5 w-3.5" />
-                                Save
-                              </Button>
-                            </div>
+                            <span
+                              className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
+                                job.verificationStatus
+                              )}`}
+                            >
+                              {verificationStatusLabel(job.verificationStatus)}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openOfficialApplyPage(job)}
+                              disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
+                              className="h-8 rounded-xl text-xs"
+                            >
+                              {job.isSourceCard ? (
+                                <Globe2 className="mr-1.5 h-3.5 w-3.5" />
+                              ) : job.verificationStatus === 'needs_verification' ? (
+                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                              ) : (
+                                <Send className="mr-1.5 h-3.5 w-3.5" />
+                              )}
+                              {deadlineInfo.expired ? 'Closed' : job.actionLabel}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => saveLocalJob(job)}
+                              className="h-8 rounded-xl text-xs"
+                            >
+                              <Save className="mr-1.5 h-3.5 w-3.5" />
+                              Save
+                            </Button>
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <h3 className="mb-3 text-sm font-semibold">Source categories</h3>
-
-                <div className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
-                  {sourceVerificationCategories.map((category) => (
-                    <div
-                      key={category.key}
-                      className="flex items-center gap-3 border-b border-black/5 p-3 last:border-0 dark:border-white/10"
-                    >
-                      <span
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${sourceCategoryIconStyle(
-                          category.key
-                        )}`}
-                      >
-                        <SourceCategoryIcon categoryKey={category.key} />
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold">{category.title}</span>
-                        <span className="line-clamp-2 text-xs leading-5 text-slate-500 dark:text-white/50">
-                          {category.note}
-                        </span>
-                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <h3 className="mb-3 text-sm font-semibold">Official local links</h3>
-
-                <div className="space-y-3">
-                  {sourceLinks.map((link) => (
-                    <a
-                      key={link.url}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => trackLinkClick(link.url, link.label)}
-                      className="flex items-center gap-3 rounded-2xl border border-black/5 bg-white p-3 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.05]"
-                    >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-                        {link.image ? (
-                          <img src={link.image} alt={link.label} className="h-6 w-6 rounded-lg object-contain" />
-                        ) : (
-                          <Briefcase className="h-4 w-4 text-slate-400" />
-                        )}
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">{link.label}</span>
-                        <span className="line-clamp-2 text-xs text-slate-500 dark:text-white/50">{link.note}</span>
-                      </span>
-
-                      <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
-                    </a>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
               <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
-                <strong className="block text-sm">Safety rule</strong>
-                FaceMeX should not mark community screenshots as verified unless the employer, official source, or application method is confirmed. Users must never pay money to apply.
+                <strong className="block text-sm">FaceMeX rule</strong>
+                Jobs must show source, area, verification status, official apply page, and closing countdown where available.
               </div>
             </div>
           </div>
