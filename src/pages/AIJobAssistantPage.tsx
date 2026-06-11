@@ -9,12 +9,14 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Copy,
   Crown,
   Edit3,
   ExternalLink,
   FileText,
   Flag,
+  Globe2,
   ImagePlus,
   Loader2,
   Mail,
@@ -26,6 +28,7 @@ import {
   Save,
   Search,
   Send,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -56,7 +59,8 @@ type SearchLink = {
   url: string;
   note?: string;
   image?: string;
-  category?: 'jobs' | 'social' | 'government' | 'nearby' | 'business' | 'source';
+  category?: 'official' | 'government' | 'municipality' | 'youth' | 'labour';
+  area?: string;
 };
 
 type SavedCategory = 'career_plan' | 'cv_advice' | 'application_message' | 'research';
@@ -79,6 +83,7 @@ type ChatMessage = {
   savedCategory?: SavedCategory;
   deletedFromChat?: boolean;
   images?: WorkspaceImage[];
+  intent?: string;
 };
 
 type SourceCategoryKey =
@@ -94,15 +99,24 @@ type SourceVerificationCategory = {
   note: string;
 };
 
-type LocalJobPost = {
+type LocalVerifiedJob = {
   id: string;
   title: string;
   company: string;
   area: string;
-  deadline: string;
+  deadline?: string | null;
   sourceLabel: string;
   verificationStatus: 'verified' | 'needs_verification' | 'avoid';
   actionLabel: string;
+  applyUrl: string;
+  sourceUrl: string;
+  sourceType:
+    | 'facemex_verified_tzaneen_employer'
+    | 'official_company_source'
+    | 'government_public_institution'
+    | 'community_advert_needs_verification'
+    | 'high_risk_avoid';
+  isSourceCard?: boolean;
 };
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
@@ -121,7 +135,7 @@ const sourceVerificationCategories: SourceVerificationCategory[] = [
   {
     key: 'official_company_source',
     title: 'Official Company Source',
-    note: 'Company website, official career page, or official company email.',
+    note: 'Official company page, career page, or application link.',
   },
   {
     key: 'government_public_institution',
@@ -131,64 +145,125 @@ const sourceVerificationCategories: SourceVerificationCategory[] = [
   {
     key: 'community_advert_needs_verification',
     title: 'Community Advert — Needs verification',
-    note: 'Facebook, WhatsApp, screenshot, or public advert shared by the community.',
+    note: 'Facebook, WhatsApp, screenshot, or community-posted advert.',
   },
   {
     key: 'high_risk_avoid',
     title: 'High Risk / Avoid',
-    note: 'Missing employer details, payment requested, or suspicious application process.',
+    note: 'Missing details, payment requested, or suspicious application process.',
   },
 ];
 
-const localJobPreview: LocalJobPost[] = [
+const OFFICIAL_LOCAL_JOB_SOURCES: SearchLink[] = [
   {
-    id: 'forklift-driver',
-    title: 'Forklift Driver',
-    company: 'Riverside Logistics',
-    area: 'Tzaneen / Polokwane',
-    deadline: '20 Jun 2026',
-    sourceLabel: 'FaceMeX Verified Employer',
-    verificationStatus: 'verified',
-    actionLabel: 'Apply Now',
+    label: 'Greater Tzaneen Municipality Vacancies',
+    area: 'Tzaneen',
+    url: 'https://www.greatertzaneen.gov.za/?q=current_vacancies',
+    note: 'Official Greater Tzaneen Municipality vacancies page.',
+    category: 'municipality',
   },
   {
-    id: 'admin-clerk',
-    title: 'EPWP Admin Clerk',
-    company: 'Local Municipality',
-    area: 'Tzaneen / Limpopo',
-    deadline: '24 Jun 2026',
-    sourceLabel: 'Government / Public Institution',
-    verificationStatus: 'verified',
-    actionLabel: 'Apply Now',
+    label: 'Polokwane Municipality Employment Portal',
+    area: 'Polokwane',
+    url: 'https://apply.polokwane.gov.za/',
+    note: 'Official Polokwane Municipality application portal.',
+    category: 'municipality',
   },
   {
-    id: 'code-14-side-tipper',
-    title: 'Code 14 Side Tipper Driver',
-    company: 'MRMS',
-    area: 'Not stated',
-    deadline: '22 Jun 2026',
-    sourceLabel: 'Public advert screenshot',
-    verificationStatus: 'needs_verification',
-    actionLabel: 'Verify First',
+    label: 'Ba-Phalaborwa Municipality Vacancies',
+    area: 'Phalaborwa',
+    url: 'https://www.phalaborwa.gov.za/vacancies/vacancies.php',
+    note: 'Official Ba-Phalaborwa Municipality vacancies page.',
+    category: 'municipality',
   },
   {
-    id: 'security-guard',
-    title: 'Security Guard',
-    company: 'Unknown',
-    area: 'Johannesburg',
-    deadline: 'Not stated',
-    sourceLabel: 'High Risk / Avoid',
-    verificationStatus: 'avoid',
-    actionLabel: 'Report',
+    label: 'Maruleng Municipality Vacancies',
+    area: 'Hoedspruit',
+    url: 'https://www.maruleng.gov.za/pages/vacancies.php',
+    note: 'Official Maruleng Municipality vacancies page for Hoedspruit area.',
+    category: 'municipality',
+  },
+  {
+    label: 'Makhado Municipality Advertised Posts',
+    area: 'Makhado',
+    url: 'https://www.makhado.gov.za/?q=advertisedvacancies',
+    note: 'Official Makhado Municipality advertised vacancies and application forms.',
+    category: 'municipality',
+  },
+  {
+    label: 'Musina Municipality Vacancies',
+    area: 'Musina',
+    url: 'https://www.musina.gov.za/vacancies-musina-municipality/',
+    note: 'Official Musina Municipality vacancies portal.',
+    category: 'municipality',
+  },
+  {
+    label: 'Limpopo Government e-Recruitment',
+    area: 'Limpopo',
+    url: 'https://erecruitment.limpopo.gov.za/',
+    note: 'Official Limpopo provincial government recruitment portal.',
+    category: 'government',
+  },
+  {
+    label: 'DPSA Vacancy Circular',
+    area: 'South Africa',
+    url: 'https://www.dpsa.gov.za/newsroom/psvc/',
+    note: 'Official South African government vacancy circular.',
+    category: 'government',
+  },
+  {
+    label: 'SAYouth',
+    area: 'Youth Opportunities',
+    url: 'https://sayouth.mobi/',
+    note: 'Youth opportunities, learnerships, entry-level work, and programmes.',
+    category: 'youth',
+  },
+  {
+    label: 'ESSA Labour',
+    area: 'Labour Department',
+    url: 'https://essa.labour.gov.za/EssaOnline/WebBeans/',
+    note: 'Official Department of Employment and Labour employment services.',
+    category: 'labour',
   },
 ];
+
+const FALLBACK_LOCAL_JOBS: LocalVerifiedJob[] = OFFICIAL_LOCAL_JOB_SOURCES.map((source) => ({
+  id: source.label.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+  title: source.label,
+  company: source.area || 'Official source',
+  area: source.area || 'Local',
+  deadline: null,
+  sourceLabel: 'Official source',
+  verificationStatus: 'verified',
+  actionLabel: 'Open Official Page',
+  applyUrl: source.url,
+  sourceUrl: source.url,
+  sourceType: source.category === 'municipality' ? 'government_public_institution' : 'official_company_source',
+  isSourceCard: true,
+}));
 
 const MAX_WORKSPACE_IMAGES = 4;
 const MAX_IMAGE_SIZE_MB = 12;
 
+const PRIORITY_AREAS = [
+  'Tzaneen',
+  'Lenyenye',
+  'Nkowankowa',
+  'Maake',
+  'Polokwane',
+  'Phalaborwa',
+  'Hoedspruit',
+  'Makhado',
+  'Musina',
+  'Messina',
+];
+
 const SOURCE_VERIFICATION_SYSTEM = `
-FaceMeX Job AI must prioritize Tzaneen first, then nearby areas:
-Tzaneen, Lenyenye, Nkowankowa, Maake, Dan, Burgersdorp, Haenertsburg, Modjadjiskloof, Giyani, Phalaborwa, and Polokwane.
+FaceMeX Job AI must prioritize these areas first:
+Tzaneen, Lenyenye, Nkowankowa, Maake, Polokwane, Phalaborwa, Hoedspruit, Makhado, Musina/Messina.
+
+Do not lead with general South Africa job boards unless the user asks for national jobs.
+Prioritize official pages, direct employer pages, municipal pages, government portals, and FaceMeX verified local employers.
 
 When checking or displaying job posts, use this Source & Verification system:
 
@@ -225,6 +300,12 @@ When responding about a job post, always include:
 Never say something is verified unless the source is clearly official or directly confirmed.
 If the source is only a screenshot, say it needs verification.
 Always warn users not to pay money to apply for jobs.
+
+For non-job questions like UIF, SASSA, school info, or general government service checks:
+- Do not show CV/application actions.
+- Give a clean ChatGPT-style answer.
+- Include the official source link if available.
+- Use clean formatting for USSD codes like *134*843#.
 `;
 
 const FACE_MEX_ANSWER_STYLE = `
@@ -237,16 +318,22 @@ When a table is useful, write a proper markdown table using pipes and a separato
 Give direct answers first.
 Avoid messy long paragraphs.
 
-FaceMeX is Tzaneen-first.
-When the user asks for jobs, prioritize Tzaneen, Lenyenye, Nkowankowa, Maake, Dan, Burgersdorp, Haenertsburg, Modjadjiskloof, Giyani, Phalaborwa, and Polokwane before broader Limpopo or South Africa.
+When displaying phone/USSD codes:
+- Write them cleanly exactly like *134*843#.
+- Do not add markdown escape slashes like \\*134\\*843#.
+- Do not wrap USSD codes with broken bold markdown.
+
+FaceMeX is local-first.
+When the user asks for jobs, prioritize:
+Tzaneen, Lenyenye, Nkowankowa, Maake, Polokwane, Phalaborwa, Hoedspruit, Makhado, Musina/Messina.
 
 When giving jobs or opportunities, show:
 1. Role/title
 2. Location/company
 3. Source & Verification
-4. Why it fits
+4. Closing date if available
 5. Action to take
-6. Link/source if available
+6. Official apply link if available
 
 When checking a job advert or screenshot, respond in this structure:
 
@@ -269,19 +356,24 @@ Safety note: Never pay money to apply.
 Give one clear action.
 
 When helping with applications, include copy-ready messages.
-If the user replies with a short answer like "yes", "okay", "continue", "do it", or "no", use the previous conversation context and continue from the last assistant question. Do not ask what they mean unless the previous context is missing.
+If the user replies with a short answer like "yes", "okay", "continue", "do it", or "no", use the previous conversation context and continue from the last assistant question.
 End with a simple next step.
 `;
 
 const quickPrompts = [
   {
-    label: 'Tzaneen jobs',
+    label: 'Local jobs',
     prompt:
-      'I am looking for job opportunities around Tzaneen, Lenyenye, Nkowankowa, Maake, and nearby areas. Help me find opportunities and apply smart.',
+      'Show me verified job sources and new vacancies around Tzaneen, Polokwane, Phalaborwa, Hoedspruit, Makhado, and Musina. Prioritize official application pages.',
   },
   {
     label: 'Check fake job',
     prompt: 'Help me check if this job or opportunity looks fake or risky. Use Source & Verification.',
+  },
+  {
+    label: 'Apply assistant',
+    prompt:
+      'Help me apply for a job properly. Guide me from checking the source, fixing my CV, writing the application email, and tracking the closing date.',
   },
   {
     label: 'Send CV',
@@ -294,11 +386,7 @@ const quickPrompts = [
   {
     label: 'Submit job',
     prompt:
-      'Help me clean and prepare a local Tzaneen job post for FaceMeX Jobs. Include source type, verification status, apply method, and safety note.',
-  },
-  {
-    label: 'Business',
-    prompt: 'Help me start a small business with low money and get customers fast.',
+      'Help me clean and prepare a local job post for FaceMeX Jobs. Include source type, verification status, apply method, closing date, and safety note.',
   },
 ];
 
@@ -313,10 +401,6 @@ function safeId() {
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function encodeSearchQuery(parts: string[]) {
-  return encodeURIComponent(parts.filter(Boolean).join(' ').trim() || 'jobs vacancies near me');
 }
 
 function normalizeTier(tier?: string | null) {
@@ -377,10 +461,22 @@ function unwrapApiResponse(res: any) {
   return res?.data || res;
 }
 
+function normalizeUssdCodes(text: string) {
+  return String(text || '')
+    .replace(/\\\*/g, '*')
+    .replace(/\*\*(\*134\*843#)\*\*/g, '$1')
+    .replace(/\*\*([*]\d{3}[*]\d{3}#)\*\*/g, '$1')
+    .replace(/`(\*\d{3}\*\d{3}#)`/g, '$1');
+}
+
 function detectIntent(text: string, hasImages = false) {
   const t = clean(text).toLowerCase();
 
   if (hasImages) return 'image_or_document_analysis';
+
+  if (/(uif|ussd|sassa|claim status|department of employment|labour|labor|\*134\*843#)/i.test(t)) {
+    return 'government-service-check';
+  }
 
   if (
     /(fake|scam|legit|legitimate|verify|verified|verification|safe|pay money|registration fee|upfront|is this real|is it real|risky|check job|check this|ligit|source)/i.test(
@@ -415,7 +511,7 @@ function detectIntent(text: string, hasImages = false) {
   }
 
   if (
-    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment|tzaneen|lenyenye|nkowankowa|maake|polokwane)/i.test(
+    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment|tzaneen|lenyenye|nkowankowa|maake|polokwane|phalaborwa|hoedspruit|makhado|musina|messina)/i.test(
       t
     )
   ) {
@@ -444,7 +540,8 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
     intent === 'research' ||
     intent === 'investors-and-networking' ||
     intent === 'image_or_document_analysis' ||
-    intent === 'verify-opportunity'
+    intent === 'verify-opportunity' ||
+    intent === 'government-service-check'
   ) {
     return 'research';
   }
@@ -453,101 +550,7 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
 }
 
 function buildVacancySources() {
-  const tzaneenJobsQuery = encodeSearchQuery([
-    'Tzaneen Lenyenye Nkowankowa Maake jobs vacancies apply now',
-  ]);
-  const tzaneenDriverQuery = encodeSearchQuery([
-    'Tzaneen driver general worker cashier cleaner admin jobs',
-  ]);
-  const governmentTzaneenQuery = encodeSearchQuery([
-    'Tzaneen municipality vacancies government jobs learnerships',
-  ]);
-  const localBusinessQuery = encodeSearchQuery([
-    'Tzaneen businesses hiring jobs vacancies',
-  ]);
-
-  const links: SearchLink[] = [
-    {
-      label: 'Tzaneen Jobs Search',
-      url: `https://www.google.com/search?q=${tzaneenJobsQuery}&tbs=qdr:w`,
-      note: 'Fresh local vacancies around Tzaneen, Lenyenye, Nkowankowa, and Maake.',
-      category: 'nearby',
-    },
-    {
-      label: 'Driver & General Work',
-      url: `https://www.google.com/search?q=${tzaneenDriverQuery}&tbs=qdr:w`,
-      note: 'Useful for drivers, general workers, cleaners, cashiers, and admin roles.',
-      category: 'nearby',
-    },
-    {
-      label: 'Government / Municipality',
-      url: `https://www.google.com/search?q=${governmentTzaneenQuery}&tbs=qdr:m`,
-      note: 'Municipality, public institution, learnerships, and government-related vacancies.',
-      category: 'government',
-    },
-    {
-      label: 'Local Businesses Hiring',
-      url: `https://www.google.com/search?q=${localBusinessQuery}&tbs=qdr:w`,
-      note: 'Find local shops, lodges, farms, restaurants, and transport businesses hiring.',
-      category: 'business',
-    },
-    {
-      label: 'SAYouth',
-      url: 'https://sayouth.mobi/',
-      note: 'Youth opportunities, entry-level jobs, learnerships, and programmes.',
-      category: 'government',
-    },
-    {
-      label: 'ESSA Labour',
-      url: 'https://essa.labour.gov.za/EssaOnline/WebBeans/',
-      note: 'Official employment services from the Department of Employment and Labour.',
-      category: 'government',
-    },
-    {
-      label: 'DPSA',
-      url: 'https://www.dpsa.gov.za/newsroom/psvc/',
-      note: 'Official South African government vacancy circular.',
-      category: 'government',
-    },
-    {
-      label: 'Indeed Tzaneen',
-      url: `https://za.indeed.com/jobs?q=${encodeURIComponent('jobs')}&l=${encodeURIComponent(
-        'Tzaneen, Limpopo'
-      )}`,
-      note: 'General local vacancies from employers and job boards.',
-      category: 'jobs',
-    },
-    {
-      label: 'LinkedIn Jobs Tzaneen',
-      url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(
-        'jobs'
-      )}&location=${encodeURIComponent('Tzaneen, Limpopo, South Africa')}`,
-      note: 'Company-posted jobs, sales, office roles, internships, and professional roles.',
-      category: 'jobs',
-    },
-    {
-      label: 'PNet Limpopo',
-      url: `https://www.pnet.co.za/jobs/limpopo`,
-      note: 'Formal vacancies and professional roles across Limpopo.',
-      category: 'jobs',
-    },
-    {
-      label: 'Careers24 Limpopo',
-      url: `https://www.careers24.com/jobs/lc-limpopo/`,
-      note: 'South African job listings across Limpopo industries.',
-      category: 'jobs',
-    },
-    {
-      label: 'Google Jobs South Africa',
-      url: `https://www.google.com/search?q=${encodeSearchQuery([
-        'jobs South Africa vacancies hiring apply',
-      ])}&tbs=qdr:w`,
-      note: 'Use when Tzaneen results are too limited.',
-      category: 'jobs',
-    },
-  ];
-
-  return links.map((link) => ({ ...link, image: faviconFor(link.url) }));
+  return OFFICIAL_LOCAL_JOB_SOURCES.map((link) => ({ ...link, image: faviconFor(link.url) }));
 }
 
 function readFileAsDataUrl(file: File) {
@@ -628,11 +631,11 @@ function normalizeAnswerText(raw: any, fallback: string) {
     (Array.isArray(raw?.suggestions) ? raw.suggestions.join('\n\n') : '') ||
     '';
 
-  return clean(answer) || fallback;
+  return normalizeUssdCodes(clean(answer) || fallback);
 }
 
 function normalizeBrokenMarkdownLinks(text: string) {
-  return String(text || '')
+  return normalizeUssdCodes(String(text || ''))
     .replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/gi, '[$1]($2)')
     .replace(
       /\[([^\]]+)\]\s*\(\s*((?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^)\s]*)?)\s*\)/gi,
@@ -979,13 +982,38 @@ function SourceCategoryIcon({ categoryKey }: { categoryKey: SourceCategoryKey })
   return <AlertTriangle className="h-4 w-4" />;
 }
 
-function isVerificationAnswer(content: string) {
-  return /(verdict|source & verification|verification status|needs verification|high risk|avoid|verified|fake|scam|legit)/i.test(
-    content
-  );
+function getDeadlineInfo(deadline?: string | null) {
+  if (!deadline) return { label: 'Check official page', expired: false, urgent: false };
+
+  const end = new Date(`${deadline}T23:59:59`);
+  const now = new Date();
+
+  if (Number.isNaN(end.getTime())) {
+    return { label: deadline, expired: false, urgent: false };
+  }
+
+  const diffMs = end.getTime() - now.getTime();
+
+  if (diffMs <= 0) {
+    return { label: 'Closed', expired: true, urgent: false };
+  }
+
+  const totalHours = Math.ceil(diffMs / (1000 * 60 * 60));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+
+  if (days <= 0) {
+    return { label: `Closing in ${hours}h`, expired: false, urgent: true };
+  }
+
+  if (days === 1) {
+    return { label: `Closing in 1 day`, expired: false, urgent: true };
+  }
+
+  return { label: `Closing in ${days} days`, expired: false, urgent: days <= 3 };
 }
 
-function verificationStatusStyles(status: LocalJobPost['verificationStatus']) {
+function verificationStatusStyles(status: LocalVerifiedJob['verificationStatus']) {
   if (status === 'verified') {
     return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20';
   }
@@ -997,10 +1025,34 @@ function verificationStatusStyles(status: LocalJobPost['verificationStatus']) {
   return 'bg-blue-50 text-blue-700 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/20';
 }
 
-function verificationStatusLabel(status: LocalJobPost['verificationStatus']) {
+function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus']) {
   if (status === 'verified') return 'Verified';
   if (status === 'avoid') return 'Avoid';
   return 'Needs verification';
+}
+
+function isJobRelatedText(content: string) {
+  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source & verification|verification status|public advert|verified employer)/i.test(
+    content
+  );
+}
+
+function isGovernmentServiceText(content: string) {
+  return /(uif|ussd|sassa|claim status|department of employment|labour|labor|\*134\*843#)/i.test(
+    normalizeUssdCodes(content)
+  );
+}
+
+function shouldShowApplyActions(content: string, previousUserText = '') {
+  const combined = `${content}\n${previousUserText}`;
+
+  if (isGovernmentServiceText(combined)) return false;
+
+  return isJobRelatedText(combined);
+}
+
+function shouldShowGovernmentSourceAction(content: string, previousUserText = '') {
+  return isGovernmentServiceText(`${content}\n${previousUserText}`);
 }
 
 export default function AIJobAssistantPage() {
@@ -1019,12 +1071,14 @@ export default function AIJobAssistantPage() {
   const [selectedImages, setSelectedImages] = useState<WorkspaceImage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sourceLinks, setSourceLinks] = useState<SearchLink[]>([]);
+  const [localJobs, setLocalJobs] = useState<LocalVerifiedJob[]>(FALLBACK_LOCAL_JOBS);
   const [busy, setBusy] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savedFilter, setSavedFilter] = useState<SavedCategory | 'all'>('all');
+  const [nowTick, setNowTick] = useState(Date.now());
 
   const canUseAI = useMemo(() => {
     if (deepSeekLimit === null) return true;
@@ -1065,6 +1119,11 @@ export default function AIJobAssistantPage() {
   }, [creatorPlus, currentTier, deepSeekUsage]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     setDeepSeekUsage(getDeepSeekUsage(currentTier));
 
     try {
@@ -1081,6 +1140,45 @@ export default function AIJobAssistantPage() {
       selected_image_count: 0,
     });
   }, [currentTier]);
+
+  useEffect(() => {
+    const loadLocalJobs = async () => {
+      try {
+        const areas = encodeURIComponent(PRIORITY_AREAS.join(','));
+        const res = await api.get(`/api/jobs/local-verified?areas=${areas}&verifiedOnly=false`);
+        const data = unwrapApiResponse(res);
+
+        const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
+
+        const normalizedJobs: LocalVerifiedJob[] = jobs
+          .map((job: any) => ({
+            id: clean(job.id) || safeId(),
+            title: clean(job.title || job.job_title || job.role),
+            company: clean(job.company || job.employer || job.source_name),
+            area: clean(job.area || job.location || job.town),
+            deadline: clean(job.deadline || job.closing_date || job.closingDate) || null,
+            sourceLabel: clean(job.sourceLabel || job.source_type || job.sourceType) || 'Official source',
+            verificationStatus:
+              job.verificationStatus ||
+              job.verification_status ||
+              (job.verified ? 'verified' : 'needs_verification'),
+            actionLabel: clean(job.actionLabel) || 'Apply Now',
+            applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.sourceUrl),
+            sourceUrl: clean(job.sourceUrl || job.source_url || job.applyUrl || job.apply_url),
+            sourceType:
+              job.sourceType || job.source_type || 'official_company_source',
+            isSourceCard: Boolean(job.isSourceCard),
+          }))
+          .filter((job: LocalVerifiedJob) => job.title && job.applyUrl);
+
+        setLocalJobs(normalizedJobs.length ? normalizedJobs : FALLBACK_LOCAL_JOBS);
+      } catch {
+        setLocalJobs(FALLBACK_LOCAL_JOBS);
+      }
+    };
+
+    loadLocalJobs();
+  }, []);
 
   useEffect(() => {
     try {
@@ -1196,6 +1294,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
       content: finalPrompt,
       createdAt: new Date().toISOString(),
       images: attachedImages,
+      intent,
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -1210,7 +1309,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
         image_count: attachedImages.length,
         has_images: hasImages,
         tier: currentTier,
-        local_focus: 'tzaneen_first',
+        local_focus: 'tzaneen_polokwane_phalaborwa_hoedspruit_makhado_musina',
       },
     });
 
@@ -1218,7 +1317,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
       trackImageAnalysis(attachedImages.length, finalPrompt, undefined, {
         intent,
         tier: currentTier,
-        local_focus: 'tzaneen_first',
+        local_focus: 'tzaneen_polokwane_phalaborwa_hoedspruit_makhado_musina',
       });
     }
 
@@ -1236,6 +1335,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
           content: answer,
           createdAt: new Date().toISOString(),
           savedCategory: suggestedSavedCategory,
+          intent,
         },
       ]);
 
@@ -1259,6 +1359,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
             role: message.role,
             content: message.content,
             createdAt: message.createdAt,
+            intent: message.intent,
           })),
         tier: currentTier,
         creatorPlus,
@@ -1267,20 +1368,9 @@ Respond based on the previous question/task. Do not ask what the user means if t
         responseStyle: 'chatgpt-premium',
         answerStyle: fullSystemInstruction,
         systemInstruction: fullSystemInstruction,
-        localFocus: 'tzaneen_first',
-        priorityAreas: [
-          'Tzaneen',
-          'Lenyenye',
-          'Nkowankowa',
-          'Maake',
-          'Dan',
-          'Burgersdorp',
-          'Haenertsburg',
-          'Modjadjiskloof',
-          'Giyani',
-          'Phalaborwa',
-          'Polokwane',
-        ],
+        localFocus: 'tzaneen_polokwane_phalaborwa_hoedspruit_makhado_musina',
+        priorityAreas: PRIORITY_AREAS,
+        officialLocalSources: OFFICIAL_LOCAL_JOB_SOURCES,
         sourceVerificationCategories,
         imageCount: attachedImages.length,
         imageDataUrls: attachedImages.map((image) => image.dataUrl),
@@ -1319,6 +1409,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
           content: answer,
           createdAt: new Date().toISOString(),
           savedCategory: suggestedSavedCategory,
+          intent,
         },
       ]);
 
@@ -1341,6 +1432,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
           content: answer,
           createdAt: new Date().toISOString(),
           savedCategory: suggestedSavedCategory,
+          intent,
         },
       ]);
 
@@ -1363,7 +1455,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
 
   const copyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(normalizeUssdCodes(text));
 
       trackFeatureUse({
         feature: 'FaceMeX Career Workspace',
@@ -1398,6 +1490,32 @@ Respond based on the previous question/task. Do not ask what the user means if t
     });
 
     toast({ title: `${savedCategoryLabels[category]} saved`, description: 'Saved in Workspace.' });
+  };
+
+  const saveLocalJob = (job: LocalVerifiedJob) => {
+    const content = `**${job.title}**
+
+Company/source: ${job.company}
+Area: ${job.area}
+Source: ${job.sourceLabel}
+Verification: ${verificationStatusLabel(job.verificationStatus)}
+Closing date: ${job.deadline || 'Check official page'}
+Apply link: ${job.applyUrl}`;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: safeId(),
+        role: 'assistant',
+        content,
+        createdAt: new Date().toISOString(),
+        saved: true,
+        savedCategory: 'career_plan',
+        intent: 'job-search',
+      },
+    ]);
+
+    toast({ title: 'Saved', description: 'Job/source saved in your workspace.' });
   };
 
   const removeFromSaved = (id: string) => {
@@ -1494,6 +1612,16 @@ Respond based on the previous question/task. Do not ask what the user means if t
     });
   };
 
+  const openOfficialApplyPage = (job: LocalVerifiedJob) => {
+    trackLinkClick(job.applyUrl, job.title, undefined, {
+      feature: 'FaceMeX Local Jobs',
+      area: job.area,
+      verification_status: job.verificationStatus,
+    });
+
+    window.open(job.applyUrl, '_blank', 'noopener,noreferrer');
+  };
+
   const renderMessageImages = (images?: WorkspaceImage[]) => {
     if (!images?.length) return null;
 
@@ -1516,11 +1644,58 @@ Respond based on the previous question/task. Do not ask what the user means if t
     );
   };
 
-  const assistantVerificationActions = (message: ChatMessage) => {
-    if (message.role !== 'assistant' || !isVerificationAnswer(message.content)) return null;
+  const assistantSmartActions = (message: ChatMessage, previousUserText = '') => {
+    if (message.role !== 'assistant') return null;
+
+    const canApply = shouldShowApplyActions(message.content, previousUserText);
+    const isGovernment = shouldShowGovernmentSourceAction(message.content, previousUserText);
+
+    if (isGovernment) {
+      return (
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
+          <a
+            href="https://www.labour.gov.za/online-tools"
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => trackLinkClick('https://www.labour.gov.za/online-tools', 'DoEL official services')}
+          >
+            <Button size="sm" variant="outline" className="h-9 w-full rounded-xl text-xs">
+              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+              Official Source
+            </Button>
+          </a>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => copyText(message.content)}
+            className="h-9 rounded-xl text-xs"
+          >
+            <Copy className="mr-2 h-3.5 w-3.5" />
+            Copy Answer
+          </Button>
+        </div>
+      );
+    }
+
+    if (!canApply) return null;
 
     return (
       <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            sendPrompt(
+              `Use Apply Assistant for this opportunity. Guide me step by step: verify the source, prepare my CV, write the application email or WhatsApp, and remind me about the closing date:\n\n${message.content}`
+            )
+          }
+          className="h-9 rounded-xl text-xs"
+        >
+          <Send className="mr-2 h-3.5 w-3.5" />
+          Apply Assistant
+        </Button>
+
         <Button
           size="sm"
           variant="outline"
@@ -1571,7 +1746,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
               `Help me report or warn others about this job if it looks risky. Write a short, professional warning message:\n\n${message.content}`
             )
           }
-          className="h-9 rounded-xl text-xs"
+          className="col-span-2 h-9 rounded-xl text-xs"
         >
           <Flag className="mr-2 h-3.5 w-3.5" />
           Report Job
@@ -1706,61 +1881,69 @@ Respond based on the previous question/task. Do not ask what the user means if t
                 </div>
               )}
 
-              {chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex w-full gap-2 sm:gap-3 ${
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  {message.role === 'assistant' && (
-                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white dark:bg-white dark:text-black">
-                      <Sparkles className="h-4 w-4" />
-                    </div>
-                  )}
+              {chatMessages.map((message, index) => {
+                const previousUserText =
+                  chatMessages
+                    .slice(0, index)
+                    .reverse()
+                    .find((item) => item.role === 'user')?.content || '';
 
+                return (
                   <div
-                    className={`max-w-[88%] rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:max-w-[82%] sm:rounded-[24px] ${
-                      message.role === 'user'
-                        ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
-                        : 'border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
+                    key={message.id}
+                    className={`flex w-full gap-2 sm:gap-3 ${
+                      message.role === 'user' ? 'justify-end' : 'justify-start'
                     }`}
                   >
-                    {editingMessageId === message.id ? (
-                      <div className="space-y-2">
-                        <Textarea
-                          value={editText}
-                          onChange={(e) => setEditText(e.target.value)}
-                          className="min-h-[120px] rounded-2xl bg-white dark:bg-black/20"
-                        />
-
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => setEditingMessageId(null)}>
-                            Cancel
-                          </Button>
-
-                          <Button size="sm" onClick={saveEdit}>
-                            Save
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className={message.role === 'assistant' ? 'max-h-[52vh] overflow-y-auto pr-1' : ''}>
-                        {renderMessageImages(message.images)}
-
-                        {message.role === 'assistant' ? (
-                          <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
-                        ) : (
-                          <div className="whitespace-pre-wrap break-words">{message.content}</div>
-                        )}
+                    {message.role === 'assistant' && (
+                      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white dark:bg-white dark:text-black">
+                        <Sparkles className="h-4 w-4" />
                       </div>
                     )}
 
-                    {editingMessageId !== message.id && assistantVerificationActions(message)}
-                    {editingMessageId !== message.id && messageActions(message)}
+                    <div
+                      className={`max-w-[88%] rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:max-w-[82%] sm:rounded-[24px] ${
+                        message.role === 'user'
+                          ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
+                          : 'border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
+                      }`}
+                    >
+                      {editingMessageId === message.id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            className="min-h-[120px] rounded-2xl bg-white dark:bg-black/20"
+                          />
+
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => setEditingMessageId(null)}>
+                              Cancel
+                            </Button>
+
+                            <Button size="sm" onClick={saveEdit}>
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={message.role === 'assistant' ? 'max-h-[52vh] overflow-y-auto pr-1' : ''}>
+                          {renderMessageImages(message.images)}
+
+                          {message.role === 'assistant' ? (
+                            <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
+                          ) : (
+                            <div className="whitespace-pre-wrap break-words">{normalizeUssdCodes(message.content)}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {editingMessageId !== message.id && assistantSmartActions(message, previousUserText)}
+                      {editingMessageId !== message.id && messageActions(message)}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {busy && (
                 <div className="flex items-start gap-3">
@@ -1933,7 +2116,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
                             </div>
 
                             <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50">
-                              {item.content}
+                              {normalizeUssdCodes(item.content)}
                             </div>
                           </button>
 
@@ -1979,7 +2162,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
               <div>
                 <h2 className="text-base font-semibold">Source & Verification</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
-                  Tzaneen-first trusted source system
+                  Tzaneen, Polokwane, Phalaborwa, Hoedspruit, Makhado, Musina
                 </p>
               </div>
 
@@ -1998,120 +2181,119 @@ Respond based on the previous question/task. Do not ask what the user means if t
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold">How FaceMeX checks jobs</h3>
                     <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
-                      Every job should show where it came from, how safe it is, and what action the user should take before applying.
+                      Jobs should show the source, area, verification status, official apply page, and closing countdown where available.
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="mt-5">
-                <h3 className="mb-3 text-sm font-semibold">Tzaneen Jobs Preview</h3>
+                <h3 className="mb-3 text-sm font-semibold">Verified local job sources</h3>
 
                 <div className="space-y-3">
-                  {localJobPreview.map((job) => (
-                    <div
-                      key={job.id}
-                      className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
-                    >
-                      <div className="flex gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-                          {job.verificationStatus === 'verified' ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                          ) : job.verificationStatus === 'avoid' ? (
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
-                          ) : (
-                            <ShieldCheck className="h-5 w-5 text-blue-600" />
-                          )}
-                        </div>
+                  {localJobs.map((job) => {
+                    const deadlineInfo = getDeadlineInfo(job.deadline);
+                    void nowTick;
 
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <h4 className="truncate text-sm font-semibold">{job.title}</h4>
-                              <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
-                            </div>
-
-                            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                    return (
+                      <div
+                        key={job.id}
+                        className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                      >
+                        <div className="flex gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                            {job.verificationStatus === 'verified' ? (
+                              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                            ) : job.verificationStatus === 'avoid' ? (
+                              <AlertTriangle className="h-5 w-5 text-red-500" />
+                            ) : (
+                              <ShieldCheck className="h-5 w-5 text-blue-600" />
+                            )}
                           </div>
 
-                          <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-3.5 w-3.5" />
-                              <span className="truncate">{job.area}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <h4 className="truncate text-sm font-semibold">{job.title}</h4>
+                                <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                              </div>
+
+                              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              <CalendarDays className="h-3.5 w-3.5" />
-                              <span>{job.deadline}</span>
+                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+                              <div className="flex items-center gap-2">
+                                <MapPin className="h-3.5 w-3.5" />
+                                <span className="truncate">{job.area}</span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <CalendarDays className="h-3.5 w-3.5" />
+                                <span>{job.deadline || 'Official vacancies page'}</span>
+                              </div>
+
+                              <div
+                                className={`flex items-center gap-2 ${
+                                  deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
+                                }`}
+                              >
+                                <Clock className="h-3.5 w-3.5" />
+                                <span>{deadlineInfo.label}</span>
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-                              Source: {job.sourceLabel}
-                            </span>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                                Source: {job.sourceLabel}
+                              </span>
 
-                            <span
-                              className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
-                                job.verificationStatus
-                              )}`}
-                            >
-                              {verificationStatusLabel(job.verificationStatus)}
-                            </span>
-                          </div>
+                              <span
+                                className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
+                                  job.verificationStatus
+                                )}`}
+                              >
+                                {verificationStatusLabel(job.verificationStatus)}
+                              </span>
+                            </div>
 
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSourcesOpen(false);
-                                sendPrompt(
-                                  `${job.actionLabel} for this job and guide me step by step:\n\nRole: ${job.title}\nCompany: ${job.company}\nArea: ${job.area}\nDeadline: ${job.deadline}\nSource: ${job.sourceLabel}\nVerification: ${verificationStatusLabel(
-                                    job.verificationStatus
-                                  )}`
-                                );
-                              }}
-                              className="h-8 rounded-xl text-xs"
-                            >
-                              {job.verificationStatus === 'avoid' ? (
-                                <Flag className="mr-1.5 h-3.5 w-3.5" />
-                              ) : job.verificationStatus === 'needs_verification' ? (
-                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                              ) : (
-                                <Send className="mr-1.5 h-3.5 w-3.5" />
-                              )}
-                              {job.actionLabel}
-                            </Button>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openOfficialApplyPage(job)}
+                                disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
+                                className="h-8 rounded-xl text-xs"
+                              >
+                                {job.isSourceCard ? (
+                                  <Globe2 className="mr-1.5 h-3.5 w-3.5" />
+                                ) : job.verificationStatus === 'needs_verification' ? (
+                                  <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                                ) : (
+                                  <Send className="mr-1.5 h-3.5 w-3.5" />
+                                )}
+                                {deadlineInfo.expired ? 'Closed' : job.actionLabel}
+                              </Button>
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                saveMessageAs(
-                                  safeId(),
-                                  'career_plan'
-                                );
-                                toast({
-                                  title: 'Job noted',
-                                  description: 'Use Save Job from a real AI answer to store full details.',
-                                });
-                              }}
-                              className="h-8 rounded-xl text-xs"
-                            >
-                              <Save className="mr-1.5 h-3.5 w-3.5" />
-                              Save
-                            </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => saveLocalJob(job)}
+                                className="h-8 rounded-xl text-xs"
+                              >
+                                <Save className="mr-1.5 h-3.5 w-3.5" />
+                                Save
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="mt-5">
-                <h3 className="mb-3 text-sm font-semibold">Better source categories</h3>
+                <h3 className="mb-3 text-sm font-semibold">Source categories</h3>
 
                 <div className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
                   {sourceVerificationCategories.map((category) => (
@@ -2139,7 +2321,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
               </div>
 
               <div className="mt-5">
-                <h3 className="mb-3 text-sm font-semibold">Local source links</h3>
+                <h3 className="mb-3 text-sm font-semibold">Official local links</h3>
 
                 <div className="space-y-3">
                   {sourceLinks.map((link) => (
