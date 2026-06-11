@@ -2,16 +2,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  AlertTriangle,
   ArrowLeft,
   Briefcase,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
   Copy,
   Crown,
   Edit3,
   ExternalLink,
   FileText,
+  Flag,
   ImagePlus,
   Loader2,
+  Mail,
+  MapPin,
   MoreVertical,
+  Phone,
   Pin,
   PinOff,
   Save,
@@ -85,6 +94,17 @@ type SourceVerificationCategory = {
   note: string;
 };
 
+type LocalJobPost = {
+  id: string;
+  title: string;
+  company: string;
+  area: string;
+  deadline: string;
+  sourceLabel: string;
+  verificationStatus: 'verified' | 'needs_verification' | 'avoid';
+  actionLabel: string;
+};
+
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
   cv_advice: 'CV',
@@ -117,6 +137,49 @@ const sourceVerificationCategories: SourceVerificationCategory[] = [
     key: 'high_risk_avoid',
     title: 'High Risk / Avoid',
     note: 'Missing employer details, payment requested, or suspicious application process.',
+  },
+];
+
+const localJobPreview: LocalJobPost[] = [
+  {
+    id: 'forklift-driver',
+    title: 'Forklift Driver',
+    company: 'Riverside Logistics',
+    area: 'Tzaneen / Polokwane',
+    deadline: '20 Jun 2026',
+    sourceLabel: 'FaceMeX Verified Employer',
+    verificationStatus: 'verified',
+    actionLabel: 'Apply Now',
+  },
+  {
+    id: 'admin-clerk',
+    title: 'EPWP Admin Clerk',
+    company: 'Local Municipality',
+    area: 'Tzaneen / Limpopo',
+    deadline: '24 Jun 2026',
+    sourceLabel: 'Government / Public Institution',
+    verificationStatus: 'verified',
+    actionLabel: 'Apply Now',
+  },
+  {
+    id: 'code-14-side-tipper',
+    title: 'Code 14 Side Tipper Driver',
+    company: 'MRMS',
+    area: 'Not stated',
+    deadline: '22 Jun 2026',
+    sourceLabel: 'Public advert screenshot',
+    verificationStatus: 'needs_verification',
+    actionLabel: 'Verify First',
+  },
+  {
+    id: 'security-guard',
+    title: 'Security Guard',
+    company: 'Unknown',
+    area: 'Johannesburg',
+    deadline: 'Not stated',
+    sourceLabel: 'High Risk / Avoid',
+    verificationStatus: 'avoid',
+    actionLabel: 'Report',
   },
 ];
 
@@ -902,18 +965,42 @@ function SourceCategoryIcon({ categoryKey }: { categoryKey: SourceCategoryKey })
   }
 
   if (categoryKey === 'official_company_source') {
-    return <Briefcase className="h-4 w-4" />;
+    return <Building2 className="h-4 w-4" />;
   }
 
   if (categoryKey === 'government_public_institution') {
-    return <ExternalLink className="h-4 w-4" />;
+    return <Briefcase className="h-4 w-4" />;
   }
 
   if (categoryKey === 'community_advert_needs_verification') {
     return <Search className="h-4 w-4" />;
   }
 
-  return <X className="h-4 w-4" />;
+  return <AlertTriangle className="h-4 w-4" />;
+}
+
+function isVerificationAnswer(content: string) {
+  return /(verdict|source & verification|verification status|needs verification|high risk|avoid|verified|fake|scam|legit)/i.test(
+    content
+  );
+}
+
+function verificationStatusStyles(status: LocalJobPost['verificationStatus']) {
+  if (status === 'verified') {
+    return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20';
+  }
+
+  if (status === 'avoid') {
+    return 'bg-red-50 text-red-700 ring-1 ring-red-100 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/20';
+  }
+
+  return 'bg-blue-50 text-blue-700 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/20';
+}
+
+function verificationStatusLabel(status: LocalJobPost['verificationStatus']) {
+  if (status === 'verified') return 'Verified';
+  if (status === 'avoid') return 'Avoid';
+  return 'Needs verification';
 }
 
 export default function AIJobAssistantPage() {
@@ -1429,6 +1516,70 @@ Respond based on the previous question/task. Do not ask what the user means if t
     );
   };
 
+  const assistantVerificationActions = (message: ChatMessage) => {
+    if (message.role !== 'assistant' || !isVerificationAnswer(message.content)) return null;
+
+    return (
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            sendPrompt(
+              `Verify this job/company deeper using Source & Verification. Check official website, company location, contact person, email domain, and scam signs:\n\n${message.content}`
+            )
+          }
+          className="h-9 rounded-xl text-xs"
+        >
+          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+          Verify Company
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            sendPrompt(
+              `Write a professional application email and WhatsApp message for this opportunity. Keep it clean, short, and copy-ready:\n\n${message.content}`
+            )
+          }
+          className="h-9 rounded-xl text-xs"
+        >
+          <Mail className="mr-2 h-3.5 w-3.5" />
+          Write Email
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            sendPrompt(
+              `Help me tailor my CV for this opportunity. Show what skills to highlight and what wording to use:\n\n${message.content}`
+            )
+          }
+          className="h-9 rounded-xl text-xs"
+        >
+          <FileText className="mr-2 h-3.5 w-3.5" />
+          Fix My CV
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            sendPrompt(
+              `Help me report or warn others about this job if it looks risky. Write a short, professional warning message:\n\n${message.content}`
+            )
+          }
+          className="h-9 rounded-xl text-xs"
+        >
+          <Flag className="mr-2 h-3.5 w-3.5" />
+          Report Job
+        </Button>
+      </div>
+    );
+  };
+
   const messageActions = (message: ChatMessage) => (
     <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-black/5 pt-2 opacity-80 dark:border-white/10">
       <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2">
@@ -1605,6 +1756,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
                       </div>
                     )}
 
+                    {editingMessageId !== message.id && assistantVerificationActions(message)}
                     {editingMessageId !== message.id && messageActions(message)}
                   </div>
                 </div>
@@ -1849,6 +2001,112 @@ Respond based on the previous question/task. Do not ask what the user means if t
                       Every job should show where it came from, how safe it is, and what action the user should take before applying.
                     </p>
                   </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <h3 className="mb-3 text-sm font-semibold">Tzaneen Jobs Preview</h3>
+
+                <div className="space-y-3">
+                  {localJobPreview.map((job) => (
+                    <div
+                      key={job.id}
+                      className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                    >
+                      <div className="flex gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                          {job.verificationStatus === 'verified' ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          ) : job.verificationStatus === 'avoid' ? (
+                            <AlertTriangle className="h-5 w-5 text-red-500" />
+                          ) : (
+                            <ShieldCheck className="h-5 w-5 text-blue-600" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h4 className="truncate text-sm font-semibold">{job.title}</h4>
+                              <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                            </div>
+
+                            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                          </div>
+
+                          <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-3.5 w-3.5" />
+                              <span className="truncate">{job.area}</span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <CalendarDays className="h-3.5 w-3.5" />
+                              <span>{job.deadline}</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                              Source: {job.sourceLabel}
+                            </span>
+
+                            <span
+                              className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
+                                job.verificationStatus
+                              )}`}
+                            >
+                              {verificationStatusLabel(job.verificationStatus)}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSourcesOpen(false);
+                                sendPrompt(
+                                  `${job.actionLabel} for this job and guide me step by step:\n\nRole: ${job.title}\nCompany: ${job.company}\nArea: ${job.area}\nDeadline: ${job.deadline}\nSource: ${job.sourceLabel}\nVerification: ${verificationStatusLabel(
+                                    job.verificationStatus
+                                  )}`
+                                );
+                              }}
+                              className="h-8 rounded-xl text-xs"
+                            >
+                              {job.verificationStatus === 'avoid' ? (
+                                <Flag className="mr-1.5 h-3.5 w-3.5" />
+                              ) : job.verificationStatus === 'needs_verification' ? (
+                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                              ) : (
+                                <Send className="mr-1.5 h-3.5 w-3.5" />
+                              )}
+                              {job.actionLabel}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                saveMessageAs(
+                                  safeId(),
+                                  'career_plan'
+                                );
+                                toast({
+                                  title: 'Job noted',
+                                  description: 'Use Save Job from a real AI answer to store full details.',
+                                });
+                              }}
+                              className="h-8 rounded-xl text-xs"
+                            >
+                              <Save className="mr-1.5 h-3.5 w-3.5" />
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
