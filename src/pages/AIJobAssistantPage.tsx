@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
+  Bell,
   Briefcase,
   Building2,
   CalendarDays,
@@ -21,6 +22,7 @@ import {
   Mail,
   MapPin,
   Menu,
+  MoreVertical,
   Pin,
   PinOff,
   Save,
@@ -72,14 +74,9 @@ type SourceCategoryKey =
 
 type LocalVerifiedJob = {
   id: string;
-  database_id?: string | null;
-  external_source?: string | null;
-  external_id?: string | null;
   title: string;
   company: string;
   area: string;
-  town?: string | null;
-  province?: string | null;
   deadline?: string | null;
   sourceLabel: string;
   verificationStatus: 'verified' | 'needs_verification' | 'avoid';
@@ -92,11 +89,6 @@ type LocalVerifiedJob = {
   category?: string | null;
   description?: string | null;
   createdAt?: string | null;
-  updatedAt?: string | null;
-  trustScore?: number | null;
-  relevanceScore?: number | null;
-  foundBy?: string[];
-  matchNote?: string | null;
 };
 
 type ChatMessage = {
@@ -114,6 +106,9 @@ type ChatMessage = {
   jobSearchArea?: string;
   jobSearchQuery?: string;
 };
+
+const AI_CV_BUILDER_PATH = '/ai-cv-builder';
+const AI_COVER_LETTER_PATH = '/ai-cover-letter';
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
@@ -148,9 +143,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Shoprite Group',
     area: 'South Africa / Local stores',
     deadline: null,
-    sourceLabel: 'Official company source',
+    sourceLabel: 'Official Company Source',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://apply.shoprite.jobs/',
     sourceUrl: 'https://apply.shoprite.jobs/',
     sourceType: 'official_company_source',
@@ -164,9 +159,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Shoprite Group',
     area: 'South Africa',
     deadline: null,
-    sourceLabel: 'Official company source',
+    sourceLabel: 'Official Company Source',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.shopriteholdings.co.za/careers.html',
     sourceUrl: 'https://www.shopriteholdings.co.za/careers.html',
     sourceType: 'official_company_source',
@@ -180,9 +175,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Westfalia Fruit',
     area: 'Tzaneen / Limpopo / South Africa',
     deadline: null,
-    sourceLabel: 'Official company source',
+    sourceLabel: 'Official Company Source',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.westfaliafruit.com/careers',
     sourceUrl: 'https://www.westfaliafruit.com/careers',
     sourceType: 'official_company_source',
@@ -196,9 +191,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'ZZ2 / Bertie van Zyl (Pty) Ltd',
     area: 'Mooketsi / Tzaneen / Limpopo',
     deadline: null,
-    sourceLabel: 'Official company source',
+    sourceLabel: 'Official Company Source',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://recruit.zz2.co.za/vacancies',
     sourceUrl: 'https://recruit.zz2.co.za/vacancies',
     sourceType: 'official_company_source',
@@ -210,11 +205,11 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     id: 'limpopo-health-careers',
     title: 'Limpopo Department of Health Careers',
     company: 'Limpopo Department of Health',
-    area: 'Limpopo',
+    area: 'Limpopo / Letaba / Nkowankowa',
     deadline: null,
-    sourceLabel: 'Government source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.ldoh.gov.za/?q=node/11',
     sourceUrl: 'https://www.ldoh.gov.za/?q=node/11',
     sourceType: 'government_public_institution',
@@ -228,9 +223,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Greater Tzaneen Municipality',
     area: 'Tzaneen',
     deadline: null,
-    sourceLabel: 'Government source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.greatertzaneen.gov.za/?q=current_vacancies',
     sourceUrl: 'https://www.greatertzaneen.gov.za/?q=current_vacancies',
     sourceType: 'government_public_institution',
@@ -244,9 +239,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Polokwane Municipality',
     area: 'Polokwane',
     deadline: null,
-    sourceLabel: 'Government source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://apply.polokwane.gov.za/',
     sourceUrl: 'https://apply.polokwane.gov.za/',
     sourceType: 'government_public_institution',
@@ -260,9 +255,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Ba-Phalaborwa Municipality',
     area: 'Phalaborwa',
     deadline: null,
-    sourceLabel: 'Government source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.phalaborwa.gov.za/vacancies/vacancies.php',
     sourceUrl: 'https://www.phalaborwa.gov.za/vacancies/vacancies.php',
     sourceType: 'government_public_institution',
@@ -276,9 +271,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Maruleng Municipality',
     area: 'Hoedspruit',
     deadline: null,
-    sourceLabel: 'Government source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.maruleng.gov.za/pages/vacancies.php',
     sourceUrl: 'https://www.maruleng.gov.za/pages/vacancies.php',
     sourceType: 'government_public_institution',
@@ -292,9 +287,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Makhado Municipality',
     area: 'Makhado',
     deadline: null,
-    sourceLabel: 'Government source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.makhado.gov.za/?q=advertisedvacancies',
     sourceUrl: 'https://www.makhado.gov.za/?q=advertisedvacancies',
     sourceType: 'government_public_institution',
@@ -308,9 +303,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'Musina Municipality',
     area: 'Musina',
     deadline: null,
-    sourceLabel: 'Government source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://www.musina.gov.za/vacancies-musina-municipality/',
     sourceUrl: 'https://www.musina.gov.za/vacancies-musina-municipality/',
     sourceType: 'government_public_institution',
@@ -324,9 +319,9 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     company: 'SAYouth',
     area: 'South Africa / Youth Opportunities',
     deadline: null,
-    sourceLabel: 'Government / public source',
+    sourceLabel: 'Government / Public Institution',
     verificationStatus: 'verified',
-    actionLabel: 'Open',
+    actionLabel: 'Open Official Page',
     applyUrl: 'https://sayouth.mobi/',
     sourceUrl: 'https://sayouth.mobi/',
     sourceType: 'government_public_institution',
@@ -337,75 +332,170 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
 ];
 
 const FACE_MEX_ANSWER_STYLE = `
-Respond like ChatGPT in a clean, calm, premium, professional style.
-Give the direct answer first.
-Use short sections.
-Use clear spacing.
-Do not return one big paragraph.
-Do not invent jobs.
-Do not say a job is verified unless it comes from a verified employer, official source, government source, or direct employer confirmation.
-For external job API results, say "Needs verification".
-For non-job questions, do not show CV/application actions.
-When showing USSD codes, write them exactly like *134*843#.
+You are FaceMeX Job AI, but you must behave like a helpful ChatGPT-style assistant for everyday life, career, business, learning, work, apps, documents, messages, planning, and general questions.
+
+Your main rule:
+- Answer any normal helpful question clearly and calmly.
+- Only search jobs when the user clearly asks for jobs, vacancies, hiring, work, learnerships, internships, employment, or a specific job role.
+- Do not treat location words like Tzaneen, Polokwane, Letsitele, Limpopo, or South Africa as job-search intent by themselves.
+- If the user asks about business ideas, life advice, app improvement, transport, money planning, studies, messages, or strategy, answer normally without showing job cards.
+- If the user asks for CV help, cover letter help, application message, or interview help, answer with career guidance.
+- If the user asks for jobs, show job results and job cards.
+- If the user asks a general question after job results, answer the new question directly.
+
+Safety rules:
+- Refuse hate, harmful, dangerous, illegal, explicit, or unsafe requests.
+- Do not help with scams, violence, exploitation, or harmful instructions.
+- For medical, legal, or financial issues, give general guidance and recommend a qualified professional when needed.
+
+Style:
+- Write like ChatGPT.
+- Clean, calm, helpful, and practical.
+- Use short sections.
+- Do not make too much noise.
+- Do not over-explain.
+- Give the direct answer first.
+- When useful, give steps or examples.
+- Never invent jobs.
+- Only say a job is verified if it comes from FaceMeX verified records, official company source, government/public institution, or a directly confirmed employer.
+
+When users ask for jobs:
+- Understand the user's intent first.
+- If they ask generally, search "jobs".
+- If they ask for security, search "security".
+- If they ask for cashier, search "cashier".
+- If they ask for driver, search "driver".
+- If they ask for admin, search "admin".
+- If they ask for teacher or creche jobs, search education/teacher/creche.
+- Prioritize exact area first.
+- Then nearby areas.
+- Then South Africa only if local results are low.
+- Show official apply links when available.
+- Keep external API jobs as Needs verification.
+
+When checking a job advert/screenshot:
+**Verdict:** Verified / Needs verification / Avoid
+
+**Why**
+- Reason
+- Reason
+- Reason
+
+**Next step**
+Give one clear action.
+
+For non-job questions:
+- Do not show job cards.
+- Do not show Apply Assistant unless the answer is about a job application.
 `;
 
 const quickPrompts = [
   {
-    label: 'Jobs in Tzaneen',
-    prompt: 'Search for current jobs in Tzaneen with apply links.',
+    label: 'Find jobs',
+    prompt:
+      'I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.',
   },
   {
-    label: 'Retail',
-    prompt: 'Search for cashier, packer, retail, clerk, and store assistant jobs near Tzaneen.',
+    label: 'Build CV',
+    prompt:
+      'Help me improve my CV for job applications. Tell me what to fix and what to write.',
   },
   {
-    label: 'Admin',
-    prompt: 'Search for admin, receptionist, clerk, data capture, and office jobs near Tzaneen.',
-  },
-  {
-    label: 'Driver',
-    prompt: 'Search for driver, code 10, code 14, delivery, courier, and truck jobs near Tzaneen.',
+    label: 'Cover letter',
+    prompt:
+      'Help me write a strong cover letter for a job application.',
   },
   {
     label: 'Check fake job',
-    prompt: 'Help me check if this job or opportunity is real, fake, or risky.',
+    prompt: 'Help me check if this job or opportunity looks fake or risky.',
   },
   {
-    label: 'Interview',
-    prompt: 'Help me prepare for an interview. Give me common questions and strong answers.',
+    label: 'Interview prep',
+    prompt: 'Help me prepare for an interview. Give me questions and strong answers.',
+  },
+  {
+    label: 'Ask anything',
+    prompt:
+      'I want general advice. Help me think clearly and give me a practical answer.',
   },
 ];
 
 function clean(value: unknown) {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'object') return '';
 
-  return String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+  if (typeof value === 'string') return value.trim();
 
-function cleanCompany(value: any) {
-  if (!value) return 'Company not stated';
-
-  if (typeof value === 'string') {
-    const company = value.replace(/\s+/g, ' ').trim();
-    if (!company || company === '[object Object]') return 'Company not stated';
-    return company;
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim();
   }
 
   if (typeof value === 'object') {
-    const company =
-      clean(value.display_name) ||
-      clean(value.name) ||
-      clean(value.company_name) ||
-      clean(value.title) ||
-      clean(value.label);
+    const item = value as any;
+    const picked =
+      item.display_name ||
+      item.full_name ||
+      item.name ||
+      item.company_name ||
+      item.title ||
+      item.label ||
+      item.value ||
+      '';
 
-    return company || 'Company not stated';
+    return String(picked || '').trim();
   }
 
-  return clean(value) || 'Company not stated';
+  return String(value || '').trim();
+}
+
+function getUserDisplayName(store: any) {
+  const user =
+    store?.user ||
+    store?.currentUser ||
+    store?.authUser ||
+    store?.profile ||
+    store?.account ||
+    store?.session?.user ||
+    store?.supabaseUser ||
+    null;
+
+  const rawName =
+    store?.full_name ||
+    store?.fullName ||
+    store?.name ||
+    store?.displayName ||
+    store?.username ||
+    store?.profile?.full_name ||
+    store?.profile?.fullName ||
+    store?.profile?.name ||
+    store?.profile?.username ||
+    user?.full_name ||
+    user?.fullName ||
+    user?.name ||
+    user?.displayName ||
+    user?.username ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.fullName ||
+    user?.user_metadata?.name ||
+    user?.user_metadata?.username ||
+    user?.email?.split('@')?.[0] ||
+    '';
+
+  const name = clean(rawName).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  if (!name) return 'there';
+
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function getFirstName(name: string) {
+  const value = clean(name);
+  if (!value || value.toLowerCase() === 'there') return 'there';
+  return value.split(' ')[0] || 'there';
 }
 
 function safeId() {
@@ -474,18 +564,16 @@ function normalizeUssdCodes(text: string) {
     .replace(/`(\*\d{3}\*\d{3}#)`/g, '$1');
 }
 
-function prepareChatGPTMarkdown(text: string) {
-  return normalizeUssdCodes(String(text || ''))
-    .replace(/\r\n/g, '\n')
-    .replace(/\s+---\s+/g, '\n\n')
-    .replace(/(^|[^\n])\s+(#{1,6}\s+)/g, '$1\n\n$2')
-    .replace(/(^|[^\n])\s+(\d+\.\s+)/g, '$1\n$2')
-    .replace(/(^|[^\n])\s+([-•]\s+)/g, '$1\n$2')
-    .replace(/\s+###\s+/g, '\n\n### ')
-    .replace(/\s+##\s+/g, '\n\n## ')
-    .replace(/\s+#\s+/g, '\n\n# ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+function hasJobSearchWords(text: string) {
+  return /(job|jobs|vacancy|vacancies|hiring|learnership|internship|employment|apply for work|looking for work|looking for a job|work opportunity|career opportunity|available posts|post available|position available|cashier|packer|clerk|security|general worker|driver|admin job|cleaner job|retail job|store assistant|teacher job|creche job|crèche job)/i.test(
+    text
+  );
+}
+
+function hasGeneralHelpWords(text: string) {
+  return /(business|start|starting|side hustle|make money|improve my life|life advice|everyday life|strategy|business idea|ideas|how can i improve|what should i do|teach me|explain|learn|study|app|website|users|customers|marketing|transport|delivery|courier|logistics|budget|save money|plan my day|motivation|discipline|relationship advice|school|college|skills|productivity)/i.test(
+    text
+  );
 }
 
 function detectIntent(text: string, hasImages = false) {
@@ -521,11 +609,11 @@ function detectIntent(text: string, hasImages = false) {
     return 'cv-profile';
   }
 
-  if (
-    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment|tzaneen|lenyenye|nkowankowa|maake|letsitele|polokwane|phalaborwa|hoedspruit|makhado|musina|messina|shoprite|westfalia|zz2|letaba|teacher|creche|crèche|cashier|packer|clerk|security|general worker|driver|admin|cleaner|retail|store assistant)/i.test(
-      t
-    )
-  ) {
+  if (hasGeneralHelpWords(t) && !hasJobSearchWords(t)) {
+    return 'general-help';
+  }
+
+  if (hasJobSearchWords(t)) {
     return 'job-search';
   }
 
@@ -547,7 +635,9 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
     intent === 'research' ||
     intent === 'image_or_document_analysis' ||
     intent === 'verify-opportunity' ||
-    intent === 'government-service-check'
+    intent === 'government-service-check' ||
+    intent === 'general-help' ||
+    intent === 'general-question'
   ) {
     return 'research';
   }
@@ -557,6 +647,7 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
 
 function extractAreaFromPrompt(text: string) {
   const t = clean(text).toLowerCase();
+
   const found = PRIORITY_AREAS.find((area) => t.includes(area.toLowerCase()));
 
   if (found) return found === 'Messina' ? 'Musina' : found;
@@ -577,31 +668,41 @@ function stripAreasFromText(text: string) {
 function extractKeywordFromPrompt(text: string) {
   const t = stripAreasFromText(text);
 
-  if (/(security|guard|armed response|protection)/i.test(t)) return 'security';
+  if (/(security|guard|armed response|protection)/i.test(t)) {
+    return 'security';
+  }
 
   if (/(cashier|packer|retail|store assistant|shop assistant|shoprite|checkers|usave|clerk)/i.test(t)) {
     return 'cashier retail packer store assistant clerk';
   }
 
-  if (/(driver|code 10|code 14|pdp|prdp|delivery|truck|courier)/i.test(t)) return 'driver';
+  if (/(driver|code 10|code 14|pdp|delivery|truck|side tipper)/i.test(t)) {
+    return 'driver';
+  }
 
-  if (/(admin|administrator|administrative|office|receptionist|data capture|data capturer)/i.test(t)) {
-    return 'admin';
+  if (/(admin|administrator|administrative|office|receptionist|data capture)/i.test(t)) {
+    return 'admin clerk office';
   }
 
   if (/(teacher|educator|creche|crèche|school|daycare|assistant teacher)/i.test(t)) {
     return 'teacher creche school daycare';
   }
 
-  if (/(cleaner|cleaning|housekeeping)/i.test(t)) return 'cleaner';
+  if (/(cleaner|cleaning|housekeeping)/i.test(t)) {
+    return 'cleaner';
+  }
 
   if (/(farm|agriculture|packhouse|packing|fruit|westfalia|zz2|letaba)/i.test(t)) {
     return 'farm agriculture packhouse packing';
   }
 
-  if (/(learnership|internship|graduate|youth)/i.test(t)) return 'learnership internship';
+  if (/(learnership|internship|graduate|youth)/i.test(t)) {
+    return 'learnership internship';
+  }
 
-  if (/(general worker|general work|general)/i.test(t)) return 'general worker';
+  if (/(general worker|general work|general)/i.test(t)) {
+    return 'general worker';
+  }
 
   const simplified = t
     .replace(/i am looking for/gi, '')
@@ -611,12 +712,14 @@ function extractKeywordFromPrompt(text: string) {
     .replace(/show me/gi, '')
     .replace(/search/gi, '')
     .replace(/available/gi, '')
+    .replace(/all/gi, '')
     .replace(/jobs?/gi, '')
     .replace(/vacanc(y|ies)/gi, '')
     .replace(/work/gi, '')
     .replace(/\bin\b/gi, '')
     .replace(/\bnear\b/gi, '')
     .replace(/\bme\b/gi, '')
+    .replace(/\ba\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -628,7 +731,7 @@ function extractKeywordFromPrompt(text: string) {
 function getSearchDisplayLabel(keyword: string) {
   const q = clean(keyword).toLowerCase();
 
-  if (!q || q === 'jobs' || q === 'job') return 'jobs';
+  if (!q || q === 'jobs' || q === 'job') return 'all jobs';
   if (q === 'security') return 'security jobs';
   if (q === 'driver') return 'driver jobs';
   if (q.includes('cashier')) return 'retail, cashier, packer and store jobs';
@@ -653,52 +756,45 @@ function normalizeSourceType(value: any): SourceCategoryKey {
   const source = clean(value).toLowerCase();
 
   if (source.includes('facemex')) return 'facemex_verified_local_employer';
-
   if (source.includes('government') || source.includes('municipality') || source.includes('public')) {
     return 'government_public_institution';
   }
-
   if (source.includes('community') || source.includes('screenshot')) {
     return 'community_advert_needs_verification';
   }
-
-  if (source.includes('api') || source.includes('adzuna') || source.includes('jooble') || source.includes('external')) {
+  if (source.includes('api') || source.includes('adzuna') || source.includes('external') || source.includes('jooble')) {
     return 'external_job_api';
   }
-
   if (source.includes('risk') || source.includes('avoid')) return 'high_risk_avoid';
 
   return 'official_company_source';
 }
 
-function getSourceLabel(job: any) {
-  const label = clean(job.sourceLabel || job.source_label);
-
-  if (label) return label;
-
-  const source = clean(job.external_source || job.source || job.provider || job.sourceType || job.source_type).toLowerCase();
-
-  if (source.includes('adzuna')) return 'Adzuna live job source';
-  if (source.includes('jooble')) return 'Jooble live job source';
-  if (source.includes('supabase')) return 'Saved in FaceMeX database';
-
-  return 'External job source';
-}
-
 function isForeignLookingJob(job: LocalVerifiedJob) {
-  const text = `${job.title} ${job.company} ${job.area} ${job.category || ''}`.toLowerCase();
+  const text = `${job.title} ${job.company} ${job.category || ''} ${job.area || ''}`.toLowerCase();
 
-  if (/(addetto|vendite|commesso|stage curriculare|magazziniere|tirocinio|impiegato|cameriere)/i.test(text)) {
+  if (/(addetto|vendite|commesso|stage curriculare|magazziniere|tirocinio|impiegato|cameriere|barista)/i.test(text)) {
     return true;
   }
 
-  if (/[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]/.test(text)) return true;
+  if (/[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]/.test(text)) {
+    return true;
+  }
 
   return false;
 }
 
 function jobText(job: LocalVerifiedJob) {
-  return [job.title, job.company, job.area, job.category, job.sourceLabel, job.description].join(' ').toLowerCase();
+  return [
+    job.title,
+    job.company,
+    job.area,
+    job.category,
+    job.sourceLabel,
+    job.description,
+  ]
+    .join(' ')
+    .toLowerCase();
 }
 
 function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
@@ -706,27 +802,21 @@ function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
   const text = jobText(job);
 
   if (!q || q === 'jobs' || q === 'job') return true;
-  if (q.includes('security')) return /(security|guard|armed|protection|response)/i.test(text);
-  if (q.includes('driver')) return /(driver|code 10|code 14|pdp|prdp|truck|delivery|courier|transport|fleet)/i.test(text);
 
+  if (q.includes('security')) return /(security|guard|armed|protection|response)/i.test(text);
+  if (q.includes('driver')) return /(driver|code 10|code 14|pdp|truck|delivery|courier|transport|fleet|vehicle)/i.test(text);
   if (q.includes('cashier') || q.includes('retail')) {
     return /(cashier|packer|retail|store|shop|sales|clerk|merchandiser|assistant)/i.test(text);
   }
-
   if (q.includes('farm') || q.includes('agriculture')) {
     return /(farm|agriculture|packhouse|packing|fruit|harvest|zz2|westfalia|letaba)/i.test(text);
   }
-
-  if (q.includes('admin')) return /(admin|clerk|office|reception|data capture|data capturer|administrator|assistant)/i.test(text);
-
+  if (q.includes('admin')) return /(admin|clerk|office|reception|data capture|administrator|assistant|pa)/i.test(text);
   if (q.includes('teacher') || q.includes('creche')) {
     return /(teacher|educator|school|creche|crèche|daycare|assistant teacher)/i.test(text);
   }
-
   if (q.includes('cleaner')) return /(cleaner|cleaning|housekeeping)/i.test(text);
-
   if (q.includes('general worker')) return /(general worker|general assistant|worker|labourer)/i.test(text);
-
   if (q.includes('learnership') || q.includes('internship')) {
     return /(learnership|internship|graduate|trainee|youth)/i.test(text);
   }
@@ -741,7 +831,7 @@ function dedupeJobs(jobs: LocalVerifiedJob[]) {
   const seen = new Set<string>();
 
   return jobs.filter((job) => {
-    const key = `${job.title}-${job.company}-${job.area}-${job.applyUrl}`.toLowerCase();
+    const key = `${job.title}-${job.company}-${job.area}`.toLowerCase();
 
     if (seen.has(key)) return false;
 
@@ -753,27 +843,30 @@ function dedupeJobs(jobs: LocalVerifiedJob[]) {
 function getDeadlineInfo(deadline?: string | null) {
   if (!deadline) return { label: 'Closing date not stated', expired: false, urgent: false };
 
-  const plain = clean(deadline);
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(plain)) {
-    return { label: plain, expired: false, urgent: false };
-  }
-
-  const end = new Date(`${plain}T23:59:59`);
+  const end = new Date(`${deadline}T23:59:59`);
   const now = new Date();
 
-  if (Number.isNaN(end.getTime())) return { label: plain, expired: false, urgent: false };
+  if (Number.isNaN(end.getTime())) {
+    return { label: deadline, expired: false, urgent: false };
+  }
 
   const diffMs = end.getTime() - now.getTime();
 
-  if (diffMs <= 0) return { label: 'Closed', expired: true, urgent: false };
+  if (diffMs <= 0) {
+    return { label: 'Closed', expired: true, urgent: false };
+  }
 
   const totalHours = Math.ceil(diffMs / (1000 * 60 * 60));
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
 
-  if (days <= 0) return { label: `Closing in ${hours}h`, expired: false, urgent: true };
-  if (days === 1) return { label: 'Closing in 1 day', expired: false, urgent: true };
+  if (days <= 0) {
+    return { label: `Closing in ${hours}h`, expired: false, urgent: true };
+  }
+
+  if (days === 1) {
+    return { label: 'Closing in 1 day', expired: false, urgent: true };
+  }
 
   return { label: `Closing in ${days} days`, expired: false, urgent: days <= 3 };
 }
@@ -797,16 +890,30 @@ function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus'])
 }
 
 function isJobRelatedText(content: string) {
-  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|cashier|packer|clerk|security|teacher|creche|general worker|driver|admin)/i.test(
+  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|admin)/i.test(
+    content
+  );
+}
+
+function isCvRelatedText(content: string) {
+  return /(cv|resume|cover letter|application letter|profile summary|ats|career profile|work experience|skills section|employment history)/i.test(
     content
   );
 }
 
 function isGovernmentServiceText(content: string) {
-  return /(uif|ussd|sassa|claim status|department of employment|labour|labor|\*134\*843#)/i.test(normalizeUssdCodes(content));
+  return /(uif|ussd|sassa|claim status|department of employment|labour|labor|\*134\*843#)/i.test(
+    normalizeUssdCodes(content)
+  );
 }
 
-function shouldShowAssistantActions(content: string, previousUserText = '') {
+function shouldShowCvBuilderActions(content: string, previousUserText = '') {
+  const combined = `${content}\n${previousUserText}`;
+  if (isGovernmentServiceText(combined)) return false;
+  return isCvRelatedText(combined);
+}
+
+function shouldShowApplyActions(content: string, previousUserText = '') {
   const combined = `${content}\n${previousUserText}`;
 
   if (isGovernmentServiceText(combined)) return false;
@@ -814,8 +921,14 @@ function shouldShowAssistantActions(content: string, previousUserText = '') {
   return isJobRelatedText(combined);
 }
 
+function shouldShowGovernmentSourceAction(content: string, previousUserText = '') {
+  return isGovernmentServiceText(`${content}\n${previousUserText}`);
+}
+
 function extractJobTitle(text: string) {
   const value = normalizeUssdCodes(text);
+
+  if (/code\s*14/i.test(value)) return 'Code 14 Side Tipper Driver';
 
   const titleMatch =
     value.match(/(?:Job title|Role|Position):\s*(.+)/i) ||
@@ -825,7 +938,11 @@ function extractJobTitle(text: string) {
 }
 
 function extractCompany(text: string) {
-  const companyMatch = text.match(/(?:Company|Employer|Source):\s*(.+)/i);
+  const companyMatch =
+    text.match(/(?:Company|Employer|Source):\s*(.+)/i) ||
+    text.match(/\bMRMS\b/i);
+
+  if (companyMatch?.[0]?.toUpperCase().includes('MRMS')) return 'MRMS';
 
   return clean(companyMatch?.[1]) || 'Company not confirmed';
 }
@@ -835,11 +952,13 @@ function extractEmail(text: string) {
 }
 
 function extractDeadline(text: string) {
-  const textDate = text.match(/\b\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\b/i)?.[0];
+  const value = text.match(/\b\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\b/i)?.[0];
 
-  if (textDate) return textDate;
+  if (value) return value;
 
-  return text.match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/)?.[0] || '';
+  const slashDate = text.match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/)?.[0];
+
+  return slashDate || '';
 }
 
 function readFileAsDataUrl(file: File) {
@@ -875,7 +994,9 @@ function resizeImageDataUrl(dataUrl: string, maxWidth = 1280, quality = 0.82) {
         }
 
         ctx.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality) || dataUrl);
+
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed || dataUrl);
       } catch {
         resolve(dataUrl);
       }
@@ -901,7 +1022,7 @@ async function imageFileToWorkspaceImage(file: File): Promise<WorkspaceImage> {
 
 function createUnavailableAnswer(hasImages: boolean) {
   if (hasImages) {
-    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly.';
+    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly. If this continues, check that your backend image-analysis route and vision API key are configured correctly.';
   }
 
   return 'FaceMeX AI is temporarily unavailable. Please try again shortly.';
@@ -918,7 +1039,16 @@ function normalizeAnswerText(raw: any, fallback: string) {
     (Array.isArray(raw?.suggestions) ? raw.suggestions.join('\n\n') : '') ||
     '';
 
-  return prepareChatGPTMarkdown(clean(answer) || fallback);
+  return normalizeUssdCodes(clean(answer) || fallback);
+}
+
+function normalizeBrokenMarkdownLinks(text: string) {
+  return normalizeUssdCodes(String(text || ''))
+    .replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/gi, '[$1]($2)')
+    .replace(
+      /\[([^\]]+)\]\s*\(\s*((?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^)\s]*)?)\s*\)/gi,
+      '[$1]($2)'
+    );
 }
 
 function stripTrailingPunctuation(value: string) {
@@ -926,7 +1056,10 @@ function stripTrailingPunctuation(value: string) {
   const trailing = trimmed.match(/[),.;:!?]+$/)?.[0] || '';
   const cleanValue = trailing ? trimmed.slice(0, -trailing.length) : trimmed;
 
-  return { cleanValue, trailing };
+  return {
+    cleanValue,
+    trailing,
+  };
 }
 
 function getLinkHref(rawUrl: string) {
@@ -942,7 +1075,9 @@ function getLinkLabel(rawUrl: string) {
 
   try {
     const href = getLinkHref(cleanValue);
-    return new URL(href).hostname.replace(/^www\./, '');
+    const host = new URL(href).hostname.replace(/^www\./, '');
+
+    return host;
   } catch {
     return cleanValue;
   }
@@ -965,17 +1100,17 @@ function SourceChip({
       onClick={() => onClick?.(url, label)}
       className="mx-1 inline-flex max-w-full translate-y-[-1px] items-center rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold leading-none text-slate-700 no-underline transition hover:bg-slate-300 dark:bg-white/[0.12] dark:text-white/70 dark:hover:bg-white/[0.2]"
     >
-      <span className="max-w-[150px] truncate">{label}</span>
+      <span className="max-w-[140px] truncate">{label}</span>
     </a>
   );
 }
 
 function renderInlineText(text: string, onLinkClick?: (url: string, label?: string) => void) {
   const nodes: ReactNode[] = [];
-  const safeText = normalizeUssdCodes(String(text || ''));
+  const safeText = normalizeBrokenMarkdownLinks(text);
 
   const regex =
-    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|((?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
+    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+|(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s)]*)?)\)|((?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -991,15 +1126,20 @@ function renderInlineText(text: string, onLinkClick?: (url: string, label?: stri
         </strong>
       );
     } else if (match[3] && match[4]) {
-      const href = getLinkHref(match[4]);
-      nodes.push(<SourceChip key={`md-${key++}`} label={match[3]} url={href} onClick={onLinkClick} />);
+      const label = match[3];
+      const rawUrl = match[4];
+      const href = getLinkHref(rawUrl);
+      const { trailing } = stripTrailingPunctuation(rawUrl);
+
+      nodes.push(<SourceChip key={`md-link-${key++}`} label={label} url={href} onClick={onLinkClick} />);
+      if (trailing) nodes.push(trailing);
     } else if (match[5]) {
       const rawUrl = match[5];
       const href = getLinkHref(rawUrl);
       const label = getLinkLabel(rawUrl);
       const { trailing } = stripTrailingPunctuation(rawUrl);
 
-      nodes.push(<SourceChip key={`link-${key++}`} label={label} url={href} onClick={onLinkClick} />);
+      nodes.push(<SourceChip key={`domain-link-${key++}`} label={label} url={href} onClick={onLinkClick} />);
       if (trailing) nodes.push(trailing);
     }
 
@@ -1011,6 +1151,94 @@ function renderInlineText(text: string, onLinkClick?: (url: string, label?: stri
   return nodes.length ? nodes : safeText;
 }
 
+function isTableSeparator(line: string) {
+  const value = line.trim();
+
+  if (!value.includes('|')) return false;
+
+  const cells = value
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+  if (cells.length < 2) return false;
+
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isLikelyTableRow(line: string) {
+  const value = line.trim();
+  if (!value.includes('|')) return false;
+
+  const cells = value
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+  return cells.length >= 2;
+}
+
+function parseTableRow(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+}
+
+function renderMarkdownTable(
+  tableLines: string[],
+  key: string,
+  onLinkClick?: (url: string, label?: string) => void
+) {
+  const header = parseTableRow(tableLines[0]);
+  const body = tableLines.slice(2).map(parseTableRow);
+  const columnCount = Math.max(header.length, ...body.map((row) => row.length));
+
+  return (
+    <div
+      key={key}
+      className="my-4 w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.03]"
+    >
+      <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+        <thead className="bg-slate-100 dark:bg-white/[0.06]">
+          <tr>
+            {Array.from({ length: columnCount }).map((_, index) => (
+              <th
+                key={`head-${index}`}
+                className="border-b border-slate-200 px-3 py-3 font-semibold text-slate-950 dark:border-white/10 dark:text-white"
+              >
+                {renderInlineText(header[index] || '', onLinkClick)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {body.map((row, rowIndex) => (
+            <tr
+              key={`row-${rowIndex}`}
+              className="border-b border-slate-100 last:border-0 dark:border-white/10"
+            >
+              {Array.from({ length: columnCount }).map((_, cellIndex) => (
+                <td
+                  key={`cell-${rowIndex}-${cellIndex}`}
+                  className="align-top px-3 py-3 text-slate-700 dark:text-white/75"
+                >
+                  {renderInlineText(row[cellIndex] || '', onLinkClick)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ChatGPTStyleText({
   text,
   onLinkClick,
@@ -1018,70 +1246,87 @@ function ChatGPTStyleText({
   text: string;
   onLinkClick?: (url: string, label?: string) => void;
 }) {
-  const safeText = prepareChatGPTMarkdown(text);
+  const safeText = normalizeBrokenMarkdownLinks(text);
   const lines = safeText.split('\n');
   const blocks: ReactNode[] = [];
 
-  lines.forEach((rawLine, index) => {
-    const line = rawLine.trim();
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+
+    if (
+      isLikelyTableRow(line) &&
+      index + 1 < lines.length &&
+      isTableSeparator(lines[index + 1])
+    ) {
+      const tableLines = [lines[index], lines[index + 1]];
+      index += 2;
+
+      while (index < lines.length && isLikelyTableRow(lines[index])) {
+        tableLines.push(lines[index]);
+        index += 1;
+      }
+
+      index -= 1;
+      blocks.push(renderMarkdownTable(tableLines, `table-${index}`, onLinkClick));
+      continue;
+    }
 
     if (!line) {
       blocks.push(<div key={`space-${index}`} className="h-1" />);
-      return;
+      continue;
     }
 
-    const heading = line.match(/^#{1,6}\s+(.+)$/);
-
+    const heading = line.match(/^#{1,4}\s+(.+)$/);
     if (heading) {
       blocks.push(
         <h3
           key={`heading-${index}`}
-          className="pt-2 text-[15px] font-semibold leading-6 text-slate-950 dark:text-white"
+          className="pt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-white"
         >
           {renderInlineText(heading[1], onLinkClick)}
         </h3>
       );
-      return;
+      continue;
     }
 
     const numbered = line.match(/^(\d+)\.\s+(.+)$/);
-
     if (numbered) {
       blocks.push(
         <div key={`number-${index}`} className="flex gap-3">
           <span className="mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/70">
             {numbered[1]}
           </span>
-          <div className="min-w-0 flex-1 font-normal">{renderInlineText(numbered[2], onLinkClick)}</div>
+          <div className="min-w-0 flex-1">{renderInlineText(numbered[2], onLinkClick)}</div>
         </div>
       );
-      return;
+      continue;
     }
 
-    const bullet = line.match(/^[-•]\s+(.+)$/);
-
+    const bullet = line.match(/^[-•*]\s+(.+)$/);
     if (bullet) {
       blocks.push(
         <div key={`bullet-${index}`} className="flex gap-3">
           <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 dark:bg-white/50" />
-          <div className="min-w-0 flex-1 font-normal">{renderInlineText(bullet[1], onLinkClick)}</div>
+          <div className="min-w-0 flex-1">{renderInlineText(bullet[1], onLinkClick)}</div>
         </div>
       );
-      return;
+      continue;
     }
 
     blocks.push(
-      <p key={`p-${index}`} className="font-normal text-slate-800 dark:text-white/85">
+      <p key={`p-${index}`} className="text-slate-800 dark:text-white/85">
         {renderInlineText(line, onLinkClick)}
       </p>
     );
-  });
+  }
 
-  return <div className="space-y-3 text-[15px] font-normal leading-7 text-slate-800 dark:text-white/85">{blocks}</div>;
+  return <div className="space-y-3 text-[15px] leading-7 text-slate-800 dark:text-white/85">{blocks}</div>;
 }
 
 function isShortContextReply(text: string) {
-  return /^(yes|yebo|yeah|yep|ok|okay|sure|continue|do it|please do|go ahead|no|not now|send it|draft it)$/i.test(clean(text));
+  return /^(yes|yebo|yeah|yep|ok|okay|sure|continue|do it|please do|go ahead|no|not now|send it|draft it)$/i.test(
+    clean(text)
+  );
 }
 
 function buildConversationContext(messages: ChatMessage[]) {
@@ -1092,12 +1337,81 @@ function buildConversationContext(messages: ChatMessage[]) {
     .join('\n\n');
 }
 
+function WelcomeHero({
+  firstName,
+  onQuickAsk,
+}: {
+  firstName: string;
+  onQuickAsk: (text: string) => void;
+}) {
+  const displayName = firstName && firstName !== 'there' ? firstName : 'there';
+
+  const animatedLines = [
+    "Let's start with positive attention.",
+    'Which job are we hunting today?',
+    "Tomorrow starts today — let's prepare for it.",
+    `Ask me anything, ${displayName}.`,
+  ];
+
+  return (
+    <div className="mx-auto flex min-h-[48vh] max-w-xl flex-col items-center justify-center text-center">
+      <div className="fm-hero-orb relative flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-black">
+        <Sparkles className="h-5 w-5" />
+        <span className="fm-orbit-dot" />
+      </div>
+
+      <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400 dark:text-white/35">
+        FaceMeX Career Workspace
+      </p>
+
+      <h2 className="mt-3 text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
+        Hi {displayName}, how can I help you today?
+      </h2>
+
+      <div className="fm-line-stage mt-3 h-9 w-full max-w-[360px] overflow-hidden rounded-full border border-black/5 bg-slate-50/80 px-4 text-sm font-medium text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white/65">
+        {animatedLines.map((line, index) => (
+          <span
+            key={line}
+            className="fm-rotating-line"
+            style={{ animationDelay: `${index * 3.2}s` }}
+          >
+            {line}
+          </span>
+        ))}
+      </div>
+
+      <p className="mt-4 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
+        Search jobs, fix your CV, prepare for interviews, check screenshots, or ask anything that helps you move forward.
+      </p>
+
+      <div className="mt-5 grid w-full grid-cols-2 gap-2 sm:grid-cols-3">
+        {quickPrompts.map((item, index) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => onQuickAsk(item.prompt)}
+            className="fm-quick-card group rounded-2xl border border-black/5 bg-white px-3 py-3 text-left text-xs font-medium text-slate-700 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white/75 dark:hover:bg-white/[0.1]"
+            style={{ animationDelay: `${index * 70}ms` }}
+          >
+            <span className="block truncate">{item.label}</span>
+            <span className="mt-1 block h-1 w-8 rounded-full bg-slate-200 transition group-hover:w-12 dark:bg-white/15" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AIJobAssistantPage() {
   const navigate = useNavigate();
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { tier, hasTier } = useUserStore();
+  const userStore = useUserStore() as any;
+  const { tier, hasTier } = userStore;
+
+  const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
+  const firstName = useMemo(() => getFirstName(userDisplayName), [userDisplayName]);
 
   const currentTier = normalizeTier(tier);
   const creatorPlus = isCreatorPlusTier(currentTier, hasTier);
@@ -1126,9 +1440,13 @@ export default function AIJobAssistantPage() {
     return Math.max(0, deepSeekLimit - deepSeekUsage);
   }, [deepSeekLimit, deepSeekUsage]);
 
-  const chatMessages = useMemo(() => messages.filter((message) => !message.deletedFromChat), [messages]);
+  const chatMessages = useMemo(() => {
+    return messages.filter((message) => !message.deletedFromChat);
+  }, [messages]);
 
-  const savedMessages = useMemo(() => messages.filter((message) => message.saved && message.savedCategory), [messages]);
+  const savedMessages = useMemo(() => {
+    return messages.filter((message) => message.saved && message.savedCategory);
+  }, [messages]);
 
   const savedStats = useMemo(() => {
     return {
@@ -1152,16 +1470,8 @@ export default function AIJobAssistantPage() {
 
   const sortedLocalJobs = useMemo(() => {
     return [...localJobs].sort((a, b) => {
-      const aVerified = a.verificationStatus === 'verified' ? 1 : 0;
-      const bVerified = b.verificationStatus === 'verified' ? 1 : 0;
-
-      if (aVerified !== bVerified) return bVerified - aVerified;
-
-      const aScore = Number(a.relevanceScore || 0);
-      const bScore = Number(b.relevanceScore || 0);
-
-      if (aScore !== bScore) return bScore - aScore;
-
+      if (a.verificationStatus === 'verified' && b.verificationStatus !== 'verified') return -1;
+      if (a.verificationStatus !== 'verified' && b.verificationStatus === 'verified') return 1;
       return a.title.localeCompare(b.title);
     });
   }, [localJobs]);
@@ -1224,51 +1534,24 @@ export default function AIJobAssistantPage() {
 
   const normalizeApiJobs = (jobs: any[], keyword = 'jobs'): LocalVerifiedJob[] => {
     const normalized = jobs
-      .map((job: any) => {
-        const externalSource = clean(job.external_source || job.source || job.provider);
-        const externalId = clean(job.external_id || job.id);
-        const sourceLabel = getSourceLabel(job);
-        const applyUrl = clean(
-          job.applyUrl ||
-            job.apply_url ||
-            job.application_link ||
-            job.redirect_url ||
-            job.sourceUrl ||
-            job.source_url ||
-            job.url
-        );
-        const sourceUrl = clean(job.sourceUrl || job.source_url || job.applyUrl || job.apply_url || job.redirect_url || job.url);
-        const company = cleanCompany(job.company || job.employer || job.source_name || job.company_name);
-
-        return {
-          id: clean(job.id) || `${externalSource || 'job'}-${externalId || safeId()}`,
-          database_id: clean(job.database_id || job.databaseId) || null,
-          external_source: externalSource || null,
-          external_id: externalId || null,
-          title: clean(job.title || job.job_title || job.role),
-          company,
-          area: clean(job.area || job.location || job.town || job.city) || 'South Africa',
-          town: clean(job.town) || null,
-          province: clean(job.province) || null,
-          deadline: clean(job.deadline || job.closing_date || job.closingDate) || null,
-          sourceLabel,
-          verificationStatus: normalizeVerificationStatus(job.verificationStatus || job.verification_status || job.status),
-          actionLabel: clean(job.actionLabel || job.action_label) || 'Open',
-          applyUrl,
-          sourceUrl: sourceUrl || applyUrl,
-          sourceType: normalizeSourceType(job.sourceType || job.source_type || sourceLabel || externalSource),
-          isSourceCard: Boolean(job.isSourceCard || job.is_source_card),
-          salary: clean(job.salary || job.salary_text) || null,
-          category: clean(job.category) || null,
-          description: clean(job.description) || null,
-          createdAt: clean(job.createdAt || job.created_at) || null,
-          updatedAt: clean(job.updatedAt || job.updated_at) || null,
-          trustScore: Number(job.trustScore || job.trust_score || 0) || null,
-          relevanceScore: Number(job.relevanceScore || job.relevance_score || 0) || null,
-          foundBy: Array.isArray(job.foundBy) ? job.foundBy : [],
-          matchNote: clean(job.matchNote || job.match_note) || null,
-        };
-      })
+      .map((job: any) => ({
+        id: clean(job.id) || safeId(),
+        title: clean(job.title || job.job_title || job.role),
+        company: clean(job.company || job.employer || job.source_name || job.company_name) || 'Company not stated',
+        area: clean(job.area || job.location || job.town || job.city) || 'South Africa',
+        deadline: clean(job.deadline || job.closing_date || job.closingDate) || null,
+        sourceLabel: clean(job.sourceLabel || job.source_label || job.source_type || job.sourceType) || 'External job source',
+        verificationStatus: normalizeVerificationStatus(job.verificationStatus || job.verification_status || job.status),
+        actionLabel: clean(job.actionLabel || job.action_label) || 'Open Job Source',
+        applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.redirect_url || job.sourceUrl || job.source_url),
+        sourceUrl: clean(job.sourceUrl || job.source_url || job.applyUrl || job.apply_url || job.redirect_url),
+        sourceType: normalizeSourceType(job.sourceType || job.source_type || job.sourceLabel),
+        isSourceCard: Boolean(job.isSourceCard || job.is_source_card),
+        salary: clean(job.salary || job.salary_text) || null,
+        category: clean(job.category) || null,
+        description: clean(job.description) || null,
+        createdAt: clean(job.createdAt || job.created_at) || null,
+      }))
       .filter((job: LocalVerifiedJob) => job.title && job.applyUrl)
       .filter((job: LocalVerifiedJob) => !isForeignLookingJob(job))
       .filter((job: LocalVerifiedJob) => jobMatchesKeywordIntent(job, keyword));
@@ -1294,6 +1577,7 @@ export default function AIJobAssistantPage() {
       const data = unwrapApiResponse(res);
       const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
       const normalizedJobs = normalizeApiJobs(jobs, query);
+
       const finalJobs = normalizedJobs.length ? normalizedJobs : OFFICIAL_JOB_SOURCE_CARDS;
 
       setLocalJobs(finalJobs);
@@ -1303,12 +1587,10 @@ export default function AIJobAssistantPage() {
       if (!silent) {
         toast({
           title: 'Live search unavailable',
-          description: 'Showing verified source pages for now.',
+          description: 'Showing official verified source cards for now.',
           variant: 'destructive',
         });
       }
-
-      trackError('workspace_jobs_search_failed', error?.message || 'Job search failed', { query, area });
 
       setLocalJobs(OFFICIAL_JOB_SOURCE_CARDS);
       return OFFICIAL_JOB_SOURCE_CARDS;
@@ -1322,18 +1604,18 @@ export default function AIJobAssistantPage() {
     const searchLabel = getSearchDisplayLabel(queryText);
 
     if (exactJobs.length) {
-      return `## ${searchLabel} found for ${areaText}
+      return `**${searchLabel} found for ${areaText}**
 
 I found ${count} result${count === 1 ? '' : 's'}. Open the job source to apply.
 
 External jobs are marked **Needs verification**, so check the company and never pay money to apply.`;
     }
 
-    return `## Verified job sources for ${areaText}
+    return `**Verified official job sources for ${areaText}**
 
-I could not load exact ${searchLabel} posts right now, so I’m showing official source pages.
+I could not load exact ${searchLabel} posts for ${areaText} right now, so I’m showing official verified source pages where you can apply safely.
 
-Open the source, search your area, then use Apply Assistant to prepare your CV and message.`;
+Open the source page, search your area, then use **Apply Assistant** to prepare your CV, email, and follow-up.`;
   };
 
   const handlePickImages = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1373,7 +1655,7 @@ Open the source, search your area, then use Apply Assistant to prepare your CV a
         uploadType: 'image',
         count: converted.length,
         metadata: {
-          feature: 'FaceMeX Job AI',
+          feature: 'FaceMeX Career Workspace',
           action: 'workspace_images_selected',
         },
       });
@@ -1396,20 +1678,15 @@ Open the source, search your area, then use Apply Assistant to prepare your CV a
     setSelectedImages([]);
   };
 
-  const sendPrompt = async (overridePrompt?: string, options?: { displayText?: string }) => {
-    const aiPrompt = clean(overridePrompt || prompt);
-    const displayPrompt = clean(options?.displayText || overridePrompt || prompt);
+  const sendPrompt = async (overridePrompt?: string) => {
+    const cleanPrompt = clean(overridePrompt || prompt);
     const attachedImages = selectedImages;
     const hasImages = attachedImages.length > 0;
 
-    if (!aiPrompt && !hasImages) return;
+    if (!cleanPrompt && !hasImages) return;
 
     const finalPrompt =
-      aiPrompt ||
-      'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
-
-    const visiblePrompt =
-      displayPrompt ||
+      cleanPrompt ||
       'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
 
     const conversationContext = buildConversationContext(messages);
@@ -1422,7 +1699,9 @@ Recent conversation:
 ${conversationContext}
 
 Latest user reply:
-${finalPrompt}`
+${finalPrompt}
+
+Respond based on the previous question/task. Do not ask what the user means if the context is clear.`
       : finalPrompt;
 
     const intent = detectIntent(finalPrompt, hasImages);
@@ -1431,7 +1710,7 @@ ${finalPrompt}`
     const userMessage: ChatMessage = {
       id: safeId(),
       role: 'user',
-      content: visiblePrompt,
+      content: finalPrompt,
       createdAt: new Date().toISOString(),
       images: attachedImages,
       intent,
@@ -1463,9 +1742,7 @@ ${finalPrompt}`
     const shouldAutoSearchJobs =
       intent === 'job-search' &&
       !hasImages &&
-      /(looking for.*job|look for.*job|jobs in|job in|vacancies in|work in|hiring|available jobs|search.*job|tzaneen|polokwane|phalaborwa|hoedspruit|makhado|musina|messina|letsitele|shoprite|westfalia|zz2|letaba|teacher|creche|cashier|packer|clerk|security|general worker|driver|admin|cleaner|retail)/i.test(
-        finalPrompt
-      );
+      hasJobSearchWords(finalPrompt);
 
     if (shouldAutoSearchJobs) {
       try {
@@ -1479,7 +1756,7 @@ ${finalPrompt}`
           {
             id: safeId(),
             role: 'assistant',
-            content: prepareChatGPTMarkdown(answer),
+            content: answer,
             createdAt: new Date().toISOString(),
             savedCategory: suggestedSavedCategory,
             intent,
@@ -1488,13 +1765,6 @@ ${finalPrompt}`
             jobSearchQuery: keyword || 'jobs',
           },
         ]);
-
-        trackWorkspaceResponse({
-          intent,
-          image_count: 0,
-          source: 'automatic_jobs',
-          answer_length: answer.length,
-        });
 
         setBusy(false);
         return;
@@ -1528,7 +1798,8 @@ ${finalPrompt}`
     try {
       const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
 
-Current FaceMeX job results:
+User name: ${userDisplayName}
+Current automatic job results in FaceMeX:
 ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
 `;
 
@@ -1550,8 +1821,10 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         tier: currentTier,
         creatorPlus,
         intent,
-        source: 'facemex-job-ai',
-        responseStyle: 'chatgpt-clean',
+        userName: userDisplayName,
+        firstName,
+        source: 'facemex-career-workspace',
+        responseStyle: 'chatgpt-premium',
         answerStyle: fullSystemInstruction,
         systemInstruction: fullSystemInstruction,
         priorityAreas: PRIORITY_AREAS,
@@ -1561,6 +1834,13 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         images: attachedImages.map((image) => ({
           name: image.name,
           type: image.type,
+          size: image.size,
+          dataUrl: image.dataUrl,
+        })),
+        attachments: attachedImages.map((image) => ({
+          type: 'image',
+          name: image.name,
+          mimeType: image.type,
           size: image.size,
           dataUrl: image.dataUrl,
         })),
@@ -1635,7 +1915,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       await navigator.clipboard.writeText(normalizeUssdCodes(text));
 
       trackFeatureUse({
-        feature: 'FaceMeX Job AI',
+        feature: 'FaceMeX Career Workspace',
         action: 'workspace_copy_message',
       });
 
@@ -1659,7 +1939,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
     );
 
     trackFeatureUse({
-      feature: 'FaceMeX Job AI',
+      feature: 'FaceMeX Career Workspace',
       action: 'workspace_saved_answer',
       metadata: { category },
     });
@@ -1668,7 +1948,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
   };
 
   const saveLocalJob = (job: LocalVerifiedJob) => {
-    const content = `## ${job.title}
+    const content = `**${job.title}**
 
 Company/source: ${job.company}
 Area: ${job.area}
@@ -1683,7 +1963,7 @@ Apply link: ${job.applyUrl}`;
       {
         id: safeId(),
         role: 'assistant',
-        content: prepareChatGPTMarkdown(content),
+        content,
         createdAt: new Date().toISOString(),
         saved: true,
         savedCategory: 'career_plan',
@@ -1709,21 +1989,25 @@ Apply link: ${job.applyUrl}`;
   };
 
   const togglePin = (id: string) => {
-    setMessages((prev) => prev.map((message) => (message.id === id ? { ...message, pinned: !message.pinned } : message)));
+    setMessages((prev) =>
+      prev.map((message) => (message.id === id ? { ...message, pinned: !message.pinned } : message))
+    );
   };
 
   const deleteMessage = (id: string) => {
     setMessages((prev) =>
       prev.flatMap((message) => {
         if (message.id !== id) return [message];
+
         if (message.saved) return [{ ...message, deletedFromChat: true }];
+
         return [];
       })
     );
 
     toast({
       title: 'Deleted',
-      description: 'Removed from chat.',
+      description: 'Removed from chat. Saved copy stays in Job Tracker.',
     });
   };
 
@@ -1734,14 +2018,7 @@ Apply link: ${job.applyUrl}`;
 
   const saveEdit = () => {
     setMessages((prev) =>
-      prev.map((message) =>
-        message.id === editingMessageId
-          ? {
-              ...message,
-              content: message.role === 'assistant' ? prepareChatGPTMarkdown(editText) : editText,
-            }
-          : message
-      )
+      prev.map((message) => (message.id === editingMessageId ? { ...message, content: editText } : message))
     );
 
     setEditingMessageId(null);
@@ -1767,7 +2044,7 @@ Apply link: ${job.applyUrl}`;
 
   const handleGeneratedLinkClick = (url: string, label?: string) => {
     trackLinkClick(url, label || 'workspace_generated_link', undefined, {
-      feature: 'FaceMeX Job AI',
+      feature: 'FaceMeX Career Workspace',
     });
   };
 
@@ -1790,6 +2067,22 @@ Apply link: ${job.applyUrl}`;
     window.open(job.applyUrl, '_blank', 'noopener,noreferrer');
   };
 
+  const openCvBuilder = () => {
+    trackButtonClick('workspace_open_cv_builder', undefined, {
+      feature: 'FaceMeX Career Workspace',
+    });
+
+    navigate(AI_CV_BUILDER_PATH);
+  };
+
+  const openCoverLetterBuilder = () => {
+    trackButtonClick('workspace_open_cover_letter_builder', undefined, {
+      feature: 'FaceMeX Career Workspace',
+    });
+
+    navigate(AI_COVER_LETTER_PATH);
+  };
+
   const renderMessageImages = (images?: WorkspaceImage[]) => {
     if (!images?.length) return null;
 
@@ -1800,7 +2093,12 @@ Apply link: ${job.applyUrl}`;
             key={image.id}
             className="overflow-hidden rounded-2xl border border-black/5 bg-slate-100 dark:border-white/10 dark:bg-white/[0.06]"
           >
-            <img src={image.dataUrl} alt={image.name} className="h-28 w-full object-cover sm:h-40" loading="lazy" />
+            <img
+              src={image.dataUrl}
+              alt={image.name}
+              className="h-28 w-full object-cover sm:h-40"
+              loading="lazy"
+            />
           </div>
         ))}
       </div>
@@ -1816,7 +2114,7 @@ Apply link: ${job.applyUrl}`;
       <div className="my-4 space-y-3">
         {jobsToShow.map((job, index) => {
           const deadlineInfo = getDeadlineInfo(job.deadline);
-          const sourceText = job.foundBy?.length ? job.foundBy.join(', ') : job.sourceLabel;
+          const needsVerification = job.verificationStatus === 'needs_verification';
 
           return (
             <div
@@ -1824,7 +2122,7 @@ Apply link: ${job.applyUrl}`;
               className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.045]"
             >
               <div className="flex gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
                   {job.verificationStatus === 'verified' ? (
                     <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                   ) : job.verificationStatus === 'avoid' ? (
@@ -1859,12 +2157,10 @@ Apply link: ${job.applyUrl}`;
                       <span className="truncate">{job.area}</span>
                     </div>
 
-                    {job.salary && (
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{job.salary}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      <span>{job.deadline || 'Closing date not stated'}</span>
+                    </div>
 
                     <div className={`flex items-center gap-2 ${deadlineInfo.urgent ? 'text-orange-600' : ''}`}>
                       <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -1879,8 +2175,8 @@ Apply link: ${job.applyUrl}`;
                       </span>
                     )}
 
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600 dark:bg-white/[0.08] dark:text-white/60">
-                      {sourceText}
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                      {job.sourceLabel}
                     </span>
 
                     <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(job.verificationStatus)}`}>
@@ -1898,10 +2194,12 @@ Apply link: ${job.applyUrl}`;
                     >
                       {job.isSourceCard ? (
                         <Globe2 className="mr-1.5 h-3.5 w-3.5" />
-                      ) : (
+                      ) : needsVerification ? (
                         <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                      ) : (
+                        <Send className="mr-1.5 h-3.5 w-3.5" />
                       )}
-                      Open
+                      {deadlineInfo.expired ? 'Closed' : 'Open'}
                     </Button>
 
                     <Button
@@ -1909,16 +2207,7 @@ Apply link: ${job.applyUrl}`;
                       variant="outline"
                       onClick={() =>
                         sendPrompt(
-                          `Verify this job/company before I apply.
-
-Job: ${job.title}
-Company: ${job.company}
-Area: ${job.area}
-Source: ${job.sourceLabel}
-Apply link: ${job.applyUrl}`,
-                          {
-                            displayText: `Verify this job before I apply: ${job.title}`,
-                          }
+                          `Verify this job/company before I apply:\n\nJob: ${job.title}\nCompany: ${job.company}\nArea: ${job.area}\nSource: ${job.sourceLabel}\nApply link: ${job.applyUrl}`
                         )
                       }
                       className="h-9 rounded-xl text-xs"
@@ -1927,7 +2216,12 @@ Apply link: ${job.applyUrl}`,
                       Verify
                     </Button>
 
-                    <Button size="sm" variant="outline" onClick={() => saveLocalJob(job)} className="h-9 rounded-xl text-xs">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => saveLocalJob(job)}
+                      className="h-9 rounded-xl text-xs"
+                    >
                       <Save className="mr-1.5 h-3.5 w-3.5" />
                       Save
                     </Button>
@@ -1940,7 +2234,7 @@ Apply link: ${job.applyUrl}`,
 
         {message.jobs.length > 20 && (
           <div className="rounded-2xl bg-slate-100 px-4 py-3 text-xs text-slate-500 dark:bg-white/[0.06] dark:text-white/50">
-            Showing first 20 results. Search a specific role and area to narrow it down.
+            Showing first 20 results. Search a specific role like “security job in Letsitele” to narrow it down.
           </div>
         )}
       </div>
@@ -1951,7 +2245,7 @@ Apply link: ${job.applyUrl}`,
     const combined = `${previousUserText}\n${message.content}`;
 
     if (message.jobs?.length) return null;
-    if (!shouldShowAssistantActions(message.content, previousUserText)) return null;
+    if (!shouldShowApplyActions(message.content, previousUserText)) return null;
 
     if (!/(verdict|needs verification|verified|avoid|job|vacancy|apply|cv|email|deadline|closing date|cashier|packer|clerk|security|teacher|general worker)/i.test(combined)) {
       return null;
@@ -1967,15 +2261,19 @@ Apply link: ${job.applyUrl}`,
       <div className="mb-4 rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex gap-3">
           {message.images?.[0] ? (
-            <img src={message.images[0].dataUrl} alt="Job screenshot" className="h-20 w-20 shrink-0 rounded-2xl object-cover" />
+            <img
+              src={message.images[0].dataUrl}
+              alt="Job screenshot"
+              className="h-24 w-24 shrink-0 rounded-2xl object-cover"
+            />
           ) : (
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-              <Briefcase className="h-6 w-6 text-slate-500" />
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+              <Briefcase className="h-7 w-7 text-slate-500" />
             </div>
           )}
 
           <div className="min-w-0 flex-1">
-            <h3 className="line-clamp-2 text-sm font-semibold leading-tight">{title}</h3>
+            <h3 className="line-clamp-2 text-base font-semibold leading-tight">{title}</h3>
 
             <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
               <div className="flex items-center gap-2">
@@ -2004,6 +2302,8 @@ Apply link: ${job.applyUrl}`,
               </span>
             </div>
           </div>
+
+          <ChevronRight className="mt-2 h-5 w-5 shrink-0 text-slate-400" />
         </div>
       </div>
     );
@@ -2011,8 +2311,86 @@ Apply link: ${job.applyUrl}`,
 
   const assistantSmartActions = (message: ChatMessage, previousUserText = '') => {
     if (message.role !== 'assistant') return null;
-    if (!shouldShowAssistantActions(message.content, previousUserText)) return null;
-    if (message.jobs?.length) return null;
+
+    const canApply = shouldShowApplyActions(message.content, previousUserText);
+    const isGovernment = shouldShowGovernmentSourceAction(message.content, previousUserText);
+    const showCvButtons = shouldShowCvBuilderActions(message.content, previousUserText);
+
+    if (isGovernment) {
+      return (
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
+          <a
+            href="https://www.labour.gov.za/online-tools"
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => trackLinkClick('https://www.labour.gov.za/online-tools', 'Official government source')}
+          >
+            <Button size="sm" variant="outline" className="h-9 w-full rounded-xl text-xs">
+              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+              Official Source
+            </Button>
+          </a>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => copyText(message.content)}
+            className="h-9 rounded-xl text-xs"
+          >
+            <Copy className="mr-2 h-3.5 w-3.5" />
+            Copy Answer
+          </Button>
+        </div>
+      );
+    }
+
+    if (showCvButtons) {
+      return (
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openCvBuilder}
+            className="h-10 rounded-xl text-xs"
+          >
+            <FileText className="mr-2 h-3.5 w-3.5" />
+            Build CV
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openCoverLetterBuilder}
+            className="h-10 rounded-xl text-xs"
+          >
+            <Mail className="mr-2 h-3.5 w-3.5" />
+            Cover Letter
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => copyText(message.content)}
+            className="h-10 rounded-xl text-xs"
+          >
+            <Copy className="mr-2 h-3.5 w-3.5" />
+            Copy Answer
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => saveMessageAs(message.id, 'cv_advice')}
+            className="h-10 rounded-xl text-xs"
+          >
+            <Save className="mr-2 h-3.5 w-3.5" />
+            Save CV Tips
+          </Button>
+        </div>
+      );
+    }
+
+    if (!canApply) return null;
 
     return (
       <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
@@ -2021,25 +2399,13 @@ Apply link: ${job.applyUrl}`,
           variant="outline"
           onClick={() =>
             sendPrompt(
-              `Use Apply Assistant for this opportunity.
-
-Guide me step by step:
-- Verify the source
-- Prepare my CV
-- Write the application email or WhatsApp
-- Remind me about the closing date
-
-Opportunity details:
-${message.content}`,
-              {
-                displayText: 'Help me apply for this job.',
-              }
+              `Use Apply Assistant for this opportunity. Guide me step by step: verify the source, prepare my CV, write the application email or WhatsApp, and remind me about the closing date:\n\n${message.content}`
             )
           }
-          className="h-9 rounded-xl text-xs"
+          className="h-10 rounded-xl text-xs"
         >
           <Send className="mr-2 h-3.5 w-3.5" />
-          Apply
+          Apply Assistant
         </Button>
 
         <Button
@@ -2047,26 +2413,57 @@ ${message.content}`,
           variant="outline"
           onClick={() =>
             sendPrompt(
-              `Verify this job/company deeper.
-
-Check:
-- Official website
-- Company location
-- Contact person
-- Email domain
-- Scam signs
-
-Opportunity details:
-${message.content}`,
-              {
-                displayText: 'Verify this job before I apply.',
-              }
+              `Verify this job/company deeper. Check official website, company location, contact person, email domain, LinkedIn/company page, and scam signs:\n\n${message.content}`
             )
           }
-          className="h-9 rounded-xl text-xs"
+          className="h-10 rounded-xl text-xs"
         >
-          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-          Verify
+          <Building2 className="mr-2 h-3.5 w-3.5" />
+          Verify Company
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            sendPrompt(
+              `Write a professional application email and WhatsApp message for this opportunity. Keep it clean, short, and copy-ready:\n\n${message.content}`
+            )
+          }
+          className="h-10 rounded-xl text-xs"
+        >
+          <Mail className="mr-2 h-3.5 w-3.5" />
+          Write Email
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openCvBuilder}
+          className="h-10 rounded-xl text-xs"
+        >
+          <FileText className="mr-2 h-3.5 w-3.5" />
+          Build CV
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openCoverLetterBuilder}
+          className="h-10 rounded-xl text-xs"
+        >
+          <Mail className="mr-2 h-3.5 w-3.5" />
+          Cover Letter
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => saveMessageAs(message.id, 'career_plan')}
+          className="h-10 rounded-xl text-xs"
+        >
+          <Save className="mr-2 h-3.5 w-3.5" />
+          Save Job
         </Button>
       </div>
     );
@@ -2094,14 +2491,19 @@ ${message.content}`,
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => saveMessageAs(message.id, message.savedCategory || 'career_plan')}
+          onClick={() => saveMessageAs(message.id, message.savedCategory || 'research')}
           className="h-8 rounded-full px-2"
         >
           <Save className="h-3.5 w-3.5" />
         </Button>
       )}
 
-      <Button size="sm" variant="ghost" onClick={() => deleteMessage(message.id)} className="ml-auto h-8 rounded-full px-2 text-red-500">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => deleteMessage(message.id)}
+        className="ml-auto h-8 rounded-full px-2 text-red-500"
+      >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
     </div>
@@ -2109,6 +2511,103 @@ ${message.content}`,
 
   return (
     <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen max-w-full flex-col overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white">
+      <style>{`
+        @keyframes fmFloatIn {
+          from {
+            opacity: 0;
+            transform: translateY(10px) scale(0.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @keyframes fmGlow {
+          0%, 100% {
+            box-shadow: 0 14px 35px rgba(15, 23, 42, 0.18);
+          }
+          50% {
+            box-shadow: 0 18px 55px rgba(15, 23, 42, 0.28);
+          }
+        }
+
+        @keyframes fmOrbit {
+          from {
+            transform: rotate(0deg) translateX(34px) rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg) translateX(34px) rotate(-360deg);
+          }
+        }
+
+        @keyframes fmRotateLine {
+          0%, 5% {
+            opacity: 0;
+            transform: translateY(18px);
+          }
+          10%, 22% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          27%, 100% {
+            opacity: 0;
+            transform: translateY(-18px);
+          }
+        }
+
+        .fm-hero-orb {
+          animation: fmGlow 4s ease-in-out infinite;
+        }
+
+        .fm-orbit-dot {
+          position: absolute;
+          width: 7px;
+          height: 7px;
+          border-radius: 999px;
+          background: currentColor;
+          opacity: 0.55;
+          animation: fmOrbit 4.8s linear infinite;
+        }
+
+        .fm-line-stage {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .fm-rotating-line {
+          position: absolute;
+          left: 14px;
+          right: 14px;
+          opacity: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          animation: fmRotateLine 12.8s ease-in-out infinite;
+        }
+
+        .fm-quick-card {
+          opacity: 0;
+          animation: fmFloatIn 520ms ease forwards;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .fm-hero-orb,
+          .fm-orbit-dot,
+          .fm-rotating-line,
+          .fm-quick-card {
+            animation: none !important;
+            opacity: 1 !important;
+          }
+
+          .fm-rotating-line:not(:last-child) {
+            display: none;
+          }
+        }
+      `}</style>
+
       <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white/95 px-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:h-16 sm:px-5">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <button
@@ -2130,16 +2629,30 @@ ${message.content}`,
               </Badge>
             </div>
 
-            <p className="truncate text-[11px] text-slate-500 dark:text-white/45">Jobs, CVs, interviews, screenshots</p>
+            <p className="truncate text-[11px] text-slate-500 dark:text-white/45">
+              Ask anything. Jobs, CVs, interviews, life, business
+            </p>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button size="icon" variant="ghost" onClick={() => setJobsOpen(true)} className="h-9 w-9 rounded-full" aria-label="Jobs">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setJobsOpen(true)}
+            className="h-9 w-9 rounded-full"
+            aria-label="Automatic jobs"
+          >
             <Menu className="h-4 w-4" />
           </Button>
 
-          <Button size="icon" variant="ghost" onClick={() => setTrackerOpen(true)} className="h-9 w-9 rounded-full" aria-label="Tracker">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setTrackerOpen(true)}
+            className="h-9 w-9 rounded-full"
+            aria-label="My Job Tracker"
+          >
             <Clock className="h-4 w-4" />
           </Button>
         </div>
@@ -2150,30 +2663,7 @@ ${message.content}`,
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
               {chatMessages.length === 0 && !busy && (
-                <div className="mx-auto flex min-h-[48vh] max-w-xl flex-col items-center justify-center text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-black">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-
-                  <h2 className="mt-4 text-xl font-semibold tracking-tight sm:text-2xl">What can I help you with?</h2>
-
-                  <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
-                    Search jobs, check a job post, fix your CV, write an application message, or prepare for an interview.
-                  </p>
-
-                  <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2">
-                    {quickPrompts.map((item) => (
-                      <button
-                        key={item.label}
-                        type="button"
-                        onClick={() => quickAsk(item.prompt)}
-                        className="rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <WelcomeHero firstName={firstName} onQuickAsk={quickAsk} />
               )}
 
               {chatMessages.map((message, index) => {
@@ -2184,12 +2674,17 @@ ${message.content}`,
                     .find((item) => item.role === 'user')?.content || '';
 
                 return (
-                  <div key={message.id} className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    key={message.id}
+                    className={`flex w-full ${
+                      message.role === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
+                  >
                     <div
                       className={`rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:rounded-[24px] ${
                         message.role === 'user'
-                          ? 'max-w-[88%] bg-slate-950 font-normal text-white dark:bg-white dark:text-black sm:max-w-[82%]'
-                          : 'max-w-[96%] border border-black/5 bg-slate-50 font-normal text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
+                          ? 'max-w-[88%] bg-slate-950 text-white dark:bg-white dark:text-black sm:max-w-[82%]'
+                          : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -2211,7 +2706,7 @@ ${message.content}`,
                           </div>
                         </div>
                       ) : (
-                        <div className={message.role === 'assistant' ? 'max-h-[60vh] overflow-y-auto pr-1' : ''}>
+                        <div className={message.role === 'assistant' ? 'max-h-[58vh] overflow-y-auto pr-1' : ''}>
                           {renderMessageImages(message.images)}
 
                           {message.role === 'assistant' && renderJobSummaryCard(message, previousUserText)}
@@ -2222,7 +2717,7 @@ ${message.content}`,
                               {renderAssistantJobCards(message)}
                             </>
                           ) : (
-                            <div className="whitespace-pre-wrap break-words font-normal leading-7">{normalizeUssdCodes(message.content)}</div>
+                            <div className="whitespace-pre-wrap break-words">{normalizeUssdCodes(message.content)}</div>
                           )}
                         </div>
                       )}
@@ -2272,7 +2767,7 @@ ${message.content}`,
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Message FaceMeX Job AI..."
+                  placeholder={`Ask me anything, ${firstName}...`}
                   className="max-h-28 min-h-[48px] resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:max-h-32 sm:min-h-[52px]"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2296,7 +2791,7 @@ ${message.content}`,
                     <div className="min-w-0 text-[11px] text-slate-500 dark:text-white/45">
                       <div className="flex min-w-0 items-center gap-1">
                         <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">Search jobs. Verify before applying.</span>
+                        <span className="truncate">Helpful answers. Verify jobs before applying.</span>
                       </div>
 
                       {selectedImages.length > 0 && (
@@ -2317,11 +2812,20 @@ ${message.content}`,
                   </Button>
                 </div>
 
-                <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePickImages} />
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handlePickImages}
+                />
               </div>
 
               {remainingAIUses !== null && (
-                <div className="mt-2 text-center text-[11px] text-slate-400">AI uses left today: {remainingAIUses}</div>
+                <div className="mt-2 text-center text-[11px] text-slate-400">
+                  AI uses left today: {remainingAIUses}
+                </div>
               )}
             </div>
           </footer>
@@ -2337,7 +2841,9 @@ ${message.content}`,
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90">
               <div>
                 <h2 className="text-base font-semibold">My Job Tracker</h2>
-                <p className="text-[11px] text-slate-500 dark:text-white/45">Saved jobs and useful answers</p>
+                <p className="text-[11px] text-slate-500 dark:text-white/45">
+                  Saved jobs, reminders, follow-ups
+                </p>
               </div>
 
               <Button size="icon" variant="ghost" onClick={() => setTrackerOpen(false)} className="h-10 w-10 rounded-full">
@@ -2356,13 +2862,15 @@ ${message.content}`,
                 <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                   <p className="mt-2 text-[11px] text-slate-500">Verified</p>
-                  <p className="text-xl font-semibold">{sortedLocalJobs.filter((job) => job.verificationStatus === 'verified').length}</p>
+                  <p className="text-xl font-semibold">
+                    {sortedLocalJobs.filter((job) => job.verificationStatus === 'verified').length}
+                  </p>
                 </div>
 
                 <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
                   <Users className="h-5 w-5 text-purple-500" />
-                  <p className="mt-2 text-[11px] text-slate-500">Tracked</p>
-                  <p className="text-xl font-semibold">{sortedLocalJobs.length}</p>
+                  <p className="mt-2 text-[11px] text-slate-500">Interviews</p>
+                  <p className="text-xl font-semibold">0</p>
                 </div>
               </div>
 
@@ -2376,15 +2884,84 @@ ${message.content}`,
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-red-600 dark:text-red-300">Closing soon</p>
                       <h3 className="truncate font-semibold">{closingSoonJob.title}</h3>
-                      <p className="text-xs text-slate-500 dark:text-white/50">{getDeadlineInfo(closingSoonJob.deadline).label}</p>
+                      <p className="text-xs text-slate-500 dark:text-white/50">
+                        {getDeadlineInfo(closingSoonJob.deadline).label}
+                      </p>
                     </div>
 
                     <Button size="sm" onClick={() => openOfficialApplyPage(closingSoonJob)} className="rounded-xl">
-                      Open
+                      Apply
                     </Button>
                   </div>
                 </div>
               )}
+
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
+                <h3 className="text-base font-semibold">Your pipeline</h3>
+
+                <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
+                  {sortedLocalJobs.slice(0, 5).map((job) => {
+                    const deadlineInfo = getDeadlineInfo(job.deadline);
+
+                    return (
+                      <div key={job.id} className="flex items-center gap-3 py-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
+                          {job.verificationStatus === 'verified' ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : (
+                            <Save className="h-4 w-4 text-blue-500" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{job.title}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 dark:text-white/50">{job.deadline || 'Open'}</p>
+                          <span
+                            className={`mt-1 inline-flex rounded-full px-2 py-1 text-[11px] font-medium ${
+                              deadlineInfo.urgent
+                                ? 'bg-orange-50 text-orange-600'
+                                : verificationStatusStyles(job.verificationStatus)
+                            }`}
+                          >
+                            {deadlineInfo.urgent ? deadlineInfo.label : verificationStatusLabel(job.verificationStatus)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
+                <h3 className="text-base font-semibold">Daily tasks</h3>
+
+                <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
+                  {[
+                    ['Search today’s new jobs', Search],
+                    ['Send follow-up email', Mail],
+                    ['Tailor CV for saved jobs', FileText],
+                    ['Review interview questions', Users],
+                  ].map(([label, Icon]: any) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        setTrackerOpen(false);
+                        sendPrompt(String(label));
+                      }}
+                      className="flex w-full items-center gap-3 py-3 text-left"
+                    >
+                      <Icon className="h-4 w-4 text-blue-500" />
+                      <span className="flex-1 text-sm">{label}</span>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="mt-4">
                 <div className="flex flex-wrap gap-2">
@@ -2396,16 +2973,18 @@ ${message.content}`,
                     All
                   </Button>
 
-                  {(['career_plan', 'cv_advice', 'application_message', 'research'] as SavedCategory[]).map((category) => (
-                    <Button
-                      key={category}
-                      variant={savedFilter === category ? 'default' : 'outline'}
-                      onClick={() => setSavedFilter(category)}
-                      className="h-9 rounded-full px-4 text-xs"
-                    >
-                      {savedCategoryLabels[category]} ({savedStats[category]})
-                    </Button>
-                  ))}
+                  {(['career_plan', 'cv_advice', 'application_message', 'research'] as SavedCategory[]).map(
+                    (category) => (
+                      <Button
+                        key={category}
+                        variant={savedFilter === category ? 'default' : 'outline'}
+                        onClick={() => setSavedFilter(category)}
+                        className="h-9 rounded-full px-4 text-xs"
+                      >
+                        {savedCategoryLabels[category]} ({savedStats[category]})
+                      </Button>
+                    )
+                  )}
                 </div>
 
                 <div className="mt-3 space-y-3">
@@ -2415,7 +2994,10 @@ ${message.content}`,
                     </div>
                   ) : (
                     visibleSavedMessages.map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+                      <div
+                        key={item.id}
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                      >
                         <div className="flex items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
                             <FileText className="h-4 w-4 text-slate-500" />
@@ -2439,6 +3021,8 @@ ${message.content}`,
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+
+                          <MoreVertical className="hidden h-4 w-4 shrink-0 text-slate-400" />
                         </div>
                       </div>
                     ))
@@ -2448,7 +3032,11 @@ ${message.content}`,
             </div>
 
             <div className="shrink-0 border-t border-black/5 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-              <Button variant="ghost" onClick={clearSavedItems} className="w-full rounded-2xl text-red-500 hover:text-red-600">
+              <Button
+                variant="ghost"
+                onClick={clearSavedItems}
+                className="w-full rounded-2xl text-red-500 hover:text-red-600"
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Clear tracker
               </Button>
@@ -2466,7 +3054,9 @@ ${message.content}`,
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90">
               <div>
                 <h2 className="text-base font-semibold">Automatic Job Search</h2>
-                <p className="text-[11px] text-slate-500 dark:text-white/45">Search by role and area</p>
+                <p className="text-[11px] text-slate-500 dark:text-white/45">
+                  Search by user intent
+                </p>
               </div>
 
               <Button size="icon" variant="ghost" onClick={() => setJobsOpen(false)} className="h-10 w-10 rounded-full">
@@ -2476,28 +3066,30 @@ ${message.content}`,
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <div className="flex gap-2 overflow-x-auto pb-2">
-                {['Tzaneen', 'Retail', 'Admin', 'Security', 'Driver', 'Farm', 'Teacher', 'Polokwane', 'Phalaborwa', 'Hoedspruit'].map((item) => (
-                  <Button
-                    key={item}
-                    variant="outline"
-                    onClick={() => {
-                      const area = PRIORITY_AREAS.includes(item) ? item : 'Tzaneen';
-                      const queryMap: Record<string, string> = {
-                        Retail: 'cashier retail packer store assistant clerk',
-                        Farm: 'farm agriculture packhouse packing',
-                        Admin: 'admin',
-                        Security: 'security',
-                        Driver: 'driver',
-                        Teacher: 'teacher creche school daycare',
-                      };
-                      const query = PRIORITY_AREAS.includes(item) ? 'jobs' : queryMap[item] || item;
-                      loadAutomaticJobs({ query, area });
-                    }}
-                    className="h-9 shrink-0 rounded-full px-4 text-xs"
-                  >
-                    {item}
-                  </Button>
-                ))}
+                {['Tzaneen', 'Retail', 'Farm', 'Admin', 'Security', 'Driver', 'Teacher', 'Polokwane', 'Phalaborwa', 'Hoedspruit'].map(
+                  (item) => (
+                    <Button
+                      key={item}
+                      variant="outline"
+                      onClick={() => {
+                        const area = PRIORITY_AREAS.includes(item) ? item : 'Tzaneen';
+                        const queryMap: Record<string, string> = {
+                          Retail: 'cashier retail packer store assistant clerk',
+                          Farm: 'farm agriculture packhouse packing',
+                          Admin: 'admin clerk office',
+                          Security: 'security',
+                          Driver: 'driver',
+                          Teacher: 'teacher creche school daycare',
+                        };
+                        const query = PRIORITY_AREAS.includes(item) ? 'jobs' : queryMap[item] || item;
+                        loadAutomaticJobs({ query, area });
+                      }}
+                      className="h-9 shrink-0 rounded-full px-4 text-xs"
+                    >
+                      {item}
+                    </Button>
+                  )
+                )}
               </div>
 
               <div className="mt-4 space-y-3">
@@ -2505,9 +3097,12 @@ ${message.content}`,
                   const deadlineInfo = getDeadlineInfo(job.deadline);
 
                   return (
-                    <div key={job.id} className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]">
+                    <div
+                      key={job.id}
+                      className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                    >
                       <div className="flex gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
                           {job.verificationStatus === 'verified' ? (
                             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                           ) : job.verificationStatus === 'avoid' ? (
@@ -2518,8 +3113,14 @@ ${message.content}`,
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <h4 className="line-clamp-2 text-sm font-semibold">{job.title}</h4>
-                          <p className="mt-1 truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h4 className="truncate text-sm font-semibold">{job.title}</h4>
+                              <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                            </div>
+
+                            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                          </div>
 
                           <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
                             <div className="flex items-center gap-2">
@@ -2527,7 +3128,16 @@ ${message.content}`,
                               <span className="truncate">{job.area}</span>
                             </div>
 
-                            <div className={`flex items-center gap-2 ${deadlineInfo.urgent ? 'text-orange-600' : ''}`}>
+                            <div className="flex items-center gap-2">
+                              <CalendarDays className="h-3.5 w-3.5" />
+                              <span>{job.deadline || 'Closing date not stated'}</span>
+                            </div>
+
+                            <div
+                              className={`flex items-center gap-2 ${
+                                deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
+                              }`}
+                            >
                               <Clock className="h-3.5 w-3.5" />
                               <span>{deadlineInfo.label}</span>
                             </div>
@@ -2538,7 +3148,11 @@ ${message.content}`,
                               {job.sourceLabel}
                             </span>
 
-                            <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(job.verificationStatus)}`}>
+                            <span
+                              className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
+                                job.verificationStatus
+                              )}`}
+                            >
                               {verificationStatusLabel(job.verificationStatus)}
                             </span>
                           </div>
@@ -2551,11 +3165,22 @@ ${message.content}`,
                               disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
                               className="h-8 rounded-xl text-xs"
                             >
-                              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                              Open
+                              {job.isSourceCard ? (
+                                <Globe2 className="mr-1.5 h-3.5 w-3.5" />
+                              ) : job.verificationStatus === 'needs_verification' ? (
+                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                              ) : (
+                                <Send className="mr-1.5 h-3.5 w-3.5" />
+                              )}
+                              {deadlineInfo.expired ? 'Closed' : job.actionLabel}
                             </Button>
 
-                            <Button size="sm" variant="outline" onClick={() => saveLocalJob(job)} className="h-8 rounded-xl text-xs">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => saveLocalJob(job)}
+                              className="h-8 rounded-xl text-xs"
+                            >
                               <Save className="mr-1.5 h-3.5 w-3.5" />
                               Save
                             </Button>
@@ -2569,7 +3194,7 @@ ${message.content}`,
 
               <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
                 <strong className="block text-sm">FaceMeX rule</strong>
-                Search according to the user’s intent. External jobs stay Needs verification. Users must never pay money to apply.
+                Search according to the user’s intent. Generic job search shows all jobs. Security search shows security jobs. Cashier search shows retail jobs. External jobs stay Needs verification.
               </div>
             </div>
           </div>
