@@ -16,7 +16,6 @@ import {
   Edit3,
   ExternalLink,
   FileText,
-  Flag,
   Globe2,
   ImagePlus,
   Loader2,
@@ -525,11 +524,8 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
 
 function extractAreaFromPrompt(text: string) {
   const t = clean(text).toLowerCase();
-
   const found = PRIORITY_AREAS.find((area) => t.includes(area.toLowerCase()));
-
   if (found) return found;
-
   return 'Tzaneen';
 }
 
@@ -650,9 +646,7 @@ function isGovernmentServiceText(content: string) {
 
 function shouldShowApplyActions(content: string, previousUserText = '') {
   const combined = `${content}\n${previousUserText}`;
-
   if (isGovernmentServiceText(combined)) return false;
-
   return isJobRelatedText(combined);
 }
 
@@ -757,7 +751,7 @@ async function imageFileToWorkspaceImage(file: File): Promise<WorkspaceImage> {
 
 function createUnavailableAnswer(hasImages: boolean) {
   if (hasImages) {
-    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly. If this continues, check that your backend image-analysis route and vision API key are configured correctly.';
+    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly. If this continues, check that image analysis is configured correctly.';
   }
 
   return 'FaceMeX AI is temporarily unavailable. Please try again shortly.';
@@ -799,9 +793,7 @@ function stripTrailingPunctuation(value: string) {
 
 function getLinkHref(rawUrl: string) {
   const { cleanValue } = stripTrailingPunctuation(rawUrl);
-
   if (/^https?:\/\//i.test(cleanValue)) return cleanValue;
-
   return `https://${cleanValue}`;
 }
 
@@ -811,7 +803,6 @@ function getLinkLabel(rawUrl: string) {
   try {
     const href = getLinkHref(cleanValue);
     const host = new URL(href).hostname.replace(/^www\./, '');
-
     return host;
   } catch {
     return cleanValue;
@@ -1261,7 +1252,6 @@ export default function AIJobAssistantPage() {
   const buildJobsAnswer = (jobs: LocalVerifiedJob[], areaText: string, queryText: string) => {
     const exactJobs = jobs.filter((job) => !job.isSourceCard);
     const sourceCards = jobs.filter((job) => job.isSourceCard);
-
     const activeList = exactJobs.length ? exactJobs : sourceCards;
 
     const list = [...activeList]
@@ -1284,8 +1274,8 @@ Apply: [Open official page](${job.applyUrl})`;
       : `**Verified official job sources for ${areaText}**`;
 
     const note = exactJobs.length
-      ? 'These are the available job results returned by FaceMeX automatic search.'
-      : 'I could not load exact job posts from the backend yet, so I am showing verified official sources where users can apply safely.';
+      ? 'These are current job results found by FaceMeX automatic search.'
+      : 'I could not find exact listed vacancies for this area right now, so I am showing verified official sources where users can apply safely.';
 
     return `${header}
 
@@ -1757,11 +1747,21 @@ Apply link: ${job.applyUrl}`;
   };
 
   const renderJobSummaryCard = (message: ChatMessage, previousUserText = '') => {
+    const lowerContent = message.content.toLowerCase();
+
+    if (
+      lowerContent.includes('i could not find exact listed vacancies') ||
+      lowerContent.includes('i could not load exact job posts') ||
+      lowerContent.includes('verified official job sources')
+    ) {
+      return null;
+    }
+
     const combined = `${previousUserText}\n${message.content}`;
 
     if (!shouldShowApplyActions(message.content, previousUserText)) return null;
 
-    if (!/(verdict|needs verification|verified|avoid|job|vacancy|apply|cv|email|deadline|closing date|cashier|packer|clerk|security|teacher|general worker)/i.test(combined)) {
+    if (!/(verdict|needs verification|avoid|company verification|public advert|screenshot|is this legit|is this real)/i.test(combined)) {
       return null;
     }
 
@@ -2082,21 +2082,13 @@ Apply link: ${job.applyUrl}`;
                 return (
                   <div
                     key={message.id}
-                    className={`flex w-full gap-2 sm:gap-3 ${
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
+                    className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
-                    {message.role === 'assistant' && (
-                      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white dark:bg-white dark:text-black">
-                        <Sparkles className="h-4 w-4" />
-                      </div>
-                    )}
-
                     <div
-                      className={`max-w-[88%] rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:max-w-[82%] sm:rounded-[24px] ${
+                      className={`rounded-[24px] px-4 py-3 text-sm leading-7 shadow-sm ${
                         message.role === 'user'
-                          ? 'bg-slate-950 text-white dark:bg-white dark:text-black'
-                          : 'border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
+                          ? 'max-w-[88%] bg-slate-950 text-white dark:bg-white dark:text-black sm:max-w-[82%]'
+                          : 'w-full border border-black/5 bg-white text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -2118,7 +2110,7 @@ Apply link: ${job.applyUrl}`;
                           </div>
                         </div>
                       ) : (
-                        <div className={message.role === 'assistant' ? 'max-h-[52vh] overflow-y-auto pr-1' : ''}>
+                        <div className={message.role === 'assistant' ? 'pr-1' : ''}>
                           {renderMessageImages(message.images)}
 
                           {message.role === 'assistant' && renderJobSummaryCard(message, previousUserText)}
@@ -2139,12 +2131,8 @@ Apply link: ${job.applyUrl}`;
               })}
 
               {busy && (
-                <div className="flex items-start gap-3">
-                  <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white dark:bg-white dark:text-black">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-
-                  <div className="rounded-[22px] border border-black/5 bg-slate-50 px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                <div className="flex w-full justify-start">
+                  <div className="w-full rounded-[24px] border border-black/5 bg-white px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
                     <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                     Searching...
                   </div>
