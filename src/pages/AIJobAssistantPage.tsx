@@ -1347,17 +1347,21 @@ function WelcomeHero({
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
 
   const animatedLines = [
-    "Let's start with positive attention.",
+    "Let's start with focus.",
     'Which job are we hunting today?',
-    "Tomorrow starts today — let's prepare for it.",
+    'Tomorrow starts today.',
     `Ask me anything, ${displayName}.`,
   ];
 
   return (
     <div className="mx-auto flex min-h-[48vh] max-w-xl flex-col items-center justify-center text-center">
-      <div className="fm-hero-orb relative flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-black">
-        <Sparkles className="h-5 w-5" />
-        <span className="fm-orbit-dot" />
+      <div className="fm-treasure-wrap">
+        <span className="fm-treasure-ring" />
+        <span className="fm-treasure-soft-glow" />
+
+        <div className="fm-treasure-orb">
+          <Sparkles className="h-5 w-5" />
+        </div>
       </div>
 
       <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400 dark:text-white/35">
@@ -1368,16 +1372,14 @@ function WelcomeHero({
         Hi {displayName}, how can I help you today?
       </h2>
 
-      <div className="fm-line-stage mt-3 h-9 w-full max-w-[360px] overflow-hidden rounded-full border border-black/5 bg-slate-50/80 px-4 text-sm font-medium text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white/65">
-        {animatedLines.map((line, index) => (
-          <span
-            key={line}
-            className="fm-rotating-line"
-            style={{ animationDelay: `${index * 3.2}s` }}
-          >
-            {line}
-          </span>
-        ))}
+      <div className="fm-line-stage mt-4 h-9 w-full max-w-[360px] overflow-hidden rounded-full border border-black/5 bg-slate-50/80 px-4 text-sm font-medium text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white/55">
+        <div className="fm-line-track">
+          {animatedLines.map((line) => (
+            <span key={line} className="fm-line-item">
+              {line}
+            </span>
+          ))}
+        </div>
       </div>
 
       <p className="mt-4 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
@@ -1391,10 +1393,10 @@ function WelcomeHero({
             type="button"
             onClick={() => onQuickAsk(item.prompt)}
             className="fm-quick-card group rounded-2xl border border-black/5 bg-white px-3 py-3 text-left text-xs font-medium text-slate-700 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white/75 dark:hover:bg-white/[0.1]"
-            style={{ animationDelay: `${index * 70}ms` }}
+            style={{ animationDelay: `${index * 45}ms` }}
           >
             <span className="block truncate">{item.label}</span>
-            <span className="mt-1 block h-1 w-8 rounded-full bg-slate-200 transition group-hover:w-12 dark:bg-white/15" />
+            <span className="mt-1 block h-1 w-8 rounded-full bg-slate-200 transition group-hover:w-10 dark:bg-white/15" />
           </button>
         ))}
       </div>
@@ -2512,10 +2514,10 @@ Apply link: ${job.applyUrl}`;
   return (
     <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen max-w-full flex-col overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white">
       <style>{`
-        @keyframes fmFloatIn {
+        @keyframes fmSoftFloatIn {
           from {
             opacity: 0;
-            transform: translateY(10px) scale(0.98);
+            transform: translateY(8px) scale(0.99);
           }
           to {
             opacity: 1;
@@ -2523,51 +2525,114 @@ Apply link: ${job.applyUrl}`;
           }
         }
 
-        @keyframes fmGlow {
-          0%, 100% {
-            box-shadow: 0 14px 35px rgba(15, 23, 42, 0.18);
-          }
-          50% {
-            box-shadow: 0 18px 55px rgba(15, 23, 42, 0.28);
-          }
-        }
-
-        @keyframes fmOrbit {
+        @keyframes fmTreasureSpin {
           from {
-            transform: rotate(0deg) translateX(34px) rotate(0deg);
+            transform: rotate(0deg);
           }
           to {
-            transform: rotate(360deg) translateX(34px) rotate(-360deg);
+            transform: rotate(360deg);
           }
         }
 
-        @keyframes fmRotateLine {
-          0%, 5% {
-            opacity: 0;
-            transform: translateY(18px);
+        @keyframes fmTreasureBreathe {
+          0%, 100% {
+            transform: scale(1);
+            opacity: 0.45;
           }
-          10%, 22% {
-            opacity: 1;
+          50% {
+            transform: scale(1.05);
+            opacity: 0.68;
+          }
+        }
+
+        @keyframes fmLineSlide {
+          0%, 18% {
             transform: translateY(0);
           }
-          27%, 100% {
-            opacity: 0;
-            transform: translateY(-18px);
+          25%, 43% {
+            transform: translateY(-36px);
+          }
+          50%, 68% {
+            transform: translateY(-72px);
+          }
+          75%, 93% {
+            transform: translateY(-108px);
+          }
+          100% {
+            transform: translateY(0);
           }
         }
 
-        .fm-hero-orb {
-          animation: fmGlow 4s ease-in-out infinite;
+        .fm-treasure-wrap {
+          position: relative;
+          display: flex;
+          height: 76px;
+          width: 76px;
+          align-items: center;
+          justify-content: center;
         }
 
-        .fm-orbit-dot {
+        .fm-treasure-ring {
           position: absolute;
-          width: 7px;
-          height: 7px;
+          inset: 0;
           border-radius: 999px;
-          background: currentColor;
-          opacity: 0.55;
-          animation: fmOrbit 4.8s linear infinite;
+          background:
+            conic-gradient(
+              from 90deg,
+              rgba(15, 23, 42, 0),
+              rgba(15, 23, 42, 0.16),
+              rgba(15, 23, 42, 0.04),
+              rgba(15, 23, 42, 0)
+            );
+          animation: fmTreasureSpin 10s linear infinite;
+        }
+
+        .fm-treasure-soft-glow {
+          position: absolute;
+          inset: 9px;
+          border-radius: 999px;
+          background: rgba(15, 23, 42, 0.08);
+          filter: blur(14px);
+          animation: fmTreasureBreathe 4.8s ease-in-out infinite;
+        }
+
+        .fm-treasure-orb {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          height: 58px;
+          width: 58px;
+          align-items: center;
+          justify-content: center;
+          border-radius: 22px;
+          background: #020617;
+          color: white;
+          box-shadow:
+            0 18px 45px rgba(15, 23, 42, 0.16),
+            inset 0 1px 0 rgba(255, 255, 255, 0.14);
+        }
+
+        .dark .fm-treasure-ring {
+          background:
+            conic-gradient(
+              from 90deg,
+              rgba(255, 255, 255, 0),
+              rgba(255, 255, 255, 0.2),
+              rgba(255, 255, 255, 0.05),
+              rgba(255, 255, 255, 0)
+            );
+        }
+
+        .dark .fm-treasure-soft-glow {
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .dark .fm-treasure-orb {
+          background: rgba(255, 255, 255, 0.95);
+          color: #020617;
+          box-shadow:
+            0 18px 45px rgba(255, 255, 255, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.35);
         }
 
         .fm-line-stage {
@@ -2577,32 +2642,43 @@ Apply link: ${job.applyUrl}`;
           justify-content: center;
         }
 
-        .fm-rotating-line {
-          position: absolute;
-          left: 14px;
-          right: 14px;
-          opacity: 0;
+        .fm-line-track {
+          height: 144px;
+          width: 100%;
+          animation: fmLineSlide 15s ease-in-out infinite;
+        }
+
+        .fm-line-item {
+          display: flex;
+          height: 36px;
+          width: 100%;
+          align-items: center;
+          justify-content: center;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          animation: fmRotateLine 12.8s ease-in-out infinite;
         }
 
         .fm-quick-card {
           opacity: 0;
-          animation: fmFloatIn 520ms ease forwards;
+          animation: fmSoftFloatIn 420ms ease forwards;
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .fm-hero-orb,
-          .fm-orbit-dot,
-          .fm-rotating-line,
+          .fm-treasure-ring,
+          .fm-treasure-soft-glow,
+          .fm-line-track,
           .fm-quick-card {
             animation: none !important;
             opacity: 1 !important;
+            transform: none !important;
           }
 
-          .fm-rotating-line:not(:last-child) {
+          .fm-line-track {
+            height: 36px;
+          }
+
+          .fm-line-item:not(:first-child) {
             display: none;
           }
         }
