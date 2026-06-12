@@ -159,6 +159,22 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     description: 'Official Shoprite Group job application portal.',
   },
   {
+    id: 'shoprite-careers',
+    title: 'Shoprite Group Careers',
+    company: 'Shoprite Group',
+    area: 'South Africa',
+    deadline: null,
+    sourceLabel: 'Official company source',
+    verificationStatus: 'verified',
+    actionLabel: 'Open',
+    applyUrl: 'https://www.shopriteholdings.co.za/careers.html',
+    sourceUrl: 'https://www.shopriteholdings.co.za/careers.html',
+    sourceType: 'official_company_source',
+    isSourceCard: true,
+    category: 'Retail',
+    description: 'Official Shoprite Group careers page.',
+  },
+  {
     id: 'westfalia-careers',
     title: 'Westfalia Fruit Careers',
     company: 'Westfalia Fruit',
@@ -324,6 +340,8 @@ const FACE_MEX_ANSWER_STYLE = `
 Respond like ChatGPT in a clean, calm, premium, professional style.
 Give the direct answer first.
 Use short sections.
+Use clear spacing.
+Do not return one big paragraph.
 Do not invent jobs.
 Do not say a job is verified unless it comes from a verified employer, official source, government source, or direct employer confirmation.
 For external job API results, say "Needs verification".
@@ -360,7 +378,6 @@ const quickPrompts = [
 
 function clean(value: unknown) {
   if (value === null || value === undefined) return '';
-
   if (typeof value === 'object') return '';
 
   return String(value || '')
@@ -373,9 +390,7 @@ function cleanCompany(value: any) {
 
   if (typeof value === 'string') {
     const company = value.replace(/\s+/g, ' ').trim();
-
     if (!company || company === '[object Object]') return 'Company not stated';
-
     return company;
   }
 
@@ -457,6 +472,20 @@ function normalizeUssdCodes(text: string) {
     .replace(/\*\*(\*134\*843#)\*\*/g, '$1')
     .replace(/\*\*([*]\d{3}[*]\d{3}#)\*\*/g, '$1')
     .replace(/`(\*\d{3}\*\d{3}#)`/g, '$1');
+}
+
+function prepareChatGPTMarkdown(text: string) {
+  return normalizeUssdCodes(String(text || ''))
+    .replace(/\r\n/g, '\n')
+    .replace(/\s+---\s+/g, '\n\n')
+    .replace(/(^|[^\n])\s+(#{1,6}\s+)/g, '$1\n\n$2')
+    .replace(/(^|[^\n])\s+(\d+\.\s+)/g, '$1\n$2')
+    .replace(/(^|[^\n])\s+([-•]\s+)/g, '$1\n$2')
+    .replace(/\s+###\s+/g, '\n\n### ')
+    .replace(/\s+##\s+/g, '\n\n## ')
+    .replace(/\s+#\s+/g, '\n\n# ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function detectIntent(text: string, hasImages = false) {
@@ -549,21 +578,29 @@ function extractKeywordFromPrompt(text: string) {
   const t = stripAreasFromText(text);
 
   if (/(security|guard|armed response|protection)/i.test(t)) return 'security';
+
   if (/(cashier|packer|retail|store assistant|shop assistant|shoprite|checkers|usave|clerk)/i.test(t)) {
     return 'cashier retail packer store assistant clerk';
   }
+
   if (/(driver|code 10|code 14|pdp|prdp|delivery|truck|courier)/i.test(t)) return 'driver';
+
   if (/(admin|administrator|administrative|office|receptionist|data capture|data capturer)/i.test(t)) {
     return 'admin';
   }
+
   if (/(teacher|educator|creche|crèche|school|daycare|assistant teacher)/i.test(t)) {
     return 'teacher creche school daycare';
   }
+
   if (/(cleaner|cleaning|housekeeping)/i.test(t)) return 'cleaner';
+
   if (/(farm|agriculture|packhouse|packing|fruit|westfalia|zz2|letaba)/i.test(t)) {
     return 'farm agriculture packhouse packing';
   }
+
   if (/(learnership|internship|graduate|youth)/i.test(t)) return 'learnership internship';
+
   if (/(general worker|general work|general)/i.test(t)) return 'general worker';
 
   const simplified = t
@@ -616,15 +653,19 @@ function normalizeSourceType(value: any): SourceCategoryKey {
   const source = clean(value).toLowerCase();
 
   if (source.includes('facemex')) return 'facemex_verified_local_employer';
+
   if (source.includes('government') || source.includes('municipality') || source.includes('public')) {
     return 'government_public_institution';
   }
+
   if (source.includes('community') || source.includes('screenshot')) {
     return 'community_advert_needs_verification';
   }
+
   if (source.includes('api') || source.includes('adzuna') || source.includes('jooble') || source.includes('external')) {
     return 'external_job_api';
   }
+
   if (source.includes('risk') || source.includes('avoid')) return 'high_risk_avoid';
 
   return 'official_company_source';
@@ -635,7 +676,7 @@ function getSourceLabel(job: any) {
 
   if (label) return label;
 
-  const source = clean(job.external_source || job.source || job.sourceType || job.source_type).toLowerCase();
+  const source = clean(job.external_source || job.source || job.provider || job.sourceType || job.source_type).toLowerCase();
 
   if (source.includes('adzuna')) return 'Adzuna live job source';
   if (source.includes('jooble')) return 'Jooble live job source';
@@ -667,18 +708,25 @@ function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
   if (!q || q === 'jobs' || q === 'job') return true;
   if (q.includes('security')) return /(security|guard|armed|protection|response)/i.test(text);
   if (q.includes('driver')) return /(driver|code 10|code 14|pdp|prdp|truck|delivery|courier|transport|fleet)/i.test(text);
+
   if (q.includes('cashier') || q.includes('retail')) {
     return /(cashier|packer|retail|store|shop|sales|clerk|merchandiser|assistant)/i.test(text);
   }
+
   if (q.includes('farm') || q.includes('agriculture')) {
     return /(farm|agriculture|packhouse|packing|fruit|harvest|zz2|westfalia|letaba)/i.test(text);
   }
+
   if (q.includes('admin')) return /(admin|clerk|office|reception|data capture|data capturer|administrator|assistant)/i.test(text);
+
   if (q.includes('teacher') || q.includes('creche')) {
     return /(teacher|educator|school|creche|crèche|daycare|assistant teacher)/i.test(text);
   }
+
   if (q.includes('cleaner')) return /(cleaner|cleaning|housekeeping)/i.test(text);
+
   if (q.includes('general worker')) return /(general worker|general assistant|worker|labourer)/i.test(text);
+
   if (q.includes('learnership') || q.includes('internship')) {
     return /(learnership|internship|graduate|trainee|youth)/i.test(text);
   }
@@ -870,11 +918,7 @@ function normalizeAnswerText(raw: any, fallback: string) {
     (Array.isArray(raw?.suggestions) ? raw.suggestions.join('\n\n') : '') ||
     '';
 
-  return normalizeUssdCodes(clean(answer) || fallback);
-}
-
-function normalizeBrokenMarkdownLinks(text: string) {
-  return normalizeUssdCodes(String(text || '')).replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/gi, '[$1]($2)');
+  return prepareChatGPTMarkdown(clean(answer) || fallback);
 }
 
 function stripTrailingPunctuation(value: string) {
@@ -928,7 +972,7 @@ function SourceChip({
 
 function renderInlineText(text: string, onLinkClick?: (url: string, label?: string) => void) {
   const nodes: ReactNode[] = [];
-  const safeText = normalizeBrokenMarkdownLinks(text);
+  const safeText = normalizeUssdCodes(String(text || ''));
 
   const regex =
     /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|((?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
@@ -974,7 +1018,7 @@ function ChatGPTStyleText({
   text: string;
   onLinkClick?: (url: string, label?: string) => void;
 }) {
-  const safeText = normalizeBrokenMarkdownLinks(text);
+  const safeText = prepareChatGPTMarkdown(text);
   const lines = safeText.split('\n');
   const blocks: ReactNode[] = [];
 
@@ -986,11 +1030,14 @@ function ChatGPTStyleText({
       return;
     }
 
-    const heading = line.match(/^#{1,4}\s+(.+)$/);
+    const heading = line.match(/^#{1,6}\s+(.+)$/);
 
     if (heading) {
       blocks.push(
-        <h3 key={`heading-${index}`} className="pt-1 text-[16px] font-semibold tracking-tight text-slate-950 dark:text-white">
+        <h3
+          key={`heading-${index}`}
+          className="pt-2 text-[15px] font-semibold leading-6 text-slate-950 dark:text-white"
+        >
           {renderInlineText(heading[1], onLinkClick)}
         </h3>
       );
@@ -1005,32 +1052,32 @@ function ChatGPTStyleText({
           <span className="mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/70">
             {numbered[1]}
           </span>
-          <div className="min-w-0 flex-1">{renderInlineText(numbered[2], onLinkClick)}</div>
+          <div className="min-w-0 flex-1 font-normal">{renderInlineText(numbered[2], onLinkClick)}</div>
         </div>
       );
       return;
     }
 
-    const bullet = line.match(/^[-•*]\s+(.+)$/);
+    const bullet = line.match(/^[-•]\s+(.+)$/);
 
     if (bullet) {
       blocks.push(
         <div key={`bullet-${index}`} className="flex gap-3">
           <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400 dark:bg-white/50" />
-          <div className="min-w-0 flex-1">{renderInlineText(bullet[1], onLinkClick)}</div>
+          <div className="min-w-0 flex-1 font-normal">{renderInlineText(bullet[1], onLinkClick)}</div>
         </div>
       );
       return;
     }
 
     blocks.push(
-      <p key={`p-${index}`} className="text-slate-800 dark:text-white/85">
+      <p key={`p-${index}`} className="font-normal text-slate-800 dark:text-white/85">
         {renderInlineText(line, onLinkClick)}
       </p>
     );
   });
 
-  return <div className="space-y-3 text-[15px] leading-7 text-slate-800 dark:text-white/85">{blocks}</div>;
+  return <div className="space-y-3 text-[15px] font-normal leading-7 text-slate-800 dark:text-white/85">{blocks}</div>;
 }
 
 function isShortContextReply(text: string) {
@@ -1275,14 +1322,14 @@ export default function AIJobAssistantPage() {
     const searchLabel = getSearchDisplayLabel(queryText);
 
     if (exactJobs.length) {
-      return `**${searchLabel} found for ${areaText}**
+      return `## ${searchLabel} found for ${areaText}
 
 I found ${count} result${count === 1 ? '' : 's'}. Open the job source to apply.
 
 External jobs are marked **Needs verification**, so check the company and never pay money to apply.`;
     }
 
-    return `**Verified job sources for ${areaText}**
+    return `## Verified job sources for ${areaText}
 
 I could not load exact ${searchLabel} posts right now, so I’m showing official source pages.
 
@@ -1349,15 +1396,20 @@ Open the source, search your area, then use Apply Assistant to prepare your CV a
     setSelectedImages([]);
   };
 
-  const sendPrompt = async (overridePrompt?: string) => {
-    const cleanPrompt = clean(overridePrompt || prompt);
+  const sendPrompt = async (overridePrompt?: string, options?: { displayText?: string }) => {
+    const aiPrompt = clean(overridePrompt || prompt);
+    const displayPrompt = clean(options?.displayText || overridePrompt || prompt);
     const attachedImages = selectedImages;
     const hasImages = attachedImages.length > 0;
 
-    if (!cleanPrompt && !hasImages) return;
+    if (!aiPrompt && !hasImages) return;
 
     const finalPrompt =
-      cleanPrompt ||
+      aiPrompt ||
+      'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
+
+    const visiblePrompt =
+      displayPrompt ||
       'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
 
     const conversationContext = buildConversationContext(messages);
@@ -1379,7 +1431,7 @@ ${finalPrompt}`
     const userMessage: ChatMessage = {
       id: safeId(),
       role: 'user',
-      content: finalPrompt,
+      content: visiblePrompt,
       createdAt: new Date().toISOString(),
       images: attachedImages,
       intent,
@@ -1427,7 +1479,7 @@ ${finalPrompt}`
           {
             id: safeId(),
             role: 'assistant',
-            content: answer,
+            content: prepareChatGPTMarkdown(answer),
             createdAt: new Date().toISOString(),
             savedCategory: suggestedSavedCategory,
             intent,
@@ -1447,7 +1499,7 @@ ${finalPrompt}`
         setBusy(false);
         return;
       } catch {
-        // AI fallback below
+        // continue to AI fallback
       }
     }
 
@@ -1616,7 +1668,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
   };
 
   const saveLocalJob = (job: LocalVerifiedJob) => {
-    const content = `**${job.title}**
+    const content = `## ${job.title}
 
 Company/source: ${job.company}
 Area: ${job.area}
@@ -1631,7 +1683,7 @@ Apply link: ${job.applyUrl}`;
       {
         id: safeId(),
         role: 'assistant',
-        content,
+        content: prepareChatGPTMarkdown(content),
         createdAt: new Date().toISOString(),
         saved: true,
         savedCategory: 'career_plan',
@@ -1681,7 +1733,16 @@ Apply link: ${job.applyUrl}`;
   };
 
   const saveEdit = () => {
-    setMessages((prev) => prev.map((message) => (message.id === editingMessageId ? { ...message, content: editText } : message)));
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === editingMessageId
+          ? {
+              ...message,
+              content: message.role === 'assistant' ? prepareChatGPTMarkdown(editText) : editText,
+            }
+          : message
+      )
+    );
 
     setEditingMessageId(null);
     setEditText('');
@@ -1848,7 +1909,16 @@ Apply link: ${job.applyUrl}`;
                       variant="outline"
                       onClick={() =>
                         sendPrompt(
-                          `Verify this job/company before I apply:\n\nJob: ${job.title}\nCompany: ${job.company}\nArea: ${job.area}\nSource: ${job.sourceLabel}\nApply link: ${job.applyUrl}`
+                          `Verify this job/company before I apply.
+
+Job: ${job.title}
+Company: ${job.company}
+Area: ${job.area}
+Source: ${job.sourceLabel}
+Apply link: ${job.applyUrl}`,
+                          {
+                            displayText: `Verify this job before I apply: ${job.title}`,
+                          }
                         )
                       }
                       className="h-9 rounded-xl text-xs"
@@ -1951,7 +2021,19 @@ Apply link: ${job.applyUrl}`;
           variant="outline"
           onClick={() =>
             sendPrompt(
-              `Use Apply Assistant for this opportunity. Guide me step by step: verify the source, prepare my CV, write the application email or WhatsApp, and remind me about the closing date:\n\n${message.content}`
+              `Use Apply Assistant for this opportunity.
+
+Guide me step by step:
+- Verify the source
+- Prepare my CV
+- Write the application email or WhatsApp
+- Remind me about the closing date
+
+Opportunity details:
+${message.content}`,
+              {
+                displayText: 'Help me apply for this job.',
+              }
             )
           }
           className="h-9 rounded-xl text-xs"
@@ -1965,7 +2047,20 @@ Apply link: ${job.applyUrl}`;
           variant="outline"
           onClick={() =>
             sendPrompt(
-              `Verify this job/company deeper. Check official website, company location, contact person, email domain, and scam signs:\n\n${message.content}`
+              `Verify this job/company deeper.
+
+Check:
+- Official website
+- Company location
+- Contact person
+- Email domain
+- Scam signs
+
+Opportunity details:
+${message.content}`,
+              {
+                displayText: 'Verify this job before I apply.',
+              }
             )
           }
           className="h-9 rounded-xl text-xs"
@@ -2093,8 +2188,8 @@ Apply link: ${job.applyUrl}`;
                     <div
                       className={`rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:rounded-[24px] ${
                         message.role === 'user'
-                          ? 'max-w-[88%] bg-slate-950 text-white dark:bg-white dark:text-black sm:max-w-[82%]'
-                          : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
+                          ? 'max-w-[88%] bg-slate-950 font-normal text-white dark:bg-white dark:text-black sm:max-w-[82%]'
+                          : 'max-w-[96%] border border-black/5 bg-slate-50 font-normal text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -2127,7 +2222,7 @@ Apply link: ${job.applyUrl}`;
                               {renderAssistantJobCards(message)}
                             </>
                           ) : (
-                            <div className="whitespace-pre-wrap break-words">{normalizeUssdCodes(message.content)}</div>
+                            <div className="whitespace-pre-wrap break-words font-normal leading-7">{normalizeUssdCodes(message.content)}</div>
                           )}
                         </div>
                       )}
