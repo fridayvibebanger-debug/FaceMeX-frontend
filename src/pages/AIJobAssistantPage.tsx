@@ -64,19 +64,6 @@ type WorkspaceImage = {
   dataUrl: string;
 };
 
-type ChatMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  createdAt: string;
-  pinned?: boolean;
-  saved?: boolean;
-  savedCategory?: SavedCategory;
-  deletedFromChat?: boolean;
-  images?: WorkspaceImage[];
-  intent?: string;
-};
-
 type SourceCategoryKey =
   | 'facemex_verified_local_employer'
   | 'official_company_source'
@@ -100,7 +87,24 @@ type LocalVerifiedJob = {
   isSourceCard?: boolean;
   salary?: string | null;
   category?: string | null;
+  description?: string | null;
   createdAt?: string | null;
+};
+
+type ChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+  pinned?: boolean;
+  saved?: boolean;
+  savedCategory?: SavedCategory;
+  deletedFromChat?: boolean;
+  images?: WorkspaceImage[];
+  intent?: string;
+  jobs?: LocalVerifiedJob[];
+  jobSearchArea?: string;
+  jobSearchQuery?: string;
 };
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
@@ -144,6 +148,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'official_company_source',
     isSourceCard: true,
     category: 'Retail',
+    description: 'Official Shoprite Group job application portal.',
   },
   {
     id: 'shoprite-careers',
@@ -159,6 +164,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'official_company_source',
     isSourceCard: true,
     category: 'Retail',
+    description: 'Official Shoprite Group careers page.',
   },
   {
     id: 'westfalia-careers',
@@ -174,6 +180,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'official_company_source',
     isSourceCard: true,
     category: 'Agriculture',
+    description: 'Official Westfalia Fruit careers page.',
   },
   {
     id: 'zz2-vacancies',
@@ -189,6 +196,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'official_company_source',
     isSourceCard: true,
     category: 'Agriculture',
+    description: 'Official ZZ2 recruitment page.',
   },
   {
     id: 'limpopo-health-careers',
@@ -204,6 +212,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Government / Health',
+    description: 'Official Limpopo Department of Health careers page.',
   },
   {
     id: 'greater-tzaneen-vacancies',
@@ -219,6 +228,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Government',
+    description: 'Official Greater Tzaneen Municipality vacancies page.',
   },
   {
     id: 'polokwane-apply',
@@ -234,6 +244,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Government',
+    description: 'Official Polokwane Municipality employment portal.',
   },
   {
     id: 'ba-phalaborwa-vacancies',
@@ -249,6 +260,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Government',
+    description: 'Official Ba-Phalaborwa Municipality vacancies page.',
   },
   {
     id: 'maruleng-vacancies',
@@ -264,6 +276,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Government',
+    description: 'Official Maruleng Municipality vacancies page.',
   },
   {
     id: 'makhado-vacancies',
@@ -279,6 +292,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Government',
+    description: 'Official Makhado Municipality advertised vacancies page.',
   },
   {
     id: 'musina-vacancies',
@@ -294,6 +308,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Government',
+    description: 'Official Musina Municipality vacancies page.',
   },
   {
     id: 'sayouth',
@@ -309,6 +324,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
     sourceType: 'government_public_institution',
     isSourceCard: true,
     category: 'Youth / Learnerships',
+    description: 'Official youth opportunities platform.',
   },
 ];
 
@@ -316,20 +332,22 @@ const FACE_MEX_ANSWER_STYLE = `
 Respond like ChatGPT in a clean, calm, premium, professional style.
 Give the direct answer first.
 Use short sections.
-Use numbered lists for jobs.
-Use bullets only where helpful.
 Never invent jobs.
-Only say a job is verified if it comes from FaceMeX verified records, official company source, government/public institution, or a trusted API result.
+Only say a job is verified if it comes from FaceMeX verified records, official company source, government/public institution, or a directly confirmed employer.
 
-When users ask for jobs in a place:
-- Search automatically using the backend.
+When users ask for jobs:
+- Understand the user's intent first.
+- If they ask generally, search "jobs".
+- If they ask for security, search "security".
+- If they ask for cashier, search "cashier".
+- If they ask for driver, search "driver".
+- If they ask for admin, search "admin".
+- If they ask for teacher or creche jobs, search education/teacher/creche.
 - Prioritize exact area first.
 - Then nearby areas.
 - Then South Africa only if local results are low.
-- Show jobs A-Z.
-- Show closing date if available.
-- Show official apply link if available.
-- If closing date is missing, say "Closing date not stated".
+- Show official apply links when available.
+- Keep external API jobs as Needs verification.
 
 When displaying phone/USSD codes:
 - Write them exactly like *134*843#.
@@ -354,7 +372,7 @@ const quickPrompts = [
   {
     label: 'Jobs in Tzaneen',
     prompt:
-      'I am looking for a job in Tzaneen. Search automatically and show me all available jobs from A to Z with verified sources and apply links.',
+      'I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.',
   },
   {
     label: 'Retail jobs',
@@ -485,7 +503,7 @@ function detectIntent(text: string, hasImages = false) {
   }
 
   if (
-    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment|tzaneen|lenyenye|nkowankowa|maake|letsitele|polokwane|phalaborwa|hoedspruit|makhado|musina|messina|shoprite|westfalia|zz2|letaba|teacher|creche|crèche|cashier|packer|clerk|security|general worker)/i.test(
+    /(job|jobs|vacancy|vacancies|hiring|opportunities|opportunity|learnership|internship|work|latest job|latest jobs|employment|tzaneen|lenyenye|nkowankowa|maake|letsitele|polokwane|phalaborwa|hoedspruit|makhado|musina|messina|shoprite|westfalia|zz2|letaba|teacher|creche|crèche|cashier|packer|clerk|security|general worker|driver|admin|cleaner|retail|store assistant)/i.test(
       t
     )
   ) {
@@ -524,36 +542,100 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
 
 function extractAreaFromPrompt(text: string) {
   const t = clean(text).toLowerCase();
+
   const found = PRIORITY_AREAS.find((area) => t.includes(area.toLowerCase()));
-  if (found) return found;
+
+  if (found) return found === 'Messina' ? 'Musina' : found;
+
   return 'Tzaneen';
 }
 
+function stripAreasFromText(text: string) {
+  let value = ` ${clean(text).toLowerCase()} `;
+
+  PRIORITY_AREAS.forEach((area) => {
+    value = value.replace(new RegExp(`\\b${area.toLowerCase()}\\b`, 'gi'), ' ');
+  });
+
+  return value.replace(/\s+/g, ' ').trim();
+}
+
 function extractKeywordFromPrompt(text: string) {
-  const t = clean(text).toLowerCase();
+  const t = stripAreasFromText(text);
 
-  if (/(shoprite|checkers|usave|cashier|packer|retail|store|clerk)/i.test(t)) {
-    return 'cashier clerk packer retail store general worker';
+  if (/(security|guard|armed response|protection)/i.test(t)) {
+    return 'security';
   }
 
-  if (/(westfalia|zz2|farm|agriculture|packhouse|packing|security|admin)/i.test(t)) {
-    return 'farm agriculture packhouse packing security admin general worker';
+  if (/(cashier|packer|retail|store assistant|shop assistant|shoprite|checkers|usave|clerk)/i.test(t)) {
+    return 'cashier retail packer store assistant clerk';
   }
 
-  if (/(teacher|creche|crèche|school|educare|daycare)/i.test(t)) {
-    return 'teacher assistant creche daycare school';
+  if (/(driver|code 10|code 14|pdp|delivery|truck|side tipper)/i.test(t)) {
+    return 'driver';
   }
 
-  if (/(driver|code 10|code 14|pdp|delivery)/i.test(t)) {
-    return 'driver code 10 code 14 delivery';
+  if (/(admin|administrator|administrative|office|receptionist|data capture)/i.test(t)) {
+    return 'admin clerk office';
   }
 
-  return clean(text)
+  if (/(teacher|educator|creche|crèche|school|daycare|assistant teacher)/i.test(t)) {
+    return 'teacher creche school daycare';
+  }
+
+  if (/(cleaner|cleaning|housekeeping)/i.test(t)) {
+    return 'cleaner';
+  }
+
+  if (/(farm|agriculture|packhouse|packing|fruit|westfalia|zz2|letaba)/i.test(t)) {
+    return 'farm agriculture packhouse packing';
+  }
+
+  if (/(learnership|internship|graduate|youth)/i.test(t)) {
+    return 'learnership internship';
+  }
+
+  if (/(general worker|general work|general)/i.test(t)) {
+    return 'general worker';
+  }
+
+  const simplified = t
     .replace(/i am looking for/gi, '')
     .replace(/i'm looking for/gi, '')
+    .replace(/im looking for/gi, '')
+    .replace(/looking for/gi, '')
+    .replace(/show me/gi, '')
+    .replace(/search/gi, '')
+    .replace(/available/gi, '')
+    .replace(/all/gi, '')
     .replace(/jobs?/gi, '')
+    .replace(/vacanc(y|ies)/gi, '')
     .replace(/work/gi, '')
+    .replace(/\bin\b/gi, '')
+    .replace(/\bnear\b/gi, '')
+    .replace(/\bme\b/gi, '')
+    .replace(/\ba\b/gi, '')
+    .replace(/\s+/g, ' ')
     .trim();
+
+  if (!simplified || simplified.length < 3) return 'jobs';
+
+  return simplified;
+}
+
+function getSearchDisplayLabel(keyword: string) {
+  const q = clean(keyword).toLowerCase();
+
+  if (!q || q === 'jobs' || q === 'job') return 'all jobs';
+  if (q === 'security') return 'security jobs';
+  if (q === 'driver') return 'driver jobs';
+  if (q.includes('cashier')) return 'retail, cashier, packer and store jobs';
+  if (q.includes('farm')) return 'farm, agriculture and packhouse jobs';
+  if (q.includes('admin')) return 'admin and office jobs';
+  if (q.includes('teacher')) return 'teacher, creche and school jobs';
+  if (q.includes('general worker')) return 'general worker jobs';
+
+  return `${keyword} jobs`;
 }
 
 function normalizeVerificationStatus(value: any): LocalVerifiedJob['verificationStatus'] {
@@ -581,6 +663,76 @@ function normalizeSourceType(value: any): SourceCategoryKey {
   if (source.includes('risk') || source.includes('avoid')) return 'high_risk_avoid';
 
   return 'official_company_source';
+}
+
+function isForeignLookingJob(job: LocalVerifiedJob) {
+  const text = `${job.title} ${job.company} ${job.category || ''}`.toLowerCase();
+
+  if (/(addetto|vendite|commesso|stage curriculare|magazziniere|tirocinio|impiegato|cameriere|barista)/i.test(text)) {
+    return true;
+  }
+
+  if (/[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]/.test(text)) {
+    return true;
+  }
+
+  return false;
+}
+
+function jobText(job: LocalVerifiedJob) {
+  return [
+    job.title,
+    job.company,
+    job.area,
+    job.category,
+    job.sourceLabel,
+    job.description,
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
+  const q = clean(keyword).toLowerCase();
+  const text = jobText(job);
+
+  if (!q || q === 'jobs' || q === 'job') return true;
+
+  if (q.includes('security')) return /(security|guard|armed|protection|response)/i.test(text);
+  if (q.includes('driver')) return /(driver|code 10|code 14|pdp|truck|delivery|courier|transport)/i.test(text);
+  if (q.includes('cashier') || q.includes('retail')) {
+    return /(cashier|packer|retail|store|shop|sales|clerk|merchandiser|assistant)/i.test(text);
+  }
+  if (q.includes('farm') || q.includes('agriculture')) {
+    return /(farm|agriculture|packhouse|packing|fruit|harvest|zz2|westfalia|letaba)/i.test(text);
+  }
+  if (q.includes('admin')) return /(admin|clerk|office|reception|data capture|administrator)/i.test(text);
+  if (q.includes('teacher') || q.includes('creche')) {
+    return /(teacher|educator|school|creche|crèche|daycare|assistant teacher)/i.test(text);
+  }
+  if (q.includes('cleaner')) return /(cleaner|cleaning|housekeeping)/i.test(text);
+  if (q.includes('general worker')) return /(general worker|general assistant|worker|labourer)/i.test(text);
+  if (q.includes('learnership') || q.includes('internship')) {
+    return /(learnership|internship|graduate|trainee|youth)/i.test(text);
+  }
+
+  return q
+    .split(/\s+/)
+    .filter((word) => word.length >= 3)
+    .some((word) => text.includes(word));
+}
+
+function dedupeJobs(jobs: LocalVerifiedJob[]) {
+  const seen = new Set<string>();
+
+  return jobs.filter((job) => {
+    const key = `${job.title}-${job.company}-${job.area}`.toLowerCase();
+
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
 }
 
 function getDeadlineInfo(deadline?: string | null) {
@@ -633,7 +785,7 @@ function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus'])
 }
 
 function isJobRelatedText(content: string) {
-  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker)/i.test(
+  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|admin)/i.test(
     content
   );
 }
@@ -646,7 +798,9 @@ function isGovernmentServiceText(content: string) {
 
 function shouldShowApplyActions(content: string, previousUserText = '') {
   const combined = `${content}\n${previousUserText}`;
+
   if (isGovernmentServiceText(combined)) return false;
+
   return isJobRelatedText(combined);
 }
 
@@ -751,7 +905,7 @@ async function imageFileToWorkspaceImage(file: File): Promise<WorkspaceImage> {
 
 function createUnavailableAnswer(hasImages: boolean) {
   if (hasImages) {
-    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly. If this continues, check that image analysis is configured correctly.';
+    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly. If this continues, check that your backend image-analysis route and vision API key are configured correctly.';
   }
 
   return 'FaceMeX AI is temporarily unavailable. Please try again shortly.';
@@ -793,7 +947,9 @@ function stripTrailingPunctuation(value: string) {
 
 function getLinkHref(rawUrl: string) {
   const { cleanValue } = stripTrailingPunctuation(rawUrl);
+
   if (/^https?:\/\//i.test(cleanValue)) return cleanValue;
+
   return `https://${cleanValue}`;
 }
 
@@ -803,6 +959,7 @@ function getLinkLabel(rawUrl: string) {
   try {
     const href = getLinkHref(cleanValue);
     const host = new URL(href).hostname.replace(/^www\./, '');
+
     return host;
   } catch {
     return cleanValue;
@@ -1189,26 +1346,31 @@ export default function AIJobAssistantPage() {
     setDeepSeekUsage(increaseDeepSeekUsage(currentTier));
   };
 
-  const normalizeApiJobs = (jobs: any[]): LocalVerifiedJob[] => {
-    return jobs
+  const normalizeApiJobs = (jobs: any[], keyword = 'jobs'): LocalVerifiedJob[] => {
+    const normalized = jobs
       .map((job: any) => ({
         id: clean(job.id) || safeId(),
         title: clean(job.title || job.job_title || job.role),
-        company: clean(job.company || job.employer || job.source_name || job.company_name),
-        area: clean(job.area || job.location || job.town || job.city),
+        company: clean(job.company || job.employer || job.source_name || job.company_name) || 'Company not stated',
+        area: clean(job.area || job.location || job.town || job.city) || 'South Africa',
         deadline: clean(job.deadline || job.closing_date || job.closingDate) || null,
         sourceLabel: clean(job.sourceLabel || job.source_label || job.source_type || job.sourceType) || 'External job source',
         verificationStatus: normalizeVerificationStatus(job.verificationStatus || job.verification_status || job.status),
-        actionLabel: clean(job.actionLabel || job.action_label) || 'Apply Now',
+        actionLabel: clean(job.actionLabel || job.action_label) || 'Open Job Source',
         applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.redirect_url || job.sourceUrl || job.source_url),
         sourceUrl: clean(job.sourceUrl || job.source_url || job.applyUrl || job.apply_url || job.redirect_url),
         sourceType: normalizeSourceType(job.sourceType || job.source_type || job.sourceLabel),
         isSourceCard: Boolean(job.isSourceCard || job.is_source_card),
         salary: clean(job.salary || job.salary_text) || null,
         category: clean(job.category) || null,
+        description: clean(job.description) || null,
         createdAt: clean(job.createdAt || job.created_at) || null,
       }))
-      .filter((job: LocalVerifiedJob) => job.title && job.applyUrl);
+      .filter((job: LocalVerifiedJob) => job.title && job.applyUrl)
+      .filter((job: LocalVerifiedJob) => !isForeignLookingJob(job))
+      .filter((job: LocalVerifiedJob) => jobMatchesKeywordIntent(job, keyword));
+
+    return dedupeJobs(normalized);
   };
 
   const loadAutomaticJobs = async ({
@@ -1228,7 +1390,7 @@ export default function AIJobAssistantPage() {
       const res = await api.get(url);
       const data = unwrapApiResponse(res);
       const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
-      const normalizedJobs = normalizeApiJobs(jobs);
+      const normalizedJobs = normalizeApiJobs(jobs, query);
 
       const finalJobs = normalizedJobs.length ? normalizedJobs : OFFICIAL_JOB_SOURCE_CARDS;
 
@@ -1252,41 +1414,22 @@ export default function AIJobAssistantPage() {
   const buildJobsAnswer = (jobs: LocalVerifiedJob[], areaText: string, queryText: string) => {
     const exactJobs = jobs.filter((job) => !job.isSourceCard);
     const sourceCards = jobs.filter((job) => job.isSourceCard);
-    const activeList = exactJobs.length ? exactJobs : sourceCards;
+    const count = exactJobs.length || sourceCards.length;
+    const searchLabel = getSearchDisplayLabel(queryText);
 
-    const list = [...activeList]
-      .sort((a, b) => a.title.localeCompare(b.title))
-      .map((job, index) => {
-        const deadlineInfo = getDeadlineInfo(job.deadline);
+    if (exactJobs.length) {
+      return `**Jobs found for ${areaText}**
 
-        return `${index + 1}. **${job.title}**
-Company/source: ${job.company}
-Area: ${job.area}
-Category: ${job.category || 'Not stated'}
-Closing date: ${job.deadline || 'Not stated'} (${deadlineInfo.label})
-Verification: ${verificationStatusLabel(job.verificationStatus)}
-Apply: [Open official page](${job.applyUrl})`;
-      })
-      .join('\n\n');
+I found ${count} current ${searchLabel} result${count === 1 ? '' : 's'} for ${areaText}.
 
-    const header = exactJobs.length
-      ? `**Jobs found for ${areaText}**`
-      : `**Verified official job sources for ${areaText}**`;
+Tap **Open Job Source** to apply from the original job page. External jobs are marked **Needs verification**, so check the company and never pay money to apply.`;
+    }
 
-    const note = exactJobs.length
-      ? 'These are current job results found by FaceMeX automatic search.'
-      : 'I could not find exact listed vacancies for this area right now, so I am showing verified official sources where users can apply safely.';
+    return `**Verified official job sources for ${areaText}**
 
-    return `${header}
+I could not load exact ${searchLabel} posts for ${areaText} right now, so I’m showing official verified source pages where users can apply safely.
 
-${note}
-
-Search intent: ${queryText || 'jobs'}
-
-${list}
-
-**Next step**
-Open the official apply page for the job that fits you, then use **Apply Assistant** to prepare your CV, email, and follow-up.`;
+Open the source page, search your area, then use **Apply Assistant** to prepare your CV, email, and follow-up.`;
   };
 
   const handlePickImages = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1413,7 +1556,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
     const shouldAutoSearchJobs =
       intent === 'job-search' &&
       !hasImages &&
-      /(looking for.*job|look for.*job|jobs in|job in|vacancies in|work in|hiring|available jobs|search.*job|tzaneen|polokwane|phalaborwa|hoedspruit|makhado|musina|messina|shoprite|westfalia|zz2|letaba|teacher|creche|cashier|packer|clerk|security|general worker)/i.test(
+      /(looking for.*job|look for.*job|jobs in|job in|vacancies in|work in|hiring|available jobs|search.*job|tzaneen|polokwane|phalaborwa|hoedspruit|makhado|musina|messina|letsitele|shoprite|westfalia|zz2|letaba|teacher|creche|cashier|packer|clerk|security|general worker|driver|admin|cleaner|retail)/i.test(
         finalPrompt
       );
 
@@ -1422,7 +1565,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
         const area = extractAreaFromPrompt(finalPrompt);
         const keyword = extractKeywordFromPrompt(finalPrompt);
         const jobs = await loadAutomaticJobs({ query: keyword || 'jobs', area });
-        const answer = buildJobsAnswer(jobs, area, keyword || finalPrompt);
+        const answer = buildJobsAnswer(jobs, area, keyword || 'jobs');
 
         setMessages((prev) => [
           ...prev,
@@ -1433,6 +1576,9 @@ Respond based on the previous question/task. Do not ask what the user means if t
             createdAt: new Date().toISOString(),
             savedCategory: suggestedSavedCategory,
             intent,
+            jobs,
+            jobSearchArea: area,
+            jobSearchQuery: keyword || 'jobs',
           },
         ]);
 
@@ -1635,6 +1781,7 @@ Apply link: ${job.applyUrl}`;
         saved: true,
         savedCategory: 'career_plan',
         intent: 'job-search',
+        jobs: [job],
       },
     ]);
 
@@ -1715,6 +1862,15 @@ Apply link: ${job.applyUrl}`;
   };
 
   const openOfficialApplyPage = (job: LocalVerifiedJob) => {
+    if (!job.applyUrl) {
+      toast({
+        title: 'No apply link',
+        description: 'This job does not have an application link yet.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     trackLinkClick(job.applyUrl, job.title, undefined, {
       feature: 'FaceMeX Automatic Jobs',
       area: job.area,
@@ -1746,22 +1902,149 @@ Apply link: ${job.applyUrl}`;
     );
   };
 
+  const renderAssistantJobCards = (message: ChatMessage) => {
+    if (!message.jobs?.length) return null;
+
+    const jobsToShow = message.jobs.slice(0, 20);
+
+    return (
+      <div className="my-4 space-y-3">
+        {jobsToShow.map((job, index) => {
+          const deadlineInfo = getDeadlineInfo(job.deadline);
+          const needsVerification = job.verificationStatus === 'needs_verification';
+
+          return (
+            <div
+              key={`${message.id}-${job.id}-${index}`}
+              className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.045]"
+            >
+              <div className="flex gap-3">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                  {job.verificationStatus === 'verified' ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  ) : job.verificationStatus === 'avoid' ? (
+                    <AlertTriangle className="h-5 w-5 text-red-500" />
+                  ) : (
+                    <Briefcase className="h-5 w-5 text-slate-500" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="line-clamp-2 text-[15px] font-semibold leading-tight text-slate-950 dark:text-white">
+                        {job.title}
+                      </h3>
+                      <p className="mt-1 truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => openOfficialApplyPage(job)}
+                      className="mt-0.5 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+                      aria-label="Open job"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{job.area}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      <span>{job.deadline || 'Closing date not stated'}</span>
+                    </div>
+
+                    <div className={`flex items-center gap-2 ${deadlineInfo.urgent ? 'text-orange-600' : ''}`}>
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span>{deadlineInfo.label}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {job.category && (
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600 dark:bg-white/[0.08] dark:text-white/60">
+                        {job.category}
+                      </span>
+                    )}
+
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                      {job.sourceLabel}
+                    </span>
+
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(job.verificationStatus)}`}>
+                      {verificationStatusLabel(job.verificationStatus)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openOfficialApplyPage(job)}
+                      disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
+                      className="h-9 rounded-xl text-xs"
+                    >
+                      {job.isSourceCard ? (
+                        <Globe2 className="mr-1.5 h-3.5 w-3.5" />
+                      ) : needsVerification ? (
+                        <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                      ) : (
+                        <Send className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      {deadlineInfo.expired ? 'Closed' : 'Open'}
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        sendPrompt(
+                          `Verify this job/company before I apply:\n\nJob: ${job.title}\nCompany: ${job.company}\nArea: ${job.area}\nSource: ${job.sourceLabel}\nApply link: ${job.applyUrl}`
+                        )
+                      }
+                      className="h-9 rounded-xl text-xs"
+                    >
+                      <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                      Verify
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => saveLocalJob(job)}
+                      className="h-9 rounded-xl text-xs"
+                    >
+                      <Save className="mr-1.5 h-3.5 w-3.5" />
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {message.jobs.length > 20 && (
+          <div className="rounded-2xl bg-slate-100 px-4 py-3 text-xs text-slate-500 dark:bg-white/[0.06] dark:text-white/50">
+            Showing first 20 results. Search a specific role like “security job in Letsitele” to narrow it down.
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderJobSummaryCard = (message: ChatMessage, previousUserText = '') => {
-    const lowerContent = message.content.toLowerCase();
-
-    if (
-      lowerContent.includes('i could not find exact listed vacancies') ||
-      lowerContent.includes('i could not load exact job posts') ||
-      lowerContent.includes('verified official job sources')
-    ) {
-      return null;
-    }
-
     const combined = `${previousUserText}\n${message.content}`;
 
+    if (message.jobs?.length) return null;
     if (!shouldShowApplyActions(message.content, previousUserText)) return null;
 
-    if (!/(verdict|needs verification|avoid|company verification|public advert|screenshot|is this legit|is this real)/i.test(combined)) {
+    if (!/(verdict|needs verification|verified|avoid|job|vacancy|apply|cv|email|deadline|closing date|cashier|packer|clerk|security|teacher|general worker)/i.test(combined)) {
       return null;
     }
 
@@ -2082,13 +2365,15 @@ Apply link: ${job.applyUrl}`;
                 return (
                   <div
                     key={message.id}
-                    className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex w-full ${
+                      message.role === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
                   >
                     <div
-                      className={`rounded-[24px] px-4 py-3 text-sm leading-7 shadow-sm ${
+                      className={`rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:rounded-[24px] ${
                         message.role === 'user'
                           ? 'max-w-[88%] bg-slate-950 text-white dark:bg-white dark:text-black sm:max-w-[82%]'
-                          : 'w-full border border-black/5 bg-white text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white'
+                          : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -2110,13 +2395,16 @@ Apply link: ${job.applyUrl}`;
                           </div>
                         </div>
                       ) : (
-                        <div className={message.role === 'assistant' ? 'pr-1' : ''}>
+                        <div className={message.role === 'assistant' ? 'max-h-[58vh] overflow-y-auto pr-1' : ''}>
                           {renderMessageImages(message.images)}
 
                           {message.role === 'assistant' && renderJobSummaryCard(message, previousUserText)}
 
                           {message.role === 'assistant' ? (
-                            <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
+                            <>
+                              <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
+                              {renderAssistantJobCards(message)}
+                            </>
                           ) : (
                             <div className="whitespace-pre-wrap break-words">{normalizeUssdCodes(message.content)}</div>
                           )}
@@ -2131,8 +2419,8 @@ Apply link: ${job.applyUrl}`;
               })}
 
               {busy && (
-                <div className="flex w-full justify-start">
-                  <div className="w-full rounded-[24px] border border-black/5 bg-white px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                <div className="flex items-start">
+                  <div className="rounded-[22px] border border-black/5 bg-slate-50 px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
                     <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                     Searching...
                   </div>
@@ -2456,7 +2744,7 @@ Apply link: ${job.applyUrl}`;
               <div>
                 <h2 className="text-base font-semibold">Automatic Job Search</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
-                  Tzaneen first, then nearby areas
+                  Search by user intent
                 </p>
               </div>
 
@@ -2474,7 +2762,15 @@ Apply link: ${job.applyUrl}`;
                       variant="outline"
                       onClick={() => {
                         const area = PRIORITY_AREAS.includes(item) ? item : 'Tzaneen';
-                        const query = PRIORITY_AREAS.includes(item) ? 'jobs' : item;
+                        const queryMap: Record<string, string> = {
+                          Retail: 'cashier retail packer store assistant clerk',
+                          Farm: 'farm agriculture packhouse packing',
+                          Admin: 'admin clerk office',
+                          Security: 'security',
+                          Driver: 'driver',
+                          Teacher: 'teacher creche school daycare',
+                        };
+                        const query = PRIORITY_AREAS.includes(item) ? 'jobs' : queryMap[item] || item;
                         loadAutomaticJobs({ query, area });
                       }}
                       className="h-9 shrink-0 rounded-full px-4 text-xs"
@@ -2488,7 +2784,6 @@ Apply link: ${job.applyUrl}`;
               <div className="mt-4 space-y-3">
                 {sortedLocalJobs.map((job) => {
                   const deadlineInfo = getDeadlineInfo(job.deadline);
-                  void nowTick;
 
                   return (
                     <div
@@ -2588,7 +2883,7 @@ Apply link: ${job.applyUrl}`;
 
               <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
                 <strong className="block text-sm">FaceMeX rule</strong>
-                Search automatically. Show exact jobs first. If exact jobs are not loaded, show verified official source pages safely.
+                Search according to the user’s intent. Generic job search shows all jobs. Security search shows security jobs. Cashier search shows retail jobs. External jobs stay Needs verification.
               </div>
             </div>
           </div>
