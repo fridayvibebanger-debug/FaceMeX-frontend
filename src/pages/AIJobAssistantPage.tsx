@@ -410,13 +410,13 @@ const quickPrompts = [
     prompt: 'Help me check if this job or opportunity looks fake or risky.',
   },
   {
-    label: 'Interview prep',
+    label: 'Interview',
     prompt: 'Help me prepare for an interview. Give me questions and strong answers.',
   },
   {
-    label: 'Ask anything',
+    label: 'Business',
     prompt:
-      'I want general advice. Help me think clearly and give me a practical answer.',
+      'Help me think through a business idea and give me practical steps.',
   },
 ];
 
@@ -571,7 +571,7 @@ function hasJobSearchWords(text: string) {
 }
 
 function hasGeneralHelpWords(text: string) {
-  return /(business|start|starting|side hustle|make money|improve my life|life advice|everyday life|strategy|business idea|ideas|how can i improve|what should i do|teach me|explain|learn|study|app|website|users|customers|marketing|transport|delivery|courier|logistics|budget|save money|plan my day|motivation|discipline|relationship advice|school|college|skills|productivity)/i.test(
+  return /(business|businesses|start|starting|side hustle|make money|improve my life|life advice|everyday life|strategy|business idea|ideas|how can i improve|what should i do|teach me|explain|learn|study|app|website|users|customers|marketing|transport|delivery|courier|logistics|budget|save money|plan my day|motivation|discipline|relationship advice|school|college|skills|productivity)/i.test(
     text
   );
 }
@@ -1347,14 +1347,14 @@ function WelcomeHero({
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
 
   const animatedLines = [
+    `Hi ${displayName}, what can I help you with today?`,
     "Let's start with focus.",
     'Which job are we hunting today?',
     'Tomorrow starts today.',
-    `Ask me anything, ${displayName}.`,
   ];
 
   return (
-    <div className="mx-auto flex min-h-[48vh] max-w-xl flex-col items-center justify-center text-center">
+    <div className="mx-auto flex min-h-[45vh] max-w-xl flex-col items-center justify-center text-center">
       <div className="fm-treasure-wrap">
         <span className="fm-treasure-ring" />
         <span className="fm-treasure-soft-glow" />
@@ -1364,39 +1364,30 @@ function WelcomeHero({
         </div>
       </div>
 
-      <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400 dark:text-white/35">
-        FaceMeX Career Workspace
-      </p>
-
-      <h2 className="mt-3 text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
-        Hi {displayName}, how can I help you today?
-      </h2>
-
-      <div className="fm-line-stage mt-4 h-9 w-full max-w-[360px] overflow-hidden rounded-full border border-black/5 bg-slate-50/80 px-4 text-sm font-medium text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white/55">
-        <div className="fm-line-track">
+      <h2 className="fm-title-stage mt-6 h-[74px] w-full overflow-hidden text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
+        <span className="fm-title-track">
           {animatedLines.map((line) => (
-            <span key={line} className="fm-line-item">
+            <span key={line} className="fm-title-line">
               {line}
             </span>
           ))}
-        </div>
-      </div>
+        </span>
+      </h2>
 
-      <p className="mt-4 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
-        Search jobs, fix your CV, prepare for interviews, check screenshots, or ask anything that helps you move forward.
+      <p className="mt-3 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
+        Ask one clear question. Upload a screenshot when checking a job post, CV, advert, or opportunity.
       </p>
 
-      <div className="mt-5 grid w-full grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2">
         {quickPrompts.map((item, index) => (
           <button
             key={item.label}
             type="button"
             onClick={() => onQuickAsk(item.prompt)}
-            className="fm-quick-card group rounded-2xl border border-black/5 bg-white px-3 py-3 text-left text-xs font-medium text-slate-700 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white/75 dark:hover:bg-white/[0.1]"
-            style={{ animationDelay: `${index * 45}ms` }}
+            className="fm-quick-pill rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition duration-300 hover:bg-slate-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
+            style={{ animationDelay: `${index * 35}ms` }}
           >
-            <span className="block truncate">{item.label}</span>
-            <span className="mt-1 block h-1 w-8 rounded-full bg-slate-200 transition group-hover:w-10 dark:bg-white/15" />
+            {item.label}
           </button>
         ))}
       </div>
@@ -2517,7 +2508,7 @@ Apply link: ${job.applyUrl}`;
         @keyframes fmSoftFloatIn {
           from {
             opacity: 0;
-            transform: translateY(8px) scale(0.99);
+            transform: translateY(6px) scale(0.99);
           }
           to {
             opacity: 1;
@@ -2537,26 +2528,26 @@ Apply link: ${job.applyUrl}`;
         @keyframes fmTreasureBreathe {
           0%, 100% {
             transform: scale(1);
-            opacity: 0.45;
+            opacity: 0.42;
           }
           50% {
-            transform: scale(1.05);
-            opacity: 0.68;
+            transform: scale(1.04);
+            opacity: 0.64;
           }
         }
 
-        @keyframes fmLineSlide {
-          0%, 18% {
+        @keyframes fmTitleSlide {
+          0%, 20% {
             transform: translateY(0);
           }
-          25%, 43% {
-            transform: translateY(-36px);
+          25%, 45% {
+            transform: translateY(-74px);
           }
-          50%, 68% {
-            transform: translateY(-72px);
+          50%, 70% {
+            transform: translateY(-148px);
           }
-          75%, 93% {
-            transform: translateY(-108px);
+          75%, 95% {
+            transform: translateY(-222px);
           }
           100% {
             transform: translateY(0);
@@ -2566,8 +2557,8 @@ Apply link: ${job.applyUrl}`;
         .fm-treasure-wrap {
           position: relative;
           display: flex;
-          height: 76px;
-          width: 76px;
+          height: 74px;
+          width: 74px;
           align-items: center;
           justify-content: center;
         }
@@ -2580,20 +2571,20 @@ Apply link: ${job.applyUrl}`;
             conic-gradient(
               from 90deg,
               rgba(15, 23, 42, 0),
-              rgba(15, 23, 42, 0.16),
+              rgba(15, 23, 42, 0.13),
               rgba(15, 23, 42, 0.04),
               rgba(15, 23, 42, 0)
             );
-          animation: fmTreasureSpin 10s linear infinite;
+          animation: fmTreasureSpin 12s linear infinite;
         }
 
         .fm-treasure-soft-glow {
           position: absolute;
-          inset: 9px;
+          inset: 8px;
           border-radius: 999px;
           background: rgba(15, 23, 42, 0.08);
           filter: blur(14px);
-          animation: fmTreasureBreathe 4.8s ease-in-out infinite;
+          animation: fmTreasureBreathe 5.5s ease-in-out infinite;
         }
 
         .fm-treasure-orb {
@@ -2608,7 +2599,7 @@ Apply link: ${job.applyUrl}`;
           background: #020617;
           color: white;
           box-shadow:
-            0 18px 45px rgba(15, 23, 42, 0.16),
+            0 18px 45px rgba(15, 23, 42, 0.14),
             inset 0 1px 0 rgba(255, 255, 255, 0.14);
         }
 
@@ -2617,8 +2608,8 @@ Apply link: ${job.applyUrl}`;
             conic-gradient(
               from 90deg,
               rgba(255, 255, 255, 0),
-              rgba(255, 255, 255, 0.2),
-              rgba(255, 255, 255, 0.05),
+              rgba(255, 255, 255, 0.18),
+              rgba(255, 255, 255, 0.04),
               rgba(255, 255, 255, 0)
             );
         }
@@ -2635,50 +2626,41 @@ Apply link: ${job.applyUrl}`;
             inset 0 1px 0 rgba(255, 255, 255, 0.35);
         }
 
-        .fm-line-stage {
+        .fm-title-stage {
           position: relative;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          display: block;
         }
 
-        .fm-line-track {
-          height: 144px;
-          width: 100%;
-          animation: fmLineSlide 15s ease-in-out infinite;
+        .fm-title-track {
+          display: block;
+          animation: fmTitleSlide 16s ease-in-out infinite;
         }
 
-        .fm-line-item {
+        .fm-title-line {
           display: flex;
-          height: 36px;
+          height: 74px;
           width: 100%;
           align-items: center;
           justify-content: center;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          padding: 0 10px;
         }
 
-        .fm-quick-card {
+        .fm-quick-pill {
           opacity: 0;
-          animation: fmSoftFloatIn 420ms ease forwards;
+          animation: fmSoftFloatIn 360ms ease forwards;
         }
 
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
           .fm-treasure-soft-glow,
-          .fm-line-track,
-          .fm-quick-card {
+          .fm-title-track,
+          .fm-quick-pill {
             animation: none !important;
             opacity: 1 !important;
             transform: none !important;
           }
 
-          .fm-line-track {
-            height: 36px;
-          }
-
-          .fm-line-item:not(:first-child) {
+          .fm-title-line:not(:first-child) {
             display: none;
           }
         }
