@@ -136,6 +136,108 @@ const PRIORITY_AREAS = [
   'Messina',
 ];
 
+const GREATER_TZANEEN_AREAS = [
+  'tzaneen',
+  'greater tzaneen',
+  'lenyenye',
+  'nkowankowa',
+  'maake',
+  'letsitele',
+  'modjadjiskloof',
+  'haenertsburg',
+  'mooketsi',
+  'duivelskloof',
+  'burgersdorp',
+  'gavaza',
+  'dan',
+  'julesburg',
+  'lephepane',
+  'mafarana',
+  'kujwana',
+  'khujwana',
+  'moime',
+  'runnymede',
+  'rita',
+  'deerpark',
+  'ramokako',
+  'mohlaba',
+  'bridgeway',
+  'nwamitwa',
+  'mogoboya',
+  'mogapeng',
+  'petanenge',
+  'relela',
+  'myakayaka',
+];
+
+const LIMPOPO_AREAS = [
+  ...GREATER_TZANEEN_AREAS,
+  'limpopo',
+  'polokwane',
+  'pietersburg',
+  'seshego',
+  'mankweng',
+  'phalaborwa',
+  'ba-phalaborwa',
+  'hoedspruit',
+  'maruleng',
+  'giyani',
+  'malamulele',
+  'mopani',
+  'makhado',
+  'louis trichardt',
+  'thohoyandou',
+  'musina',
+  'messina',
+  'mokopane',
+  'modimolle',
+  'bela-bela',
+  'warmbad',
+  'lephalale',
+  'ellisras',
+  'thabazimbi',
+  'waterberg',
+  'burgersfort',
+  'greater tubatse',
+  'steelpoort',
+  'marble hall',
+  'groblersdal',
+  'capricorn',
+  'vhembe',
+  'sekhukhune',
+];
+
+const OUTSIDE_LIMPOPO_AREAS = [
+  'gauteng',
+  'johannesburg',
+  'joburg',
+  'roodepoort',
+  'west johannesburg',
+  'pretoria',
+  'tshwane',
+  'sandton',
+  'midrand',
+  'centurion',
+  'soweto',
+  'durban',
+  'kwazulu',
+  'cape town',
+  'western cape',
+  'eastern cape',
+  'free state',
+  'bloemfontein',
+  'north west',
+  'rustenburg',
+  'mpumalanga',
+  'nelspruit',
+  'mbombela',
+  'witbank',
+  'emalahleni',
+  'secunda',
+  'kimberley',
+  'northern cape',
+];
+
 const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
   {
     id: 'shoprite-store-jobs',
@@ -447,6 +549,11 @@ function clean(value: unknown) {
   return String(value || '').trim();
 }
 
+function includesAny(value: string, list: string[]) {
+  const text = clean(value).toLowerCase();
+  return list.some((item) => text.includes(item.toLowerCase()));
+}
+
 function getUserDisplayName(store: any) {
   const user =
     store?.user ||
@@ -565,7 +672,7 @@ function normalizeUssdCodes(text: string) {
 }
 
 function hasJobSearchWords(text: string) {
-  return /(job|jobs|vacancy|vacancies|hiring|learnership|internship|employment|apply for work|looking for work|looking for a job|work opportunity|career opportunity|available posts|post available|position available|cashier|packer|clerk|security|general worker|driver|admin job|cleaner job|retail job|store assistant|teacher job|creche job|crèche job)/i.test(
+  return /(job|jobs|vacancy|vacancies|hiring|learnership|internship|employment|apply for work|looking for work|looking for a job|work opportunity|career opportunity|available posts|post available|position available|cashier|packer|clerk|security|general worker|driver|drivers|admin job|cleaner job|retail job|store assistant|teacher job|creche job|crèche job)/i.test(
     text
   );
 }
@@ -676,7 +783,7 @@ function extractKeywordFromPrompt(text: string) {
     return 'cashier retail packer store assistant clerk';
   }
 
-  if (/(driver|code 10|code 14|pdp|delivery|truck|side tipper)/i.test(t)) {
+  if (/(driver|drivers|code 10|code 14|pdp|delivery|truck|side tipper)/i.test(t)) {
     return 'driver';
   }
 
@@ -797,6 +904,73 @@ function jobText(job: LocalVerifiedJob) {
     .toLowerCase();
 }
 
+function isBroadSearchArea(area: string) {
+  const value = clean(area).toLowerCase();
+  return value === 'south africa' || value === 'africa' || value === 'limpopo';
+}
+
+function isGreaterTzaneenSearch(area: string) {
+  return includesAny(area, GREATER_TZANEEN_AREAS);
+}
+
+function isLimpopoSearch(area: string) {
+  return includesAny(area, LIMPOPO_AREAS);
+}
+
+function isClearlyOutsideRequestedProvince(job: LocalVerifiedJob, requestedArea: string) {
+  const requested = clean(requestedArea).toLowerCase();
+
+  if (requested === 'south africa' || requested === 'africa') return false;
+
+  const text = jobText(job);
+
+  if (isLimpopoSearch(requestedArea)) {
+    if (includesAny(text, LIMPOPO_AREAS)) return false;
+    if (includesAny(text, OUTSIDE_LIMPOPO_AREAS)) return true;
+
+    if (/south africa/i.test(job.area) && !includesAny(text, LIMPOPO_AREAS)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function jobMatchesRequestedArea(job: LocalVerifiedJob, requestedArea: string) {
+  const requested = clean(requestedArea).toLowerCase();
+
+  if (!requested || requested === 'south africa' || requested === 'africa') return true;
+
+  const text = jobText(job);
+
+  if (isClearlyOutsideRequestedProvince(job, requestedArea)) return false;
+
+  if (isGreaterTzaneenSearch(requestedArea)) {
+    return includesAny(text, GREATER_TZANEEN_AREAS) || includesAny(text, LIMPOPO_AREAS);
+  }
+
+  if (isLimpopoSearch(requestedArea)) {
+    return includesAny(text, LIMPOPO_AREAS);
+  }
+
+  return text.includes(requested);
+}
+
+function areaRelevanceScore(job: LocalVerifiedJob, requestedArea: string) {
+  const requested = clean(requestedArea).toLowerCase();
+  const text = jobText(job);
+
+  if (!requested || requested === 'south africa' || requested === 'africa') return 0;
+
+  if (isClearlyOutsideRequestedProvince(job, requestedArea)) return -500;
+
+  if (text.includes(requested)) return 600;
+  if (isGreaterTzaneenSearch(requestedArea) && includesAny(text, GREATER_TZANEEN_AREAS)) return 460;
+  if (isLimpopoSearch(requestedArea) && includesAny(text, LIMPOPO_AREAS)) return 260;
+
+  return 0;
+}
+
 function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
   const q = clean(keyword).toLowerCase();
   const text = jobText(job);
@@ -804,7 +978,7 @@ function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
   if (!q || q === 'jobs' || q === 'job') return true;
 
   if (q.includes('security')) return /(security|guard|armed|protection|response)/i.test(text);
-  if (q.includes('driver')) return /(driver|code 10|code 14|pdp|truck|delivery|courier|transport|fleet|vehicle)/i.test(text);
+  if (q.includes('driver')) return /(driver|drivers|code 10|code 14|pdp|truck|delivery|courier|transport|fleet|vehicle)/i.test(text);
   if (q.includes('cashier') || q.includes('retail')) {
     return /(cashier|packer|retail|store|shop|sales|clerk|merchandiser|assistant)/i.test(text);
   }
@@ -890,7 +1064,7 @@ function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus'])
 }
 
 function isJobRelatedText(content: string) {
-  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|admin)/i.test(
+  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|drivers|admin)/i.test(
     content
   );
 }
@@ -1337,6 +1511,68 @@ function buildConversationContext(messages: ChatMessage[]) {
     .join('\n\n');
 }
 
+function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 180 180"
+      className={`fm-flow-icon ${className}`}
+      role="img"
+      aria-label="FaceMeX AI"
+    >
+      <defs>
+        <linearGradient id="fmFlowSilverA" x1="28" y1="12" x2="120" y2="166" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#f8fafc" />
+          <stop offset="0.36" stopColor="#cbd5e1" />
+          <stop offset="0.68" stopColor="#ffffff" />
+          <stop offset="1" stopColor="#94a3b8" />
+        </linearGradient>
+
+        <linearGradient id="fmFlowSilverB" x1="84" y1="18" x2="156" y2="162" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="0.42" stopColor="#d1d5db" />
+          <stop offset="1" stopColor="#9ca3af" />
+        </linearGradient>
+
+        <radialGradient id="fmFlowShadow" cx="50%" cy="50%" r="60%">
+          <stop offset="0" stopColor="#020617" stopOpacity="0.12" />
+          <stop offset="1" stopColor="#020617" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      <circle cx="90" cy="90" r="78" fill="url(#fmFlowShadow)" opacity="0.28" />
+
+      <g className="fm-flow-shape">
+        <path
+          d="M38 118C31 95 34 72 50 53C67 32 98 30 116 46C130 59 130 83 117 104C105 124 100 140 111 155C84 150 66 134 69 108C72 83 98 65 91 53C87 46 74 46 62 56C47 69 39 91 38 118Z"
+          fill="#08090d"
+        />
+
+        <path
+          d="M83 151C65 121 71 93 91 66C104 48 103 33 91 22C121 25 145 46 151 77C158 111 141 143 111 158C100 150 95 136 101 119C108 99 127 78 119 59C117 53 112 48 106 45C108 62 95 79 84 99C74 119 73 137 83 151Z"
+          fill="#08090d"
+        />
+
+        <path
+          d="M129 140C144 125 151 107 148 88C144 64 129 47 108 38C124 68 109 87 97 106C86 124 84 142 98 158C109 157 120 151 129 140Z"
+          fill="url(#fmFlowSilverB)"
+          opacity="0.9"
+        />
+
+        <path
+          d="M45 120C49 94 61 73 80 59C65 76 55 100 57 123C58 137 64 148 75 155C57 151 48 139 45 120Z"
+          fill="url(#fmFlowSilverA)"
+          opacity="0.86"
+        />
+
+        <path
+          d="M138 127C144 112 145 97 139 82C151 91 158 106 156 121C154 137 144 150 130 156C132 147 134 137 138 127Z"
+          fill="#08090d"
+        />
+      </g>
+    </svg>
+  );
+}
+
 function WelcomeHero({
   firstName,
   onQuickAsk,
@@ -1347,7 +1583,7 @@ function WelcomeHero({
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
 
   const animatedLines = [
-    `Hi ${displayName}, what can I help you with today?`,
+    `Hi ${displayName}, how can I help you today?`,
     "Let's start with focus.",
     'Which job are we hunting today?',
     'Tomorrow starts today.',
@@ -1360,7 +1596,7 @@ function WelcomeHero({
         <span className="fm-treasure-soft-glow" />
 
         <div className="fm-treasure-orb">
-          <Sparkles className="h-5 w-5" />
+          <FaceMeXFlowIcon className="h-12 w-12" />
         </div>
       </div>
 
@@ -1525,7 +1761,7 @@ export default function AIJobAssistantPage() {
     setDeepSeekUsage(increaseDeepSeekUsage(currentTier));
   };
 
-  const normalizeApiJobs = (jobs: any[], keyword = 'jobs'): LocalVerifiedJob[] => {
+  const normalizeApiJobs = (jobs: any[], keyword = 'jobs', requestedArea = 'Tzaneen'): LocalVerifiedJob[] => {
     const normalized = jobs
       .map((job: any) => ({
         id: clean(job.id) || safeId(),
@@ -1547,7 +1783,17 @@ export default function AIJobAssistantPage() {
       }))
       .filter((job: LocalVerifiedJob) => job.title && job.applyUrl)
       .filter((job: LocalVerifiedJob) => !isForeignLookingJob(job))
-      .filter((job: LocalVerifiedJob) => jobMatchesKeywordIntent(job, keyword));
+      .filter((job: LocalVerifiedJob) => jobMatchesKeywordIntent(job, keyword))
+      .filter((job: LocalVerifiedJob) => jobMatchesRequestedArea(job, requestedArea))
+      .sort((a: LocalVerifiedJob, b: LocalVerifiedJob) => {
+        const areaDiff = areaRelevanceScore(b, requestedArea) - areaRelevanceScore(a, requestedArea);
+        if (areaDiff !== 0) return areaDiff;
+
+        if (a.verificationStatus === 'verified' && b.verificationStatus !== 'verified') return -1;
+        if (a.verificationStatus !== 'verified' && b.verificationStatus === 'verified') return 1;
+
+        return a.title.localeCompare(b.title);
+      });
 
     return dedupeJobs(normalized);
   };
@@ -1569,7 +1815,7 @@ export default function AIJobAssistantPage() {
       const res = await api.get(url);
       const data = unwrapApiResponse(res);
       const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
-      const normalizedJobs = normalizeApiJobs(jobs, query);
+      const normalizedJobs = normalizeApiJobs(jobs, query, area);
 
       const finalJobs = normalizedJobs.length ? normalizedJobs : OFFICIAL_JOB_SOURCE_CARDS;
 
@@ -1595,20 +1841,21 @@ export default function AIJobAssistantPage() {
     const sourceCards = jobs.filter((job) => job.isSourceCard);
     const count = exactJobs.length || sourceCards.length;
     const searchLabel = getSearchDisplayLabel(queryText);
+    const areaLabel = isBroadSearchArea(areaText) ? areaText : `${areaText} / nearby Limpopo areas`;
 
     if (exactJobs.length) {
-      return `**${searchLabel} found for ${areaText}**
+      return `**${searchLabel} found for ${areaLabel}**
 
-I found ${count} result${count === 1 ? '' : 's'}. Open the job source to apply.
+I found ${count} relevant result${count === 1 ? '' : 's'}. Open the job source to apply.
 
 External jobs are marked **Needs verification**, so check the company and never pay money to apply.`;
     }
 
-    return `**Verified official job sources for ${areaText}**
+    return `**No clear local ${searchLabel} found for ${areaText} right now**
 
-I could not load exact ${searchLabel} posts for ${areaText} right now, so I’m showing official verified source pages where you can apply safely.
+I filtered out jobs that look far from ${areaText}, so I’m not showing unrelated places like Gauteng or Johannesburg.
 
-Open the source page, search your area, then use **Apply Assistant** to prepare your CV, email, and follow-up.`;
+You can still check the verified official source pages below, or try searching nearby areas like **Tzaneen**, **Polokwane**, **Phalaborwa**, or **Hoedspruit**.`;
   };
 
   const handlePickImages = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -2528,25 +2775,43 @@ Apply link: ${job.applyUrl}`;
         @keyframes fmTreasureBreathe {
           0%, 100% {
             transform: scale(1);
-            opacity: 0.42;
+            opacity: 0.34;
           }
           50% {
-            transform: scale(1.04);
-            opacity: 0.64;
+            transform: scale(1.045);
+            opacity: 0.52;
+          }
+        }
+
+        @keyframes fmFlowGesture {
+          0% {
+            transform: rotate(-5deg) scale(0.985);
+          }
+          28% {
+            transform: rotate(3deg) scale(1.015);
+          }
+          55% {
+            transform: rotate(-2deg) scale(1);
+          }
+          82% {
+            transform: rotate(4deg) scale(1.012);
+          }
+          100% {
+            transform: rotate(-5deg) scale(0.985);
           }
         }
 
         @keyframes fmTitleSlide {
-          0%, 20% {
+          0%, 21% {
             transform: translateY(0);
           }
-          25%, 45% {
+          26%, 46% {
             transform: translateY(-74px);
           }
-          50%, 70% {
+          51%, 71% {
             transform: translateY(-148px);
           }
-          75%, 95% {
+          76%, 96% {
             transform: translateY(-222px);
           }
           100% {
@@ -2557,8 +2822,8 @@ Apply link: ${job.applyUrl}`;
         .fm-treasure-wrap {
           position: relative;
           display: flex;
-          height: 74px;
-          width: 74px;
+          height: 86px;
+          width: 86px;
           align-items: center;
           justify-content: center;
         }
@@ -2571,36 +2836,48 @@ Apply link: ${job.applyUrl}`;
             conic-gradient(
               from 90deg,
               rgba(15, 23, 42, 0),
-              rgba(15, 23, 42, 0.13),
+              rgba(15, 23, 42, 0.11),
+              rgba(148, 163, 184, 0.28),
               rgba(15, 23, 42, 0.04),
               rgba(15, 23, 42, 0)
             );
-          animation: fmTreasureSpin 12s linear infinite;
+          animation: fmTreasureSpin 18s linear infinite;
         }
 
         .fm-treasure-soft-glow {
           position: absolute;
-          inset: 8px;
+          inset: 9px;
           border-radius: 999px;
           background: rgba(15, 23, 42, 0.08);
-          filter: blur(14px);
-          animation: fmTreasureBreathe 5.5s ease-in-out infinite;
+          filter: blur(18px);
+          animation: fmTreasureBreathe 6.8s ease-in-out infinite;
         }
 
         .fm-treasure-orb {
           position: relative;
           z-index: 1;
           display: flex;
-          height: 58px;
-          width: 58px;
+          height: 68px;
+          width: 68px;
           align-items: center;
           justify-content: center;
-          border-radius: 22px;
-          background: #020617;
-          color: white;
+          border-radius: 24px;
+          background: linear-gradient(145deg, #ffffff, #f1f5f9);
+          color: #020617;
           box-shadow:
-            0 18px 45px rgba(15, 23, 42, 0.14),
-            inset 0 1px 0 rgba(255, 255, 255, 0.14);
+            0 18px 45px rgba(15, 23, 42, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            inset 0 -1px 0 rgba(15, 23, 42, 0.05);
+        }
+
+        .fm-flow-icon {
+          transform-origin: 50% 50%;
+          animation: fmFlowGesture 8.5s ease-in-out infinite;
+          filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.16));
+        }
+
+        .fm-flow-shape {
+          transform-origin: 50% 50%;
         }
 
         .dark .fm-treasure-ring {
@@ -2608,7 +2885,8 @@ Apply link: ${job.applyUrl}`;
             conic-gradient(
               from 90deg,
               rgba(255, 255, 255, 0),
-              rgba(255, 255, 255, 0.18),
+              rgba(255, 255, 255, 0.16),
+              rgba(148, 163, 184, 0.24),
               rgba(255, 255, 255, 0.04),
               rgba(255, 255, 255, 0)
             );
@@ -2619,11 +2897,12 @@ Apply link: ${job.applyUrl}`;
         }
 
         .dark .fm-treasure-orb {
-          background: rgba(255, 255, 255, 0.95);
+          background: linear-gradient(145deg, #ffffff, #e5e7eb);
           color: #020617;
           box-shadow:
             0 18px 45px rgba(255, 255, 255, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.35);
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            inset 0 -1px 0 rgba(15, 23, 42, 0.08);
         }
 
         .fm-title-stage {
@@ -2633,7 +2912,7 @@ Apply link: ${job.applyUrl}`;
 
         .fm-title-track {
           display: block;
-          animation: fmTitleSlide 16s ease-in-out infinite;
+          animation: fmTitleSlide 18s ease-in-out infinite;
         }
 
         .fm-title-line {
@@ -2653,6 +2932,7 @@ Apply link: ${job.applyUrl}`;
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
           .fm-treasure-soft-glow,
+          .fm-flow-icon,
           .fm-title-track,
           .fm-quick-pill {
             animation: none !important;
