@@ -108,7 +108,7 @@ type ChatMessage = {
 
 const AI_CV_BUILDER_PATH = '/ai-cv-builder';
 const AI_COVER_LETTER_PATH = '/ai-cover-letter';
-const FACE_MEX_AI_ICON_SRC = '/facemex-ai-flow-icon.png';
+const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
@@ -1512,12 +1512,19 @@ function buildConversationContext(messages: ChatMessage[]) {
 }
 
 function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return <div className={`fm-flow-fallback ${className}`} />;
+  }
+
   return (
     <img
       src={FACE_MEX_AI_ICON_SRC}
-      alt="FaceMeX AI"
+      alt=""
       className={`fm-flow-image ${className}`}
       draggable={false}
+      onError={() => setFailed(true)}
     />
   );
 }
@@ -1530,6 +1537,71 @@ function WelcomeHero({
   onQuickAsk: (text: string) => void;
 }) {
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
+  const greetingText = `Hi ${displayName}, how can I help you with today?`;
+
+  const rotatingPrompts = useMemo(
+    () => [
+      "Let's start with positive attention.",
+      'Which job are we hunting today?',
+      "Tomorrow starts today. Let's prepare for it.",
+      `Ask me anything, ${displayName}.`,
+    ],
+    [displayName]
+  );
+
+  const [typedGreeting, setTypedGreeting] = useState('');
+  const [promptIndex, setPromptIndex] = useState(0);
+  const [typedPrompt, setTypedPrompt] = useState('');
+
+  useEffect(() => {
+    let charIndex = 0;
+
+    setTypedGreeting('');
+
+    const timer = window.setInterval(() => {
+      charIndex += 1;
+      setTypedGreeting(greetingText.slice(0, charIndex));
+
+      if (charIndex >= greetingText.length) {
+        window.clearInterval(timer);
+      }
+    }, 34);
+
+    return () => window.clearInterval(timer);
+  }, [greetingText]);
+
+  useEffect(() => {
+    let mounted = true;
+    let charIndex = 0;
+    let nextTimer: number | undefined;
+
+    const activeText = rotatingPrompts[promptIndex];
+
+    setTypedPrompt('');
+
+    const typingTimer = window.setInterval(() => {
+      charIndex += 1;
+
+      if (!mounted) return;
+
+      setTypedPrompt(activeText.slice(0, charIndex));
+
+      if (charIndex >= activeText.length) {
+        window.clearInterval(typingTimer);
+
+        nextTimer = window.setTimeout(() => {
+          if (!mounted) return;
+          setPromptIndex((prev) => (prev + 1) % rotatingPrompts.length);
+        }, 1700);
+      }
+    }, 38);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(typingTimer);
+      if (nextTimer) window.clearTimeout(nextTimer);
+    };
+  }, [promptIndex, rotatingPrompts]);
 
   return (
     <div className="mx-auto flex min-h-[45vh] max-w-xl flex-col items-center justify-center text-center">
@@ -1542,20 +1614,26 @@ function WelcomeHero({
         </div>
       </div>
 
-      <h2 className="mt-6 text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
-        Hi {displayName}, how can I help you today?
-      </h2>
-
-      <div className="mt-4 flex h-9 items-center justify-center">
-        <span className="fm-typing-text">Let's start with focus.</span>
+      <div className="mt-6 flex min-h-[80px] items-center justify-center px-2">
+        <h2 className="text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
+          {typedGreeting || '\u00A0'}
+          {typedGreeting.length < greetingText.length && <span className="fm-type-caret" />}
+        </h2>
       </div>
 
-      <p className="mt-3 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
+      <div className="mt-1 flex min-h-9 items-center justify-center px-3">
+        <span className="fm-rotating-type">
+          {typedPrompt || '\u00A0'}
+          <span className="fm-type-caret" />
+        </span>
+      </div>
+
+      <p className="mt-3 max-w-md px-3 text-sm leading-6 text-slate-500 dark:text-white/50">
         Ask one clear question. Upload a screenshot when checking a job post,
         CV, advert, or opportunity.
       </p>
 
-      <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2">
+      <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2 px-2">
         {quickPrompts.map((item, index) => (
           <button
             key={item.label}
@@ -2716,11 +2794,11 @@ Apply link: ${job.applyUrl}`;
         @keyframes fmTreasureBreathe {
           0%, 100% {
             transform: scale(1);
-            opacity: 0.34;
+            opacity: 0.28;
           }
           50% {
-            transform: scale(1.045);
-            opacity: 0.5;
+            transform: scale(1.04);
+            opacity: 0.42;
           }
         }
 
@@ -2742,21 +2820,12 @@ Apply link: ${job.applyUrl}`;
           }
         }
 
-        @keyframes fmTyping {
-          from {
-            width: 0;
-          }
-          to {
-            width: 23ch;
-          }
-        }
-
-        @keyframes fmCaret {
+        @keyframes fmCaretBlink {
           0%, 45% {
-            border-color: rgba(15, 23, 42, 0.45);
+            opacity: 1;
           }
           46%, 100% {
-            border-color: transparent;
+            opacity: 0;
           }
         }
 
@@ -2777,19 +2846,19 @@ Apply link: ${job.applyUrl}`;
             conic-gradient(
               from 90deg,
               rgba(15, 23, 42, 0),
-              rgba(15, 23, 42, 0.08),
-              rgba(148, 163, 184, 0.24),
-              rgba(15, 23, 42, 0.04),
+              rgba(15, 23, 42, 0.07),
+              rgba(148, 163, 184, 0.2),
+              rgba(15, 23, 42, 0.035),
               rgba(15, 23, 42, 0)
             );
-          animation: fmTreasureRingRotate 22s linear infinite;
+          animation: fmTreasureRingRotate 24s linear infinite;
         }
 
         .fm-treasure-shadow {
           position: absolute;
           inset: 13px;
           border-radius: 999px;
-          background: rgba(15, 23, 42, 0.08);
+          background: rgba(15, 23, 42, 0.07);
           filter: blur(18px);
           animation: fmTreasureBreathe 7s ease-in-out infinite;
         }
@@ -2820,20 +2889,36 @@ Apply link: ${job.applyUrl}`;
           backface-visibility: hidden;
         }
 
-        .fm-typing-text {
+        .fm-flow-fallback {
+          border-radius: 24px;
+          background:
+            radial-gradient(circle at 30% 20%, rgba(255,255,255,0.9), rgba(255,255,255,0) 34%),
+            linear-gradient(145deg, #111827, #020617);
+        }
+
+        .fm-type-caret {
           display: inline-block;
-          width: 0;
+          height: 1em;
+          width: 2px;
+          margin-left: 2px;
+          transform: translateY(2px);
+          border-radius: 999px;
+          background: rgba(15, 23, 42, 0.5);
+          animation: fmCaretBlink 0.85s step-end infinite;
+        }
+
+        .fm-rotating-type {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 26px;
           max-width: 100%;
-          overflow: hidden;
-          white-space: nowrap;
-          border-right: 2px solid rgba(15, 23, 42, 0.45);
+          text-align: center;
           font-size: 15px;
           font-weight: 600;
+          line-height: 1.55;
           letter-spacing: -0.01em;
           color: rgb(71 85 105);
-          animation:
-            fmTyping 2.1s steps(23, end) 0.5s forwards,
-            fmCaret 0.85s step-end infinite;
         }
 
         .fm-quick-pill {
@@ -2846,15 +2931,15 @@ Apply link: ${job.applyUrl}`;
             conic-gradient(
               from 90deg,
               rgba(255, 255, 255, 0),
-              rgba(255, 255, 255, 0.13),
-              rgba(148, 163, 184, 0.22),
-              rgba(255, 255, 255, 0.04),
+              rgba(255, 255, 255, 0.11),
+              rgba(148, 163, 184, 0.18),
+              rgba(255, 255, 255, 0.035),
               rgba(255, 255, 255, 0)
             );
         }
 
         .dark .fm-treasure-shadow {
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.07);
         }
 
         .dark .fm-treasure-orb {
@@ -2865,25 +2950,30 @@ Apply link: ${job.applyUrl}`;
             inset 0 -1px 0 rgba(15, 23, 42, 0.08);
         }
 
-        .dark .fm-typing-text {
+        .dark .fm-rotating-type {
           color: rgba(255, 255, 255, 0.7);
-          border-right-color: rgba(255, 255, 255, 0.45);
+        }
+
+        .dark .fm-type-caret {
+          background: rgba(255, 255, 255, 0.55);
+        }
+
+        @media (max-width: 420px) {
+          .fm-rotating-type {
+            max-width: 31ch;
+            font-size: 14px;
+          }
         }
 
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
           .fm-treasure-shadow,
           .fm-flow-image,
-          .fm-typing-text,
-          .fm-quick-pill {
+          .fm-quick-pill,
+          .fm-type-caret {
             animation: none !important;
             opacity: 1 !important;
             transform: none !important;
-          }
-
-          .fm-typing-text {
-            width: auto !important;
-            border-right: 0 !important;
           }
         }
       `}</style>
