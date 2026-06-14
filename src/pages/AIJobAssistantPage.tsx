@@ -1537,10 +1537,10 @@ function WelcomeHero({
   onQuickAsk: (text: string) => void;
 }) {
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
-  const greetingText = `Hi ${displayName}, how can I help you with today?`;
 
   const rotatingPrompts = useMemo(
     () => [
+      `Hi ${displayName}, how can I help you today?`,
       "Let's start with positive attention.",
       'Which job are we hunting today?',
       "Tomorrow starts today. Let's prepare for it.",
@@ -1549,26 +1549,8 @@ function WelcomeHero({
     [displayName]
   );
 
-  const [typedGreeting, setTypedGreeting] = useState('');
   const [promptIndex, setPromptIndex] = useState(0);
   const [typedPrompt, setTypedPrompt] = useState('');
-
-  useEffect(() => {
-    let charIndex = 0;
-
-    setTypedGreeting('');
-
-    const timer = window.setInterval(() => {
-      charIndex += 1;
-      setTypedGreeting(greetingText.slice(0, charIndex));
-
-      if (charIndex >= greetingText.length) {
-        window.clearInterval(timer);
-      }
-    }, 34);
-
-    return () => window.clearInterval(timer);
-  }, [greetingText]);
 
   useEffect(() => {
     let mounted = true;
@@ -1592,9 +1574,9 @@ function WelcomeHero({
         nextTimer = window.setTimeout(() => {
           if (!mounted) return;
           setPromptIndex((prev) => (prev + 1) % rotatingPrompts.length);
-        }, 1700);
+        }, 1800);
       }
-    }, 38);
+    }, 36);
 
     return () => {
       mounted = false;
@@ -1614,21 +1596,14 @@ function WelcomeHero({
         </div>
       </div>
 
-      <div className="mt-6 flex min-h-[80px] items-center justify-center px-2">
-        <h2 className="text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
-          {typedGreeting || '\u00A0'}
-          {typedGreeting.length < greetingText.length && <span className="fm-type-caret" />}
+      <div className="mt-7 flex min-h-[98px] items-center justify-center px-4">
+        <h2 className="fm-main-typing-text text-balance text-[30px] font-semibold leading-tight tracking-tight text-slate-950 dark:text-white sm:text-[38px]">
+          {typedPrompt || '\u00A0'}
+          <span className="fm-type-caret" />
         </h2>
       </div>
 
-      <div className="mt-1 flex min-h-9 items-center justify-center px-3">
-        <span className="fm-rotating-type">
-          {typedPrompt || '\u00A0'}
-          <span className="fm-type-caret" />
-        </span>
-      </div>
-
-      <p className="mt-3 max-w-md px-3 text-sm leading-6 text-slate-500 dark:text-white/50">
+      <p className="mt-2 max-w-md px-3 text-sm leading-6 text-slate-500 dark:text-white/50">
         Ask one clear question. Upload a screenshot when checking a job post,
         CV, advert, or opportunity.
       </p>
@@ -2896,6 +2871,11 @@ Apply link: ${job.applyUrl}`;
             linear-gradient(145deg, #111827, #020617);
         }
 
+        .fm-main-typing-text {
+          max-width: 17ch;
+          text-align: center;
+        }
+
         .fm-type-caret {
           display: inline-block;
           height: 1em;
@@ -2905,20 +2885,6 @@ Apply link: ${job.applyUrl}`;
           border-radius: 999px;
           background: rgba(15, 23, 42, 0.5);
           animation: fmCaretBlink 0.85s step-end infinite;
-        }
-
-        .fm-rotating-type {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 26px;
-          max-width: 100%;
-          text-align: center;
-          font-size: 15px;
-          font-weight: 600;
-          line-height: 1.55;
-          letter-spacing: -0.01em;
-          color: rgb(71 85 105);
         }
 
         .fm-quick-pill {
@@ -2950,18 +2916,20 @@ Apply link: ${job.applyUrl}`;
             inset 0 -1px 0 rgba(15, 23, 42, 0.08);
         }
 
-        .dark .fm-rotating-type {
-          color: rgba(255, 255, 255, 0.7);
-        }
-
         .dark .fm-type-caret {
           background: rgba(255, 255, 255, 0.55);
         }
 
+        @media (min-width: 640px) {
+          .fm-main-typing-text {
+            max-width: 22ch;
+          }
+        }
+
         @media (max-width: 420px) {
-          .fm-rotating-type {
-            max-width: 31ch;
-            font-size: 14px;
+          .fm-main-typing-text {
+            font-size: 30px;
+            max-width: 15ch;
           }
         }
 
