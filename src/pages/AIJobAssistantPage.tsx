@@ -144,6 +144,7 @@ const GREATER_TZANEEN_AREAS = [
   'maake',
   'letsitele',
   'modjadjiskloof',
+  'haenertsberg',
   'haenertsburg',
   'mooketsi',
   'duivelskloof',
@@ -1551,39 +1552,47 @@ function WelcomeHero({
 
   const [promptIndex, setPromptIndex] = useState(0);
   const [typedPrompt, setTypedPrompt] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-    let charIndex = 0;
-    let nextTimer: number | undefined;
+    const currentText = rotatingPrompts[promptIndex];
 
-    const activeText = rotatingPrompts[promptIndex];
+    const typeSpeed = 95;
+    const deleteSpeed = 58;
+    const pauseAfterTyping = 2800;
+    const pauseBeforeNext = 500;
 
-    setTypedPrompt('');
+    let timer: number | undefined;
 
-    const typingTimer = window.setInterval(() => {
-      charIndex += 1;
+    if (!isDeleting && typedPrompt.length < currentText.length) {
+      timer = window.setTimeout(() => {
+        setTypedPrompt(currentText.slice(0, typedPrompt.length + 1));
+      }, typeSpeed);
+    }
 
-      if (!mounted) return;
+    if (!isDeleting && typedPrompt.length === currentText.length) {
+      timer = window.setTimeout(() => {
+        setIsDeleting(true);
+      }, pauseAfterTyping);
+    }
 
-      setTypedPrompt(activeText.slice(0, charIndex));
+    if (isDeleting && typedPrompt.length > 0) {
+      timer = window.setTimeout(() => {
+        setTypedPrompt(currentText.slice(0, typedPrompt.length - 1));
+      }, deleteSpeed);
+    }
 
-      if (charIndex >= activeText.length) {
-        window.clearInterval(typingTimer);
-
-        nextTimer = window.setTimeout(() => {
-          if (!mounted) return;
-          setPromptIndex((prev) => (prev + 1) % rotatingPrompts.length);
-        }, 1800);
-      }
-    }, 36);
+    if (isDeleting && typedPrompt.length === 0) {
+      timer = window.setTimeout(() => {
+        setIsDeleting(false);
+        setPromptIndex((prev) => (prev + 1) % rotatingPrompts.length);
+      }, pauseBeforeNext);
+    }
 
     return () => {
-      mounted = false;
-      window.clearInterval(typingTimer);
-      if (nextTimer) window.clearTimeout(nextTimer);
+      if (timer) window.clearTimeout(timer);
     };
-  }, [promptIndex, rotatingPrompts]);
+  }, [typedPrompt, isDeleting, promptIndex, rotatingPrompts]);
 
   return (
     <div className="mx-auto flex min-h-[45vh] max-w-xl flex-col items-center justify-center text-center">
@@ -1596,8 +1605,8 @@ function WelcomeHero({
         </div>
       </div>
 
-      <div className="mt-7 flex min-h-[98px] items-center justify-center px-4">
-        <h2 className="fm-main-typing-text text-balance text-[30px] font-semibold leading-tight tracking-tight text-slate-950 dark:text-white sm:text-[38px]">
+      <div className="mt-7 flex min-h-[78px] items-center justify-center px-4">
+        <h2 className="fm-main-typing-text text-balance font-semibold leading-tight tracking-tight text-slate-950 dark:text-white">
           {typedPrompt || '\u00A0'}
           <span className="fm-type-caret" />
         </h2>
@@ -2796,10 +2805,10 @@ Apply link: ${job.applyUrl}`;
         }
 
         @keyframes fmCaretBlink {
-          0%, 45% {
+          0%, 48% {
             opacity: 1;
           }
-          46%, 100% {
+          49%, 100% {
             opacity: 0;
           }
         }
@@ -2872,19 +2881,22 @@ Apply link: ${job.applyUrl}`;
         }
 
         .fm-main-typing-text {
-          max-width: 17ch;
+          max-width: 19ch;
           text-align: center;
+          font-size: 23px;
+          line-height: 1.2;
+          letter-spacing: -0.03em;
         }
 
         .fm-type-caret {
           display: inline-block;
-          height: 1em;
+          height: 0.85em;
           width: 2px;
-          margin-left: 2px;
+          margin-left: 3px;
           transform: translateY(2px);
           border-radius: 999px;
-          background: rgba(15, 23, 42, 0.5);
-          animation: fmCaretBlink 0.85s step-end infinite;
+          background: rgba(15, 23, 42, 0.4);
+          animation: fmCaretBlink 1.15s step-end infinite;
         }
 
         .fm-quick-pill {
@@ -2917,19 +2929,20 @@ Apply link: ${job.applyUrl}`;
         }
 
         .dark .fm-type-caret {
-          background: rgba(255, 255, 255, 0.55);
+          background: rgba(255, 255, 255, 0.52);
         }
 
         @media (min-width: 640px) {
           .fm-main-typing-text {
-            max-width: 22ch;
+            max-width: 24ch;
+            font-size: 29px;
           }
         }
 
         @media (max-width: 420px) {
           .fm-main-typing-text {
-            font-size: 30px;
-            max-width: 15ch;
+            max-width: 18ch;
+            font-size: 22px;
           }
         }
 
