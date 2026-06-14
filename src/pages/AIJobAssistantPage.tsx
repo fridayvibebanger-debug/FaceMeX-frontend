@@ -29,7 +29,6 @@ import {
   Search,
   Send,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Users,
   X,
@@ -109,6 +108,7 @@ type ChatMessage = {
 
 const AI_CV_BUILDER_PATH = '/ai-cv-builder';
 const AI_COVER_LETTER_PATH = '/ai-cover-letter';
+const FACE_MEX_AI_ICON_SRC = '/facemex-ai-flow-icon.png';
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
@@ -436,7 +436,7 @@ const OFFICIAL_JOB_SOURCE_CARDS: LocalVerifiedJob[] = [
 const FACE_MEX_ANSWER_STYLE = `
 You are FaceMeX Job AI, but you must behave like a helpful ChatGPT-style assistant for everyday life, career, business, learning, work, apps, documents, messages, planning, and general questions.
 
-Your main rule:
+Main rule:
 - Answer any normal helpful question clearly and calmly.
 - Only search jobs when the user clearly asks for jobs, vacancies, hiring, work, learnerships, internships, employment, or a specific job role.
 - Do not treat location words like Tzaneen, Polokwane, Letsitele, Limpopo, or South Africa as job-search intent by themselves.
@@ -1513,63 +1513,12 @@ function buildConversationContext(messages: ChatMessage[]) {
 
 function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 180 180"
-      className={`fm-flow-icon ${className}`}
-      role="img"
-      aria-label="FaceMeX AI"
-    >
-      <defs>
-        <linearGradient id="fmFlowSilverA" x1="28" y1="12" x2="120" y2="166" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#f8fafc" />
-          <stop offset="0.36" stopColor="#cbd5e1" />
-          <stop offset="0.68" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#94a3b8" />
-        </linearGradient>
-
-        <linearGradient id="fmFlowSilverB" x1="84" y1="18" x2="156" y2="162" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#ffffff" />
-          <stop offset="0.42" stopColor="#d1d5db" />
-          <stop offset="1" stopColor="#9ca3af" />
-        </linearGradient>
-
-        <radialGradient id="fmFlowShadow" cx="50%" cy="50%" r="60%">
-          <stop offset="0" stopColor="#020617" stopOpacity="0.12" />
-          <stop offset="1" stopColor="#020617" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      <circle cx="90" cy="90" r="78" fill="url(#fmFlowShadow)" opacity="0.28" />
-
-      <g className="fm-flow-shape">
-        <path
-          d="M38 118C31 95 34 72 50 53C67 32 98 30 116 46C130 59 130 83 117 104C105 124 100 140 111 155C84 150 66 134 69 108C72 83 98 65 91 53C87 46 74 46 62 56C47 69 39 91 38 118Z"
-          fill="#08090d"
-        />
-
-        <path
-          d="M83 151C65 121 71 93 91 66C104 48 103 33 91 22C121 25 145 46 151 77C158 111 141 143 111 158C100 150 95 136 101 119C108 99 127 78 119 59C117 53 112 48 106 45C108 62 95 79 84 99C74 119 73 137 83 151Z"
-          fill="#08090d"
-        />
-
-        <path
-          d="M129 140C144 125 151 107 148 88C144 64 129 47 108 38C124 68 109 87 97 106C86 124 84 142 98 158C109 157 120 151 129 140Z"
-          fill="url(#fmFlowSilverB)"
-          opacity="0.9"
-        />
-
-        <path
-          d="M45 120C49 94 61 73 80 59C65 76 55 100 57 123C58 137 64 148 75 155C57 151 48 139 45 120Z"
-          fill="url(#fmFlowSilverA)"
-          opacity="0.86"
-        />
-
-        <path
-          d="M138 127C144 112 145 97 139 82C151 91 158 106 156 121C154 137 144 150 130 156C132 147 134 137 138 127Z"
-          fill="#08090d"
-        />
-      </g>
-    </svg>
+    <img
+      src={FACE_MEX_AI_ICON_SRC}
+      alt="FaceMeX AI"
+      className={`fm-flow-image ${className}`}
+      draggable={false}
+    />
   );
 }
 
@@ -1582,36 +1531,28 @@ function WelcomeHero({
 }) {
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
 
-  const animatedLines = [
-    `Hi ${displayName}, how can I help you today?`,
-    "Let's start with focus.",
-    'Which job are we hunting today?',
-    'Tomorrow starts today.',
-  ];
-
   return (
     <div className="mx-auto flex min-h-[45vh] max-w-xl flex-col items-center justify-center text-center">
       <div className="fm-treasure-wrap">
         <span className="fm-treasure-ring" />
-        <span className="fm-treasure-soft-glow" />
+        <span className="fm-treasure-shadow" />
 
         <div className="fm-treasure-orb">
-          <FaceMeXFlowIcon className="h-12 w-12" />
+          <FaceMeXFlowIcon className="h-[62px] w-[62px]" />
         </div>
       </div>
 
-      <h2 className="fm-title-stage mt-6 h-[74px] w-full overflow-hidden text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
-        <span className="fm-title-track">
-          {animatedLines.map((line) => (
-            <span key={line} className="fm-title-line">
-              {line}
-            </span>
-          ))}
-        </span>
+      <h2 className="mt-6 text-balance text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl">
+        Hi {displayName}, how can I help you today?
       </h2>
 
+      <div className="mt-4 flex h-9 items-center justify-center">
+        <span className="fm-typing-text">Let's start with focus.</span>
+      </div>
+
       <p className="mt-3 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
-        Ask one clear question. Upload a screenshot when checking a job post, CV, advert, or opportunity.
+        Ask one clear question. Upload a screenshot when checking a job post,
+        CV, advert, or opportunity.
       </p>
 
       <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2">
@@ -2763,7 +2704,7 @@ Apply link: ${job.applyUrl}`;
           }
         }
 
-        @keyframes fmTreasureSpin {
+        @keyframes fmTreasureRingRotate {
           from {
             transform: rotate(0deg);
           }
@@ -2779,51 +2720,51 @@ Apply link: ${job.applyUrl}`;
           }
           50% {
             transform: scale(1.045);
-            opacity: 0.52;
+            opacity: 0.5;
           }
         }
 
-        @keyframes fmFlowGesture {
+        @keyframes fmIconRealGesture {
           0% {
-            transform: rotate(-5deg) scale(0.985);
+            transform: perspective(760px) rotateY(-14deg) rotateX(3deg) rotateZ(-1.5deg) scale(0.99);
           }
           28% {
-            transform: rotate(3deg) scale(1.015);
+            transform: perspective(760px) rotateY(13deg) rotateX(-2deg) rotateZ(1.2deg) scale(1.015);
           }
           55% {
-            transform: rotate(-2deg) scale(1);
+            transform: perspective(760px) rotateY(-6deg) rotateX(2deg) rotateZ(-0.8deg) scale(1);
           }
           82% {
-            transform: rotate(4deg) scale(1.012);
+            transform: perspective(760px) rotateY(15deg) rotateX(-2deg) rotateZ(1.4deg) scale(1.012);
           }
           100% {
-            transform: rotate(-5deg) scale(0.985);
+            transform: perspective(760px) rotateY(-14deg) rotateX(3deg) rotateZ(-1.5deg) scale(0.99);
           }
         }
 
-        @keyframes fmTitleSlide {
-          0%, 21% {
-            transform: translateY(0);
+        @keyframes fmTyping {
+          from {
+            width: 0;
           }
-          26%, 46% {
-            transform: translateY(-74px);
+          to {
+            width: 23ch;
           }
-          51%, 71% {
-            transform: translateY(-148px);
+        }
+
+        @keyframes fmCaret {
+          0%, 45% {
+            border-color: rgba(15, 23, 42, 0.45);
           }
-          76%, 96% {
-            transform: translateY(-222px);
-          }
-          100% {
-            transform: translateY(0);
+          46%, 100% {
+            border-color: transparent;
           }
         }
 
         .fm-treasure-wrap {
           position: relative;
           display: flex;
-          height: 86px;
-          width: 86px;
+          height: 100px;
+          width: 100px;
           align-items: center;
           justify-content: center;
         }
@@ -2836,92 +2777,63 @@ Apply link: ${job.applyUrl}`;
             conic-gradient(
               from 90deg,
               rgba(15, 23, 42, 0),
-              rgba(15, 23, 42, 0.11),
-              rgba(148, 163, 184, 0.28),
+              rgba(15, 23, 42, 0.08),
+              rgba(148, 163, 184, 0.24),
               rgba(15, 23, 42, 0.04),
               rgba(15, 23, 42, 0)
             );
-          animation: fmTreasureSpin 18s linear infinite;
+          animation: fmTreasureRingRotate 22s linear infinite;
         }
 
-        .fm-treasure-soft-glow {
+        .fm-treasure-shadow {
           position: absolute;
-          inset: 9px;
+          inset: 13px;
           border-radius: 999px;
           background: rgba(15, 23, 42, 0.08);
           filter: blur(18px);
-          animation: fmTreasureBreathe 6.8s ease-in-out infinite;
+          animation: fmTreasureBreathe 7s ease-in-out infinite;
         }
 
         .fm-treasure-orb {
           position: relative;
           z-index: 1;
           display: flex;
-          height: 68px;
-          width: 68px;
+          height: 78px;
+          width: 78px;
           align-items: center;
           justify-content: center;
-          border-radius: 24px;
-          background: linear-gradient(145deg, #ffffff, #f1f5f9);
-          color: #020617;
+          overflow: hidden;
+          border-radius: 28px;
+          background: linear-gradient(145deg, #ffffff, #f8fafc);
           box-shadow:
-            0 18px 45px rgba(15, 23, 42, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.9),
-            inset 0 -1px 0 rgba(15, 23, 42, 0.05);
+            0 20px 46px rgba(15, 23, 42, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.92),
+            inset 0 -1px 0 rgba(15, 23, 42, 0.06);
         }
 
-        .fm-flow-icon {
+        .fm-flow-image {
+          object-fit: contain;
           transform-origin: 50% 50%;
-          animation: fmFlowGesture 8.5s ease-in-out infinite;
-          filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.16));
+          animation: fmIconRealGesture 8.5s ease-in-out infinite;
+          filter: drop-shadow(0 10px 16px rgba(15, 23, 42, 0.18));
+          will-change: transform;
+          backface-visibility: hidden;
         }
 
-        .fm-flow-shape {
-          transform-origin: 50% 50%;
-        }
-
-        .dark .fm-treasure-ring {
-          background:
-            conic-gradient(
-              from 90deg,
-              rgba(255, 255, 255, 0),
-              rgba(255, 255, 255, 0.16),
-              rgba(148, 163, 184, 0.24),
-              rgba(255, 255, 255, 0.04),
-              rgba(255, 255, 255, 0)
-            );
-        }
-
-        .dark .fm-treasure-soft-glow {
-          background: rgba(255, 255, 255, 0.08);
-        }
-
-        .dark .fm-treasure-orb {
-          background: linear-gradient(145deg, #ffffff, #e5e7eb);
-          color: #020617;
-          box-shadow:
-            0 18px 45px rgba(255, 255, 255, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.9),
-            inset 0 -1px 0 rgba(15, 23, 42, 0.08);
-        }
-
-        .fm-title-stage {
-          position: relative;
-          display: block;
-        }
-
-        .fm-title-track {
-          display: block;
-          animation: fmTitleSlide 18s ease-in-out infinite;
-        }
-
-        .fm-title-line {
-          display: flex;
-          height: 74px;
-          width: 100%;
-          align-items: center;
-          justify-content: center;
-          padding: 0 10px;
+        .fm-typing-text {
+          display: inline-block;
+          width: 0;
+          max-width: 100%;
+          overflow: hidden;
+          white-space: nowrap;
+          border-right: 2px solid rgba(15, 23, 42, 0.45);
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          color: rgb(71 85 105);
+          animation:
+            fmTyping 2.1s steps(23, end) 0.5s forwards,
+            fmCaret 0.85s step-end infinite;
         }
 
         .fm-quick-pill {
@@ -2929,19 +2841,49 @@ Apply link: ${job.applyUrl}`;
           animation: fmSoftFloatIn 360ms ease forwards;
         }
 
+        .dark .fm-treasure-ring {
+          background:
+            conic-gradient(
+              from 90deg,
+              rgba(255, 255, 255, 0),
+              rgba(255, 255, 255, 0.13),
+              rgba(148, 163, 184, 0.22),
+              rgba(255, 255, 255, 0.04),
+              rgba(255, 255, 255, 0)
+            );
+        }
+
+        .dark .fm-treasure-shadow {
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .dark .fm-treasure-orb {
+          background: linear-gradient(145deg, #ffffff, #e5e7eb);
+          box-shadow:
+            0 20px 46px rgba(255, 255, 255, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.92),
+            inset 0 -1px 0 rgba(15, 23, 42, 0.08);
+        }
+
+        .dark .fm-typing-text {
+          color: rgba(255, 255, 255, 0.7);
+          border-right-color: rgba(255, 255, 255, 0.45);
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
-          .fm-treasure-soft-glow,
-          .fm-flow-icon,
-          .fm-title-track,
+          .fm-treasure-shadow,
+          .fm-flow-image,
+          .fm-typing-text,
           .fm-quick-pill {
             animation: none !important;
             opacity: 1 !important;
             transform: none !important;
           }
 
-          .fm-title-line:not(:first-child) {
-            display: none;
+          .fm-typing-text {
+            width: auto !important;
+            border-right: 0 !important;
           }
         }
       `}</style>
