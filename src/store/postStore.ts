@@ -118,6 +118,23 @@ export interface Post {
   aiScore?: number;
   mode?: PostMode;
 
+  isRepost?: boolean;
+  is_repost?: boolean;
+  repostedBy?: string;
+  reposted_by?: string;
+  repostedById?: string;
+  reposted_by_id?: string;
+  repostedAt?: string;
+  reposted_at?: string;
+  sharedBy?: string;
+  shared_by?: string;
+  sharedById?: string;
+  shared_by_id?: string;
+  sharedAt?: string;
+  shared_at?: string;
+  sharedByUsers?: CollaboratorProfile[];
+  repostedByUsers?: CollaboratorProfile[];
+
   collabInvites?: Array<string | CollaboratorProfile>;
   collaborators?: Array<string | CollaboratorProfile>;
   collaboratorProfiles?: CollaboratorProfile[];
@@ -229,8 +246,11 @@ function isVerifiedValue(value: any) {
     value?.addons?.verified === true ||
       value?.verified === true ||
       value?.userVerified === true ||
+      value?.user_verified === true ||
       value?.authorVerified === true ||
+      value?.author_verified === true ||
       value?.accountVerified === true ||
+      value?.account_verified === true ||
       value?.isVerified === true ||
       value?.is_verified === true ||
       value?.profileVerified === true ||
@@ -265,10 +285,6 @@ function getProfileAvatar(profile: any) {
   );
 }
 
-function getInitial(value: string) {
-  return cleanString(value).charAt(0).toUpperCase() || 'U';
-}
-
 function normalizeProfile(raw: any, fallbackId = ''): CollaboratorProfile {
   if (typeof raw === 'string') {
     return {
@@ -289,6 +305,7 @@ function normalizeProfile(raw: any, fallbackId = ''): CollaboratorProfile {
     cleanString(raw?.id) ||
     cleanString(raw?._id) ||
     cleanString(raw?.userId) ||
+    cleanString(raw?.user_id) ||
     cleanString(raw?.externalId) ||
     cleanString(raw?.supabaseId) ||
     cleanString(raw?.authId) ||
@@ -297,6 +314,7 @@ function normalizeProfile(raw: any, fallbackId = ''): CollaboratorProfile {
   const name =
     cleanString(raw?.name) ||
     cleanString(raw?.userName) ||
+    cleanString(raw?.user_name) ||
     cleanString(raw?.fullName) ||
     cleanString(raw?.full_name) ||
     cleanString(raw?.username) ||
@@ -305,6 +323,7 @@ function normalizeProfile(raw: any, fallbackId = ''): CollaboratorProfile {
   const avatar =
     cleanString(raw?.avatar) ||
     cleanString(raw?.userAvatar) ||
+    cleanString(raw?.user_avatar) ||
     cleanString(raw?.avatarUrl) ||
     cleanString(raw?.avatar_url) ||
     '';
@@ -338,7 +357,109 @@ function normalizeProfiles(value: unknown): CollaboratorProfile[] {
       seen.add(profile.id);
       return true;
     })
-    .slice(0, 10);
+    .slice(0, 50);
+}
+
+function createProfileFromUser(authUser: any): CollaboratorProfile {
+  const userStore = useUserStore.getState() as any;
+  const authStoreUser = useAuthStore.getState().user as any;
+
+  const id = cleanString(authUser?.id || userStore?.id || authStoreUser?.id);
+
+  const name =
+    cleanString(authUser?.name) ||
+    cleanString(userStore?.name) ||
+    cleanString(authStoreUser?.name) ||
+    cleanString(authUser?.email)?.split('@')?.[0] ||
+    `User ${id.slice(0, 6)}`;
+
+  const avatar =
+    cleanString(authUser?.avatar) ||
+    cleanString(userStore?.avatar) ||
+    cleanString(authStoreUser?.avatar) ||
+    '';
+
+  const verified =
+    isVerifiedValue(userStore) ||
+    isVerifiedValue(authStoreUser) ||
+    isVerifiedValue(authUser);
+
+  return {
+    id,
+    userId: id,
+    name,
+    userName: name,
+    avatar,
+    userAvatar: avatar,
+    verified,
+    userVerified: verified,
+    isVerified: verified,
+    code: id,
+  };
+}
+
+function addProfileOnce(
+  profiles: CollaboratorProfile[] | undefined,
+  profile: CollaboratorProfile
+) {
+  const list = Array.isArray(profiles) ? profiles : [];
+  const exists = list.some((item) => item.id === profile.id || item.userId === profile.id);
+
+  if (exists) return list;
+
+  return [profile, ...list];
+}
+
+function dispatchPostEvents(type: 'created' | 'updated' | 'reposted' = 'updated') {
+  try {
+    if (typeof window === 'undefined') return;
+
+    window.dispatchEvent(new Event('facemex:posts-updated'));
+    window.dispatchEvent(new Event('facemex:feed-refresh'));
+
+    if (type === 'created') {
+      window.dispatchEvent(new Event('facemex:post-created'));
+    }
+
+    if (type === 'reposted') {
+      window.dispatchEvent(new Event('facemex:post-reposted'));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function addShareToPost(post: Post, authUser: any) {
+  const profile = createProfileFromUser(authUser);
+  const now = new Date().toISOString();
+
+  const sharedByUsers = addProfileOnce(post.sharedByUsers, profile);
+  const repostedByUsers = addProfileOnce(post.repostedByUsers, profile);
+
+  const wasAlreadyShared = (post.sharedByUsers || []).some(
+    (item) => item.id === profile.id || item.userId === profile.id
+  );
+
+  return {
+    ...post,
+    shares: wasAlreadyShared ? post.shares : post.shares + 1,
+    sharedBy: profile.name,
+    shared_by: profile.name,
+    sharedById: profile.id,
+    shared_by_id: profile.id,
+    sharedAt: now,
+    shared_at: now,
+    repostedBy: profile.name,
+    reposted_by: profile.name,
+    repostedById: profile.id,
+    reposted_by_id: profile.id,
+    repostedAt: now,
+    reposted_at: now,
+    isRepost: true,
+    is_repost: true,
+    sharedByUsers,
+    repostedByUsers,
+  };
 }
 
 function normalizeDocuments(value: unknown): PostDocument[] {
@@ -634,6 +755,24 @@ function mapBackendPost(raw: any, currentUserId?: string): Post {
       ? normalizeProfiles(raw?.collaborationRequests)
       : normalizeProfiles(raw?.collabInvites);
 
+  const sharedByUsers = normalizeProfiles(
+    raw?.sharedByUsers ||
+      raw?.shared_by_users ||
+      raw?.shareProfiles ||
+      raw?.share_profiles ||
+      raw?.sharesByUsers ||
+      raw?.shares_by_users ||
+      []
+  );
+
+  const repostedByUsers = normalizeProfiles(
+    raw?.repostedByUsers ||
+      raw?.reposted_by_users ||
+      raw?.repostProfiles ||
+      raw?.repost_profiles ||
+      sharedByUsers
+  );
+
   const mediaType = inferPrimaryMediaType({
     explicit: raw?.mediaType || raw?.media_type,
     imageUrls,
@@ -641,6 +780,15 @@ function mapBackendPost(raw: any, currentUserId?: string): Post {
     audioUrl: raw?.audio || '',
     documents,
   });
+
+  const createdAt = raw?.createdAt || raw?.created_at || raw?.timestamp;
+  const repostedAt =
+    raw?.repostedAt ||
+    raw?.reposted_at ||
+    raw?.sharedAt ||
+    raw?.shared_at ||
+    raw?.share_created_at ||
+    '';
 
   return {
     id: cleanString(raw?.id || raw?._id),
@@ -687,13 +835,37 @@ function mapBackendPost(raw: any, currentUserId?: string): Post {
 
     likes: Number(raw?.likes || likedBy.length || 0),
     comments: Array.isArray(raw?.comments) ? raw.comments.map(mapComment) : [],
-    shares: Number(raw?.shares || 0),
-    timestamp: getSafeDate(raw?.timestamp || raw?.createdAt || raw?.created_at),
-    createdAt: raw?.createdAt || raw?.created_at || raw?.timestamp,
+    shares: Number(raw?.shares || sharedByUsers.length || 0),
+    timestamp: getSafeDate(repostedAt || createdAt),
+    createdAt,
     isLiked,
     isSaved: Boolean(raw?.isSaved),
     reaction: myReaction as ReactionType | undefined,
     mode: raw?.mode === 'professional' ? 'professional' : 'social',
+
+    isRepost:
+      raw?.isRepost === true ||
+      raw?.is_repost === true ||
+      Boolean(raw?.repostedBy || raw?.reposted_by || raw?.sharedBy || raw?.shared_by),
+    is_repost:
+      raw?.isRepost === true ||
+      raw?.is_repost === true ||
+      Boolean(raw?.repostedBy || raw?.reposted_by || raw?.sharedBy || raw?.shared_by),
+    repostedBy: cleanString(raw?.repostedBy || raw?.reposted_by || raw?.sharedBy || raw?.shared_by),
+    reposted_by: cleanString(raw?.reposted_by || raw?.repostedBy || raw?.shared_by || raw?.sharedBy),
+    repostedById: cleanString(raw?.repostedById || raw?.reposted_by_id || raw?.sharedById || raw?.shared_by_id),
+    reposted_by_id: cleanString(raw?.reposted_by_id || raw?.repostedById || raw?.shared_by_id || raw?.sharedById),
+    repostedAt,
+    reposted_at: repostedAt,
+    sharedBy: cleanString(raw?.sharedBy || raw?.shared_by || raw?.repostedBy || raw?.reposted_by),
+    shared_by: cleanString(raw?.shared_by || raw?.sharedBy || raw?.reposted_by || raw?.repostedBy),
+    sharedById: cleanString(raw?.sharedById || raw?.shared_by_id || raw?.repostedById || raw?.reposted_by_id),
+    shared_by_id: cleanString(raw?.shared_by_id || raw?.sharedById || raw?.reposted_by_id || raw?.repostedById),
+    sharedAt: repostedAt,
+    shared_at: repostedAt,
+    sharedByUsers,
+    repostedByUsers,
+
     collabInvites,
     collaborators,
     collaboratorProfiles: collaborators,
@@ -717,7 +889,27 @@ function mergePosts(primary: Post[], secondary: Post[]) {
 
   [...secondary, ...primary].forEach((post) => {
     if (!post.id) return;
-    map.set(post.id, post);
+
+    const existing = map.get(post.id);
+
+    if (!existing) {
+      map.set(post.id, post);
+      return;
+    }
+
+    map.set(post.id, {
+      ...existing,
+      ...post,
+      sharedByUsers: normalizeProfiles([
+        ...(existing.sharedByUsers || []),
+        ...(post.sharedByUsers || []),
+      ]),
+      repostedByUsers: normalizeProfiles([
+        ...(existing.repostedByUsers || []),
+        ...(post.repostedByUsers || []),
+      ]),
+      shares: Math.max(existing.shares || 0, post.shares || 0),
+    });
   });
 
   return sortPosts(Array.from(map.values()));
@@ -760,7 +952,8 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
 
   const savedPostIds = new Set(saves.map((s: any) => s.post_id));
   const commentUserIds = comments.map((c: any) => c.user_id).filter(Boolean);
-  const allUserIds = Array.from(new Set([...postAuthorIds, ...commentUserIds]));
+  const shareUserIds = shares.map((s: any) => s.user_id).filter(Boolean);
+  const allUserIds = Array.from(new Set([...postAuthorIds, ...commentUserIds, ...shareUserIds]));
 
   const { data: profiles, error: profilesError } = allUserIds.length
     ? await supabase.from('profiles').select('*').in('id', allUserIds)
@@ -781,10 +974,12 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
     }
   });
 
-  const shareCountMap = new Map<string, number>();
+  const shareRowsByPost = new Map<string, any[]>();
 
   shares.forEach((s: any) => {
-    shareCountMap.set(s.post_id, (shareCountMap.get(s.post_id) || 0) + 1);
+    const list = shareRowsByPost.get(s.post_id) || [];
+    list.push(s);
+    shareRowsByPost.set(s.post_id, list);
   });
 
   const commentsByPost = new Map<string, Comment[]>();
@@ -846,6 +1041,49 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
 
     const verified = isVerifiedValue(profile) || isVerifiedValue(p);
 
+    const shareRows = shareRowsByPost.get(p.id) || [];
+    const sharedByUsers = shareRows
+      .map((share: any) => {
+        const shareProfile = profileMap.get(share.user_id);
+
+        return normalizeProfile(
+          {
+            ...(shareProfile || {}),
+            id: share.user_id,
+            userId: share.user_id,
+            verified: isVerifiedValue(shareProfile),
+            userVerified: isVerifiedValue(shareProfile),
+            isVerified: isVerifiedValue(shareProfile),
+          },
+          share.user_id
+        );
+      })
+      .filter((item: CollaboratorProfile) => item.id);
+
+    const myShare = currentUserId
+      ? shareRows.find((share: any) => share.user_id === currentUserId)
+      : null;
+
+    const latestShare = shareRows
+      .slice()
+      .sort((a: any, b: any) => {
+        return getSafeDate(b.created_at).getTime() - getSafeDate(a.created_at).getTime();
+      })[0];
+
+    const latestShareProfile = latestShare?.user_id
+      ? normalizeProfile(
+          {
+            ...(profileMap.get(latestShare.user_id) || {}),
+            id: latestShare.user_id,
+            userId: latestShare.user_id,
+          },
+          latestShare.user_id
+        )
+      : null;
+
+    const shareCreatedAt = latestShare?.created_at || '';
+    const myShareCreatedAt = myShare?.created_at || '';
+
     return {
       id: p.id,
       userId: p.user_id,
@@ -883,13 +1121,31 @@ async function loadSupabasePosts(currentUserId?: string): Promise<Post[]> {
       hashtags: extractHashtagsStatic(p.content || ''),
       likes: reactionCountMap.get(p.id) || 0,
       comments: commentsByPost.get(p.id) || [],
-      shares: shareCountMap.get(p.id) || 0,
-      timestamp: getSafeDate(p.created_at),
+      shares: shareRows.length,
+      timestamp: getSafeDate(myShareCreatedAt || p.created_at),
       createdAt: p.created_at,
       isLiked: !!myReaction,
       isSaved: savedPostIds.has(p.id),
       reaction: myReaction as ReactionType | undefined,
       mode: p.mode || 'social',
+
+      isRepost: Boolean(myShare),
+      is_repost: Boolean(myShare),
+      sharedBy: latestShareProfile?.name || '',
+      shared_by: latestShareProfile?.name || '',
+      sharedById: latestShareProfile?.id || '',
+      shared_by_id: latestShareProfile?.id || '',
+      sharedAt: shareCreatedAt,
+      shared_at: shareCreatedAt,
+      repostedBy: latestShareProfile?.name || '',
+      reposted_by: latestShareProfile?.name || '',
+      repostedById: latestShareProfile?.id || '',
+      reposted_by_id: latestShareProfile?.id || '',
+      repostedAt: shareCreatedAt,
+      reposted_at: shareCreatedAt,
+      sharedByUsers,
+      repostedByUsers: sharedByUsers,
+
       collabInvites: [],
       collaborators: [],
       collaboratorProfiles: [],
@@ -1087,6 +1343,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       const newPost = mapBackendPost(created, authUser.id);
 
       set({ posts: sortPosts([newPost, ...get().posts]) });
+      dispatchPostEvents('created');
       return;
     } catch (error) {
       console.log('Backend add post failed, trying Supabase fallback.');
@@ -1168,6 +1425,8 @@ export const usePostStore = create<PostState>((set, get) => ({
       isLiked: false,
       isSaved: false,
       mode: mode || 'social',
+      sharedByUsers: [],
+      repostedByUsers: [],
       collabInvites: [],
       collaborators: [],
       collaboratorProfiles: [],
@@ -1175,6 +1434,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     };
 
     set({ posts: sortPosts([newPost, ...get().posts]) });
+    dispatchPostEvents('created');
   },
 
   likePost: async (postId, reaction = 'like') => {
@@ -1192,6 +1452,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         posts: get().posts.map((p) =>
           p.id === postId
             ? {
+                ...p,
                 ...mapped,
                 isLiked: !post.isLiked || post.reaction !== reaction,
                 reaction: (!post.isLiked || post.reaction !== reaction) ? reaction as ReactionType : undefined,
@@ -1200,6 +1461,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         ),
       });
 
+      dispatchPostEvents('updated');
       return;
     } catch {
       // fallback below
@@ -1227,6 +1489,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         ),
       });
 
+      dispatchPostEvents('updated');
       return;
     }
 
@@ -1249,6 +1512,8 @@ export const usePostStore = create<PostState>((set, get) => ({
           : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   addComment: async (postId, content) => {
@@ -1265,6 +1530,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         ),
       });
 
+      dispatchPostEvents('updated');
       return;
     } catch {
       // fallback below
@@ -1313,6 +1579,8 @@ export const usePostStore = create<PostState>((set, get) => ({
         p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   addVoiceComment: async (postId, voiceUrl) => {
@@ -1329,6 +1597,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         ),
       });
 
+      dispatchPostEvents('updated');
       return;
     } catch {
       // fallback below
@@ -1379,6 +1648,8 @@ export const usePostStore = create<PostState>((set, get) => ({
         p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   editPost: async (postId, content) => {
@@ -1391,6 +1662,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         posts: get().posts.map((p) => (p.id === postId ? { ...p, ...updated } : p)),
       });
 
+      dispatchPostEvents('updated');
       return;
     } catch {
       // fallback below
@@ -1409,6 +1681,8 @@ export const usePostStore = create<PostState>((set, get) => ({
           : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   deletePost: async (postId) => {
@@ -1416,6 +1690,7 @@ export const usePostStore = create<PostState>((set, get) => ({
       await api.delete(`/api/posts/${postId}`);
 
       set({ posts: get().posts.filter((p) => p.id !== postId) });
+      dispatchPostEvents('updated');
       return;
     } catch {
       // fallback below
@@ -1429,6 +1704,7 @@ export const usePostStore = create<PostState>((set, get) => ({
     }
 
     set({ posts: get().posts.filter((p) => p.id !== postId) });
+    dispatchPostEvents('updated');
   },
 
   editComment: async (postId, commentId, content) => {
@@ -1453,6 +1729,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         ),
       });
 
+      dispatchPostEvents('updated');
       return;
     } catch {
       // fallback below
@@ -1477,6 +1754,8 @@ export const usePostStore = create<PostState>((set, get) => ({
           : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   deleteComment: async (postId, commentId) => {
@@ -1491,6 +1770,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         ),
       });
 
+      dispatchPostEvents('updated');
       return;
     } catch {
       // fallback below
@@ -1510,22 +1790,29 @@ export const usePostStore = create<PostState>((set, get) => ({
           : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   sharePost: async (postId) => {
     const authUser = await ensureProfile();
     if (!authUser?.id) return;
 
+    const post = get().posts.find((p) => p.id === postId);
+    if (!post) return;
+
     try {
       const data = await api.post(`/api/posts/${postId}/share`, {});
       const updated = mapBackendPost(data, authUser.id);
+      const shared = addShareToPost({ ...post, ...updated }, authUser);
 
       set({
         posts: get().posts.map((p) =>
-          p.id === postId ? { ...p, ...updated } : p
+          p.id === postId ? shared : p
         ),
       });
 
+      dispatchPostEvents('reposted');
       return;
     } catch {
       // fallback below
@@ -1535,13 +1822,17 @@ export const usePostStore = create<PostState>((set, get) => ({
       .from('post_shares')
       .insert({ post_id: postId, user_id: authUser.id });
 
-    if (error) return;
+    if (error) {
+      console.log('Share insert warning:', error.message);
+    }
 
     set({
       posts: get().posts.map((p) =>
-        p.id === postId ? { ...p, shares: p.shares + 1 } : p
+        p.id === postId ? addShareToPost(p, authUser) : p
       ),
     });
+
+    dispatchPostEvents('reposted');
   },
 
   savePost: async (postId) => {
@@ -1575,6 +1866,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         ),
       });
 
+      dispatchPostEvents('updated');
       return;
     }
 
@@ -1598,6 +1890,8 @@ export const usePostStore = create<PostState>((set, get) => ({
         p.id === postId ? { ...p, isSaved: true } : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   inviteCollaborator: async (postId, userId, extra) => {
@@ -1621,6 +1915,8 @@ export const usePostStore = create<PostState>((set, get) => ({
             p.id === postId ? { ...p, ...updated } : p
           ),
         });
+
+        dispatchPostEvents('updated');
       }
 
       return;
@@ -1649,6 +1945,8 @@ export const usePostStore = create<PostState>((set, get) => ({
             p.id === postId ? { ...p, ...updated } : p
           ),
         });
+
+        dispatchPostEvents('updated');
       }
 
       return;
@@ -1677,6 +1975,8 @@ export const usePostStore = create<PostState>((set, get) => ({
             p.id === postId ? { ...p, ...updated } : p
           ),
         });
+
+        dispatchPostEvents('updated');
       }
 
       return;
@@ -1701,6 +2001,8 @@ export const usePostStore = create<PostState>((set, get) => ({
             p.id === postId ? { ...p, ...updated } : p
           ),
         });
+
+        dispatchPostEvents('updated');
       }
     } catch (error) {
       console.error('Remove collaborator failed:', error);
@@ -1750,6 +2052,7 @@ export const usePostStore = create<PostState>((set, get) => ({
         });
       }
 
+      dispatchPostEvents('updated');
       return;
     } catch {
       // local fallback
@@ -1776,6 +2079,8 @@ export const usePostStore = create<PostState>((set, get) => ({
           : p
       ),
     });
+
+    dispatchPostEvents('updated');
   },
 
   extractHashtags: (content) => extractHashtagsStatic(content),
