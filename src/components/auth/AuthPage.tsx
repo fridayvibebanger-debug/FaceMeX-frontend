@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, MailCheck } from 'lucide-react';
+
+import { supabase } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/store/authStore';
 
 type AuthMode = 'login' | 'register';
@@ -36,6 +38,10 @@ function getFriendlyError(error: unknown) {
   return 'Something went wrong. Please try again.';
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
@@ -44,7 +50,10 @@ export default function AuthPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+
   const [errorText, setErrorText] = useState('');
+  const [successText, setSuccessText] = useState('');
 
   const navigate = useNavigate();
   const { isAuthenticated, login, register } = useAuthStore();
@@ -70,7 +79,43 @@ export default function AuthPage() {
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     setErrorText('');
+    setSuccessText('');
     setShowPassword(false);
+  };
+
+  const handleForgotPassword = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    setErrorText('');
+    setSuccessText('');
+
+    if (!cleanEmail) {
+      setErrorText('Please enter your email address first.');
+      return;
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      setErrorText('Please enter a valid email address first.');
+      return;
+    }
+
+    try {
+      setResettingPassword(true);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      setSuccessText('Password reset link sent. Please check your email inbox.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+
+      setErrorText(message || 'Could not send password reset link. Please try again.');
+    } finally {
+      setResettingPassword(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -81,9 +126,15 @@ export default function AuthPage() {
     const cleanPassword = password.trim();
 
     setErrorText('');
+    setSuccessText('');
 
     if (!cleanEmail || !cleanPassword) {
       setErrorText('Please enter your email and password.');
+      return;
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      setErrorText('Please enter a valid email address.');
       return;
     }
 
@@ -197,6 +248,7 @@ export default function AuthPage() {
                       placeholder="Enter your full name"
                       className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.105] px-4 text-[13px] font-medium text-white outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] placeholder:text-white/30 focus:border-white/22 focus:bg-white/[0.13]"
                       autoComplete="name"
+                      disabled={submitting || resettingPassword}
                     />
                   </motion.div>
                 )}
@@ -209,6 +261,7 @@ export default function AuthPage() {
                 placeholder="Enter your email address"
                 className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.105] px-4 text-[13px] font-medium text-white outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] placeholder:text-white/30 focus:border-white/22 focus:bg-white/[0.13]"
                 autoComplete="email"
+                disabled={submitting || resettingPassword}
               />
 
               <div className="relative">
@@ -219,12 +272,14 @@ export default function AuthPage() {
                   placeholder="Password"
                   className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.105] px-4 pr-12 text-[13px] font-medium text-white outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] placeholder:text-white/30 focus:border-white/22 focus:bg-white/[0.13]"
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  disabled={submitting || resettingPassword}
                 />
 
                 <button
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-white/38 hover:bg-white/10 hover:text-white"
+                  disabled={submitting || resettingPassword}
+                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-white/38 hover:bg-white/10 hover:text-white disabled:opacity-50"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? (
@@ -239,13 +294,31 @@ export default function AuthPage() {
                 <div className="flex justify-end">
                   <button
                     type="button"
-                    onClick={() => alert('Password reset screen is not connected yet.')}
-                    className="text-[11.5px] font-medium text-white/42 hover:text-white"
+                    onClick={handleForgotPassword}
+                    disabled={submitting || resettingPassword}
+                    className="text-[11.5px] font-medium text-white/42 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Forgot Password?
+                    {resettingPassword ? 'Sending reset link...' : 'Forgot Password?'}
                   </button>
                 </div>
               )}
+
+              <AnimatePresence>
+                {successText && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -3, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: -3, height: 0 }}
+                    transition={{ duration: 0.12 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-center text-[12px] font-medium text-emerald-100">
+                      <MailCheck className="h-4 w-4 shrink-0" />
+                      <span>{successText}</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <AnimatePresence>
                 {errorText && (
@@ -265,7 +338,7 @@ export default function AuthPage() {
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || resettingPassword}
                 className="mt-1 flex h-12 w-full items-center justify-center rounded-2xl bg-white text-[13px] font-bold text-black shadow-[0_12px_30px_rgba(255,255,255,0.10)] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? (
