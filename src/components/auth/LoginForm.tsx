@@ -52,9 +52,17 @@ export default function LoginForm() {
 
       setSuccess('Password reset link sent. Please check your email inbox.');
     } catch (error) {
-      const message = (error as Error)?.message || '';
+      const err = error as any;
 
-      setError(message || 'Could not send password reset link. Please try again.');
+      console.error('Password reset error:', err);
+
+      const message =
+        err?.message ||
+        err?.error_description ||
+        err?.details ||
+        'Could not send password reset link. Please try again.';
+
+      setError(message);
     } finally {
       setResetLoading(false);
     }
