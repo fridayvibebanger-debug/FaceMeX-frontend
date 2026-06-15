@@ -774,6 +774,7 @@ function stripAreasFromText(text: string) {
 }
 
 function extractKeywordFromPrompt(text: string) {
+  const original = clean(text).toLowerCase();
   const t = stripAreasFromText(text);
 
   if (/(security|guard|armed response|protection)/i.test(t)) {
@@ -812,22 +813,46 @@ function extractKeywordFromPrompt(text: string) {
     return 'general worker';
   }
 
+  if (
+    /\b(job|jobs|vacancy|vacancies|work|employment|hiring)\b/i.test(original) &&
+    !/(security|cashier|driver|admin|teacher|creche|crèche|cleaner|farm|agriculture|learnership|internship|general worker)/i.test(
+      original
+    )
+  ) {
+    return 'jobs';
+  }
+
   const simplified = t
+    .replace(/\b(hi|hello|hey|please)\b/gi, '')
+    .replace(/can you help me/gi, '')
+    .replace(/can you help/gi, '')
+    .replace(/help me/gi, '')
+    .replace(/help/gi, '')
+    .replace(/find me/gi, '')
+    .replace(/find/gi, '')
+    .replace(/search for/gi, '')
+    .replace(/search/gi, '')
     .replace(/i am looking for/gi, '')
     .replace(/i'm looking for/gi, '')
     .replace(/im looking for/gi, '')
     .replace(/looking for/gi, '')
     .replace(/show me/gi, '')
-    .replace(/search/gi, '')
     .replace(/available/gi, '')
     .replace(/all/gi, '')
     .replace(/jobs?/gi, '')
     .replace(/vacanc(y|ies)/gi, '')
+    .replace(/employment/gi, '')
+    .replace(/hiring/gi, '')
     .replace(/work/gi, '')
     .replace(/\bin\b/gi, '')
+    .replace(/\bnearby\b/gi, '')
     .replace(/\bnear\b/gi, '')
+    .replace(/\baround\b/gi, '')
     .replace(/\bme\b/gi, '')
+    .replace(/\bmy area\b/gi, '')
+    .replace(/\bclose to me\b/gi, '')
     .replace(/\ba\b/gi, '')
+    .replace(/[?.,!]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -839,7 +864,7 @@ function extractKeywordFromPrompt(text: string) {
 function getSearchDisplayLabel(keyword: string) {
   const q = clean(keyword).toLowerCase();
 
-  if (!q || q === 'jobs' || q === 'job') return 'all jobs';
+  if (!q || q === 'jobs' || q === 'job') return 'jobs';
   if (q === 'security') return 'security jobs';
   if (q === 'driver') return 'driver jobs';
   if (q.includes('cashier')) return 'retail, cashier, packer and store jobs';
@@ -849,6 +874,16 @@ function getSearchDisplayLabel(keyword: string) {
   if (q.includes('general worker')) return 'general worker jobs';
 
   return `${keyword} jobs`;
+}
+
+function getJobResultHeadline(keyword: string, areaLabel: string) {
+  const searchLabel = getSearchDisplayLabel(keyword);
+
+  if (searchLabel === 'jobs') {
+    return `Jobs found near ${areaLabel}`;
+  }
+
+  return `${searchLabel} found near ${areaLabel}`;
 }
 
 function normalizeVerificationStatus(value: any): LocalVerifiedJob['verificationStatus'] {
@@ -1843,22 +1878,22 @@ export default function AIJobAssistantPage() {
     const exactJobs = jobs.filter((job) => !job.isSourceCard);
     const sourceCards = jobs.filter((job) => job.isSourceCard);
     const count = exactJobs.length || sourceCards.length;
-    const searchLabel = getSearchDisplayLabel(queryText);
     const areaLabel = isBroadSearchArea(areaText) ? areaText : `${areaText} / nearby Limpopo areas`;
+    const headline = getJobResultHeadline(queryText, areaLabel);
 
     if (exactJobs.length) {
-      return `**${searchLabel} found for ${areaLabel}**
+      return `**${headline}**
 
 I found ${count} relevant result${count === 1 ? '' : 's'}. Open the job source to apply.
 
-External jobs are marked **Needs verification**, so check the company and never pay money to apply.`;
+**Safety tip:** External jobs are marked **Needs verification**. Check the company source and never pay money to apply.`;
     }
 
-    return `**No clear local ${searchLabel} found for ${areaText} right now**
+    return `**No clear local ${getSearchDisplayLabel(queryText)} found for ${areaText} right now**
 
 I filtered out jobs that look far from ${areaText}, so I’m not showing unrelated places like Gauteng or Johannesburg.
 
-You can still check the verified official source pages below, or try searching nearby areas like **Tzaneen**, **Polokwane**, **Phalaborwa**, or **Hoedspruit**.`;
+You can still check the verified official source pages below, or try nearby areas like **Tzaneen**, **Polokwane**, **Phalaborwa**, or **Hoedspruit**.`;
   };
 
   const handlePickImages = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -2352,6 +2387,8 @@ Apply link: ${job.applyUrl}`;
     if (!message.jobs?.length) return null;
 
     const jobsToShow = message.jobs.slice(0, 20);
+    const searchArea = message.jobSearchArea || 'Tzaneen';
+    const searchQuery = message.jobSearchQuery || 'jobs';
 
     return (
       <div className="my-4 space-y-3">
@@ -2398,11 +2435,6 @@ Apply link: ${job.applyUrl}`;
                     <div className="flex items-center gap-2">
                       <MapPin className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{job.area}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-                      <span>{job.deadline || 'Closing date not stated'}</span>
                     </div>
 
                     <div className={`flex items-center gap-2 ${deadlineInfo.urgent ? 'text-orange-600' : ''}`}>
@@ -2474,6 +2506,40 @@ Apply link: ${job.applyUrl}`;
             </div>
           );
         })}
+
+        <div className="flex flex-wrap gap-2 rounded-2xl bg-slate-100 px-3 py-3 dark:bg-white/[0.06]">
+          <button
+            type="button"
+            onClick={() => sendPrompt(`Show me more ${getSearchDisplayLabel(searchQuery)} around ${searchArea}.`)}
+            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
+          >
+            More jobs
+          </button>
+
+          <button
+            type="button"
+            onClick={() => sendPrompt(`Show jobs in ${searchArea} that do not need experience.`)}
+            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
+          >
+            No experience
+          </button>
+
+          <button
+            type="button"
+            onClick={() => sendPrompt('Help me apply for one of these jobs. Tell me what to prepare first.')}
+            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
+          >
+            Help me apply
+          </button>
+
+          <button
+            type="button"
+            onClick={() => sendPrompt('Teach me how to check if a job advert is fake before I apply.')}
+            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
+          >
+            Check fake job
+          </button>
+        </div>
 
         {message.jobs.length > 20 && (
           <div className="rounded-2xl bg-slate-100 px-4 py-3 text-xs text-slate-500 dark:bg-white/[0.06] dark:text-white/50">
@@ -3477,11 +3543,6 @@ Apply link: ${job.applyUrl}`;
                             <div className="flex items-center gap-2">
                               <MapPin className="h-3.5 w-3.5" />
                               <span className="truncate">{job.area}</span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <CalendarDays className="h-3.5 w-3.5" />
-                              <span>{job.deadline || 'Closing date not stated'}</span>
                             </div>
 
                             <div
