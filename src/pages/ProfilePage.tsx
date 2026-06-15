@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,6 +19,7 @@ import {
   Sparkles,
   MessageCircle,
   Save,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePostStore } from '@/store/postStore';
@@ -155,8 +156,16 @@ function getPostImages(post: any) {
     post.images.forEach(push);
   }
 
+  if (Array.isArray(post?.media)) {
+    post.media.forEach((item: any) => {
+      push(item?.url || item?.src || item?.media_url || item);
+    });
+  }
+
   push(post?.image);
+  push(post?.image_url);
   push(post?.media_type === 'image' ? post?.media_url : '');
+  push(post?.mediaUrl);
 
   return images;
 }
@@ -180,10 +189,21 @@ function PremiumVerifiedBadge({ size = 'md' }: { size?: 'sm' | 'md' }) {
   return (
     <span
       title="Verified FaceMeX profile"
-      className="inline-flex items-center gap-1 rounded-full border border-blue-400/40 bg-gradient-to-r from-blue-600 via-cyan-500 to-purple-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow-[0_0_18px_rgba(59,130,246,0.45)]"
+      className="inline-flex items-center gap-1 rounded-full border border-black/20 bg-black px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm ring-1 ring-black/10 dark:border-white/20 dark:bg-white dark:text-black dark:ring-white/20"
     >
-      <CheckCircle className={`${iconSize} fill-white/20 text-white`} />
+      <CheckCircle className={`${iconSize} fill-white/20 text-white dark:fill-black/10 dark:text-black`} />
       Verified
+    </span>
+  );
+}
+
+function PremiumVerifiedIcon() {
+  return (
+    <span
+      title="Verified FaceMeX profile"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black text-white shadow-sm ring-2 ring-background dark:bg-white dark:text-black"
+    >
+      <CheckCircle className="h-3 w-3 fill-white/20 dark:fill-black/10" />
     </span>
   );
 }
@@ -247,6 +267,35 @@ function getTierRank(tier?: string) {
   };
 
   return ranks[clean] || 0;
+}
+
+function getPostTime(post: any) {
+  return new Date(
+    post?.createdAt ||
+      post?.created_at ||
+      post?.timestamp ||
+      post?.updated_at ||
+      0
+  ).getTime();
+}
+
+function uniquePosts(posts: any[]) {
+  const seen = new Set<string>();
+
+  return posts.filter((post) => {
+    const key =
+      cleanString(post?.id) ||
+      cleanString(post?._id) ||
+      `${cleanString(post?.user_id || post?.userId)}-${cleanString(
+        post?.content || post?.caption || post?.body
+      )}-${getPostTime(post)}`;
+
+    if (!key) return true;
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
 }
 
 export default function ProfilePage() {
@@ -326,6 +375,9 @@ export default function ProfilePage() {
   const [profileNotFound, setProfileNotFound] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  const [profileSupabasePosts, setProfileSupabasePosts] = useState<any[]>([]);
+  const [postsRefreshing, setPostsRefreshing] = useState(false);
+
   const [followerCount, setFollowerCount] = useState(0);
   const [connectionCount, setConnectionCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
@@ -384,9 +436,22 @@ export default function ProfilePage() {
     'posts' | 'professional' | 'photos'
   >(mode === 'professional' ? 'professional' : 'posts');
 
-  useEffect(() => {
-    loadPosts?.().catch(() => {});
+  const profilePostUserId = isOwnProfile && effectiveUserId ? effectiveUserId : viewedUserId;
+
+  const loadAllPosts = useCallback(async () => {
+    try {
+      setPostsRefreshing(true);
+      await loadPosts?.();
+    } catch {
+      // keep UI stable
+    } finally {
+      setPostsRefreshing(false);
+    }
   }, [loadPosts]);
+
+  useEffect(() => {
+    loadAllPosts();
+  }, [loadAllPosts]);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -608,6 +673,135 @@ export default function ProfilePage() {
 
   const isProfileVerified = Boolean(viewedUser?.verified);
 
+  const normalizeProfilePostFromRow = useCallback(
+    (row: any) => {
+      const normalizedImages = getPostImages(row);
+
+      return {
+        ...row,
+        id: cleanString(row?.id) || cleanString(row?._id) || `${profilePostUserId}-${getPostTime(row)}`,
+        userId: cleanString(row?.userId || row?.user_id || row?.authorId || row?.author_id || profilePostUserId),
+        user_id: cleanString(row?.user_id || row?.userId || row?.author_id || row?.authorId || profilePostUserId),
+        userName:
+          cleanString(row?.userName || row?.user_name || row?.authorName || row?.author_name) ||
+          viewedUser?.name ||
+          'FaceMeX user',
+        user_name:
+          cleanString(row?.user_name || row?.userName || row?.author_name || row?.authorName) ||
+          viewedUser?.name ||
+          'FaceMeX user',
+        userAvatar:
+          cleanString(row?.userAvatar || row?.user_avatar || row?.authorAvatar || row?.author_avatar) ||
+          viewedUser?.avatar ||
+          '',
+        user_avatar:
+          cleanString(row?.user_avatar || row?.userAvatar || row?.author_avatar || row?.authorAvatar) ||
+          viewedUser?.avatar ||
+          '',
+        userVerified:
+          row?.userVerified === true ||
+          row?.user_verified === true ||
+          row?.verified === true ||
+          viewedUser?.verified === true,
+        authorVerified:
+          row?.authorVerified === true ||
+          row?.author_verified === true ||
+          row?.verified === true ||
+          viewedUser?.verified === true,
+        createdAt: row?.createdAt || row?.created_at || row?.timestamp || new Date().toISOString(),
+        created_at: row?.created_at || row?.createdAt || row?.timestamp || new Date().toISOString(),
+        images: normalizedImages,
+      };
+    },
+    [profilePostUserId, viewedUser?.avatar, viewedUser?.name, viewedUser?.verified]
+  );
+
+  const loadProfilePostsDirect = useCallback(async () => {
+    if (!profilePostUserId) {
+      setProfileSupabasePosts([]);
+      return;
+    }
+
+    const possibleUserColumns = ['user_id', 'author_id', 'profile_id'];
+
+    for (const column of possibleUserColumns) {
+      try {
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .eq(column, profilePostUserId)
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (!error) {
+          setProfileSupabasePosts((data || []).map(normalizeProfilePostFromRow));
+          return;
+        }
+      } catch {
+        // try next possible column
+      }
+    }
+  }, [profilePostUserId, normalizeProfilePostFromRow]);
+
+  const refreshProfilePosts = useCallback(async () => {
+    setPostsRefreshing(true);
+
+    try {
+      await Promise.all([
+        loadPosts?.().catch(() => {}),
+        loadProfilePostsDirect().catch(() => {}),
+      ]);
+    } finally {
+      setPostsRefreshing(false);
+    }
+  }, [loadPosts, loadProfilePostsDirect]);
+
+  useEffect(() => {
+    refreshProfilePosts();
+  }, [refreshProfilePosts]);
+
+  useEffect(() => {
+    if (!profilePostUserId) return;
+
+    const refresh = () => {
+      refreshProfilePosts();
+    };
+
+    const channel = supabase
+      .channel(`profile-posts-live-${profilePostUserId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'posts' },
+        (payload) => {
+          const row = ((payload as any)?.new || (payload as any)?.old || {}) as any;
+
+          const changedForProfile =
+            postBelongsToProfile(row, profilePostUserId) ||
+            cleanString(row?.user_id) === profilePostUserId ||
+            cleanString(row?.author_id) === profilePostUserId ||
+            cleanString(row?.profile_id) === profilePostUserId;
+
+          if (changedForProfile || !row?.id) {
+            refresh();
+          }
+        }
+      )
+      .subscribe();
+
+    window.addEventListener('focus', refresh);
+    window.addEventListener('facemex:post-created', refresh);
+    window.addEventListener('facemex:posts-updated', refresh);
+    window.addEventListener('facemex:feed-refresh', refresh);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('facemex:post-created', refresh);
+      window.removeEventListener('facemex:posts-updated', refresh);
+      window.removeEventListener('facemex:feed-refresh', refresh);
+    };
+  }, [profilePostUserId, refreshProfilePosts]);
+
   useEffect(() => {
     setBioDraft(viewedUser?.bio || '');
   }, [viewedUser?.bio]);
@@ -624,25 +818,20 @@ export default function ProfilePage() {
     viewedPro.resumeSummary,
   ]);
 
-  const profilePostUserId = isOwnProfile && effectiveUserId ? effectiveUserId : viewedUserId;
-
   const userPosts = useMemo(() => {
     if (!profilePostUserId) return [];
 
-    return posts
-      .filter((post: any) => postBelongsToProfile(post, profilePostUserId))
-      .sort((a: any, b: any) => {
-        const aTime = new Date(
-          a.createdAt || a.created_at || a.timestamp || 0
-        ).getTime();
+    const storePosts = posts.filter((post: any) =>
+      postBelongsToProfile(post, profilePostUserId)
+    );
 
-        const bTime = new Date(
-          b.createdAt || b.created_at || b.timestamp || 0
-        ).getTime();
+    const combined = uniquePosts([
+      ...profileSupabasePosts,
+      ...storePosts,
+    ]);
 
-        return bTime - aTime;
-      });
-  }, [posts, profilePostUserId]);
+    return combined.sort((a: any, b: any) => getPostTime(b) - getPostTime(a));
+  }, [posts, profilePostUserId, profileSupabasePosts]);
 
   const loadProfileRelationships = async () => {
     if (!profilePostUserId) return;
@@ -1150,8 +1339,10 @@ export default function ProfilePage() {
                   </Avatar>
 
                   {isProfileVerified && (
-                    <span className="absolute -bottom-2 -right-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-300/60 bg-gradient-to-br from-blue-600 via-cyan-500 to-purple-600 shadow-[0_0_22px_rgba(59,130,246,0.65)] ring-2 ring-background">
-                      <CheckCircle className="h-4 w-4 fill-white/20 text-white" />
+                    <span className="absolute -bottom-2 -right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-background shadow-md ring-2 ring-background">
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-black text-white shadow-sm dark:bg-white dark:text-black">
+                        <CheckCircle className="h-4 w-4 fill-white/20 dark:fill-black/10" />
+                      </span>
                     </span>
                   )}
                 </div>
@@ -1539,10 +1730,31 @@ export default function ProfilePage() {
           </TabsList>
 
           <TabsContent value="posts" className="mt-6 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold">Recent posts</h2>
+                <p className="text-xs text-muted-foreground">
+                  Newest posts load first.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={refreshProfilePosts}
+                disabled={postsRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${postsRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+
             {userPosts.length > 0 ? (
               userPosts.map((post: any, index: number) => (
                 <motion.div
-                  key={post.id}
+                  key={post.id || `${index}-${getPostTime(post)}`}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(index * 0.025, 0.15) }}
