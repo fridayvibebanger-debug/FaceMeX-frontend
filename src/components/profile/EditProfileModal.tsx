@@ -1,24 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Camera, Loader2, ShieldCheck, X } from 'lucide-react';
-
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-
+import { Camera, X } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { uploadMedia } from '@/lib/storage';
 import { toast } from '@/components/ui/use-toast';
@@ -28,19 +17,9 @@ interface EditProfileModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const moodOptions = [
-  'happy',
-  'excited',
-  'focused',
-  'peaceful',
-  'creative',
-  'energetic',
-];
+const moodOptions = ['happy', 'excited', 'focused', 'peaceful', 'creative', 'energetic'];
 
 const interestOptions = [
-  'Jobs',
-  'Career',
-  'Business',
   'Technology',
   'Design',
   'Photography',
@@ -53,70 +32,28 @@ const interestOptions = [
   'Fashion',
 ];
 
-function cleanText(value: unknown) {
-  if (typeof value !== 'string') return '';
-  return value.trim();
+function safeString(value: unknown) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  return '';
 }
 
-function getUserValue(user: any, keys: string[], fallback = '') {
-  for (const key of keys) {
-    const value = user?.[key];
+function safeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
 
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-
-    if (Array.isArray(value)) {
-      return value;
-    }
-
-    if (typeof value === 'boolean') {
-      return value;
-    }
-  }
-
-  return fallback;
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function getIsVerified(user: any) {
-  return Boolean(
-    user?.verified ||
-      user?.isVerified ||
-      user?.is_verified ||
-      user?.verificationStatus === 'verified' ||
-      user?.verification_status === 'verified' ||
-      user?.account_status === 'verified'
-  );
+function firstLetter(value: string) {
+  const clean = value.trim();
+  return clean ? clean.charAt(0).toUpperCase() : 'U';
 }
 
-function PostCardVerifiedBadge() {
-  return (
-    <span
-      title="Verified"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-sky-500 text-white shadow-sm ring-2 ring-white dark:ring-[#111]"
-    >
-      <ShieldCheck className="h-3 w-3" strokeWidth={3} />
-    </span>
-  );
-}
-
-function VerifiedTextBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-600 ring-1 ring-sky-500/20 dark:bg-sky-400/10 dark:text-sky-300 dark:ring-sky-400/20">
-      <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.6} />
-      Verified
-    </span>
-  );
-}
-
-export default function EditProfileModal({
-  open,
-  onOpenChange,
-}: EditProfileModalProps) {
-  const { user, updateProfile } = useAuthStore();
-
-  const currentUser = user as any;
-  const isVerified = getIsVerified(currentUser);
+export default function EditProfileModal({ open, onOpenChange }: EditProfileModalProps) {
+  const { user, updateProfile } = useAuthStore() as any;
 
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -127,82 +64,31 @@ export default function EditProfileModal({
   const [interests, setInterests] = useState<string[]>([]);
   const [avatarPreview, setAvatarPreview] = useState('');
   const [coverPreview, setCoverPreview] = useState('');
-
   const [saving, setSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [uploadingCover, setUploadingCover] = useState(false);
-
-  const userSnapshot = useMemo(() => {
-    return {
-      name: getUserValue(currentUser, [
-        'name',
-        'full_name',
-        'fullName',
-        'displayName',
-        'username',
-      ]),
-      bio: getUserValue(currentUser, ['bio', 'about']),
-      pronouns: getUserValue(currentUser, ['pronouns']),
-      mood: getUserValue(currentUser, ['mood']),
-      location: getUserValue(currentUser, ['location', 'city']),
-      website: getUserValue(currentUser, ['website', 'website_url']),
-      interests: getUserValue(currentUser, ['interests'], []) as string[],
-      avatar: getUserValue(currentUser, [
-        'avatar',
-        'avatarUrl',
-        'avatar_url',
-        'profileImage',
-        'profile_image',
-      ]),
-      coverPhoto: getUserValue(currentUser, [
-        'coverPhoto',
-        'cover_photo',
-        'coverUrl',
-        'cover_url',
-      ]),
-    };
-  }, [currentUser]);
 
   useEffect(() => {
     if (!open) return;
 
-    setName(userSnapshot.name);
-    setBio(userSnapshot.bio);
-    setPronouns(userSnapshot.pronouns);
-    setMood(userSnapshot.mood);
-    setLocation(userSnapshot.location);
-    setWebsite(userSnapshot.website);
-    setInterests(Array.isArray(userSnapshot.interests) ? userSnapshot.interests : []);
-    setAvatarPreview(userSnapshot.avatar);
-    setCoverPreview(userSnapshot.coverPhoto);
-  }, [open, userSnapshot]);
+    setName(safeString(user?.name || user?.full_name || user?.fullName || user?.username));
+    setBio(safeString(user?.bio));
+    setPronouns(safeString(user?.pronouns));
+    setMood(safeString(user?.mood));
+    setLocation(safeString(user?.location));
+    setWebsite(safeString(user?.website));
+    setInterests(safeStringArray(user?.interests));
+    setAvatarPreview(safeString(user?.avatar || user?.avatar_url || user?.avatarUrl));
+    setCoverPreview(safeString(user?.coverPhoto || user?.cover_photo || user?.coverUrl));
+  }, [open, user]);
 
   const handleAvatarUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.currentTarget.value = '';
+    e.target.value = '';
 
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: 'Invalid file',
-        description: 'Please upload an image file.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     try {
-      setUploadingAvatar(true);
-
       const url = await uploadMedia(file, 'profile/avatars');
-
-      setAvatarPreview(url);
-
-      toast({
-        title: 'Profile picture uploaded',
-        description: 'Tap Save Changes to update your profile.',
-      });
+      setAvatarPreview(safeString(url));
     } catch (err) {
       console.error('Avatar upload failed', err);
 
@@ -211,37 +97,18 @@ export default function EditProfileModal({
         description: 'Please try again with a different image or check your connection.',
         variant: 'destructive',
       });
-    } finally {
-      setUploadingAvatar(false);
     }
   };
 
   const handleCoverUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.currentTarget.value = '';
+    e.target.value = '';
 
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: 'Invalid file',
-        description: 'Please upload an image file.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     try {
-      setUploadingCover(true);
-
       const url = await uploadMedia(file, 'profile/covers');
-
-      setCoverPreview(url);
-
-      toast({
-        title: 'Cover photo uploaded',
-        description: 'Tap Save Changes to update your profile.',
-      });
+      setCoverPreview(safeString(url));
     } catch (err) {
       console.error('Cover upload failed', err);
 
@@ -250,26 +117,31 @@ export default function EditProfileModal({
         description: 'Please try again with a different image or check your connection.',
         variant: 'destructive',
       });
-    } finally {
-      setUploadingCover(false);
     }
   };
 
   const toggleInterest = (interest: string) => {
-    setInterests((prev) =>
-      prev.includes(interest)
-        ? prev.filter((item) => item !== interest)
-        : [...prev, interest]
-    );
+    setInterests((prev) => {
+      if (prev.includes(interest)) {
+        return prev.filter((item) => item !== interest);
+      }
+
+      return [...prev, interest];
+    });
   };
 
   const handleSave = async () => {
-    const cleanName = name.trim().replace(/\s+/g, ' ');
+    const cleanName = name.trim();
+    const cleanBio = bio.trim();
+    const cleanPronouns = pronouns.trim();
+    const cleanMood = mood.trim();
+    const cleanLocation = location.trim();
+    const cleanWebsite = website.trim();
 
     if (!cleanName) {
       toast({
         title: 'Name required',
-        description: 'Please enter your name.',
+        description: 'Please enter your name before saving.',
         variant: 'destructive',
       });
       return;
@@ -278,48 +150,23 @@ export default function EditProfileModal({
     try {
       setSaving(true);
 
-      const payload = {
+      await updateProfile?.({
         name: cleanName,
-        full_name: cleanName,
-        fullName: cleanName,
-        displayName: cleanName,
-
-        bio: bio.trim(),
-        about: bio.trim(),
-
-        pronouns: pronouns.trim(),
-        mood,
-        location: location.trim(),
-        city: location.trim(),
-
-        website: website.trim(),
-        website_url: website.trim(),
-
+        bio: cleanBio,
+        pronouns: cleanPronouns,
+        mood: cleanMood,
+        location: cleanLocation,
+        website: cleanWebsite,
         interests,
-
         avatar: avatarPreview,
-        avatarUrl: avatarPreview,
         avatar_url: avatarPreview,
-        profileImage: avatarPreview,
-        profile_image: avatarPreview,
-
         coverPhoto: coverPreview,
         cover_photo: coverPreview,
-        coverUrl: coverPreview,
-        cover_url: coverPreview,
-
-        verified: Boolean(currentUser?.verified),
-        isVerified: Boolean(currentUser?.isVerified),
-        is_verified: Boolean(currentUser?.is_verified),
-
-        updated_at: new Date().toISOString(),
-      };
-
-      await Promise.resolve(updateProfile(payload as any));
+      });
 
       toast({
         title: 'Profile updated',
-        description: 'Your latest profile changes are saved.',
+        description: 'Your changes were saved.',
       });
 
       onOpenChange(false);
@@ -327,19 +174,14 @@ export default function EditProfileModal({
       console.error('Profile update failed', err);
 
       toast({
-        title: 'Profile update failed',
-        description: 'Please try again.',
+        title: 'Save failed',
+        description: 'Your profile could not be saved. Please try again.',
         variant: 'destructive',
       });
     } finally {
       setSaving(false);
     }
   };
-
-  const avatarFallback =
-    cleanText(name).charAt(0).toUpperCase() ||
-    cleanText(currentUser?.email).charAt(0).toUpperCase() ||
-    'F';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -354,26 +196,14 @@ export default function EditProfileModal({
 
             <div className="relative mt-2 h-32 overflow-hidden rounded-xl border border-border/60 bg-muted/40">
               {coverPreview ? (
-                <img
-                  src={coverPreview}
-                  alt="Cover"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-                  Add a cover photo
-                </div>
-              )}
+                <img src={coverPreview} alt="Cover" className="h-full w-full object-cover" />
+              ) : null}
 
               <label
                 htmlFor="cover-upload"
                 className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/40 transition-colors hover:bg-black/50"
               >
-                {uploadingCover ? (
-                  <Loader2 className="h-8 w-8 animate-spin text-white" />
-                ) : (
-                  <Camera className="h-8 w-8 text-white" />
-                )}
+                <Camera className="h-8 w-8 text-white" />
               </label>
 
               <input
@@ -381,7 +211,6 @@ export default function EditProfileModal({
                 type="file"
                 accept="image/*"
                 className="hidden"
-                disabled={uploadingCover || saving}
                 onChange={handleCoverUpload}
               />
             </div>
@@ -393,29 +222,15 @@ export default function EditProfileModal({
             <div className="mt-2 flex items-center gap-4">
               <div className="relative">
                 <Avatar className="h-24 w-24">
-                  <AvatarImage src={avatarPreview} alt={name || 'Profile picture'} />
-                  <AvatarFallback>{avatarFallback}</AvatarFallback>
+                  <AvatarImage src={avatarPreview} alt={name} />
+                  <AvatarFallback>{firstLetter(name)}</AvatarFallback>
                 </Avatar>
-
-                {isVerified && (
-                  <span className="absolute -bottom-1 -right-1">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-md">
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-500 text-white">
-                        <ShieldCheck className="h-3.5 w-3.5" strokeWidth={3} />
-                      </span>
-                    </span>
-                  </span>
-                )}
 
                 <label
                   htmlFor="avatar-upload"
                   className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-black/40 transition-colors hover:bg-black/50"
                 >
-                  {uploadingAvatar ? (
-                    <Loader2 className="h-6 w-6 animate-spin text-white" />
-                  ) : (
-                    <Camera className="h-6 w-6 text-white" />
-                  )}
+                  <Camera className="h-6 w-6 text-white" />
                 </label>
 
                 <input
@@ -423,24 +238,8 @@ export default function EditProfileModal({
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  disabled={uploadingAvatar || saving}
                   onChange={handleAvatarUpload}
                 />
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-semibold">
-                    {name || 'FaceMeX user'}
-                  </p>
-
-                  {isVerified && <PostCardVerifiedBadge />}
-                  {isVerified && <VerifiedTextBadge />}
-                </div>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Your verified badge is controlled by FaceMeX and cannot be edited here.
-                </p>
               </div>
             </div>
           </div>
@@ -490,7 +289,7 @@ export default function EditProfileModal({
                 <Badge
                   key={moodOption}
                   variant={mood === moodOption ? 'default' : 'outline'}
-                  className="cursor-pointer capitalize"
+                  className="cursor-pointer"
                   onClick={() => setMood(moodOption)}
                 >
                   {moodOption}
@@ -512,9 +311,7 @@ export default function EditProfileModal({
                 >
                   {interest}
 
-                  {interests.includes(interest) && (
-                    <X className="ml-1 h-3 w-3" />
-                  )}
+                  {interests.includes(interest) ? <X className="ml-1 h-3 w-3" /> : null}
                 </Badge>
               ))}
             </div>
@@ -545,16 +342,11 @@ export default function EditProfileModal({
           </div>
 
           <div className="flex justify-end gap-2 border-t pt-4">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={saving}
-            >
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               Cancel
             </Button>
 
-            <Button onClick={handleSave} disabled={saving || uploadingAvatar || uploadingCover}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
