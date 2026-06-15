@@ -94,6 +94,67 @@ function decodeRouteValue(value: unknown) {
   }
 }
 
+function valueMatchesProfile(value: unknown, profileId: string) {
+  return cleanString(value) === cleanString(profileId);
+}
+
+function arrayContainsProfile(value: unknown, profileId: string) {
+  if (!Array.isArray(value)) return false;
+
+  return value.some((item: any) => {
+    if (typeof item === 'string') return valueMatchesProfile(item, profileId);
+
+    return (
+      valueMatchesProfile(item?.id, profileId) ||
+      valueMatchesProfile(item?.userId, profileId) ||
+      valueMatchesProfile(item?.user_id, profileId) ||
+      valueMatchesProfile(item?.profileId, profileId) ||
+      valueMatchesProfile(item?.profile_id, profileId)
+    );
+  });
+}
+
+function isRepostByProfile(post: any, profileId: string) {
+  const target = cleanString(profileId);
+
+  if (!target) return false;
+
+  const repostIds = [
+    post?.repostedBy,
+    post?.reposted_by,
+    post?.repostedById,
+    post?.reposted_by_id,
+    post?.repostUserId,
+    post?.repost_user_id,
+    post?.sharedBy,
+    post?.shared_by,
+    post?.sharedById,
+    post?.shared_by_id,
+    post?.repost?.userId,
+    post?.repost?.user_id,
+    post?.repost?.profileId,
+    post?.repost?.profile_id,
+    post?.repost?.by,
+    post?.share?.userId,
+    post?.share?.user_id,
+    post?.share?.profileId,
+    post?.share?.profile_id,
+    post?.shared_by_user?.id,
+    post?.reposted_by_user?.id,
+  ]
+    .map(cleanString)
+    .filter(Boolean);
+
+  return (
+    repostIds.includes(target) ||
+    arrayContainsProfile(post?.reposts, target) ||
+    arrayContainsProfile(post?.reposters, target) ||
+    arrayContainsProfile(post?.shares, target) ||
+    arrayContainsProfile(post?.sharedByUsers, target) ||
+    arrayContainsProfile(post?.repostedByUsers, target)
+  );
+}
+
 function postBelongsToProfile(post: any, profileId: string) {
   const target = cleanString(profileId);
 
@@ -111,11 +172,13 @@ function postBelongsToProfile(post: any, profileId: string) {
     post?.externalId,
     post?.user?.id,
     post?.user?._id,
+    post?.author?.id,
+    post?.profile?.id,
   ]
     .map(cleanString)
     .filter(Boolean);
 
-  return ids.includes(target);
+  return ids.includes(target) || isRepostByProfile(post, target);
 }
 
 function getPostDisplayName(post: any) {
@@ -127,6 +190,8 @@ function getPostDisplayName(post: any) {
     cleanString(post?.author_name) ||
     cleanString(post?.user?.name) ||
     cleanString(post?.user?.full_name) ||
+    cleanString(post?.author?.name) ||
+    cleanString(post?.author?.full_name) ||
     'FaceMeX user'
   );
 }
@@ -140,6 +205,8 @@ function getPostAvatar(post: any) {
     cleanString(post?.author_avatar) ||
     cleanString(post?.user?.avatar) ||
     cleanString(post?.user?.avatar_url) ||
+    cleanString(post?.author?.avatar) ||
+    cleanString(post?.author?.avatar_url) ||
     ''
   );
 }
@@ -174,12 +241,18 @@ function isPostAuthorVerified(post: any) {
   return Boolean(
     post?.verified === true ||
       post?.userVerified === true ||
+      post?.user_verified === true ||
       post?.authorVerified === true ||
+      post?.author_verified === true ||
       post?.accountVerified === true ||
+      post?.account_verified === true ||
       post?.isVerified === true ||
       post?.is_verified === true ||
       post?.user?.verified === true ||
-      post?.user?.userVerified === true
+      post?.user?.userVerified === true ||
+      post?.user?.is_verified === true ||
+      post?.author?.verified === true ||
+      post?.author?.is_verified === true
   );
 }
 
@@ -191,7 +264,9 @@ function PremiumVerifiedBadge({ size = 'md' }: { size?: 'sm' | 'md' }) {
       title="Verified FaceMeX profile"
       className="inline-flex items-center gap-1 rounded-full border border-black/20 bg-black px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm ring-1 ring-black/10 dark:border-white/20 dark:bg-white dark:text-black dark:ring-white/20"
     >
-      <CheckCircle className={`${iconSize} fill-white/20 text-white dark:fill-black/10 dark:text-black`} />
+      <CheckCircle
+        className={`${iconSize} fill-white/20 text-white dark:fill-black/10 dark:text-black`}
+      />
       Verified
     </span>
   );
@@ -271,7 +346,12 @@ function getTierRank(tier?: string) {
 
 function getPostTime(post: any) {
   return new Date(
-    post?.createdAt ||
+    post?.repostedAt ||
+      post?.reposted_at ||
+      post?.sharedAt ||
+      post?.shared_at ||
+      post?.share_created_at ||
+      post?.createdAt ||
       post?.created_at ||
       post?.timestamp ||
       post?.updated_at ||
@@ -286,8 +366,9 @@ function uniquePosts(posts: any[]) {
     const key =
       cleanString(post?.id) ||
       cleanString(post?._id) ||
-      `${cleanString(post?.user_id || post?.userId)}-${cleanString(
-        post?.content || post?.caption || post?.body
+      cleanString(post?.post_id) ||
+      `${cleanString(post?.user_id || post?.userId || post?.author_id || post?.authorId)}-${cleanString(
+        post?.content || post?.caption || post?.body || post?.text
       )}-${getPostTime(post)}`;
 
     if (!key) return true;
@@ -674,14 +755,39 @@ export default function ProfilePage() {
   const isProfileVerified = Boolean(viewedUser?.verified);
 
   const normalizeProfilePostFromRow = useCallback(
-    (row: any) => {
+    (row: any, options?: { repostedAt?: string; repostedBy?: string; isRepost?: boolean }) => {
       const normalizedImages = getPostImages(row);
+      const authorVerified =
+        row?.userVerified === true ||
+        row?.user_verified === true ||
+        row?.authorVerified === true ||
+        row?.author_verified === true ||
+        row?.verified === true ||
+        viewedUser?.verified === true;
 
       return {
         ...row,
-        id: cleanString(row?.id) || cleanString(row?._id) || `${profilePostUserId}-${getPostTime(row)}`,
-        userId: cleanString(row?.userId || row?.user_id || row?.authorId || row?.author_id || profilePostUserId),
-        user_id: cleanString(row?.user_id || row?.userId || row?.author_id || row?.authorId || profilePostUserId),
+        id:
+          cleanString(row?.id) ||
+          cleanString(row?._id) ||
+          cleanString(row?.post_id) ||
+          `${profilePostUserId}-${getPostTime(row)}`,
+        userId: cleanString(
+          row?.userId ||
+            row?.user_id ||
+            row?.authorId ||
+            row?.author_id ||
+            row?.profile_id ||
+            profilePostUserId
+        ),
+        user_id: cleanString(
+          row?.user_id ||
+            row?.userId ||
+            row?.author_id ||
+            row?.authorId ||
+            row?.profile_id ||
+            profilePostUserId
+        ),
         userName:
           cleanString(row?.userName || row?.user_name || row?.authorName || row?.author_name) ||
           viewedUser?.name ||
@@ -698,18 +804,51 @@ export default function ProfilePage() {
           cleanString(row?.user_avatar || row?.userAvatar || row?.author_avatar || row?.authorAvatar) ||
           viewedUser?.avatar ||
           '',
-        userVerified:
-          row?.userVerified === true ||
-          row?.user_verified === true ||
-          row?.verified === true ||
-          viewedUser?.verified === true,
-        authorVerified:
-          row?.authorVerified === true ||
-          row?.author_verified === true ||
-          row?.verified === true ||
-          viewedUser?.verified === true,
+        verified: authorVerified,
+        userVerified: authorVerified,
+        user_verified: authorVerified,
+        authorVerified: authorVerified,
+        author_verified: authorVerified,
+        isVerified: authorVerified,
+        is_verified: authorVerified,
         createdAt: row?.createdAt || row?.created_at || row?.timestamp || new Date().toISOString(),
         created_at: row?.created_at || row?.createdAt || row?.timestamp || new Date().toISOString(),
+        repostedAt:
+          options?.repostedAt ||
+          row?.repostedAt ||
+          row?.reposted_at ||
+          row?.sharedAt ||
+          row?.shared_at ||
+          row?.created_at,
+        reposted_at:
+          options?.repostedAt ||
+          row?.reposted_at ||
+          row?.repostedAt ||
+          row?.shared_at ||
+          row?.sharedAt ||
+          row?.created_at,
+        repostedBy:
+          options?.repostedBy ||
+          row?.repostedBy ||
+          row?.reposted_by ||
+          row?.sharedBy ||
+          row?.shared_by,
+        reposted_by:
+          options?.repostedBy ||
+          row?.reposted_by ||
+          row?.repostedBy ||
+          row?.shared_by ||
+          row?.sharedBy,
+        isRepost:
+          options?.isRepost ||
+          row?.isRepost === true ||
+          row?.is_repost === true ||
+          Boolean(row?.reposted_by || row?.repostedBy || row?.shared_by || row?.sharedBy),
+        is_repost:
+          options?.isRepost ||
+          row?.is_repost === true ||
+          row?.isRepost === true ||
+          Boolean(row?.reposted_by || row?.repostedBy || row?.shared_by || row?.sharedBy),
         images: normalizedImages,
       };
     },
@@ -722,9 +861,11 @@ export default function ProfilePage() {
       return;
     }
 
-    const possibleUserColumns = ['user_id', 'author_id', 'profile_id'];
+    const collected: any[] = [];
 
-    for (const column of possibleUserColumns) {
+    const directColumns = ['user_id', 'author_id', 'profile_id', 'owner_id'];
+
+    for (const column of directColumns) {
       try {
         const { data, error } = await supabase
           .from('posts')
@@ -733,14 +874,86 @@ export default function ProfilePage() {
           .order('created_at', { ascending: false })
           .limit(100);
 
-        if (!error) {
-          setProfileSupabasePosts((data || []).map(normalizeProfilePostFromRow));
-          return;
+        if (!error && Array.isArray(data)) {
+          collected.push(...data.map((row) => normalizeProfilePostFromRow(row)));
         }
       } catch {
         // try next possible column
       }
     }
+
+    const repostColumns = [
+      'reposted_by',
+      'reposted_by_id',
+      'repost_user_id',
+      'shared_by',
+      'shared_by_id',
+    ];
+
+    for (const column of repostColumns) {
+      try {
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .eq(column, profilePostUserId)
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (!error && Array.isArray(data)) {
+          collected.push(
+            ...data.map((row) =>
+              normalizeProfilePostFromRow(row, {
+                repostedBy: profilePostUserId,
+                repostedAt:
+                  row?.reposted_at ||
+                  row?.repostedAt ||
+                  row?.shared_at ||
+                  row?.sharedAt ||
+                  row?.created_at,
+                isRepost: true,
+              })
+            )
+          );
+        }
+      } catch {
+        // try next possible repost column
+      }
+    }
+
+    const repostTables = ['post_reposts', 'reposts'];
+
+    for (const tableName of repostTables) {
+      try {
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('*, posts(*)')
+          .eq('user_id', profilePostUserId)
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (!error && Array.isArray(data)) {
+          collected.push(
+            ...data
+              .map((row: any) => {
+                const postRow = row?.posts || row?.post || row;
+
+                return normalizeProfilePostFromRow(postRow, {
+                  repostedBy: profilePostUserId,
+                  repostedAt: row?.created_at || row?.reposted_at || row?.shared_at,
+                  isRepost: true,
+                });
+              })
+              .filter(Boolean)
+          );
+        }
+      } catch {
+        // table may not exist, ignore
+      }
+    }
+
+    setProfileSupabasePosts(
+      uniquePosts(collected).sort((a: any, b: any) => getPostTime(b) - getPostTime(a))
+    );
   }, [profilePostUserId, normalizeProfilePostFromRow]);
 
   const refreshProfilePosts = useCallback(async () => {
@@ -779,17 +992,32 @@ export default function ProfilePage() {
             postBelongsToProfile(row, profilePostUserId) ||
             cleanString(row?.user_id) === profilePostUserId ||
             cleanString(row?.author_id) === profilePostUserId ||
-            cleanString(row?.profile_id) === profilePostUserId;
+            cleanString(row?.profile_id) === profilePostUserId ||
+            cleanString(row?.reposted_by) === profilePostUserId ||
+            cleanString(row?.reposted_by_id) === profilePostUserId ||
+            cleanString(row?.shared_by) === profilePostUserId ||
+            cleanString(row?.shared_by_id) === profilePostUserId;
 
           if (changedForProfile || !row?.id) {
             refresh();
           }
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'post_reposts' },
+        () => refresh()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reposts' },
+        () => refresh()
+      )
       .subscribe();
 
     window.addEventListener('focus', refresh);
     window.addEventListener('facemex:post-created', refresh);
+    window.addEventListener('facemex:post-reposted', refresh);
     window.addEventListener('facemex:posts-updated', refresh);
     window.addEventListener('facemex:feed-refresh', refresh);
 
@@ -797,6 +1025,7 @@ export default function ProfilePage() {
       supabase.removeChannel(channel);
       window.removeEventListener('focus', refresh);
       window.removeEventListener('facemex:post-created', refresh);
+      window.removeEventListener('facemex:post-reposted', refresh);
       window.removeEventListener('facemex:posts-updated', refresh);
       window.removeEventListener('facemex:feed-refresh', refresh);
     };
@@ -821,9 +1050,12 @@ export default function ProfilePage() {
   const userPosts = useMemo(() => {
     if (!profilePostUserId) return [];
 
-    const storePosts = posts.filter((post: any) =>
-      postBelongsToProfile(post, profilePostUserId)
-    );
+    const storePosts = posts
+      .filter((post: any) => postBelongsToProfile(post, profilePostUserId))
+      .map((post: any) => normalizeProfilePostFromRow(post, {
+        isRepost: isRepostByProfile(post, profilePostUserId),
+        repostedBy: isRepostByProfile(post, profilePostUserId) ? profilePostUserId : undefined,
+      }));
 
     const combined = uniquePosts([
       ...profileSupabasePosts,
@@ -831,7 +1063,12 @@ export default function ProfilePage() {
     ]);
 
     return combined.sort((a: any, b: any) => getPostTime(b) - getPostTime(a));
-  }, [posts, profilePostUserId, profileSupabasePosts]);
+  }, [
+    posts,
+    profilePostUserId,
+    profileSupabasePosts,
+    normalizeProfilePostFromRow,
+  ]);
 
   const loadProfileRelationships = async () => {
     if (!profilePostUserId) return;
@@ -1354,6 +1591,7 @@ export default function ProfilePage() {
                     </h1>
 
                     {isProfileVerified && <PremiumVerifiedBadge />}
+                    {isProfileVerified && <PremiumVerifiedIcon />}
 
                     {profileTier !== 'free' && (
                       <Badge variant="secondary" className="ml-1">
@@ -1734,7 +1972,7 @@ export default function ProfilePage() {
               <div>
                 <h2 className="text-sm font-semibold">Recent posts</h2>
                 <p className="text-xs text-muted-foreground">
-                  Newest posts load first.
+                  New posts and reposts load first.
                 </p>
               </div>
 
@@ -1746,7 +1984,11 @@ export default function ProfilePage() {
                 onClick={refreshProfilePosts}
                 disabled={postsRefreshing}
               >
-                <RefreshCw className={`h-4 w-4 mr-2 ${postsRefreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`h-4 w-4 mr-2 ${
+                    postsRefreshing ? 'animate-spin' : ''
+                  }`}
+                />
                 Refresh
               </Button>
             </div>
@@ -1923,6 +2165,7 @@ export default function ProfilePage() {
                                         : ''
                                     }${experience.end || ''}`}
                                 </div>
+
                                 {experience.summary && (
                                   <div className="text-xs text-muted-foreground mt-1">
                                     {experience.summary}
@@ -1950,6 +2193,7 @@ export default function ProfilePage() {
                               value={expRole}
                               onChange={(event) => setExpRole(event.target.value)}
                             />
+
                             <Input
                               placeholder="Company"
                               value={expCompany}
@@ -1967,6 +2211,7 @@ export default function ProfilePage() {
                                 setExpStart(event.target.value)
                               }
                             />
+
                             <Input
                               placeholder="End"
                               value={expEnd}
@@ -2015,6 +2260,7 @@ export default function ProfilePage() {
                                 <div className="font-medium text-sm">
                                   {education.institution || 'Institution'}
                                 </div>
+
                                 <div className="text-xs text-muted-foreground">
                                   {education.degree || 'Degree'}
                                   {education.field
@@ -2059,6 +2305,7 @@ export default function ProfilePage() {
                                 setEduDegree(event.target.value)
                               }
                             />
+
                             <Input
                               placeholder="Field"
                               value={eduField}
@@ -2076,6 +2323,7 @@ export default function ProfilePage() {
                                 setEduStart(event.target.value)
                               }
                             />
+
                             <Input
                               placeholder="End"
                               value={eduEnd}
@@ -2175,6 +2423,7 @@ export default function ProfilePage() {
                             <FileText className="h-4 w-4 text-muted-foreground" />
                             <span>Professional summary</span>
                           </h3>
+
                           <p className="text-xs text-muted-foreground">
                             A short summary visitors can see on your profile.
                           </p>
@@ -2255,6 +2504,7 @@ export default function ProfilePage() {
                           <h3 className="font-semibold mb-1">
                             Open to creative collabs
                           </h3>
+
                           <p className="text-xs text-muted-foreground">
                             Signal interest in collaborations and projects.
                           </p>
