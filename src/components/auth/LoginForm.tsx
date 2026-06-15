@@ -100,7 +100,7 @@ export default function LoginForm() {
         return;
       }
 
-      window.location.assign('/feed');
+      window.location.assign('/career-ai');
     } catch (error) {
       const code = (error as Error)?.message || '';
 
