@@ -10,6 +10,7 @@ import EmotionAIPage from './pages/EmotionAIPage';
 import FeedPage from './pages/FeedPage';
 import WatchPage from './pages/WatchPage';
 import ProfilePage from './pages/ProfilePage';
+import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import MessagesPage from './pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
 import VirtualWorldsPage from './pages/VirtualWorldsPage';
@@ -128,6 +129,7 @@ function App() {
         <Route path="/screenshot-policy" element={<ScreenshotPolicy />} />
         <Route path="/community-rules" element={<CommunityRules />} />
         <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />  
 
         <Route
           path="/recruiter-portal"
