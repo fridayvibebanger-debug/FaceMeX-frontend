@@ -111,12 +111,14 @@ const AI_COVER_LETTER_PATH = '/ai/cover-letter';
 const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
 
 const JOBS_BATCH_SIZE = 10;
-
 const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
 
 const BUILD_CV_QUICK_ACTION = '__OPEN_FACEMEX_AI_CV_BUILDER__';
 const COVER_LETTER_QUICK_ACTION = '__OPEN_FACEMEX_COVER_LETTER_AI__';
 const TRACK_APPLICATIONS_QUICK_ACTION = '__OPEN_FACEMEX_JOB_TRACKER__';
+
+const NO_EXPERIENCE_SEARCH_KEYWORD =
+  'no experience entry level general worker cleaner packer cashier store assistant learnership internship';
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
@@ -483,6 +485,7 @@ Style:
 When users ask for jobs:
 - Understand the user's intent first.
 - If they ask generally, search "jobs".
+- If they ask for no experience, entry level, first job, or training provided, search beginner-friendly jobs only.
 - If they ask for security, search "security".
 - If they ask for cashier, search "cashier".
 - If they ask for driver, search "driver".
@@ -576,7 +579,6 @@ const applySheetTools: ApplySheetTool[] = [
 
 function clean(value: unknown) {
   if (value === null || value === undefined) return '';
-
   if (typeof value === 'string') return value.trim();
 
   if (typeof value === 'number' || typeof value === 'boolean') {
@@ -604,6 +606,22 @@ function clean(value: unknown) {
 function includesAny(value: string, list: string[]) {
   const text = clean(value).toLowerCase();
   return list.some((item) => text.includes(item.toLowerCase()));
+}
+
+function isNoExperienceSearchKeyword(keyword: string) {
+  const q = clean(keyword).toLowerCase();
+
+  return /(no experience|without experience|no previous experience|no prior experience|entry level|first job|beginner|training provided|grade 10|grade 11|grade 12|matric|learnership|internship)/i.test(
+    q
+  );
+}
+
+function looksLikeNoExperienceJob(job: LocalVerifiedJob) {
+  const text = jobText(job);
+
+  return /(no experience|without experience|no previous experience|no prior experience|entry level|training provided|full training|first job|beginner|junior|trainee|learner|learnership|internship|graduate|general worker|general assistant|cleaner|cleaning|housekeeping|packer|picker|cashier|store assistant|shop assistant|retail assistant|merchandiser|promoter|crew|waiter|waitress|griller|kitchen assistant|kitchen staff|grade 10|grade 11|grade 12|matric)/i.test(
+    text
+  );
 }
 
 function getUserDisplayName(store: any) {
@@ -724,7 +742,7 @@ function normalizeUssdCodes(text: string) {
 }
 
 function hasJobSearchWords(text: string) {
-  return /(job|jobs|vacancy|vacancies|hiring|learnership|internship|employment|apply for work|looking for work|looking for a job|work opportunity|career opportunity|available posts|post available|position available|cashier|packer|clerk|security|general worker|driver|drivers|admin job|cleaner job|retail job|store assistant|teacher job|creche job|crèche job)/i.test(
+  return /(job|jobs|vacancy|vacancies|hiring|learnership|internship|employment|apply for work|looking for work|looking for a job|work opportunity|career opportunity|available posts|post available|position available|cashier|packer|clerk|security|general worker|driver|drivers|admin job|cleaner job|retail job|store assistant|teacher job|creche job|crèche job|no experience|entry level|first job|training provided)/i.test(
     text
   );
 }
@@ -852,6 +870,10 @@ function extractKeywordFromPrompt(text: string) {
   const original = clean(text).toLowerCase();
   const t = stripAreasFromText(text);
 
+  if (/(no experience|without experience|no previous experience|no prior experience|entry level|first job|beginner|training provided|grade 10|grade 11|grade 12|matric)/i.test(t)) {
+    return NO_EXPERIENCE_SEARCH_KEYWORD;
+  }
+
   if (/(security|guard|armed response|protection)/i.test(t)) {
     return 'security';
   }
@@ -939,6 +961,7 @@ function extractKeywordFromPrompt(text: string) {
 function getSearchDisplayLabel(keyword: string) {
   const q = clean(keyword).toLowerCase();
 
+  if (isNoExperienceSearchKeyword(q)) return 'no experience jobs';
   if (!q || q === 'jobs' || q === 'job') return 'jobs';
   if (q === 'security') return 'security jobs';
   if (q === 'driver') return 'driver jobs';
@@ -1077,6 +1100,8 @@ function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
   const text = jobText(job);
 
   if (!q || q === 'jobs' || q === 'job') return true;
+
+  if (isNoExperienceSearchKeyword(q)) return looksLikeNoExperienceJob(job);
 
   if (q.includes('security')) return /(security|guard|armed|protection|response)/i.test(text);
   if (q.includes('driver')) return /(driver|drivers|code 10|code 14|pdp|truck|delivery|courier|transport|fleet|vehicle)/i.test(text);
@@ -2181,6 +2206,77 @@ export default function AIJobAssistantPage() {
     });
   };
 
+  const filterNoExperienceJobsForMessage = async (message: ChatMessage) => {
+    const searchArea = message.jobSearchArea || 'Tzaneen';
+    const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
+
+    setBusy(true);
+
+    try {
+      const liveJobs = await loadAutomaticJobs({
+        query: NO_EXPERIENCE_SEARCH_KEYWORD,
+        area: searchArea,
+        silent: true,
+      });
+
+      const liveFiltered = liveJobs
+        .filter((job) => !job.isSourceCard)
+        .filter((job) => looksLikeNoExperienceJob(job));
+
+      const existingFiltered = (message.jobs || [])
+        .filter((job) => !job.isSourceCard)
+        .filter((job) => looksLikeNoExperienceJob(job));
+
+      const finalJobs = dedupeJobs(liveFiltered.length ? liveFiltered : existingFiltered);
+      const content = finalJobs.length
+        ? `${finalJobs.length} no experience jobs found ${areaLabel}`
+        : `No clear local no experience jobs found ${areaLabel}`;
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === message.id
+            ? {
+                ...item,
+                content,
+                jobs: finalJobs.length ? finalJobs : undefined,
+                jobSearchArea: searchArea,
+                jobSearchQuery: NO_EXPERIENCE_SEARCH_KEYWORD,
+              }
+            : item
+        )
+      );
+
+      setJobVisibleCounts((prev) => ({
+        ...prev,
+        [message.id]: JOBS_BATCH_SIZE,
+      }));
+
+      toast({
+        title: finalJobs.length ? 'Filtered' : 'No beginner jobs found',
+        description: finalJobs.length
+          ? `Showing no experience jobs around ${searchArea}.`
+          : `No clear no experience jobs found around ${searchArea} right now.`,
+      });
+
+      trackButtonClick('workspace_filter_no_experience_jobs', undefined, {
+        message_id: message.id,
+        total_jobs_before: message.jobs?.length || 0,
+        total_jobs_after: finalJobs.length,
+        area: searchArea,
+      });
+    } catch (error: any) {
+      trackError('workspace_no_experience_filter_failed', error?.message || 'Could not filter no experience jobs.');
+
+      toast({
+        title: 'Filter failed',
+        description: 'Could not filter no experience jobs right now.',
+        variant: 'destructive',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const clearWorkspaceFromScratch = () => {
     setMessages([]);
     setPrompt('');
@@ -2286,7 +2382,10 @@ Respond based on the previous question/task. Do not ask what the user means if t
         const area = extractAreaFromPrompt(finalPrompt);
         const keyword = extractKeywordFromPrompt(finalPrompt);
         const jobs = await loadAutomaticJobs({ query: keyword || 'jobs', area });
-        const answer = buildJobsAnswer(jobs, area, keyword || 'jobs');
+        const exactJobs = jobs.filter((job) => !job.isSourceCard);
+        const shouldHideSourceCards = isNoExperienceSearchKeyword(keyword || 'jobs');
+        const finalJobs = shouldHideSourceCards ? exactJobs : jobs;
+        const answer = buildJobsAnswer(finalJobs, area, keyword || 'jobs');
 
         setMessages((prev) => [
           ...prev,
@@ -2297,7 +2396,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
             createdAt: new Date().toISOString(),
             savedCategory: suggestedSavedCategory,
             intent,
-            jobs,
+            jobs: finalJobs.length ? finalJobs : undefined,
             jobSearchArea: area,
             jobSearchQuery: keyword || 'jobs',
           },
@@ -2696,7 +2795,8 @@ Apply link: ${job.applyUrl}`;
     const searchArea = message.jobSearchArea || 'Tzaneen';
     const searchQuery = message.jobSearchQuery || 'jobs';
     const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
-    const totalLabel = `${message.jobs.length} jobs found ${areaLabel}`;
+    const searchLabel = getSearchDisplayLabel(searchQuery);
+    const totalLabel = `${message.jobs.length} ${searchLabel} found ${areaLabel}`;
 
     return (
       <div className="space-y-2.5">
@@ -2744,7 +2844,7 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => sendPrompt(`Show jobs in ${searchArea} that do not need experience.`)}
+            onClick={() => filterNoExperienceJobsForMessage(message)}
             className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
           >
             No experience
@@ -4004,7 +4104,7 @@ Apply link: ${job.applyUrl}`;
 
               <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
                 <strong className="block text-sm">FaceMeX rule</strong>
-                Search according to the user’s intent. Generic job search shows all jobs. Security search shows security jobs. Cashier search shows retail jobs. External jobs stay Needs verification.
+                Search according to the user’s intent. Generic job search shows all jobs. Security search shows security jobs. Cashier search shows retail jobs. No experience filters beginner-friendly jobs only. External jobs stay Needs verification.
               </div>
             </div>
           </div>
