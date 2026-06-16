@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
-  Bell,
   Briefcase,
   Building2,
   CalendarDays,
@@ -110,6 +109,8 @@ type ChatMessage = {
 const AI_CV_BUILDER_PATH = '/ai-cv-builder';
 const AI_COVER_LETTER_PATH = '/ai-cover-letter';
 const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
+
+const JOBS_BATCH_SIZE = 10;
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
@@ -902,16 +903,6 @@ function getSearchDisplayLabel(keyword: string) {
   if (q.includes('general worker')) return 'general worker jobs';
 
   return `${keyword} jobs`;
-}
-
-function getJobResultHeadline(keyword: string, areaLabel: string) {
-  const searchLabel = getSearchDisplayLabel(keyword);
-
-  if (searchLabel === 'jobs') {
-    return `Jobs found near ${areaLabel}`;
-  }
-
-  return `${searchLabel} found near ${areaLabel}`;
 }
 
 function normalizeVerificationStatus(value: any): LocalVerifiedJob['verificationStatus'] {
@@ -1853,6 +1844,7 @@ export default function AIJobAssistantPage() {
   const [applySheetOpen, setApplySheetOpen] = useState(false);
   const [applySheetContext, setApplySheetContext] = useState('');
   const [followUpExpanded, setFollowUpExpanded] = useState(false);
+  const [jobVisibleCounts, setJobVisibleCounts] = useState<Record<string, number>>({});
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savedFilter, setSavedFilter] = useState<SavedCategory | 'all'>('all');
@@ -2116,6 +2108,28 @@ export default function AIJobAssistantPage() {
   const openApplySheet = (context: string) => {
     setApplySheetContext(context);
     setApplySheetOpen(true);
+  };
+
+  const showMoreJobsForMessage = (message: ChatMessage) => {
+    const total = message.jobs?.length || 0;
+
+    if (!total) return;
+
+    setJobVisibleCounts((prev) => {
+      const current = prev[message.id] || JOBS_BATCH_SIZE;
+      const next = Math.min(total, current + JOBS_BATCH_SIZE);
+
+      return {
+        ...prev,
+        [message.id]: next,
+      };
+    });
+
+    trackButtonClick('workspace_show_more_jobs', undefined, {
+      message_id: message.id,
+      total_jobs: total,
+      batch_size: JOBS_BATCH_SIZE,
+    });
   };
 
   const sendPrompt = async (overridePrompt?: string) => {
@@ -2550,7 +2564,10 @@ Apply link: ${job.applyUrl}`;
   const renderAssistantJobCards = (message: ChatMessage) => {
     if (!message.jobs?.length) return null;
 
-    const jobsToShow = message.jobs.slice(0, 20);
+    const visibleLimit = jobVisibleCounts[message.id] || JOBS_BATCH_SIZE;
+    const jobsToShow = message.jobs.slice(0, visibleLimit);
+    const remainingJobs = Math.max(0, message.jobs.length - jobsToShow.length);
+
     const searchArea = message.jobSearchArea || 'Tzaneen';
     const searchQuery = message.jobSearchQuery || 'jobs';
     const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
@@ -2586,13 +2603,19 @@ Apply link: ${job.applyUrl}`;
         ))}
 
         <div className="flex flex-wrap gap-2 rounded-2xl bg-slate-100 px-3 py-3 dark:bg-white/[0.06]">
-          <button
-            type="button"
-            onClick={() => sendPrompt(`Show me more ${getSearchDisplayLabel(searchQuery)} around ${searchArea}.`)}
-            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
-          >
-            More jobs
-          </button>
+          {remainingJobs > 0 ? (
+            <button
+              type="button"
+              onClick={() => showMoreJobsForMessage(message)}
+              className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
+            >
+              More jobs ({remainingJobs})
+            </button>
+          ) : (
+            <span className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-400 shadow-sm dark:bg-white/[0.08] dark:text-white/40">
+              All jobs shown
+            </span>
+          )}
 
           <button
             type="button"
@@ -2623,9 +2646,9 @@ Apply link: ${job.applyUrl}`;
           </button>
         </div>
 
-        {message.jobs.length > 20 && (
+        {remainingJobs === 0 && message.jobs.length > JOBS_BATCH_SIZE && (
           <div className="rounded-2xl bg-slate-100 px-4 py-3 text-xs text-slate-500 dark:bg-white/[0.06] dark:text-white/50">
-            Showing first 20 results. Search a specific role like “security job in Letsitele” to narrow it down.
+            You have reached the end of these results. Try a specific search like “security job in Letsitele” or “driver job in Tzaneen”.
           </div>
         )}
       </div>
