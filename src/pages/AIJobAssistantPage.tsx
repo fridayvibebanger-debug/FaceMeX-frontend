@@ -9,6 +9,7 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock,
   Copy,
@@ -520,6 +521,33 @@ const quickPrompts = [
     label: 'Business',
     prompt:
       'Help me think through a business idea and give me practical steps.',
+  },
+];
+
+const applySheetTools = [
+  {
+    label: 'Apply Assistant',
+    icon: Send,
+    prompt:
+      'Use Apply Assistant. Help me choose the best job, verify it, prepare my documents, and tell me exactly what to do next.',
+  },
+  {
+    label: 'Build CV',
+    icon: FileText,
+    prompt:
+      'Help me build or improve my CV for this job. Ask me for my experience, education, skills, and contact details.',
+  },
+  {
+    label: 'Cover Letter',
+    icon: FileText,
+    prompt:
+      'Write a short, professional cover letter for the job I want to apply for. Make it simple and strong.',
+  },
+  {
+    label: 'Write Email',
+    icon: Mail,
+    prompt:
+      'Write a professional email I can send with my CV for this job. Keep it short, polite, and convincing.',
   },
 ];
 
@@ -1669,6 +1697,136 @@ function WelcomeHero({
   );
 }
 
+function CompactAssistantJobCard({
+  job,
+  onOpen,
+  onVerify,
+  onSave,
+}: {
+  job: LocalVerifiedJob;
+  onOpen: () => void;
+  onVerify: () => void;
+  onSave: () => void;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const deadlineInfo = getDeadlineInfo(job.deadline);
+  const disabled = job.verificationStatus === 'avoid' || deadlineInfo.expired;
+
+  return (
+    <div className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.045]">
+      <div className="min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="line-clamp-1 text-[15px] font-semibold leading-tight text-slate-950 dark:text-white">
+              {job.title}
+            </h3>
+
+            <p className="mt-0.5 line-clamp-1 text-xs font-medium text-slate-600 dark:text-white/60">
+              {job.company}
+            </p>
+          </div>
+
+          {job.verificationStatus === 'verified' ? (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+          ) : job.verificationStatus === 'avoid' ? (
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+          ) : (
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+          )}
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-slate-500 dark:text-white/50">
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            <span className="max-w-[150px] truncate">{job.area}</span>
+          </span>
+
+          <span
+            className={`inline-flex items-center gap-1 ${
+              job.verificationStatus === 'avoid'
+                ? 'text-red-600'
+                : job.verificationStatus === 'verified'
+                  ? 'text-emerald-600'
+                  : 'text-blue-600'
+            }`}
+          >
+            {verificationStatusLabel(job.verificationStatus)}
+          </span>
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {job.category && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-white/[0.08] dark:text-white/60">
+              {job.category}
+            </span>
+          )}
+
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-white/[0.08] dark:text-white/60">
+            {job.sourceLabel}
+          </span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onOpen}
+            disabled={disabled}
+            className="h-9 rounded-xl text-xs"
+          >
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+            {deadlineInfo.expired ? 'Closed' : 'Open'}
+          </Button>
+
+          <Button size="sm" variant="outline" onClick={onVerify} className="h-9 rounded-xl text-xs">
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Verify
+          </Button>
+
+          <Button size="sm" variant="outline" onClick={onSave} className="h-9 rounded-xl text-xs">
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            Save
+          </Button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((value) => !value)}
+          className="mt-2 flex w-full items-center justify-between rounded-xl px-1 py-1 text-[12px] font-semibold text-slate-500 transition hover:text-slate-800 dark:text-white/50 dark:hover:text-white"
+        >
+          <span>More details</span>
+          {detailsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+
+        {detailsOpen && (
+          <div className="mt-2 rounded-xl bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600 dark:bg-white/[0.06] dark:text-white/60">
+            <p>
+              <span className="font-semibold text-slate-800 dark:text-white">Closing date:</span>{' '}
+              {deadlineInfo.label}
+            </p>
+
+            {job.salary && (
+              <p>
+                <span className="font-semibold text-slate-800 dark:text-white">Salary:</span> {job.salary}
+              </p>
+            )}
+
+            {job.description && (
+              <p>
+                <span className="font-semibold text-slate-800 dark:text-white">Details:</span> {job.description}
+              </p>
+            )}
+
+            <p>
+              <span className="font-semibold text-slate-800 dark:text-white">Source:</span> {job.sourceLabel}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AIJobAssistantPage() {
   const navigate = useNavigate();
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -1692,6 +1850,9 @@ export default function AIJobAssistantPage() {
   const [busy, setBusy] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+  const [applySheetOpen, setApplySheetOpen] = useState(false);
+  const [applySheetContext, setApplySheetContext] = useState('');
+  const [followUpExpanded, setFollowUpExpanded] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savedFilter, setSavedFilter] = useState<SavedCategory | 'all'>('all');
@@ -1710,6 +1871,10 @@ export default function AIJobAssistantPage() {
   const chatMessages = useMemo(() => {
     return messages.filter((message) => !message.deletedFromChat);
   }, [messages]);
+
+  const hasJobResultsOnScreen = useMemo(() => {
+    return chatMessages.some((message) => message.role === 'assistant' && Boolean(message.jobs?.length));
+  }, [chatMessages]);
 
   const savedMessages = useMemo(() => {
     return messages.filter((message) => message.saved && message.savedCategory);
@@ -1878,22 +2043,14 @@ export default function AIJobAssistantPage() {
     const exactJobs = jobs.filter((job) => !job.isSourceCard);
     const sourceCards = jobs.filter((job) => job.isSourceCard);
     const count = exactJobs.length || sourceCards.length;
-    const areaLabel = isBroadSearchArea(areaText) ? areaText : `${areaText} / nearby Limpopo areas`;
-    const headline = getJobResultHeadline(queryText, areaLabel);
+    const areaLabel = isBroadSearchArea(areaText) ? areaText : `${areaText} • Limpopo`;
+    const searchLabel = getSearchDisplayLabel(queryText);
 
     if (exactJobs.length) {
-      return `**${headline}**
-
-I found ${count} relevant result${count === 1 ? '' : 's'}. Open the job source to apply.
-
-**Safety tip:** External jobs are marked **Needs verification**. Check the company source and never pay money to apply.`;
+      return `${count} ${searchLabel} found ${areaLabel}`;
     }
 
-    return `**No clear local ${getSearchDisplayLabel(queryText)} found for ${areaText} right now**
-
-I filtered out jobs that look far from ${areaText}, so I’m not showing unrelated places like Gauteng or Johannesburg.
-
-You can still check the verified official source pages below, or try nearby areas like **Tzaneen**, **Polokwane**, **Phalaborwa**, or **Hoedspruit**.`;
+    return `No clear local ${searchLabel} found ${areaLabel}`;
   };
 
   const handlePickImages = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1956,6 +2113,11 @@ You can still check the verified official source pages below, or try nearby area
     setSelectedImages([]);
   };
 
+  const openApplySheet = (context: string) => {
+    setApplySheetContext(context);
+    setApplySheetOpen(true);
+  };
+
   const sendPrompt = async (overridePrompt?: string) => {
     const cleanPrompt = clean(overridePrompt || prompt);
     const attachedImages = selectedImages;
@@ -1997,6 +2159,7 @@ Respond based on the previous question/task. Do not ask what the user means if t
     setMessages((prev) => [...prev, userMessage]);
     setPrompt('');
     setSelectedImages([]);
+    setFollowUpExpanded(false);
     setBusy(true);
 
     trackWorkspacePrompt({
@@ -2305,6 +2468,7 @@ Apply link: ${job.applyUrl}`;
 
   const researchMessage = (message: ChatMessage) => {
     setPrompt(`Research this deeper and give me a stronger practical answer:\n\n${message.content}`);
+    setFollowUpExpanded(true);
   };
 
   const clearSavedItems = () => {
@@ -2389,123 +2553,37 @@ Apply link: ${job.applyUrl}`;
     const jobsToShow = message.jobs.slice(0, 20);
     const searchArea = message.jobSearchArea || 'Tzaneen';
     const searchQuery = message.jobSearchQuery || 'jobs';
+    const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
+    const totalLabel = `${message.jobs.length} jobs found ${areaLabel}`;
 
     return (
-      <div className="my-4 space-y-3">
-        {jobsToShow.map((job, index) => {
-          const deadlineInfo = getDeadlineInfo(job.deadline);
-          const needsVerification = job.verificationStatus === 'needs_verification';
-
-          return (
-            <div
-              key={`${message.id}-${job.id}-${index}`}
-              className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.045]"
-            >
-              <div className="flex gap-3">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-                  {job.verificationStatus === 'verified' ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                  ) : job.verificationStatus === 'avoid' ? (
-                    <AlertTriangle className="h-5 w-5 text-red-500" />
-                  ) : (
-                    <Briefcase className="h-5 w-5 text-slate-500" />
-                  )}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h3 className="line-clamp-2 text-[15px] font-semibold leading-tight text-slate-950 dark:text-white">
-                        {job.title}
-                      </h3>
-                      <p className="mt-1 truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => openOfficialApplyPage(job)}
-                      className="mt-0.5 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
-                      aria-label="Open job"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                  </div>
-
-                  <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{job.area}</span>
-                    </div>
-
-                    <div className={`flex items-center gap-2 ${deadlineInfo.urgent ? 'text-orange-600' : ''}`}>
-                      <Clock className="h-3.5 w-3.5 shrink-0" />
-                      <span>{deadlineInfo.label}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {job.category && (
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600 dark:bg-white/[0.08] dark:text-white/60">
-                        {job.category}
-                      </span>
-                    )}
-
-                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-                      {job.sourceLabel}
-                    </span>
-
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(job.verificationStatus)}`}>
-                      {verificationStatusLabel(job.verificationStatus)}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openOfficialApplyPage(job)}
-                      disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
-                      className="h-9 rounded-xl text-xs"
-                    >
-                      {job.isSourceCard ? (
-                        <Globe2 className="mr-1.5 h-3.5 w-3.5" />
-                      ) : needsVerification ? (
-                        <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                      ) : (
-                        <Send className="mr-1.5 h-3.5 w-3.5" />
-                      )}
-                      {deadlineInfo.expired ? 'Closed' : 'Open'}
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        sendPrompt(
-                          `Verify this job/company before I apply:\n\nJob: ${job.title}\nCompany: ${job.company}\nArea: ${job.area}\nSource: ${job.sourceLabel}\nApply link: ${job.applyUrl}`
-                        )
-                      }
-                      className="h-9 rounded-xl text-xs"
-                    >
-                      <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                      Verify
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => saveLocalJob(job)}
-                      className="h-9 rounded-xl text-xs"
-                    >
-                      <Save className="mr-1.5 h-3.5 w-3.5" />
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              </div>
+      <div className="space-y-2.5">
+        <div className="sticky top-0 z-10 rounded-2xl border border-black/5 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#171717]/95">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Briefcase className="h-4 w-4 shrink-0 text-slate-600 dark:text-white/60" />
+              <p className="truncate text-[13px] font-semibold text-slate-950 dark:text-white">
+                {totalLabel}
+              </p>
             </div>
-          );
-        })}
+
+            {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+          </div>
+        </div>
+
+        {jobsToShow.map((job, index) => (
+          <CompactAssistantJobCard
+            key={`${message.id}-${job.id}-${index}`}
+            job={job}
+            onOpen={() => openOfficialApplyPage(job)}
+            onVerify={() =>
+              sendPrompt(
+                `Verify this job/company before I apply:\n\nJob: ${job.title}\nCompany: ${job.company}\nArea: ${job.area}\nSource: ${job.sourceLabel}\nApply link: ${job.applyUrl}\n\nTell me if it looks safe, what red flags to check, and what I must do before sending my CV.`
+              )
+            }
+            onSave={() => saveLocalJob(job)}
+          />
+        ))}
 
         <div className="flex flex-wrap gap-2 rounded-2xl bg-slate-100 px-3 py-3 dark:bg-white/[0.06]">
           <button
@@ -2526,7 +2604,11 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => sendPrompt('Help me apply for one of these jobs. Tell me what to prepare first.')}
+            onClick={() =>
+              openApplySheet(
+                `Help me apply for one of these jobs around ${searchArea}. Search type: ${getSearchDisplayLabel(searchQuery)}.`
+              )
+            }
             className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70"
           >
             Help me apply
@@ -2620,6 +2702,7 @@ Apply link: ${job.applyUrl}`;
 
   const assistantSmartActions = (message: ChatMessage, previousUserText = '') => {
     if (message.role !== 'assistant') return null;
+    if (message.jobs?.length) return null;
 
     const canApply = shouldShowApplyActions(message.content, previousUserText);
     const isGovernment = shouldShowGovernmentSourceAction(message.content, previousUserText);
@@ -2659,26 +2742,6 @@ Apply link: ${job.applyUrl}`;
           <Button
             size="sm"
             variant="outline"
-            onClick={openCvBuilder}
-            className="h-10 rounded-xl text-xs"
-          >
-            <FileText className="mr-2 h-3.5 w-3.5" />
-            Build CV
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={openCoverLetterBuilder}
-            className="h-10 rounded-xl text-xs"
-          >
-            <Mail className="mr-2 h-3.5 w-3.5" />
-            Cover Letter
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
             onClick={() => copyText(message.content)}
             className="h-10 rounded-xl text-xs"
           >
@@ -2693,7 +2756,7 @@ Apply link: ${job.applyUrl}`;
             className="h-10 rounded-xl text-xs"
           >
             <Save className="mr-2 h-3.5 w-3.5" />
-            Save CV Tips
+            Save Tips
           </Button>
         </div>
       );
@@ -2702,77 +2765,15 @@ Apply link: ${job.applyUrl}`;
     if (!canApply) return null;
 
     return (
-      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
+      <div className="mt-3 border-t border-black/5 pt-3 dark:border-white/10">
         <Button
           size="sm"
           variant="outline"
-          onClick={() =>
-            sendPrompt(
-              `Use Apply Assistant for this opportunity. Guide me step by step: verify the source, prepare my CV, write the application email or WhatsApp, and remind me about the closing date:\n\n${message.content}`
-            )
-          }
-          className="h-10 rounded-xl text-xs"
+          onClick={() => openApplySheet(message.content)}
+          className="h-10 w-full rounded-xl text-xs"
         >
           <Send className="mr-2 h-3.5 w-3.5" />
-          Apply Assistant
-        </Button>
-
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            sendPrompt(
-              `Verify this job/company deeper. Check official website, company location, contact person, email domain, LinkedIn/company page, and scam signs:\n\n${message.content}`
-            )
-          }
-          className="h-10 rounded-xl text-xs"
-        >
-          <Building2 className="mr-2 h-3.5 w-3.5" />
-          Verify Company
-        </Button>
-
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            sendPrompt(
-              `Write a professional application email and WhatsApp message for this opportunity. Keep it clean, short, and copy-ready:\n\n${message.content}`
-            )
-          }
-          className="h-10 rounded-xl text-xs"
-        >
-          <Mail className="mr-2 h-3.5 w-3.5" />
-          Write Email
-        </Button>
-
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={openCvBuilder}
-          className="h-10 rounded-xl text-xs"
-        >
-          <FileText className="mr-2 h-3.5 w-3.5" />
-          Build CV
-        </Button>
-
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={openCoverLetterBuilder}
-          className="h-10 rounded-xl text-xs"
-        >
-          <Mail className="mr-2 h-3.5 w-3.5" />
-          Cover Letter
-        </Button>
-
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => saveMessageAs(message.id, 'career_plan')}
-          className="h-10 rounded-xl text-xs"
-        >
-          <Save className="mr-2 h-3.5 w-3.5" />
-          Save Job
+          Help me apply
         </Button>
       </div>
     );
@@ -3090,6 +3091,8 @@ Apply link: ${job.applyUrl}`;
                     .reverse()
                     .find((item) => item.role === 'user')?.content || '';
 
+                const isJobResultsMessage = message.role === 'assistant' && Boolean(message.jobs?.length);
+
                 return (
                   <div
                     key={message.id}
@@ -3101,7 +3104,9 @@ Apply link: ${job.applyUrl}`;
                       className={`rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:rounded-[24px] ${
                         message.role === 'user'
                           ? 'max-w-[88%] bg-slate-950 text-white dark:bg-white dark:text-black sm:max-w-[82%]'
-                          : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
+                          : isJobResultsMessage
+                            ? 'w-full max-w-full bg-transparent px-0 py-0 shadow-none'
+                            : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -3123,15 +3128,18 @@ Apply link: ${job.applyUrl}`;
                           </div>
                         </div>
                       ) : (
-                        <div className={message.role === 'assistant' ? 'max-h-[58vh] overflow-y-auto pr-1' : ''}>
+                        <div className={message.role === 'assistant' && !isJobResultsMessage ? 'max-h-[58vh] overflow-y-auto pr-1' : ''}>
                           {renderMessageImages(message.images)}
 
                           {message.role === 'assistant' && renderJobSummaryCard(message, previousUserText)}
 
                           {message.role === 'assistant' ? (
                             <>
-                              <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
-                              {renderAssistantJobCards(message)}
+                              {isJobResultsMessage ? (
+                                renderAssistantJobCards(message)
+                              ) : (
+                                <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
+                              )}
                             </>
                           ) : (
                             <div className="whitespace-pre-wrap break-words">{normalizeUssdCodes(message.content)}</div>
@@ -3139,8 +3147,8 @@ Apply link: ${job.applyUrl}`;
                         </div>
                       )}
 
-                      {editingMessageId !== message.id && assistantSmartActions(message, previousUserText)}
-                      {editingMessageId !== message.id && messageActions(message)}
+                      {!isJobResultsMessage && editingMessageId !== message.id && assistantSmartActions(message, previousUserText)}
+                      {!isJobResultsMessage && editingMessageId !== message.id && messageActions(message)}
                     </div>
                   </div>
                 );
@@ -3180,64 +3188,121 @@ Apply link: ${job.applyUrl}`;
                 </div>
               )}
 
-              <div className="rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717] sm:rounded-[24px]">
-                <Textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={`Ask me anything, ${firstName}...`}
-                  className="max-h-28 min-h-[48px] resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:max-h-32 sm:min-h-[52px]"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendPrompt();
-                    }
-                  }}
-                />
+              {hasJobResultsOnScreen && !followUpExpanded && selectedImages.length === 0 && !prompt.trim() ? (
+                <div className="flex items-center gap-2 rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717]">
+                  <button
+                    type="button"
+                    onClick={() => setFollowUpExpanded(true)}
+                    className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl bg-slate-100 px-3 text-left text-sm font-medium text-slate-500 dark:bg-white/[0.08] dark:text-white/50"
+                  >
+                    <Search className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Ask a follow-up...</span>
+                  </button>
 
-                <div className="flex items-center justify-between gap-2 border-t border-black/5 px-1 pt-2 dark:border-white/10">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => imageInputRef.current?.click()}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/[0.08] dark:text-white"
-                      aria-label="Upload image"
-                    >
-                      <ImagePlus className="h-4 w-4" />
-                    </button>
-
-                    <div className="min-w-0 text-[11px] text-slate-500 dark:text-white/45">
-                      <div className="flex min-w-0 items-center gap-1">
-                        <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">Helpful answers. Verify jobs before applying.</span>
-                      </div>
-
-                      {selectedImages.length > 0 && (
-                        <button type="button" onClick={clearSelectedImages} className="font-semibold text-red-500">
-                          Clear images
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/[0.08] dark:text-white"
+                    aria-label="Upload image"
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                  </button>
 
                   <Button
                     onClick={() => sendPrompt()}
-                    disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
-                    className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/90"
+                    disabled
+                    className="h-11 w-11 shrink-0 rounded-2xl bg-slate-950 p-0 text-white disabled:opacity-40 dark:bg-white dark:text-black"
                     aria-label="Send"
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    <Send className="h-4 w-4" />
                   </Button>
-                </div>
 
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={handlePickImages}
-                />
-              </div>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handlePickImages}
+                  />
+                </div>
+              ) : (
+                <div className="rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717] sm:rounded-[24px]">
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onFocus={() => setFollowUpExpanded(true)}
+                    placeholder={hasJobResultsOnScreen ? 'Ask a follow-up...' : `Ask me anything, ${firstName}...`}
+                    className={`resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                      hasJobResultsOnScreen ? 'max-h-24 min-h-[46px]' : 'max-h-28 min-h-[48px] sm:max-h-32 sm:min-h-[52px]'
+                    }`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendPrompt();
+                      }
+                    }}
+                  />
+
+                  <div className="flex items-center justify-between gap-2 border-t border-black/5 px-1 pt-2 dark:border-white/10">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/[0.08] dark:text-white"
+                        aria-label="Upload image"
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                      </button>
+
+                      <div className="min-w-0 text-[11px] text-slate-500 dark:text-white/45">
+                        <div className="flex min-w-0 items-center gap-1">
+                          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">Helpful answers. Verify jobs before applying.</span>
+                        </div>
+
+                        {selectedImages.length > 0 && (
+                          <button type="button" onClick={clearSelectedImages} className="font-semibold text-red-500">
+                            Clear images
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {hasJobResultsOnScreen && followUpExpanded && !prompt.trim() && selectedImages.length === 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setFollowUpExpanded(false)}
+                          className="h-10 w-10 shrink-0 rounded-full p-0"
+                          aria-label="Collapse input"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      <Button
+                        onClick={() => sendPrompt()}
+                        disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
+                        className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/90"
+                        aria-label="Send"
+                      >
+                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handlePickImages}
+                  />
+                </div>
+              )}
 
               {remainingAIUses !== null && (
                 <div className="mt-2 text-center text-[11px] text-slate-400">
@@ -3249,6 +3314,61 @@ Apply link: ${job.applyUrl}`;
         </section>
       </main>
 
+      {applySheetOpen && (
+        <div className="fixed inset-0 z-[90] flex items-end bg-black/40 backdrop-blur-sm" onClick={() => setApplySheetOpen(false)}>
+          <div
+            className="w-full rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20" />
+
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-slate-950 dark:text-white">Help me apply</h2>
+                <p className="truncate text-xs text-slate-500 dark:text-white/50">
+                  Choose what you need now.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setApplySheetOpen(false)}
+                className="h-10 w-10 rounded-full"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {applySheetTools.map((tool) => {
+                const Icon = tool.icon;
+
+                return (
+                  <button
+                    key={tool.label}
+                    type="button"
+                    onClick={() => {
+                      setApplySheetOpen(false);
+                      sendPrompt(`${tool.prompt}\n\nContext:\n${applySheetContext}`);
+                    }}
+                    className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06]"
+                  >
+                    <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70" />
+                    <p className="text-sm font-semibold text-slate-950 dark:text-white">{tool.label}</p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="mt-3 rounded-2xl bg-amber-50 p-3 text-[12px] font-medium leading-5 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+              Safety rule: never pay money to get a job. Verify the company, email domain, official advert, and source before sending documents.
+            </p>
+          </div>
+        </div>
+      )}
+
       {trackerOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setTrackerOpen(false)}>
           <div
@@ -3259,7 +3379,7 @@ Apply link: ${job.applyUrl}`;
               <div>
                 <h2 className="text-base font-semibold">My Job Tracker</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
-                  Saved jobs, reminders, follow-ups
+                  Saved jobs, applied, interviews, rejected, offers
                 </p>
               </div>
 
@@ -3289,6 +3409,24 @@ Apply link: ${job.applyUrl}`;
                   <p className="mt-2 text-[11px] text-slate-500">Interviews</p>
                   <p className="text-xl font-semibold">0</p>
                 </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {[
+                  ['Save Jobs', savedMessages.length],
+                  ['Applied Jobs', 0],
+                  ['Interview Tracker', 0],
+                  ['Rejected Jobs', 0],
+                  ['Offer Received', 0],
+                ].map(([label, count]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]"
+                  >
+                    <p className="text-xs text-slate-500 dark:text-white/50">{label}</p>
+                    <p className="mt-1 text-lg font-semibold">{count}</p>
+                  </div>
+                ))}
               </div>
 
               {closingSoonJob && (
