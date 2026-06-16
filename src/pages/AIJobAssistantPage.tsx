@@ -529,11 +529,11 @@ const quickPrompts = [
     prompt: 'Help me check if this job or opportunity looks fake or risky.',
   },
   {
-    label: 'Interview',
+    label: 'Interview Prep',
     prompt: 'Help me prepare for an interview. Give me questions and strong answers.',
   },
   {
-    label: 'Track applications',
+    label: 'Job Tracker',
     prompt: TRACK_APPLICATIONS_QUICK_ACTION,
   },
 ];
@@ -1695,7 +1695,7 @@ function WelcomeHero({
   }, [typedPrompt, isDeleting, promptIndex, rotatingPrompts]);
 
   return (
-    <div className="mx-auto flex min-h-[45vh] max-w-xl flex-col items-center justify-center text-center">
+    <div className="mx-auto flex min-h-[38vh] max-w-xl flex-col items-center justify-center text-center">
       <div className="fm-treasure-wrap">
         <span className="fm-treasure-ring" />
         <span className="fm-treasure-shadow" />
@@ -1914,6 +1914,8 @@ export default function AIJobAssistantPage() {
   const hasJobResultsOnScreen = useMemo(() => {
     return chatMessages.some((message) => message.role === 'assistant' && Boolean(message.jobs?.length));
   }, [chatMessages]);
+
+  const inputHasContent = prompt.trim().length > 0 || selectedImages.length > 0;
 
   const savedMessages = useMemo(() => {
     return messages.filter((message) => message.saved && message.savedCategory);
@@ -2474,7 +2476,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       setTrackerOpen(true);
 
       toast({
-        title: 'My Job Tracker opened',
+        title: 'Job Tracker opened',
         description: 'Track saved jobs, applied jobs, interviews, rejected jobs, and offers.',
       });
 
@@ -2550,7 +2552,7 @@ Apply link: ${job.applyUrl}`;
       },
     ]);
 
-    toast({ title: 'Saved', description: 'Job saved in My Job Tracker.' });
+    toast({ title: 'Saved', description: 'Job saved in Job Tracker.' });
   };
 
   const removeFromSaved = (id: string) => {
@@ -3247,7 +3249,7 @@ Apply link: ${job.applyUrl}`;
             variant="ghost"
             onClick={() => setTrackerOpen(true)}
             className="h-9 w-9 rounded-full"
-            aria-label="My Job Tracker"
+            aria-label="Job Tracker"
           >
             <Clock className="h-4 w-4" />
           </Button>
@@ -3413,10 +3415,16 @@ Apply link: ${job.applyUrl}`;
                     placeholder={
                       hasJobResultsOnScreen
                         ? 'Ask a follow-up...'
-                        : 'Search jobs, check a job advert, or ask for CV help...'
+                        : 'Search jobs, check advert, or ask CV help...'
                     }
                     className={`resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
-                      hasJobResultsOnScreen ? 'max-h-24 min-h-[46px]' : 'max-h-28 min-h-[48px] sm:max-h-32 sm:min-h-[52px]'
+                      hasJobResultsOnScreen
+                        ? inputHasContent || followUpExpanded
+                          ? 'max-h-24 min-h-[46px]'
+                          : 'h-10 min-h-[40px] max-h-[40px] overflow-hidden'
+                        : inputHasContent
+                          ? 'max-h-28 min-h-[48px] sm:max-h-32 sm:min-h-[52px]'
+                          : 'h-10 min-h-[40px] max-h-[40px] overflow-hidden'
                     }`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -3629,7 +3637,7 @@ Apply link: ${job.applyUrl}`;
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90">
               <div>
-                <h2 className="text-base font-semibold">My Job Tracker</h2>
+                <h2 className="text-base font-semibold">Job Tracker</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
                   Saved jobs, applied, interviews, rejected, offers
                 </p>
