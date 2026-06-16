@@ -112,6 +112,8 @@ const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
 
 const JOBS_BATCH_SIZE = 10;
 
+const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
+
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
   cv_advice: 'CV',
@@ -448,6 +450,16 @@ Main rule:
 - If the user asks for jobs, show job results and job cards.
 - If the user asks a general question after job results, answer the new question directly.
 
+CV and Cover Letter rule:
+- If the user asks about a CV, answer according to the user's exact intent first: create CV, improve CV, review CV, write profile summary, list skills, tailor CV, or fix wording.
+- After helping, instruct them clearly:
+  "To create your CV inside FaceMeX, tap the hamburger menu (☰), scroll down, and open AI CV Builder."
+- If the user asks about a cover letter, answer according to the user's exact intent first: create cover letter, improve cover letter, tailor cover letter, or write an application letter.
+- After helping, instruct them clearly:
+  "To create your cover letter inside FaceMeX, tap the hamburger menu (☰), scroll down, and open Cover Letter AI."
+- Keep the instruction short and practical.
+- Do not force job cards for CV or cover letter requests unless the user also asks for jobs.
+
 Safety rules:
 - Refuse hate, harmful, dangerous, illegal, explicit, or unsafe requests.
 - Do not help with scams, violence, exploitation, or harmful instructions.
@@ -536,13 +548,13 @@ const applySheetTools = [
     label: 'Build CV',
     icon: FileText,
     prompt:
-      'Help me build or improve my CV for this job. Ask me for my experience, education, skills, and contact details.',
+      'Help me build or improve my CV for this job. Ask me for my experience, education, skills, and contact details. Also remind me that inside FaceMeX I can tap the hamburger menu, scroll down, and open AI CV Builder.',
   },
   {
     label: 'Cover Letter',
     icon: FileText,
     prompt:
-      'Write a short, professional cover letter for the job I want to apply for. Make it simple and strong.',
+      'Write a short, professional cover letter for the job I want to apply for. Also remind me that inside FaceMeX I can tap the hamburger menu, scroll down, and open Cover Letter AI.',
   },
   {
     label: 'Write Email',
@@ -730,7 +742,11 @@ function detectIntent(text: string, hasImages = false) {
     return 'verify-opportunity';
   }
 
-  if (/(email|mail|cover letter|application email|send cv|send my cv|email cv)/i.test(t)) {
+  if (/(cover letter|application letter|motivation letter)/i.test(t)) {
+    return 'cover-letter';
+  }
+
+  if (/(email|mail|application email|send cv|send my cv|email cv)/i.test(t)) {
     return 'email-application';
   }
 
@@ -764,7 +780,7 @@ function detectIntent(text: string, hasImages = false) {
 function savedCategoryFromIntent(intent: string): SavedCategory {
   if (intent === 'cv-profile') return 'cv_advice';
 
-  if (intent === 'email-application' || intent === 'message-application') {
+  if (intent === 'cover-letter' || intent === 'email-application' || intent === 'message-application') {
     return 'application_message';
   }
 
@@ -780,6 +796,26 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
   }
 
   return 'career_plan';
+}
+
+function addFaceMeXCareerToolInstruction(promptText: string, intent: string) {
+  if (intent === 'cv-profile') {
+    return `${promptText}
+
+FaceMeX instruction:
+After answering the user's CV request, remind them:
+"To create your CV inside FaceMeX, tap the hamburger menu (☰), scroll down, and open AI CV Builder."`;
+  }
+
+  if (intent === 'cover-letter') {
+    return `${promptText}
+
+FaceMeX instruction:
+After answering the user's cover letter request, remind them:
+"To create your cover letter inside FaceMeX, tap the hamburger menu (☰), scroll down, and open Cover Letter AI."`;
+  }
+
+  return promptText;
 }
 
 function extractAreaFromPrompt(text: string) {
@@ -1119,13 +1155,13 @@ function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus'])
 }
 
 function isJobRelatedText(content: string) {
-  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|drivers|admin)/i.test(
+  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|cover letter|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|drivers|admin)/i.test(
     content
   );
 }
 
 function isCvRelatedText(content: string) {
-  return /(cv|resume|cover letter|application letter|profile summary|ats|career profile|work experience|skills section|employment history)/i.test(
+  return /(cv|resume|cover letter|application letter|motivation letter|profile summary|ats|career profile|work experience|skills section|employment history)/i.test(
     content
   );
 }
@@ -1842,6 +1878,7 @@ export default function AIJobAssistantPage() {
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [applySheetOpen, setApplySheetOpen] = useState(false);
+  const [clearWorkspaceOpen, setClearWorkspaceOpen] = useState(false);
   const [applySheetContext, setApplySheetContext] = useState('');
   const [followUpExpanded, setFollowUpExpanded] = useState(false);
   const [jobVisibleCounts, setJobVisibleCounts] = useState<Record<string, number>>({});
@@ -1919,7 +1956,7 @@ export default function AIJobAssistantPage() {
     setDeepSeekUsage(getDeepSeekUsage(currentTier));
 
     try {
-      const rawMessages = localStorage.getItem('facemex_opportunities_workspace_messages');
+      const rawMessages = localStorage.getItem(WORKSPACE_STORAGE_KEY);
       setMessages(rawMessages ? JSON.parse(rawMessages) : []);
     } catch {
       setMessages([]);
@@ -1941,7 +1978,7 @@ export default function AIJobAssistantPage() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('facemex_opportunities_workspace_messages', JSON.stringify(messages));
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(messages));
     } catch {
       // ignore
     }
@@ -2132,6 +2169,37 @@ export default function AIJobAssistantPage() {
     });
   };
 
+  const clearWorkspaceFromScratch = () => {
+    setMessages([]);
+    setPrompt('');
+    setSelectedImages([]);
+    setJobVisibleCounts({});
+    setFollowUpExpanded(false);
+    setEditingMessageId(null);
+    setEditText('');
+    setApplySheetOpen(false);
+    setApplySheetContext('');
+    setJobsOpen(false);
+    setTrackerOpen(false);
+    setClearWorkspaceOpen(false);
+
+    try {
+      localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+
+    trackFeatureUse({
+      feature: 'FaceMeX Career Workspace',
+      action: 'workspace_clear_start_from_scratch',
+    });
+
+    toast({
+      title: 'Started fresh',
+      description: 'Chat and saved tracker items were cleared.',
+    });
+  };
+
   const sendPrompt = async (overridePrompt?: string) => {
     const cleanPrompt = clean(overridePrompt || prompt);
     const attachedImages = selectedImages;
@@ -2146,6 +2214,9 @@ export default function AIJobAssistantPage() {
     const conversationContext = buildConversationContext(messages);
     const shouldUseContext = isShortContextReply(finalPrompt) && conversationContext;
 
+    const intent = detectIntent(finalPrompt, hasImages);
+    const suggestedSavedCategory = savedCategoryFromIntent(intent);
+
     const contextualPrompt = shouldUseContext
       ? `Use the recent conversation to understand this short reply and continue from the last assistant question.
 
@@ -2158,8 +2229,7 @@ ${finalPrompt}
 Respond based on the previous question/task. Do not ask what the user means if the context is clear.`
       : finalPrompt;
 
-    const intent = detectIntent(finalPrompt, hasImages);
-    const suggestedSavedCategory = savedCategoryFromIntent(intent);
+    const aiPromptWithToolDirection = addFaceMeXCareerToolInstruction(contextualPrompt, intent);
 
     const userMessage: ChatMessage = {
       id: safeId(),
@@ -2259,9 +2329,9 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
 `;
 
       const payload = {
-        prompt: contextualPrompt,
-        message: contextualPrompt,
-        question: contextualPrompt,
+        prompt: aiPromptWithToolDirection,
+        message: aiPromptWithToolDirection,
+        question: aiPromptWithToolDirection,
         originalPrompt: finalPrompt,
         conversationContext,
         conversationMessages: messages
@@ -2765,6 +2835,26 @@ Apply link: ${job.applyUrl}`;
           <Button
             size="sm"
             variant="outline"
+            onClick={openCvBuilder}
+            className="h-10 rounded-xl text-xs"
+          >
+            <FileText className="mr-2 h-3.5 w-3.5" />
+            AI CV Builder
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openCoverLetterBuilder}
+            className="h-10 rounded-xl text-xs"
+          >
+            <Mail className="mr-2 h-3.5 w-3.5" />
+            Cover Letter AI
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => copyText(message.content)}
             className="h-10 rounded-xl text-xs"
           >
@@ -3080,6 +3170,16 @@ Apply link: ${job.applyUrl}`;
           <Button
             size="icon"
             variant="ghost"
+            onClick={() => setClearWorkspaceOpen(true)}
+            className="h-9 w-9 rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+            aria-label="Delete and start from scratch"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
             onClick={() => setJobsOpen(true)}
             className="h-9 w-9 rounded-full"
             aria-label="Automatic jobs"
@@ -3336,6 +3436,55 @@ Apply link: ${job.applyUrl}`;
           </footer>
         </section>
       </main>
+
+      {clearWorkspaceOpen && (
+        <div
+          className="fixed inset-0 z-[95] flex items-end bg-black/40 backdrop-blur-sm"
+          onClick={() => setClearWorkspaceOpen(false)}
+        >
+          <div
+            className="w-full rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20" />
+
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
+                <Trash2 className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold text-slate-950 dark:text-white">
+                  Delete and start from scratch?
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-white/55">
+                  This will clear the chat, saved tracker items, selected images, and local chat history on this device.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setClearWorkspaceOpen(false)}
+                className="h-11 rounded-2xl"
+              >
+                Cancel
+              </Button>
+
+              <Button
+                type="button"
+                onClick={clearWorkspaceFromScratch}
+                className="h-11 rounded-2xl bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {applySheetOpen && (
         <div className="fixed inset-0 z-[90] flex items-end bg-black/40 backdrop-blur-sm" onClick={() => setApplySheetOpen(false)}>
