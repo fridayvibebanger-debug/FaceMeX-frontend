@@ -59,6 +59,8 @@ import NotificationsPage from './pages/NotificationsPage';
 import ConnectPage from './pages/ConnectPage';
 import CallPage from './pages/CallPage';
 
+const DEFAULT_AUTHENTICATED_ROUTE = '/ai/job-assistant';
+
 function PublicAuthRoute() {
   const { isAuthenticated, isInitialized } = useAuthStore();
 
@@ -66,7 +68,7 @@ function PublicAuthRoute() {
     return <AuthPage />;
   }
 
-  return isAuthenticated ? <Navigate to="/feed" replace /> : <AuthPage />;
+  return isAuthenticated ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <AuthPage />;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -129,7 +131,7 @@ function App() {
         <Route path="/screenshot-policy" element={<ScreenshotPolicy />} />
         <Route path="/community-rules" element={<CommunityRules />} />
         <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />  
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route
           path="/recruiter-portal"
