@@ -106,24 +106,6 @@ type ChatMessage = {
   jobSearchQuery?: string;
 };
 
-type QuickPromptAction = 'prompt' | 'cv-builder' | 'cover-letter-builder' | 'job-tracker';
-
-type QuickPromptItem = {
-  label: string;
-  description?: string;
-  prompt?: string;
-  action: QuickPromptAction;
-  primary?: boolean;
-  icon: any;
-};
-
-type ApplySheetTool = {
-  label: string;
-  icon: any;
-  action: 'prompt' | 'cv-builder' | 'cover-letter-builder';
-  prompt?: string;
-};
-
 const AI_CV_BUILDER_PATH = '/ai/resume';
 const AI_COVER_LETTER_PATH = '/ai/cover-letter';
 const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
@@ -131,6 +113,10 @@ const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
 const JOBS_BATCH_SIZE = 10;
 
 const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
+
+const BUILD_CV_QUICK_ACTION = '__OPEN_FACEMEX_AI_CV_BUILDER__';
+const COVER_LETTER_QUICK_ACTION = '__OPEN_FACEMEX_COVER_LETTER_AI__';
+const TRACK_APPLICATIONS_QUICK_ACTION = '__OPEN_FACEMEX_JOB_TRACKER__';
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
   career_plan: 'Plan',
@@ -524,72 +510,65 @@ For non-job questions:
 - Do not show Apply Assistant unless the answer is about a job application.
 `;
 
-const quickPrompts: QuickPromptItem[] = [
+const quickPrompts = [
   {
-    label: 'Find jobs in Tzaneen',
-    description: 'Search local jobs now',
-    action: 'prompt',
-    primary: true,
-    icon: Search,
+    label: 'Find jobs',
     prompt:
       'I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.',
   },
   {
     label: 'Build My CV',
-    description: 'Create a winning CV',
-    action: 'cv-builder',
-    icon: FileText,
+    prompt: BUILD_CV_QUICK_ACTION,
   },
   {
-    label: 'Cover Letter',
-    description: 'Write a tailored letter',
-    action: 'cover-letter-builder',
-    icon: Mail,
+    label: 'Cover letter',
+    prompt: COVER_LETTER_QUICK_ACTION,
   },
   {
-    label: 'Check Fake Job',
-    description: 'Verify job adverts',
-    action: 'prompt',
-    icon: ShieldCheck,
+    label: 'Check fake job',
     prompt: 'Help me check if this job or opportunity looks fake or risky.',
   },
   {
-    label: 'Interview Prep',
-    description: 'Practice and get ready',
-    action: 'prompt',
-    icon: Users,
+    label: 'Interview',
     prompt: 'Help me prepare for an interview. Give me questions and strong answers.',
   },
   {
-    label: 'Track Applications',
-    description: 'Saved, applied, interviews',
-    action: 'job-tracker',
-    icon: Clock,
+    label: 'Track applications',
+    prompt: TRACK_APPLICATIONS_QUICK_ACTION,
   },
 ];
+
+type ApplySheetTool = {
+  label: string;
+  icon: any;
+  prompt: string;
+  action?: 'open_cv_builder' | 'open_cover_letter_builder';
+};
 
 const applySheetTools: ApplySheetTool[] = [
   {
     label: 'Apply Assistant',
     icon: Send,
-    action: 'prompt',
     prompt:
       'Use Apply Assistant. Help me choose the best job, verify it, prepare my documents, and tell me exactly what to do next.',
   },
   {
     label: 'Build CV',
     icon: FileText,
-    action: 'cv-builder',
+    action: 'open_cv_builder',
+    prompt:
+      'Open AI CV Builder so the user can create or improve their CV inside FaceMeX.',
   },
   {
     label: 'Cover Letter',
     icon: FileText,
-    action: 'cover-letter-builder',
+    action: 'open_cover_letter_builder',
+    prompt:
+      'Open Cover Letter AI so the user can create a professional cover letter inside FaceMeX.',
   },
   {
     label: 'Write Email',
     icon: Mail,
-    action: 'prompt',
     prompt:
       'Write a professional email I can send with my CV for this job. Keep it short, polite, and convincing.',
   },
@@ -873,13 +852,17 @@ function extractKeywordFromPrompt(text: string) {
   const original = clean(text).toLowerCase();
   const t = stripAreasFromText(text);
 
-  if (/(security|guard|armed response|protection)/i.test(t)) return 'security';
+  if (/(security|guard|armed response|protection)/i.test(t)) {
+    return 'security';
+  }
 
   if (/(cashier|packer|retail|store assistant|shop assistant|shoprite|checkers|usave|clerk)/i.test(t)) {
     return 'cashier retail packer store assistant clerk';
   }
 
-  if (/(driver|drivers|code 10|code 14|pdp|delivery|truck|side tipper)/i.test(t)) return 'driver';
+  if (/(driver|drivers|code 10|code 14|pdp|delivery|truck|side tipper)/i.test(t)) {
+    return 'driver';
+  }
 
   if (/(admin|administrator|administrative|office|receptionist|data capture)/i.test(t)) {
     return 'admin clerk office';
@@ -889,15 +872,21 @@ function extractKeywordFromPrompt(text: string) {
     return 'teacher creche school daycare';
   }
 
-  if (/(cleaner|cleaning|housekeeping)/i.test(t)) return 'cleaner';
+  if (/(cleaner|cleaning|housekeeping)/i.test(t)) {
+    return 'cleaner';
+  }
 
   if (/(farm|agriculture|packhouse|packing|fruit|westfalia|zz2|letaba)/i.test(t)) {
     return 'farm agriculture packhouse packing';
   }
 
-  if (/(learnership|internship|graduate|youth)/i.test(t)) return 'learnership internship';
+  if (/(learnership|internship|graduate|youth)/i.test(t)) {
+    return 'learnership internship';
+  }
 
-  if (/(general worker|general work|general)/i.test(t)) return 'general worker';
+  if (/(general worker|general work|general)/i.test(t)) {
+    return 'general worker';
+  }
 
   if (
     /\b(job|jobs|vacancy|vacancies|work|employment|hiring)\b/i.test(original) &&
@@ -978,7 +967,9 @@ function normalizeSourceType(value: any): SourceCategoryKey {
   if (source.includes('government') || source.includes('municipality') || source.includes('public')) {
     return 'government_public_institution';
   }
-  if (source.includes('community') || source.includes('screenshot')) return 'community_advert_needs_verification';
+  if (source.includes('community') || source.includes('screenshot')) {
+    return 'community_advert_needs_verification';
+  }
   if (source.includes('api') || source.includes('adzuna') || source.includes('external') || source.includes('jooble')) {
     return 'external_job_api';
   }
@@ -994,13 +985,22 @@ function isForeignLookingJob(job: LocalVerifiedJob) {
     return true;
   }
 
-  if (/[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]/.test(text)) return true;
+  if (/[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]/.test(text)) {
+    return true;
+  }
 
   return false;
 }
 
 function jobText(job: LocalVerifiedJob) {
-  return [job.title, job.company, job.area, job.category, job.sourceLabel, job.description]
+  return [
+    job.title,
+    job.company,
+    job.area,
+    job.category,
+    job.sourceLabel,
+    job.description,
+  ]
     .join(' ')
     .toLowerCase();
 }
@@ -1029,7 +1029,9 @@ function isClearlyOutsideRequestedProvince(job: LocalVerifiedJob, requestedArea:
     if (includesAny(text, LIMPOPO_AREAS)) return false;
     if (includesAny(text, OUTSIDE_LIMPOPO_AREAS)) return true;
 
-    if (/south africa/i.test(job.area) && !includesAny(text, LIMPOPO_AREAS)) return true;
+    if (/south africa/i.test(job.area) && !includesAny(text, LIMPOPO_AREAS)) {
+      return true;
+    }
   }
 
   return false;
@@ -1048,7 +1050,9 @@ function jobMatchesRequestedArea(job: LocalVerifiedJob, requestedArea: string) {
     return includesAny(text, GREATER_TZANEEN_AREAS) || includesAny(text, LIMPOPO_AREAS);
   }
 
-  if (isLimpopoSearch(requestedArea)) return includesAny(text, LIMPOPO_AREAS);
+  if (isLimpopoSearch(requestedArea)) {
+    return includesAny(text, LIMPOPO_AREAS);
+  }
 
   return text.includes(requested);
 }
@@ -1088,7 +1092,9 @@ function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
   }
   if (q.includes('cleaner')) return /(cleaner|cleaning|housekeeping)/i.test(text);
   if (q.includes('general worker')) return /(general worker|general assistant|worker|labourer)/i.test(text);
-  if (q.includes('learnership') || q.includes('internship')) return /(learnership|internship|graduate|trainee|youth)/i.test(text);
+  if (q.includes('learnership') || q.includes('internship')) {
+    return /(learnership|internship|graduate|trainee|youth)/i.test(text);
+  }
 
   return q
     .split(/\s+/)
@@ -1115,19 +1121,27 @@ function getDeadlineInfo(deadline?: string | null) {
   const end = new Date(`${deadline}T23:59:59`);
   const now = new Date();
 
-  if (Number.isNaN(end.getTime())) return { label: deadline, expired: false, urgent: false };
+  if (Number.isNaN(end.getTime())) {
+    return { label: deadline, expired: false, urgent: false };
+  }
 
   const diffMs = end.getTime() - now.getTime();
 
-  if (diffMs <= 0) return { label: 'Closed', expired: true, urgent: false };
+  if (diffMs <= 0) {
+    return { label: 'Closed', expired: true, urgent: false };
+  }
 
   const totalHours = Math.ceil(diffMs / (1000 * 60 * 60));
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
 
-  if (days <= 0) return { label: `Closing in ${hours}h`, expired: false, urgent: true };
+  if (days <= 0) {
+    return { label: `Closing in ${hours}h`, expired: false, urgent: true };
+  }
 
-  if (days === 1) return { label: 'Closing in 1 day', expired: false, urgent: true };
+  if (days === 1) {
+    return { label: 'Closing in 1 day', expired: false, urgent: true };
+  }
 
   return { label: `Closing in ${days} days`, expired: false, urgent: days <= 3 };
 }
@@ -1199,7 +1213,9 @@ function extractJobTitle(text: string) {
 }
 
 function extractCompany(text: string) {
-  const companyMatch = text.match(/(?:Company|Employer|Source):\s*(.+)/i) || text.match(/\bMRMS\b/i);
+  const companyMatch =
+    text.match(/(?:Company|Employer|Source):\s*(.+)/i) ||
+    text.match(/\bMRMS\b/i);
 
   if (companyMatch?.[0]?.toUpperCase().includes('MRMS')) return 'MRMS';
 
@@ -1599,7 +1615,9 @@ function buildConversationContext(messages: ChatMessage[]) {
 function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
   const [failed, setFailed] = useState(false);
 
-  if (failed) return <div className={`fm-flow-fallback ${className}`} />;
+  if (failed) {
+    return <div className={`fm-flow-fallback ${className}`} />;
+  }
 
   return (
     <img
@@ -1614,84 +1632,103 @@ function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
 
 function WelcomeHero({
   firstName,
-  onQuickAction,
+  onQuickAsk,
 }: {
   firstName: string;
-  onQuickAction: (item: QuickPromptItem) => void;
+  onQuickAsk: (text: string) => void;
 }) {
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
-  const primaryAction = quickPrompts.find((item) => item.primary);
-  const secondaryActions = quickPrompts.filter((item) => !item.primary);
+
+  const rotatingPrompts = useMemo(
+    () => [
+      `Hi ${displayName}, how can I help you today?`,
+      "Let's start with positive attention.",
+      'Which job are we hunting today?',
+      "Tomorrow starts today. Let's prepare for it.",
+      `Ask me anything, ${displayName}.`,
+    ],
+    [displayName]
+  );
+
+  const [promptIndex, setPromptIndex] = useState(0);
+  const [typedPrompt, setTypedPrompt] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentText = rotatingPrompts[promptIndex];
+
+    const typeSpeed = 95;
+    const deleteSpeed = 58;
+    const pauseAfterTyping = 2800;
+    const pauseBeforeNext = 500;
+
+    let timer: number | undefined;
+
+    if (!isDeleting && typedPrompt.length < currentText.length) {
+      timer = window.setTimeout(() => {
+        setTypedPrompt(currentText.slice(0, typedPrompt.length + 1));
+      }, typeSpeed);
+    }
+
+    if (!isDeleting && typedPrompt.length === currentText.length) {
+      timer = window.setTimeout(() => {
+        setIsDeleting(true);
+      }, pauseAfterTyping);
+    }
+
+    if (isDeleting && typedPrompt.length > 0) {
+      timer = window.setTimeout(() => {
+        setTypedPrompt(currentText.slice(0, typedPrompt.length - 1));
+      }, deleteSpeed);
+    }
+
+    if (isDeleting && typedPrompt.length === 0) {
+      timer = window.setTimeout(() => {
+        setIsDeleting(false);
+        setPromptIndex((prev) => (prev + 1) % rotatingPrompts.length);
+      }, pauseBeforeNext);
+    }
+
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [typedPrompt, isDeleting, promptIndex, rotatingPrompts]);
 
   return (
-    <div className="mx-auto flex min-h-[38vh] max-w-xl flex-col items-center justify-center px-2 text-center">
-      <div className="fm-treasure-wrap fm-treasure-wrap-compact">
+    <div className="mx-auto flex min-h-[45vh] max-w-xl flex-col items-center justify-center text-center">
+      <div className="fm-treasure-wrap">
         <span className="fm-treasure-ring" />
         <span className="fm-treasure-shadow" />
 
-        <div className="fm-treasure-orb fm-treasure-orb-compact">
-          <FaceMeXFlowIcon className="h-[48px] w-[48px]" />
+        <div className="fm-treasure-orb">
+          <FaceMeXFlowIcon className="h-[62px] w-[62px]" />
         </div>
       </div>
 
-      <div className="mt-5 px-4">
-        <h2 className="text-balance text-[24px] font-bold leading-tight tracking-tight text-slate-950 dark:text-white sm:text-[30px]">
-          What job are you looking for today?
+      <div className="mt-7 flex min-h-[78px] items-center justify-center px-4">
+        <h2 className="fm-main-typing-text text-balance font-semibold leading-tight tracking-tight text-slate-950 dark:text-white">
+          {typedPrompt || '\u00A0'}
+          <span className="fm-type-caret" />
         </h2>
-
-        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500 dark:text-white/50">
-          Get expert help with jobs, CVs, interviews, and scam detection in seconds, {displayName}.
-        </p>
       </div>
 
-      {primaryAction && (
-        <button
-          type="button"
-          onClick={() => onQuickAction(primaryAction)}
-          className="mt-5 flex w-full max-w-md items-center justify-center gap-3 rounded-2xl bg-blue-700 px-5 py-4 text-sm font-bold text-white shadow-[0_16px_35px_rgba(29,78,216,0.25)] transition active:scale-[0.98] dark:bg-blue-500"
-        >
-          <Search className="h-5 w-5" />
-          <span>{primaryAction.label}</span>
-          <ChevronRight className="h-5 w-5" />
-        </button>
-      )}
+      <p className="mt-2 max-w-md px-3 text-sm leading-6 text-slate-500 dark:text-white/50">
+        Ask one clear question. Upload a screenshot when checking a job post,
+        CV, advert, or opportunity.
+      </p>
 
-      <div className="mt-4 grid w-full max-w-md grid-cols-2 gap-2">
-        {secondaryActions.map((item, index) => {
-          const Icon = item.icon;
-          const isWide = item.action === 'job-tracker';
-
-          return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => onQuickAction(item)}
-              className={`fm-quick-pill rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm transition duration-300 hover:bg-slate-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.1] ${
-                isWide ? 'col-span-2' : ''
-              }`}
-              style={{ animationDelay: `${index * 35}ms` }}
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 dark:bg-white/[0.08] dark:text-white/70">
-                  <Icon className="h-5 w-5" />
-                </span>
-
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold text-slate-950 dark:text-white">
-                    {item.label}
-                  </span>
-                  {item.description && (
-                    <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-white/50">
-                      {item.description}
-                    </span>
-                  )}
-                </span>
-
-                {isWide && <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />}
-              </div>
-            </button>
-          );
-        })}
+      <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2 px-2">
+        {quickPrompts.map((item, index) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => onQuickAsk(item.prompt)}
+            className="fm-quick-pill rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition duration-300 hover:bg-slate-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
+            style={{ animationDelay: `${index * 35}ms` }}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -2168,8 +2205,8 @@ export default function AIJobAssistantPage() {
     });
 
     toast({
-      title: 'Chat cleared',
-      description: 'You can start fresh now.',
+      title: 'Started fresh',
+      description: 'Chat and saved tracker items were cleared.',
     });
   };
 
@@ -2400,6 +2437,57 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
     }
   };
 
+  const quickAsk = (text: string) => {
+    if (text === BUILD_CV_QUICK_ACTION) {
+      trackButtonClick('workspace_quick_open_cv_builder', undefined, {
+        feature: 'FaceMeX Career Workspace',
+      });
+
+      toast({
+        title: 'Opening AI CV Builder',
+        description: 'Create or improve your CV inside FaceMeX.',
+      });
+
+      navigate(AI_CV_BUILDER_PATH);
+      return;
+    }
+
+    if (text === COVER_LETTER_QUICK_ACTION) {
+      trackButtonClick('workspace_quick_open_cover_letter_ai', undefined, {
+        feature: 'FaceMeX Career Workspace',
+      });
+
+      toast({
+        title: 'Opening Cover Letter AI',
+        description: 'Create a professional cover letter inside FaceMeX.',
+      });
+
+      navigate(AI_COVER_LETTER_PATH);
+      return;
+    }
+
+    if (text === TRACK_APPLICATIONS_QUICK_ACTION) {
+      trackButtonClick('workspace_quick_open_job_tracker', undefined, {
+        feature: 'FaceMeX Career Workspace',
+      });
+
+      setTrackerOpen(true);
+
+      toast({
+        title: 'My Job Tracker opened',
+        description: 'Track saved jobs, applied jobs, interviews, rejected jobs, and offers.',
+      });
+
+      return;
+    }
+
+    trackButtonClick('workspace_quick_prompt', undefined, {
+      prompt_preview: text.slice(0, 80),
+    });
+
+    sendPrompt(text);
+  };
+
   const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(normalizeUssdCodes(text));
@@ -2563,11 +2651,6 @@ Apply link: ${job.applyUrl}`;
       feature: 'FaceMeX Career Workspace',
     });
 
-    toast({
-      title: 'Opening AI CV Builder',
-      description: 'Create or improve your CV inside FaceMeX.',
-    });
-
     navigate(AI_CV_BUILDER_PATH);
   };
 
@@ -2576,51 +2659,7 @@ Apply link: ${job.applyUrl}`;
       feature: 'FaceMeX Career Workspace',
     });
 
-    toast({
-      title: 'Opening Cover Letter AI',
-      description: 'Create a cover letter inside FaceMeX.',
-    });
-
     navigate(AI_COVER_LETTER_PATH);
-  };
-
-  const openJobTracker = () => {
-    setTrackerOpen(true);
-
-    trackFeatureUse({
-      feature: 'FaceMeX Career Workspace',
-      action: 'workspace_open_job_tracker',
-    });
-
-    toast({
-      title: 'Job Tracker opened',
-      description: 'Track saved jobs, applied jobs, interviews, rejections, and offers.',
-    });
-  };
-
-  const handleQuickAction = (item: QuickPromptItem) => {
-    trackButtonClick('workspace_quick_prompt', undefined, {
-      label: item.label,
-      action: item.action,
-      prompt_preview: item.prompt?.slice(0, 80) || '',
-    });
-
-    if (item.action === 'cv-builder') {
-      openCvBuilder();
-      return;
-    }
-
-    if (item.action === 'cover-letter-builder') {
-      openCoverLetterBuilder();
-      return;
-    }
-
-    if (item.action === 'job-tracker') {
-      openJobTracker();
-      return;
-    }
-
-    sendPrompt(item.prompt || item.label);
   };
 
   const renderMessageImages = (images?: WorkspaceImage[]) => {
@@ -2998,6 +3037,15 @@ Apply link: ${job.applyUrl}`;
           }
         }
 
+        @keyframes fmCaretBlink {
+          0%, 48% {
+            opacity: 1;
+          }
+          49%, 100% {
+            opacity: 0;
+          }
+        }
+
         .fm-treasure-wrap {
           position: relative;
           display: flex;
@@ -3005,11 +3053,6 @@ Apply link: ${job.applyUrl}`;
           width: 100px;
           align-items: center;
           justify-content: center;
-        }
-
-        .fm-treasure-wrap-compact {
-          height: 86px;
-          width: 86px;
         }
 
         .fm-treasure-ring {
@@ -3054,12 +3097,6 @@ Apply link: ${job.applyUrl}`;
             inset 0 -1px 0 rgba(15, 23, 42, 0.06);
         }
 
-        .fm-treasure-orb-compact {
-          height: 68px;
-          width: 68px;
-          border-radius: 24px;
-        }
-
         .fm-flow-image {
           object-fit: contain;
           transform-origin: 50% 50%;
@@ -3074,6 +3111,25 @@ Apply link: ${job.applyUrl}`;
           background:
             radial-gradient(circle at 30% 20%, rgba(255,255,255,0.9), rgba(255,255,255,0) 34%),
             linear-gradient(145deg, #111827, #020617);
+        }
+
+        .fm-main-typing-text {
+          max-width: 19ch;
+          text-align: center;
+          font-size: 23px;
+          line-height: 1.2;
+          letter-spacing: -0.03em;
+        }
+
+        .fm-type-caret {
+          display: inline-block;
+          height: 0.85em;
+          width: 2px;
+          margin-left: 3px;
+          transform: translateY(2px);
+          border-radius: 999px;
+          background: rgba(15, 23, 42, 0.4);
+          animation: fmCaretBlink 1.15s step-end infinite;
         }
 
         .fm-quick-pill {
@@ -3105,11 +3161,30 @@ Apply link: ${job.applyUrl}`;
             inset 0 -1px 0 rgba(15, 23, 42, 0.08);
         }
 
+        .dark .fm-type-caret {
+          background: rgba(255, 255, 255, 0.52);
+        }
+
+        @media (min-width: 640px) {
+          .fm-main-typing-text {
+            max-width: 24ch;
+            font-size: 29px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .fm-main-typing-text {
+            max-width: 18ch;
+            font-size: 22px;
+          }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
           .fm-treasure-shadow,
           .fm-flow-image,
-          .fm-quick-pill {
+          .fm-quick-pill,
+          .fm-type-caret {
             animation: none !important;
             opacity: 1 !important;
             transform: none !important;
@@ -3139,7 +3214,7 @@ Apply link: ${job.applyUrl}`;
             </div>
 
             <p className="truncate text-[11px] text-slate-500 dark:text-white/45">
-              Jobs, CVs, interviews, scam check
+              Ask anything. Jobs, CVs, interviews, life, business
             </p>
           </div>
         </div>
@@ -3151,7 +3226,7 @@ Apply link: ${job.applyUrl}`;
               variant="ghost"
               onClick={() => setClearWorkspaceOpen(true)}
               className="h-9 w-9 rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
-              aria-label="Clear chat"
+              aria-label="Clear chat and start from scratch"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -3170,7 +3245,7 @@ Apply link: ${job.applyUrl}`;
           <Button
             size="icon"
             variant="ghost"
-            onClick={openJobTracker}
+            onClick={() => setTrackerOpen(true)}
             className="h-9 w-9 rounded-full"
             aria-label="My Job Tracker"
           >
@@ -3184,7 +3259,7 @@ Apply link: ${job.applyUrl}`;
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
               {chatMessages.length === 0 && !busy && (
-                <WelcomeHero firstName={firstName} onQuickAction={handleQuickAction} />
+                <WelcomeHero firstName={firstName} onQuickAsk={quickAsk} />
               )}
 
               {chatMessages.map((message, index) => {
@@ -3439,11 +3514,11 @@ Apply link: ${job.applyUrl}`;
 
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-semibold text-slate-950 dark:text-white">
-                  Clear chat and start fresh?
+                  Delete and start from scratch?
                 </h2>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-white/55">
-                  This will clear the chat, selected images, and local chat history on this device.
+                  This will clear the chat, saved tracker items, selected images, and local chat history on this device.
                 </p>
               </div>
             </div>
@@ -3463,7 +3538,7 @@ Apply link: ${job.applyUrl}`;
                 onClick={clearWorkspaceFromScratch}
                 className="h-11 rounded-2xl bg-red-600 text-white hover:bg-red-700"
               >
-                Clear chat
+                Delete
               </Button>
             </div>
           </div>
@@ -3508,12 +3583,22 @@ Apply link: ${job.applyUrl}`;
                     onClick={() => {
                       setApplySheetOpen(false);
 
-                      if (tool.action === 'cv-builder') {
+                      if (tool.action === 'open_cv_builder') {
+                        toast({
+                          title: 'Opening AI CV Builder',
+                          description: 'Create or improve your CV inside FaceMeX.',
+                        });
+
                         openCvBuilder();
                         return;
                       }
 
-                      if (tool.action === 'cover-letter-builder') {
+                      if (tool.action === 'open_cover_letter_builder') {
+                        toast({
+                          title: 'Opening Cover Letter AI',
+                          description: 'Create a professional cover letter inside FaceMeX.',
+                        });
+
                         openCoverLetterBuilder();
                         return;
                       }
@@ -3580,7 +3665,7 @@ Apply link: ${job.applyUrl}`;
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 {[
-                  ['Saved Jobs', savedMessages.length],
+                  ['Save Jobs', savedMessages.length],
                   ['Applied Jobs', 0],
                   ['Interview Tracker', 0],
                   ['Rejected Jobs', 0],
