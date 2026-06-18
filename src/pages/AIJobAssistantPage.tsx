@@ -3541,6 +3541,31 @@ Apply link: ${job.applyUrl}`;
           background: transparent;
         }
 
+        .fm-panel-scroll {
+          overscroll-behavior: contain;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
+          scrollbar-gutter: stable;
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar-thumb {
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.34);
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.48);
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
         .fm-chat-scroll {
           overscroll-behavior: contain;
         }
@@ -3600,8 +3625,8 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden flex-col border-r border-white/5 bg-[#050505] text-white lg:flex">
-        <div className="flex h-14 shrink-0 items-center justify-between px-4">
+      <aside className="fm-desktop-sidebar-scroll hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-y-auto overflow-x-hidden border-r border-white/5 bg-[#050505] text-white lg:block">
+        <div className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between bg-[#050505] px-4">
           <div className="min-w-0 truncate text-sm font-semibold">FaceMeX</div>
 
           <button
@@ -3614,7 +3639,7 @@ Apply link: ${job.applyUrl}`;
           </button>
         </div>
 
-        <div className="fm-desktop-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden py-2 pl-3 pr-2 pb-8">
+        <div className="min-w-0 py-2 pl-3 pr-2 pb-6">
           <button
             type="button"
             onClick={() => setClearWorkspaceOpen(true)}
@@ -3722,7 +3747,7 @@ Apply link: ${job.applyUrl}`;
           )}
         </div>
 
-        <div className="border-t border-white/5 p-3">
+        <div className="border-t border-white/5 p-3 pb-6">
           <button
             type="button"
             onClick={() => navigate('/feed')}
@@ -4119,7 +4144,7 @@ Apply link: ${job.applyUrl}`;
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-base font-semibold text-slate-950 dark:text-white">Help me apply</h2>
-                <p className="truncate text-xs text-slate-500 dark:text-white/50">
+                <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
                   {applySheetJob ? applySheetJob.title : 'Choose what you need now.'}
                 </p>
               </div>
@@ -4188,7 +4213,7 @@ Apply link: ${job.applyUrl}`;
       {trackerOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setTrackerOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:bg-[#111] lg:text-white"
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:border-l lg:border-white/10 lg:bg-[#111] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
@@ -4199,30 +4224,30 @@ Apply link: ${job.applyUrl}`;
                 </p>
               </div>
 
-              <Button size="icon" variant="ghost" onClick={() => setTrackerOpen(false)} className="h-10 w-10 rounded-full">
+              <Button size="icon" variant="ghost" onClick={() => setTrackerOpen(false)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
                 <X className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                   <Save className="h-5 w-5 text-blue-500" />
-                  <p className="mt-2 text-[11px] text-slate-500">Saved</p>
+                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Saved</p>
                   <p className="text-xl font-semibold">{savedMessages.length}</p>
                 </div>
 
-                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  <p className="mt-2 text-[11px] text-slate-500">Verified</p>
+                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Verified</p>
                   <p className="text-xl font-semibold">
                     {sortedLocalJobs.filter((job) => job.verificationStatus === 'verified').length}
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                   <FileText className="h-5 w-5 text-purple-500" />
-                  <p className="mt-2 text-[11px] text-slate-500">Education</p>
+                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Education</p>
                   <p className="text-xl font-semibold">
                     {savedStats.homework_help + savedStats.assignments + savedStats.youtube_lessons + savedStats.institution_applications}
                   </p>
@@ -4239,9 +4264,9 @@ Apply link: ${job.applyUrl}`;
                 ].map(([label, count]) => (
                   <div
                     key={String(label)}
-                    className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]"
+                    className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white"
                   >
-                    <p className="text-xs text-slate-500 dark:text-white/50">{label}</p>
+                    <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{label}</p>
                     <p className="mt-1 text-lg font-semibold">{count}</p>
                   </div>
                 ))}
@@ -4257,7 +4282,7 @@ Apply link: ${job.applyUrl}`;
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-red-600 dark:text-red-300">Closing soon</p>
                       <h3 className="truncate font-semibold">{closingSoonJob.title}</h3>
-                      <p className="text-xs text-slate-500 dark:text-white/50">
+                      <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
                         {getDeadlineInfo(closingSoonJob.deadline).label}
                       </p>
                     </div>
@@ -4269,8 +4294,8 @@ Apply link: ${job.applyUrl}`;
                 </div>
               )}
 
-              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
-                <h3 className="text-base font-semibold">Your pipeline</h3>
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Your pipeline</h3>
 
                 <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
                   {sortedLocalJobs.slice(0, 5).map((job) => {
@@ -4278,7 +4303,7 @@ Apply link: ${job.applyUrl}`;
 
                     return (
                       <div key={job.id} className="flex items-center gap-3 py-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
                           {job.verificationStatus === 'verified' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                           ) : (
@@ -4288,11 +4313,11 @@ Apply link: ${job.applyUrl}`;
 
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold">{job.title}</p>
-                          <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{job.company}</p>
                         </div>
 
                         <div className="text-right">
-                          <p className="text-xs text-slate-500 dark:text-white/50">
+                          <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
                             {job.deadline || 'Check source'}
                           </p>
                           <span
@@ -4311,8 +4336,8 @@ Apply link: ${job.applyUrl}`;
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
-                <h3 className="text-base font-semibold">Daily tasks</h3>
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Daily tasks</h3>
 
                 <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
                   {[
@@ -4330,7 +4355,7 @@ Apply link: ${job.applyUrl}`;
                         setTrackerOpen(false);
                         sendPrompt(String(label));
                       }}
-                      className="flex w-full items-center gap-3 py-3 text-left"
+                      className="flex w-full items-center gap-3 rounded-xl py-3 text-left text-slate-900 dark:text-white lg:px-2 lg:text-white lg:hover:bg-white/10"
                     >
                       <Icon className="h-4 w-4 text-blue-500" />
                       <span className="flex-1 text-sm">{label}</span>
@@ -4345,7 +4370,7 @@ Apply link: ${job.applyUrl}`;
                   <Button
                     variant={savedFilter === 'all' ? 'default' : 'outline'}
                     onClick={() => setSavedFilter('all')}
-                    className="h-9 rounded-full px-4 text-xs"
+                    className="h-9 rounded-full px-4 text-xs lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/[0.1]"
                   >
                     All
                   </Button>
@@ -4364,7 +4389,7 @@ Apply link: ${job.applyUrl}`;
                       key={category}
                       variant={savedFilter === category ? 'default' : 'outline'}
                       onClick={() => setSavedFilter(category)}
-                      className="h-9 rounded-full px-4 text-xs"
+                      className="h-9 rounded-full px-4 text-xs lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/[0.1]"
                     >
                       {savedCategoryLabels[category]} ({savedStats[category]})
                     </Button>
@@ -4373,17 +4398,17 @@ Apply link: ${job.applyUrl}`;
 
                 <div className="mt-3 space-y-3">
                   {visibleSavedMessages.length === 0 ? (
-                    <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50">
+                    <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white/60">
                       No saved items yet.
                     </div>
                   ) : (
                     visibleSavedMessages.map((item) => (
                       <div
                         key={item.id}
-                        className="rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-left text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
                             <FileText className="h-4 w-4 text-slate-500" />
                           </div>
 
@@ -4392,7 +4417,7 @@ Apply link: ${job.applyUrl}`;
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item'}
                             </div>
 
-                            <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50">
+                            <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50 lg:text-white/55">
                               {normalizeUssdCodes(item.content)}
                             </div>
                           </button>
@@ -4415,11 +4440,11 @@ Apply link: ${job.applyUrl}`;
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-black/5 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="shrink-0 border-t border-black/5 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.03] lg:border-white/10 lg:bg-[#111]">
               <Button
                 variant="ghost"
                 onClick={clearSavedItems}
-                className="w-full rounded-2xl text-red-500 hover:text-red-600"
+                className="w-full rounded-2xl text-red-500 hover:text-red-600 lg:hover:bg-red-500/10"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Clear tracker
@@ -4432,7 +4457,7 @@ Apply link: ${job.applyUrl}`;
       {jobsOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setJobsOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:bg-[#111] lg:text-white"
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:border-l lg:border-white/10 lg:bg-[#111] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
@@ -4448,8 +4473,8 @@ Apply link: ${job.applyUrl}`;
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                 <h3 className="text-base font-semibold">Education AI</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
                   Homework, assignments, YouTube lessons, and college or university applications.
@@ -4530,7 +4555,7 @@ Apply link: ${job.applyUrl}`;
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <h4 className="truncate text-sm font-semibold">{job.title}</h4>
-                                <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                                <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{job.company}</p>
                               </div>
 
                               <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
