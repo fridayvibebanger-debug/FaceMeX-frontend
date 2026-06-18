@@ -58,7 +58,10 @@ type SavedCategory =
   | 'cv_advice'
   | 'application_message'
   | 'research'
-  | 'education_notes';
+  | 'homework_help'
+  | 'assignments'
+  | 'youtube_lessons'
+  | 'institution_applications';
 
 type WorkspaceImage = {
   id: string;
@@ -126,11 +129,14 @@ const NO_EXPERIENCE_SEARCH_KEYWORD =
   'no experience entry level general worker cleaner packer cashier store assistant learnership internship';
 
 const savedCategoryLabels: Record<SavedCategory, string> = {
-  career_plan: 'Plan',
+  career_plan: 'Jobs',
   cv_advice: 'CV',
   application_message: 'Apply',
   research: 'Research',
-  education_notes: 'Education',
+  homework_help: 'Homework',
+  assignments: 'Assignments',
+  youtube_lessons: 'YouTube Lessons',
+  institution_applications: 'Applications',
 };
 
 const MAX_WORKSPACE_IMAGES = 4;
@@ -463,15 +469,38 @@ Main rule:
 - If the user asks a general question after job results, answer the new question directly.
 
 Education rule:
-- If the user asks about school, assignments, homework, notes, studying, exams, a subject, college applications, university applications, bursaries, scholarships, NSFAS, institutions, courses, or admissions, answer as Education AI.
-- Explain step by step.
-- Help students understand, not just copy.
-- Create clean study notes when useful.
-- Help with assignments and homework in a safe learning way.
-- Help students apply to colleges, universities, TVET colleges, private institutions, and institutions across Africa and beyond.
-- If a video will help, include a simple YouTube search link like:
-  [Watch related lessons on YouTube](https://www.youtube.com/results?search_query=topic)
-- Keep education answers saved as education notes.
+- If the user is in Homework Help, behave as a professional educational assistant.
+- First understand the subject, grade/level, exact question, and what the learner has already tried.
+- Explain step by step in a way a student can understand.
+- Do not only give final answers. Teach the method.
+- Highlight key words and key points.
+- End with a short revision note.
+
+Assignments rule:
+- If the user is in Assignments, first ask for the assignment instructions, subject, grade/level, due date, marking rubric, and required format.
+- Help the student plan the assignment academically.
+- Help with structure, research points, introduction, paragraphs, conclusion, references, and editing.
+- Do not encourage copying. Help the student understand and write better.
+
+YouTube Lessons rule:
+- If the user is in YouTube Lessons, first ask what subject, topic, grade/level, and type of lesson they want to watch.
+- If the user gives a YouTube link, title, or transcript, summarize the lesson into academic notes.
+- Create sections: Lesson title, Main idea, Key terms, Step-by-step explanation, Important points, Example, Quick revision notes.
+- If a YouTube video is needed, give a YouTube search link like:
+  [Find related lessons on YouTube](https://www.youtube.com/results?search_query=topic)
+- Do not pretend to watch a video unless the user provides a link, title, transcript, or enough context.
+
+College and university applications rule:
+- If the user is in College / University Applications, ask before giving a full answer:
+  1. Which country?
+  2. Which college, university, TVET, or institution?
+  3. Which course or career field?
+  4. Which intake year?
+  5. What grade/results do they have?
+  6. Do they need funding, bursary, scholarship, or NSFAS help?
+- Respond according to the user's intent and instructions.
+- Help with application steps, documents, motivation letters, emails, deadlines, and funding options.
+- Do not invent application dates or admission requirements.
 
 CV and Cover Letter rule:
 - If the user asks about a CV, answer according to the user's exact intent first: create CV, improve CV, review CV, write profile summary, list skills, tailor CV, or fix wording.
@@ -514,11 +543,12 @@ When users ask for jobs:
 - Understand the user's intent first.
 - If they ask generally, search "jobs".
 - If they ask for no experience, entry level, first job, or training provided, search beginner-friendly jobs only.
-- If they ask for security, search "security".
-- If they ask for cashier, search "cashier".
-- If they ask for driver, search "driver".
-- If they ask for admin, search "admin".
-- If they ask for teacher or creche jobs, search education/teacher/creche.
+- If they ask for security, search only security jobs.
+- If they ask for cashier or retail, search only retail, cashier, store, shop, sales, merchandiser, or packer jobs.
+- If they ask for farm, search only farm, agriculture, packhouse, fruit, harvest, ZZ2, Westfalia, or agricultural jobs.
+- If they ask for admin, search only admin, office, receptionist, data capture, or administrator jobs.
+- If they ask for teacher or creche jobs, search only teacher, educator, tutor, school, daycare, or creche jobs.
+- If they ask for driver, search only driver, delivery, courier, transport, code 10, code 14, or fleet jobs.
 - Prioritize exact area first.
 - Then nearby areas.
 - Then South Africa only if local results are low.
@@ -610,25 +640,25 @@ const educationTools: ApplySheetTool[] = [
     label: 'Homework Help',
     icon: FileText,
     prompt:
-      'Education AI: Help me with my homework or assignment step by step. Explain clearly and create clean notes I can save.',
+      'Education Workspace: Homework Help. First ask me for my subject, grade or level, exact homework question, and what I have already tried. Then help me understand the answer step by step. Highlight key words and key points, and save the answer under Homework Help.',
   },
   {
-    label: 'Save Notes',
-    icon: Save,
+    label: 'Assignments',
+    icon: Edit3,
     prompt:
-      'Education AI: Help me create clean study notes from a topic, lesson, screenshot, or paragraph.',
+      'Education Workspace: Assignments. First ask me for the assignment instructions, subject, grade or level, due date, rubric, and required format. Then help me plan and write it academically step by step. Save the answer under Assignments.',
   },
   {
     label: 'YouTube Lessons',
     icon: Globe2,
     prompt:
-      'Education AI: Help me understand a topic and suggest useful YouTube lesson search links that can demonstrate it clearly.',
+      'Education Workspace: YouTube Lessons. First ask me what subject, topic, grade or level, and type of lesson I want to watch. If I provide a YouTube link, title, or transcript, summarize it into academic notes with key terms, key points, examples, and revision notes. Save the summary under YouTube Lessons.',
   },
   {
-    label: 'College Applications',
+    label: 'College / University',
     icon: Users,
     prompt:
-      'Education AI: Help me apply for colleges, universities, TVET colleges, private institutions, bursaries, scholarships, and institutions across Africa and beyond.',
+      'Education Workspace: College and University Applications. First ask me which country, institution, course, intake year, results, and funding support I need. Then help me apply to colleges, universities, TVET colleges, private institutions, bursaries, scholarships, and institutions across Africa and beyond. Save the answer under Applications.',
   },
 ];
 
@@ -680,9 +710,31 @@ function looksLikeNoExperienceJob(job: LocalVerifiedJob) {
 }
 
 function isEducationText(text: string) {
-  return /(school|homework|assignment|study|studying|exam|test|notes|lesson|teacher|student|math|maths|mathematics|english|life sciences|physical science|physics|chemistry|biology|geography|history|accounting|economics|business studies|college|university|tvet|institution|course|faculty|admission|application form|bursary|scholarship|nsfas|learn|youtube lesson|explain this topic|grade 8|grade 9|grade 10|grade 11|grade 12|tertiary)/i.test(
+  return /(education workspace|homework|assignment|study|studying|exam|test|notes|lesson|teacher|student|math|maths|mathematics|english|life sciences|physical science|physics|chemistry|biology|geography|history|accounting|economics|business studies|youtube lessons|youtube lesson|college|university|tvet|institution|course|faculty|admission|application form|bursary|scholarship|nsfas|learn|explain this topic|grade 8|grade 9|grade 10|grade 11|grade 12|tertiary)/i.test(
     text
   );
+}
+
+function getEducationIntent(text: string) {
+  const t = clean(text).toLowerCase();
+
+  if (/(college|university|tvet|institution|admission|application form|bursary|scholarship|nsfas|course|faculty)/i.test(t)) {
+    return 'education_institution';
+  }
+
+  if (/(youtube|video|watch|lesson video|youtube lesson)/i.test(t)) {
+    return 'education_youtube';
+  }
+
+  if (/(assignment|rubric|due date|essay|project|research task)/i.test(t)) {
+    return 'education_assignment';
+  }
+
+  if (/(homework|school work|question|exercise|study|exam|test|notes|subject|grade)/i.test(t)) {
+    return 'education_homework';
+  }
+
+  return 'education_homework';
 }
 
 function getUserDisplayName(store: any) {
@@ -817,10 +869,8 @@ function hasGeneralHelpWords(text: string) {
 function detectIntent(text: string, hasImages = false) {
   const t = clean(text).toLowerCase();
 
-  if (hasImages && isEducationText(t)) return 'education';
+  if (isEducationText(t)) return getEducationIntent(t);
   if (hasImages) return 'image_or_document_analysis';
-
-  if (isEducationText(t)) return 'education';
 
   if (/(uif|ussd|sassa|claim status|department of employment|labour|labor|\*134\*843#)/i.test(t)) {
     return 'government-service-check';
@@ -870,7 +920,11 @@ function detectIntent(text: string, hasImages = false) {
 }
 
 function savedCategoryFromIntent(intent: string): SavedCategory {
-  if (intent === 'education') return 'education_notes';
+  if (intent === 'education_homework') return 'homework_help';
+  if (intent === 'education_assignment') return 'assignments';
+  if (intent === 'education_youtube') return 'youtube_lessons';
+  if (intent === 'education_institution') return 'institution_applications';
+
   if (intent === 'cv-profile') return 'cv_advice';
 
   if (intent === 'cover-letter' || intent === 'email-application' || intent === 'message-application') {
@@ -892,16 +946,47 @@ function savedCategoryFromIntent(intent: string): SavedCategory {
 }
 
 function addFaceMeXCareerToolInstruction(promptText: string, intent: string) {
-  if (intent === 'education') {
+  if (intent === 'education_homework') {
     return `${promptText}
 
-FaceMeX Education instruction:
-Answer as Education AI.
-Explain step by step.
-Create clean study notes if useful.
-If a video demonstration will help, include a YouTube search link.
-If this is about college, university, TVET, bursary, scholarship, or institution applications, help the student apply step by step.
-Save this response as Education Notes.`;
+FaceMeX Education Workspace:
+You are now in Homework Help.
+First ask for the subject, grade/level, exact question, and what the student has already tried.
+Then teach step by step.
+Highlight key words and key points.
+Save this response under Homework Help.`;
+  }
+
+  if (intent === 'education_assignment') {
+    return `${promptText}
+
+FaceMeX Education Workspace:
+You are now in Assignments.
+First ask for the assignment instructions, subject, grade/level, due date, rubric, and required format.
+Help the student plan and write academically.
+Save this response under Assignments.`;
+  }
+
+  if (intent === 'education_youtube') {
+    return `${promptText}
+
+FaceMeX Education Workspace:
+You are now in YouTube Lessons.
+First ask what subject, topic, grade/level, and lesson type the student wants to watch.
+If a YouTube link, title, or transcript is provided, summarize it into academic notes.
+Use: Lesson title, Main idea, Key terms, Step-by-step explanation, Key points, Example, Quick revision notes.
+Save this response under YouTube Lessons.`;
+  }
+
+  if (intent === 'education_institution') {
+    return `${promptText}
+
+FaceMeX Education Workspace:
+You are now in College and University Applications.
+First ask for country, institution, course, intake year, results, and funding support.
+Then guide the student step by step according to their intent.
+Do not invent requirements or deadlines.
+Save this response under Applications.`;
   }
 
   if (intent === 'cv-profile') {
@@ -951,45 +1036,19 @@ function extractKeywordFromPrompt(text: string) {
     return NO_EXPERIENCE_SEARCH_KEYWORD;
   }
 
-  if (/(security|guard|armed response|protection)/i.test(t)) {
-    return 'security';
-  }
-
-  if (/(cashier|packer|retail|store assistant|shop assistant|shoprite|checkers|usave|clerk)/i.test(t)) {
-    return 'cashier retail packer store assistant clerk';
-  }
-
-  if (/(driver|drivers|code 10|code 14|pdp|delivery|truck|side tipper)/i.test(t)) {
-    return 'driver';
-  }
-
-  if (/(admin|administrator|administrative|office|receptionist|data capture)/i.test(t)) {
-    return 'admin clerk office';
-  }
-
-  if (/(teacher|educator|creche|crèche|school|daycare|assistant teacher)/i.test(t)) {
-    return 'teacher creche school daycare';
-  }
-
-  if (/(cleaner|cleaning|housekeeping)/i.test(t)) {
-    return 'cleaner';
-  }
-
-  if (/(farm|agriculture|packhouse|packing|fruit|westfalia|zz2|letaba)/i.test(t)) {
-    return 'farm agriculture packhouse packing';
-  }
-
-  if (/(learnership|internship|graduate|youth)/i.test(t)) {
-    return 'learnership internship';
-  }
-
-  if (/(general worker|general work|general)/i.test(t)) {
-    return 'general worker';
-  }
+  if (/(security|guard|armed response|protection)/i.test(t)) return 'security';
+  if (/(cashier|retail|store assistant|shop assistant|shoprite|checkers|usave|sales assistant|merchandiser|packer|clerk)/i.test(t)) return 'retail';
+  if (/(farm|agriculture|packhouse|packing|fruit|westfalia|zz2|letaba|harvest)/i.test(t)) return 'farm';
+  if (/(admin|administrator|administrative|office|receptionist|data capture)/i.test(t)) return 'admin';
+  if (/(teacher|educator|creche|crèche|school|daycare|assistant teacher|tutor)/i.test(t)) return 'teacher';
+  if (/(driver|drivers|code 10|code 14|pdp|delivery|truck|side tipper|courier|transport)/i.test(t)) return 'driver';
+  if (/(cleaner|cleaning|housekeeping)/i.test(t)) return 'cleaner';
+  if (/(learnership|internship|graduate|youth)/i.test(t)) return 'learnership internship';
+  if (/(general worker|general work|general)/i.test(t)) return 'general worker';
 
   if (
     /\b(job|jobs|vacancy|vacancies|work|employment|hiring)\b/i.test(original) &&
-    !/(security|cashier|driver|admin|teacher|creche|crèche|cleaner|farm|agriculture|learnership|internship|general worker)/i.test(
+    !/(security|cashier|retail|driver|admin|teacher|creche|crèche|cleaner|farm|agriculture|learnership|internship|general worker)/i.test(
       original
     )
   ) {
@@ -1042,10 +1101,10 @@ function getSearchDisplayLabel(keyword: string) {
   if (!q || q === 'jobs' || q === 'job') return 'jobs';
   if (q === 'security') return 'security jobs';
   if (q === 'driver') return 'driver jobs';
-  if (q.includes('cashier')) return 'retail, cashier, packer and store jobs';
-  if (q.includes('farm')) return 'farm, agriculture and packhouse jobs';
-  if (q.includes('admin')) return 'admin and office jobs';
-  if (q.includes('teacher')) return 'teacher, creche and school jobs';
+  if (q === 'retail' || q.includes('cashier')) return 'retail, cashier, packer and store jobs';
+  if (q === 'farm' || q.includes('farm')) return 'farm, agriculture and packhouse jobs';
+  if (q === 'admin' || q.includes('admin')) return 'admin and office jobs';
+  if (q === 'teacher' || q.includes('teacher')) return 'teacher, creche and school jobs';
   if (q.includes('general worker')) return 'general worker jobs';
 
   return `${keyword} jobs`;
@@ -1085,24 +1144,13 @@ function isForeignLookingJob(job: LocalVerifiedJob) {
     return true;
   }
 
-  if (/[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]/.test(text)) {
-    return true;
-  }
+  if (/[\u0400-\u04FF\u0600-\u06FF\u4E00-\u9FFF]/.test(text)) return true;
 
   return false;
 }
 
 function jobText(job: LocalVerifiedJob) {
-  return [
-    job.title,
-    job.company,
-    job.area,
-    job.category,
-    job.sourceLabel,
-    job.description,
-  ]
-    .join(' ')
-    .toLowerCase();
+  return [job.title, job.company, job.area, job.category, job.sourceLabel, job.description].join(' ').toLowerCase();
 }
 
 function isBroadSearchArea(area: string) {
@@ -1129,9 +1177,7 @@ function isClearlyOutsideRequestedProvince(job: LocalVerifiedJob, requestedArea:
     if (includesAny(text, LIMPOPO_AREAS)) return false;
     if (includesAny(text, OUTSIDE_LIMPOPO_AREAS)) return true;
 
-    if (/south africa/i.test(job.area) && !includesAny(text, LIMPOPO_AREAS)) {
-      return true;
-    }
+    if (/south africa/i.test(job.area) && !includesAny(text, LIMPOPO_AREAS)) return true;
   }
 
   return false;
@@ -1150,9 +1196,7 @@ function jobMatchesRequestedArea(job: LocalVerifiedJob, requestedArea: string) {
     return includesAny(text, GREATER_TZANEEN_AREAS) || includesAny(text, LIMPOPO_AREAS);
   }
 
-  if (isLimpopoSearch(requestedArea)) {
-    return includesAny(text, LIMPOPO_AREAS);
-  }
+  if (isLimpopoSearch(requestedArea)) return includesAny(text, LIMPOPO_AREAS);
 
   return text.includes(requested);
 }
@@ -1177,26 +1221,33 @@ function jobMatchesKeywordIntent(job: LocalVerifiedJob, keyword: string) {
   const text = jobText(job);
 
   if (!q || q === 'jobs' || q === 'job') return true;
-
   if (isNoExperienceSearchKeyword(q)) return looksLikeNoExperienceJob(job);
 
-  if (q.includes('security')) return /(security|guard|armed|protection|response)/i.test(text);
-  if (q.includes('driver')) return /(driver|drivers|code 10|code 14|pdp|truck|delivery|courier|transport|fleet|vehicle)/i.test(text);
-  if (q.includes('cashier') || q.includes('retail')) {
-    return /(cashier|packer|retail|store|shop|sales|clerk|merchandiser|assistant)/i.test(text);
+  if (q === 'security') return /(security|guard|armed|protection|response|control room|patrol)/i.test(text);
+
+  if (q === 'driver') {
+    return /(driver|drivers|code 10|code 14|pdp|truck|delivery|courier|transport|fleet|vehicle|motorbike|bike|side tipper)/i.test(text);
   }
-  if (q.includes('farm') || q.includes('agriculture')) {
-    return /(farm|agriculture|packhouse|packing|fruit|harvest|zz2|westfalia|letaba)/i.test(text);
+
+  if (q === 'retail' || q.includes('cashier')) {
+    return /(cashier|retail|store assistant|shop assistant|sales assistant|sales consultant|packer|picker|merchandiser|till operator|shoprite|checkers|usave|store|supermarket)/i.test(text);
   }
-  if (q.includes('admin')) return /(admin|clerk|office|reception|data capture|administrator|assistant|pa)/i.test(text);
-  if (q.includes('teacher') || q.includes('creche')) {
-    return /(teacher|educator|school|creche|crèche|daycare|assistant teacher)/i.test(text);
+
+  if (q === 'farm' || q.includes('farm') || q.includes('agriculture')) {
+    return /(farm|agriculture|agricultural|packhouse|fruit|harvest|avocado|tomato|zz2|westfalia|letaba|orchard|irrigation|tractor|production farm|farm worker)/i.test(text);
   }
-  if (q.includes('cleaner')) return /(cleaner|cleaning|housekeeping)/i.test(text);
-  if (q.includes('general worker')) return /(general worker|general assistant|worker|labourer)/i.test(text);
-  if (q.includes('learnership') || q.includes('internship')) {
-    return /(learnership|internship|graduate|trainee|youth)/i.test(text);
+
+  if (q === 'admin' || q.includes('admin')) {
+    return /(admin|administrator|administrative|office administrator|office assistant|receptionist|data capture|data capturer|clerk|filing|secretary)/i.test(text);
   }
+
+  if (q === 'teacher' || q.includes('teacher')) {
+    return /(teacher|educator|teaching assistant|assistant teacher|school|creche|crèche|daycare|tutor|lecturer|facilitator|training facilitator)/i.test(text);
+  }
+
+  if (q.includes('cleaner')) return /(cleaner|cleaning|housekeeping|housekeeper)/i.test(text);
+  if (q.includes('general worker')) return /(general worker|general assistant|labourer|worker)/i.test(text);
+  if (q.includes('learnership') || q.includes('internship')) return /(learnership|internship|graduate|trainee|youth)/i.test(text);
 
   return q
     .split(/\s+/)
@@ -1230,12 +1281,7 @@ function extractClosingDateFromText(text: string) {
 
 function getDeadlineInfo(deadline?: string | null) {
   if (!deadline) {
-    return {
-      label: 'Not stated by source',
-      expired: false,
-      urgent: false,
-      needsCheck: true,
-    };
+    return { label: 'Not stated by source', expired: false, urgent: false, needsCheck: true };
   }
 
   const end = new Date(`${deadline}T23:59:59`);
@@ -1247,21 +1293,14 @@ function getDeadlineInfo(deadline?: string | null) {
 
   const diffMs = end.getTime() - now.getTime();
 
-  if (diffMs <= 0) {
-    return { label: 'Closed', expired: true, urgent: false, needsCheck: false };
-  }
+  if (diffMs <= 0) return { label: 'Closed', expired: true, urgent: false, needsCheck: false };
 
   const totalHours = Math.ceil(diffMs / (1000 * 60 * 60));
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
 
-  if (days <= 0) {
-    return { label: `Closing in ${hours}h`, expired: false, urgent: true, needsCheck: false };
-  }
-
-  if (days === 1) {
-    return { label: 'Closing in 1 day', expired: false, urgent: true, needsCheck: false };
-  }
+  if (days <= 0) return { label: `Closing in ${hours}h`, expired: false, urgent: true, needsCheck: false };
+  if (days === 1) return { label: 'Closing in 1 day', expired: false, urgent: true, needsCheck: false };
 
   return { label: `Closing in ${days} days`, expired: false, urgent: days <= 3, needsCheck: false };
 }
@@ -1343,9 +1382,7 @@ function extractJobTitle(text: string) {
 }
 
 function extractCompany(text: string) {
-  const companyMatch =
-    text.match(/(?:Company|Employer|Source):\s*(.+)/i) ||
-    text.match(/\bMRMS\b/i);
+  const companyMatch = text.match(/(?:Company|Employer|Source):\s*(.+)/i) || text.match(/\bMRMS\b/i);
 
   if (companyMatch?.[0]?.toUpperCase().includes('MRMS')) return 'MRMS';
 
@@ -1484,10 +1521,7 @@ function stripTrailingPunctuation(value: string) {
   const trailing = trimmed.match(/[),.;:!?]+$/)?.[0] || '';
   const cleanValue = trailing ? trimmed.slice(0, -trailing.length) : trimmed;
 
-  return {
-    cleanValue,
-    trailing,
-  };
+  return { cleanValue, trailing };
 }
 
 function getLinkHref(rawUrl: string) {
@@ -1681,11 +1715,7 @@ function ChatGPTStyleText({
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].trim();
 
-    if (
-      isLikelyTableRow(line) &&
-      index + 1 < lines.length &&
-      isTableSeparator(lines[index + 1])
-    ) {
+    if (isLikelyTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
       const tableLines = [lines[index], lines[index + 1]];
       index += 2;
 
@@ -1768,9 +1798,7 @@ function buildConversationContext(messages: ChatMessage[]) {
 function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
   const [failed, setFailed] = useState(false);
 
-  if (failed) {
-    return <div className={`fm-flow-fallback ${className}`} />;
-  }
+  if (failed) return <div className={`fm-flow-fallback ${className}`} />;
 
   return (
     <img
@@ -1797,6 +1825,7 @@ function WelcomeHero({
       `Hi ${displayName}, how can I help you today?`,
       "Let's start with positive attitude.",
       'Which job are we hunting today?',
+      'Which college or university are we applying to today?',
       "Tomorrow starts today. Let's prepare for it.",
       `Ask me anything, ${displayName}.`,
     ],
@@ -2084,7 +2113,10 @@ export default function AIJobAssistantPage() {
       cv_advice: savedMessages.filter((message) => message.savedCategory === 'cv_advice').length,
       application_message: savedMessages.filter((message) => message.savedCategory === 'application_message').length,
       research: savedMessages.filter((message) => message.savedCategory === 'research').length,
-      education_notes: savedMessages.filter((message) => message.savedCategory === 'education_notes').length,
+      homework_help: savedMessages.filter((message) => message.savedCategory === 'homework_help').length,
+      assignments: savedMessages.filter((message) => message.savedCategory === 'assignments').length,
+      youtube_lessons: savedMessages.filter((message) => message.savedCategory === 'youtube_lessons').length,
+      institution_applications: savedMessages.filter((message) => message.savedCategory === 'institution_applications').length,
     };
   }, [savedMessages]);
 
@@ -2190,7 +2222,7 @@ export default function AIJobAssistantPage() {
           deadline: deadline || null,
           sourceLabel: clean(job.sourceLabel || job.source_label || job.source_type || job.sourceType) || 'External job source',
           verificationStatus: normalizeVerificationStatus(job.verificationStatus || job.verification_status || job.status),
-          actionLabel: clean(job.actionLabel || job.action_label) || 'Open Job Source',
+          actionLabel: clean(job.actionLabel || job.action_label) || 'Open Apply Page',
           applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.redirect_url || job.sourceUrl || job.source_url),
           sourceUrl: clean(job.sourceUrl || job.source_url || job.applyUrl || job.apply_url || job.redirect_url),
           sourceType: normalizeSourceType(job.sourceType || job.source_type || job.sourceLabel),
@@ -2236,8 +2268,13 @@ export default function AIJobAssistantPage() {
       const data = unwrapApiResponse(res);
       const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
       const normalizedJobs = normalizeApiJobs(jobs, query, area);
+      const shouldFallbackToOfficial = clean(query).toLowerCase() === 'jobs';
 
-      const finalJobs = normalizedJobs.length ? normalizedJobs : OFFICIAL_JOB_SOURCE_CARDS;
+      const finalJobs = normalizedJobs.length
+        ? normalizedJobs
+        : shouldFallbackToOfficial
+          ? OFFICIAL_JOB_SOURCE_CARDS
+          : [];
 
       setLocalJobs(finalJobs);
 
@@ -2251,8 +2288,9 @@ export default function AIJobAssistantPage() {
         });
       }
 
-      setLocalJobs(OFFICIAL_JOB_SOURCE_CARDS);
-      return OFFICIAL_JOB_SOURCE_CARDS;
+      const fallback = clean(query).toLowerCase() === 'jobs' ? OFFICIAL_JOB_SOURCE_CARDS : [];
+      setLocalJobs(fallback);
+      return fallback;
     }
   };
 
@@ -2263,9 +2301,8 @@ export default function AIJobAssistantPage() {
     const areaLabel = isBroadSearchArea(areaText) ? areaText : `${areaText} • Limpopo`;
     const searchLabel = getSearchDisplayLabel(queryText);
 
-    if (exactJobs.length) {
-      return `${count} ${searchLabel} found ${areaLabel}`;
-    }
+    if (exactJobs.length) return `${count} ${searchLabel} found ${areaLabel}`;
+    if (sourceCards.length) return `${count} official job sources found ${areaLabel}`;
 
     return `No clear local ${searchLabel} found ${areaLabel}`;
   };
@@ -2338,7 +2375,6 @@ export default function AIJobAssistantPage() {
 
   const showMoreJobsForMessage = (message: ChatMessage) => {
     const total = message.jobs?.length || 0;
-
     if (!total) return;
 
     setJobVisibleCounts((prev) => {
@@ -2371,13 +2407,8 @@ export default function AIJobAssistantPage() {
         silent: true,
       });
 
-      const liveFiltered = liveJobs
-        .filter((job) => !job.isSourceCard)
-        .filter((job) => looksLikeNoExperienceJob(job));
-
-      const existingFiltered = (message.jobs || [])
-        .filter((job) => !job.isSourceCard)
-        .filter((job) => looksLikeNoExperienceJob(job));
+      const liveFiltered = liveJobs.filter((job) => !job.isSourceCard).filter((job) => looksLikeNoExperienceJob(job));
+      const existingFiltered = (message.jobs || []).filter((job) => !job.isSourceCard).filter((job) => looksLikeNoExperienceJob(job));
 
       const finalJobs = dedupeJobs(liveFiltered.length ? liveFiltered : existingFiltered);
       const content = finalJobs.length
@@ -2478,7 +2509,11 @@ export default function AIJobAssistantPage() {
 
     const intent = detectIntent(finalPrompt, hasImages);
     const suggestedSavedCategory = savedCategoryFromIntent(intent);
-    const shouldAutoSaveEducation = suggestedSavedCategory === 'education_notes';
+    const shouldAutoSaveEducation =
+      suggestedSavedCategory === 'homework_help' ||
+      suggestedSavedCategory === 'assignments' ||
+      suggestedSavedCategory === 'youtube_lessons' ||
+      suggestedSavedCategory === 'institution_applications';
 
     const contextualPrompt = shouldUseContext
       ? `Use the recent conversation to understand this short reply and continue from the last assistant question.
@@ -2835,9 +2870,7 @@ Apply link: ${job.applyUrl}`;
     setMessages((prev) =>
       prev.flatMap((message) => {
         if (message.id !== id) return [message];
-
         if (message.saved) return [{ ...message, deletedFromChat: true }];
-
         return [];
       })
     );
@@ -3161,42 +3194,22 @@ Apply link: ${job.applyUrl}`;
     if (showCvButtons) {
       return (
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={openCvBuilder}
-            className="h-10 rounded-xl text-xs"
-          >
+          <Button size="sm" variant="outline" onClick={openCvBuilder} className="h-10 rounded-xl text-xs">
             <FileText className="mr-2 h-3.5 w-3.5" />
             AI CV Builder
           </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={openCoverLetterBuilder}
-            className="h-10 rounded-xl text-xs"
-          >
+          <Button size="sm" variant="outline" onClick={openCoverLetterBuilder} className="h-10 rounded-xl text-xs">
             <Mail className="mr-2 h-3.5 w-3.5" />
             Cover Letter AI
           </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => copyText(message.content)}
-            className="h-10 rounded-xl text-xs"
-          >
+          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl text-xs">
             <Copy className="mr-2 h-3.5 w-3.5" />
             Copy Answer
           </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => saveMessageAs(message.id, 'cv_advice')}
-            className="h-10 rounded-xl text-xs"
-          >
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-10 rounded-xl text-xs">
             <Save className="mr-2 h-3.5 w-3.5" />
             Save Tips
           </Button>
@@ -3204,13 +3217,19 @@ Apply link: ${job.applyUrl}`;
       );
     }
 
-    if (message.savedCategory === 'education_notes' || message.intent === 'education') {
+    if (
+      message.savedCategory === 'homework_help' ||
+      message.savedCategory === 'assignments' ||
+      message.savedCategory === 'youtube_lessons' ||
+      message.savedCategory === 'institution_applications' ||
+      message.intent?.startsWith('education_')
+    ) {
       return (
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
           <Button
             size="sm"
             variant="outline"
-            onClick={() => saveMessageAs(message.id, 'education_notes')}
+            onClick={() => saveMessageAs(message.id, message.savedCategory || 'homework_help')}
             className="h-10 rounded-xl text-xs"
           >
             <Save className="mr-2 h-3.5 w-3.5" />
@@ -3221,13 +3240,13 @@ Apply link: ${job.applyUrl}`;
             size="sm"
             variant="outline"
             onClick={() => {
-              setPrompt(`Find a YouTube lesson to explain this better:\n\n${message.content}`);
+              setPrompt(`Create a clearer study summary from this answer:\n\n${message.content}`);
               setFollowUpExpanded(true);
             }}
             className="h-10 rounded-xl text-xs"
           >
-            <Globe2 className="mr-2 h-3.5 w-3.5" />
-            YouTube Help
+            <FileText className="mr-2 h-3.5 w-3.5" />
+            Make Notes
           </Button>
         </div>
       );
@@ -3972,17 +3991,19 @@ Apply link: ${job.applyUrl}`;
                 <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
                   <FileText className="h-5 w-5 text-purple-500" />
                   <p className="mt-2 text-[11px] text-slate-500">Education</p>
-                  <p className="text-xl font-semibold">{savedStats.education_notes}</p>
+                  <p className="text-xl font-semibold">
+                    {savedStats.homework_help + savedStats.assignments + savedStats.youtube_lessons + savedStats.institution_applications}
+                  </p>
                 </div>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 {[
-                  ['Save Jobs', savedStats.career_plan],
-                  ['Applied Jobs', 0],
-                  ['Interview Tracker', 0],
-                  ['Education Notes', savedStats.education_notes],
-                  ['Offer Received', 0],
+                  ['Saved Jobs', savedStats.career_plan],
+                  ['Homework Help', savedStats.homework_help],
+                  ['Assignments', savedStats.assignments],
+                  ['YouTube Lessons', savedStats.youtube_lessons],
+                  ['Applications', savedStats.institution_applications],
                 ].map(([label, count]) => (
                   <div
                     key={String(label)}
@@ -4067,7 +4088,8 @@ Apply link: ${job.applyUrl}`;
                     ['Send follow-up email', Mail],
                     ['Tailor CV for saved jobs', FileText],
                     ['Review interview questions', Users],
-                    ['Study notes / homework', FileText],
+                    ['Homework Help', FileText],
+                    ['College / University Applications', Users],
                   ].map(([label, Icon]: any) => (
                     <button
                       key={label}
@@ -4096,18 +4118,25 @@ Apply link: ${job.applyUrl}`;
                     All
                   </Button>
 
-                  {(['career_plan', 'cv_advice', 'application_message', 'research', 'education_notes'] as SavedCategory[]).map(
-                    (category) => (
-                      <Button
-                        key={category}
-                        variant={savedFilter === category ? 'default' : 'outline'}
-                        onClick={() => setSavedFilter(category)}
-                        className="h-9 rounded-full px-4 text-xs"
-                      >
-                        {savedCategoryLabels[category]} ({savedStats[category]})
-                      </Button>
-                    )
-                  )}
+                  {([
+                    'career_plan',
+                    'cv_advice',
+                    'application_message',
+                    'research',
+                    'homework_help',
+                    'assignments',
+                    'youtube_lessons',
+                    'institution_applications',
+                  ] as SavedCategory[]).map((category) => (
+                    <Button
+                      key={category}
+                      variant={savedFilter === category ? 'default' : 'outline'}
+                      onClick={() => setSavedFilter(category)}
+                      className="h-9 rounded-full px-4 text-xs"
+                    >
+                      {savedCategoryLabels[category]} ({savedStats[category]})
+                    </Button>
+                  ))}
                 </div>
 
                 <div className="mt-3 space-y-3">
@@ -4176,7 +4205,7 @@ Apply link: ${job.applyUrl}`;
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90">
               <div>
-                <h2 className="text-base font-semibold">Automatic Job Search</h2>
+                <h2 className="text-base font-semibold">FaceMeX Tools</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
                   Jobs and Education AI
                 </p>
@@ -4191,7 +4220,7 @@ Apply link: ${job.applyUrl}`;
               <div className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
                 <h3 className="text-base font-semibold">Education AI</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
-                  Homework, assignments, study notes, YouTube lessons, and institution applications.
+                  Homework, assignments, YouTube lessons, and college or university applications.
                 </p>
 
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -4217,133 +4246,136 @@ Apply link: ${job.applyUrl}`;
               </div>
 
               <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-                {['Tzaneen', 'Retail', 'Farm', 'Admin', 'Security', 'Driver', 'Teacher', 'Polokwane', 'Phalaborwa', 'Hoedspruit'].map(
-                  (item) => (
-                    <Button
-                      key={item}
-                      variant="outline"
-                      onClick={() => {
-                        const area = PRIORITY_AREAS.includes(item) ? item : 'Tzaneen';
-                        const queryMap: Record<string, string> = {
-                          Retail: 'cashier retail packer store assistant clerk',
-                          Farm: 'farm agriculture packhouse packing',
-                          Admin: 'admin clerk office',
-                          Security: 'security',
-                          Driver: 'driver',
-                          Teacher: 'teacher creche school daycare',
-                        };
-                        const query = PRIORITY_AREAS.includes(item) ? 'jobs' : queryMap[item] || item;
-                        loadAutomaticJobs({ query, area });
-                      }}
-                      className="h-9 shrink-0 rounded-full px-4 text-xs"
-                    >
-                      {item}
-                    </Button>
-                  )
-                )}
+                {[
+                  { label: 'Tzaneen', query: 'jobs', area: 'Tzaneen' },
+                  { label: 'Retail', query: 'retail', area: 'Tzaneen' },
+                  { label: 'Farm', query: 'farm', area: 'Tzaneen' },
+                  { label: 'Admin', query: 'admin', area: 'Tzaneen' },
+                  { label: 'Security', query: 'security', area: 'Tzaneen' },
+                  { label: 'Driver', query: 'driver', area: 'Tzaneen' },
+                  { label: 'Teacher', query: 'teacher', area: 'Tzaneen' },
+                  { label: 'Polokwane', query: 'jobs', area: 'Polokwane' },
+                  { label: 'Phalaborwa', query: 'jobs', area: 'Phalaborwa' },
+                  { label: 'Hoedspruit', query: 'jobs', area: 'Hoedspruit' },
+                ].map((item) => (
+                  <Button
+                    key={item.label}
+                    variant="outline"
+                    onClick={() => loadAutomaticJobs({ query: item.query, area: item.area })}
+                    className="h-9 shrink-0 rounded-full px-4 text-xs"
+                  >
+                    {item.label}
+                  </Button>
+                ))}
               </div>
 
               <div className="mt-4 space-y-3">
-                {sortedLocalJobs.map((job) => {
-                  const deadlineInfo = getDeadlineInfo(job.deadline);
+                {sortedLocalJobs.length === 0 ? (
+                  <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm leading-6 text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50">
+                    No matching jobs found for this category right now. Try another category or search from the main AI page.
+                  </div>
+                ) : (
+                  sortedLocalJobs.map((job) => {
+                    const deadlineInfo = getDeadlineInfo(job.deadline);
 
-                  return (
-                    <div
-                      key={job.id}
-                      className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
-                    >
-                      <div className="flex gap-3">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-                          {job.verificationStatus === 'verified' ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                          ) : job.verificationStatus === 'avoid' ? (
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
-                          ) : (
-                            <ShieldCheck className="h-5 w-5 text-blue-600" />
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <h4 className="truncate text-sm font-semibold">{job.title}</h4>
-                              <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
-                            </div>
-
-                            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                    return (
+                      <div
+                        key={job.id}
+                        className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                      >
+                        <div className="flex gap-3">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                            {job.verificationStatus === 'verified' ? (
+                              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                            ) : job.verificationStatus === 'avoid' ? (
+                              <AlertTriangle className="h-5 w-5 text-red-500" />
+                            ) : (
+                              <ShieldCheck className="h-5 w-5 text-blue-600" />
+                            )}
                           </div>
 
-                          <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-3.5 w-3.5" />
-                              <span className="truncate">{job.area}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <h4 className="truncate text-sm font-semibold">{job.title}</h4>
+                                <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                              </div>
+
+                              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                             </div>
 
-                            <div
-                              className={`flex items-center gap-2 ${
-                                deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
-                              }`}
-                            >
-                              <Clock className="h-3.5 w-3.5" />
-                              <span>{job.deadline ? deadlineInfo.label : 'Closing date not stated by source'}</span>
+                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+                              <div className="flex items-center gap-2">
+                                <MapPin className="h-3.5 w-3.5" />
+                                <span className="truncate">{job.area}</span>
+                              </div>
+
+                              <div
+                                className={`flex items-center gap-2 ${
+                                  deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
+                                }`}
+                              >
+                                <Clock className="h-3.5 w-3.5" />
+                                <span>{job.deadline ? deadlineInfo.label : 'Closing date not stated by source'}</span>
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-                              {job.sourceLabel}
-                            </span>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                                {job.sourceLabel}
+                              </span>
 
-                            <span
-                              className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
-                                job.verificationStatus
-                              )}`}
-                            >
-                              {verificationStatusLabel(job.verificationStatus)}
-                            </span>
-                          </div>
+                              <span
+                                className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
+                                  job.verificationStatus
+                                )}`}
+                              >
+                                {verificationStatusLabel(job.verificationStatus)}
+                              </span>
+                            </div>
 
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openOfficialApplyPage(job)}
-                              disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
-                              className="h-8 rounded-xl text-xs"
-                            >
-                              {job.isSourceCard ? (
-                                <Globe2 className="mr-1.5 h-3.5 w-3.5" />
-                              ) : job.verificationStatus === 'needs_verification' ? (
-                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                              ) : (
-                                <Send className="mr-1.5 h-3.5 w-3.5" />
-                              )}
-                              {deadlineInfo.expired ? 'Closed' : job.actionLabel}
-                            </Button>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openOfficialApplyPage(job)}
+                                disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
+                                className="h-8 rounded-xl text-xs"
+                              >
+                                {job.isSourceCard ? (
+                                  <Globe2 className="mr-1.5 h-3.5 w-3.5" />
+                                ) : job.verificationStatus === 'needs_verification' ? (
+                                  <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                                ) : (
+                                  <Send className="mr-1.5 h-3.5 w-3.5" />
+                                )}
+                                {deadlineInfo.expired ? 'Closed' : job.actionLabel}
+                              </Button>
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setLastSelectedJob(job);
-                                saveLocalJob(job);
-                              }}
-                              className="h-8 rounded-xl text-xs"
-                            >
-                              <Save className="mr-1.5 h-3.5 w-3.5" />
-                              Save
-                            </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setLastSelectedJob(job);
+                                  saveLocalJob(job);
+                                }}
+                                className="h-8 rounded-xl text-xs"
+                              >
+                                <Save className="mr-1.5 h-3.5 w-3.5" />
+                                Save
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
 
               <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
                 <strong className="block text-sm">FaceMeX rule</strong>
-                Search according to the user’s intent. Generic job search shows all jobs. Security search shows security jobs. Cashier search shows retail jobs. No experience filters beginner-friendly jobs only. Education AI helps with homework, notes, YouTube lessons, and institution applications.
+                Each job category filters only related jobs. Education AI has separate workspaces for Homework Help, Assignments, YouTube Lessons, and College / University Applications.
               </div>
             </div>
           </div>
