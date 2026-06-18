@@ -1667,7 +1667,7 @@ function WelcomeHero({
   const rotatingPrompts = useMemo(
     () => [
       `Hi ${displayName}, how can I help you today?`,
-      "Let's start with positive attention.",
+      "Let's start with positive attitude.",
       'Which job are we hunting today?',
       "Tomorrow starts today. Let's prepare for it.",
       `Ask me anything, ${displayName}.`,
