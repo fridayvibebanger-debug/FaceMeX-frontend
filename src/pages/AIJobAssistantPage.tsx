@@ -1877,7 +1877,7 @@ function WelcomeHero({
   }, [typedPrompt, isDeleting, promptIndex, rotatingPrompts]);
 
   return (
-    <div className="mx-auto flex min-h-[38vh] max-w-xl flex-col items-center justify-center text-center">
+    <div className="mx-auto flex min-h-[38vh] max-w-xl flex-col items-center justify-center text-center lg:min-h-[45vh]">
       <div className="fm-treasure-wrap">
         <span className="fm-treasure-ring" />
         <span className="fm-treasure-shadow" />
@@ -3578,10 +3578,10 @@ Apply link: ${job.applyUrl}`;
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-hidden px-2 py-2 sm:px-4 sm:py-4">
-        <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.045] sm:rounded-[30px]">
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+      <main className="min-h-0 flex-1 overflow-hidden px-2 py-2 sm:px-4 sm:py-4 lg:bg-white lg:px-0 lg:py-0 dark:lg:bg-[#0b0b0c]">
+        <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.045] sm:rounded-[30px] lg:max-w-none lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none dark:lg:bg-[#0b0b0c]">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6">
               {chatMessages.length === 0 && !busy && (
                 <WelcomeHero firstName={firstName} onQuickAsk={quickAsk} />
               )}
@@ -3611,7 +3611,7 @@ Apply link: ${job.applyUrl}`;
                           ? 'max-w-[88%] bg-slate-950 text-white dark:bg-white dark:text-black sm:max-w-[82%]'
                           : isJobResultsMessage
                             ? 'w-full max-w-full bg-transparent px-0 py-0 shadow-none'
-                            : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%]'
+                            : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%] lg:bg-transparent lg:border-0 lg:shadow-none lg:px-0'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -3633,7 +3633,7 @@ Apply link: ${job.applyUrl}`;
                           </div>
                         </div>
                       ) : (
-                        <div className={message.role === 'assistant' && !isJobResultsMessage ? 'max-h-[58vh] overflow-y-auto pr-1' : ''}>
+                        <div className={message.role === 'assistant' && !isJobResultsMessage ? 'max-h-[58vh] overflow-y-auto pr-1 lg:max-h-none lg:overflow-visible lg:pr-0' : ''}>
                           {renderMessageImages(message.images)}
 
                           {message.role === 'assistant' && renderJobSummaryCard(message, previousUserText)}
@@ -3670,8 +3670,8 @@ Apply link: ${job.applyUrl}`;
             </div>
           </div>
 
-          <footer className="shrink-0 border-t border-black/5 bg-white/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:p-4">
-            <div className="mx-auto w-full max-w-3xl">
+          <footer className="shrink-0 border-t border-black/5 bg-white/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:p-4 lg:border-0 lg:bg-white lg:px-6 lg:pb-6 dark:lg:bg-[#0b0b0c]">
+            <div className="mx-auto w-full max-w-3xl lg:max-w-[760px]">
               {selectedImages.length > 0 && (
                 <div className="mb-2 grid grid-cols-4 gap-2">
                   {selectedImages.map((image) => (
@@ -3692,7 +3692,7 @@ Apply link: ${job.applyUrl}`;
               )}
 
               {hasJobResultsOnScreen && !followUpExpanded && selectedImages.length === 0 && !prompt.trim() ? (
-                <div className="flex items-center gap-2 rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717]">
+                <div className="flex items-center gap-2 rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717] lg:rounded-[28px] lg:border-slate-200 lg:shadow-[0_8px_28px_rgba(15,23,42,0.08)] dark:lg:border-white/10">
                   <button
                     type="button"
                     onClick={() => setFollowUpExpanded(true)}
@@ -3730,7 +3730,7 @@ Apply link: ${job.applyUrl}`;
                   />
                 </div>
               ) : (
-                <div className="rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717] sm:rounded-[24px]">
+                <div className="rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717] sm:rounded-[24px] lg:rounded-[28px] lg:border-slate-200 lg:shadow-[0_8px_28px_rgba(15,23,42,0.08)] dark:lg:border-white/10">
                   <Textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
