@@ -2150,6 +2150,19 @@ export default function AIJobAssistantPage() {
   }, [sortedLocalJobs, nowTick]);
 
   useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -3310,7 +3323,7 @@ Apply link: ${job.applyUrl}`;
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen max-w-full overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white lg:bg-black lg:text-white">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white lg:bg-black lg:text-white">
       <style>{`
         @keyframes fmSoftFloatIn {
           from {
@@ -3503,6 +3516,63 @@ Apply link: ${job.applyUrl}`;
           }
         }
 
+        .fm-desktop-sidebar-scroll {
+          overscroll-behavior: contain;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+        }
+
+        .fm-chat-scroll {
+          overscroll-behavior: contain;
+        }
+
+        .fm-chat-scroll::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .fm-chat-scroll::-webkit-scrollbar-thumb {
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.18);
+        }
+
+        .fm-chat-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .fm-user-prompt-bubble {
+          background: #020617;
+          color: #ffffff;
+        }
+
+        .fm-user-prompt-bubble * {
+          color: inherit;
+        }
+
+        .dark .fm-user-prompt-bubble {
+          background: #ffffff;
+          color: #000000;
+        }
+
+        @media (min-width: 1024px) {
+          .fm-user-prompt-bubble,
+          .dark .fm-user-prompt-bubble {
+            background: #2f2f2f;
+            color: #ffffff;
+          }
+        }
+
+        @media (max-width: 1023px) {
+          .dark .fm-user-prompt-bubble,
+          .dark .fm-user-prompt-bubble * {
+            color: #000000;
+          }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
           .fm-treasure-shadow,
@@ -3516,9 +3586,9 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className="hidden h-full w-[260px] shrink-0 flex-col border-r border-white/5 bg-[#050505] text-white lg:flex">
-        <div className="flex h-14 items-center justify-between px-4">
-          <div className="text-sm font-semibold">FaceMeX</div>
+      <aside className="hidden h-full max-h-[100dvh] w-[260px] min-w-[260px] shrink-0 overflow-hidden flex-col border-r border-white/5 bg-[#050505] text-white lg:flex">
+        <div className="flex h-14 shrink-0 items-center justify-between px-4">
+          <div className="min-w-0 truncate text-sm font-semibold">FaceMeX</div>
 
           <button
             type="button"
@@ -3530,11 +3600,11 @@ Apply link: ${job.applyUrl}`;
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-2">
+        <div className="fm-desktop-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6">
           <button
             type="button"
             onClick={() => setClearWorkspaceOpen(true)}
-            className="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/10"
           >
             <Edit3 className="h-4 w-4" />
             New chat
@@ -3543,7 +3613,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <Search className="h-4 w-4" />
             Search jobs
@@ -3552,7 +3622,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setTrackerOpen(true)}
-            className="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <Clock className="h-4 w-4" />
             Job Tracker
@@ -3561,7 +3631,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <FileText className="h-4 w-4" />
             Education AI
@@ -3642,7 +3712,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => navigate('/feed')}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
+            className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to FaceMeX
@@ -3661,7 +3731,7 @@ Apply link: ${job.applyUrl}`;
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
       <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white/95 px-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:h-16 sm:px-5 lg:hidden">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -3727,7 +3797,7 @@ Apply link: ${job.applyUrl}`;
 
       <main className="min-h-0 flex-1 overflow-hidden px-2 py-2 sm:px-4 sm:py-4 lg:bg-black lg:px-0 lg:py-0">
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.045] sm:rounded-[30px] lg:max-w-none lg:rounded-none lg:border-0 lg:bg-black lg:shadow-none">
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
+          <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
               {chatMessages.length === 0 && !busy && (
                 <WelcomeHero firstName={firstName} onQuickAsk={quickAsk} />
@@ -3755,7 +3825,7 @@ Apply link: ${job.applyUrl}`;
                     <div
                       className={`rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:rounded-[24px] ${
                         message.role === 'user'
-                          ? 'max-w-[88%] bg-slate-950 text-white dark:bg-white dark:text-black sm:max-w-[82%] lg:max-w-[72%] lg:rounded-[18px] lg:bg-[#2f2f2f] lg:px-4 lg:py-3 lg:text-white'
+                          ? 'fm-user-prompt-bubble max-w-[88%] sm:max-w-[82%] lg:max-w-[72%] lg:rounded-[18px] lg:px-4 lg:py-3'
                           : isJobResultsMessage
                             ? 'w-full max-w-full bg-transparent px-0 py-0 shadow-none'
                             : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%] lg:w-full lg:max-w-full lg:border-0 lg:bg-transparent lg:px-0 lg:py-1 lg:text-white lg:shadow-none'
@@ -3766,7 +3836,7 @@ Apply link: ${job.applyUrl}`;
                           <Textarea
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            className="min-h-[120px] rounded-2xl bg-white dark:bg-black/20"
+                            className="min-h-[120px] rounded-2xl bg-white text-slate-950 dark:bg-black/20 dark:text-white lg:bg-[#2f2f2f] lg:text-white"
                           />
 
                           <div className="flex justify-end gap-2">
@@ -3887,7 +3957,7 @@ Apply link: ${job.applyUrl}`;
                         ? 'Ask a follow-up...'
                         : 'Search jobs, check advert, or ask CV help...'
                     }
-                    className={`resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed shadow-none placeholder:text-slate-500 focus-visible:ring-0 focus-visible:ring-offset-0 lg:text-white lg:placeholder:text-white/55 ${
+                    className={`resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed text-slate-950 shadow-none placeholder:text-slate-500 focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-white lg:text-white lg:placeholder:text-white/55 ${
                       hasJobResultsOnScreen
                         ? inputHasContent || followUpExpanded
                           ? 'max-h-24 min-h-[46px]'
