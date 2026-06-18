@@ -3518,13 +3518,27 @@ Apply link: ${job.applyUrl}`;
 
         .fm-desktop-sidebar-scroll {
           overscroll-behavior: contain;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
+          scrollbar-gutter: stable;
         }
 
         .fm-desktop-sidebar-scroll::-webkit-scrollbar {
-          width: 0;
-          height: 0;
+          width: 8px;
+          height: 8px;
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar-thumb {
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.34);
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.48);
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar-track {
+          background: transparent;
         }
 
         .fm-chat-scroll {
@@ -3586,7 +3600,7 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className="hidden h-full max-h-[100dvh] w-[260px] min-w-[260px] shrink-0 overflow-hidden flex-col border-r border-white/5 bg-[#050505] text-white lg:flex">
+      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden flex-col border-r border-white/5 bg-[#050505] text-white lg:flex">
         <div className="flex h-14 shrink-0 items-center justify-between px-4">
           <div className="min-w-0 truncate text-sm font-semibold">FaceMeX</div>
 
@@ -3600,7 +3614,7 @@ Apply link: ${job.applyUrl}`;
           </button>
         </div>
 
-        <div className="fm-desktop-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6">
+        <div className="fm-desktop-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden py-2 pl-3 pr-2 pb-8">
           <button
             type="button"
             onClick={() => setClearWorkspaceOpen(true)}
