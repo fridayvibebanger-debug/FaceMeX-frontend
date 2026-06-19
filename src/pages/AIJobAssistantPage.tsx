@@ -2143,14 +2143,63 @@ function isShortContextReply(text: string) {
 }
 
 
+function buildPremiumRecentHeading(text: string) {
+  const value = clean(text).replace(/\s+/g, ' ').trim();
+  const lower = value.toLowerCase();
+
+  if (!value) return 'New chat';
+
+  const locationMatch = lower.match(/(tzaneen|lenyenye|nkowankowa|polokwane|limpopo|gauteng|johannesburg|pretoria|cape town|durban|south africa)/i);
+  const location = locationMatch?.[1]
+    ? locationMatch[1].split(' ').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+    : '';
+
+  if (/(job|jobs|vacancy|vacancies|hiring|work|employment|learnership|internship)/i.test(lower)) {
+    return location ? `Seeking ${location} Job` : 'Seeking Jobs';
+  }
+
+  if (/(cv|resume)/i.test(lower)) return 'Building CV';
+  if (/(cover letter|application letter|motivation letter)/i.test(lower)) return 'Cover Letter';
+  if (/(interview)/i.test(lower)) return 'Interview Prep';
+  if (/(fake|scam|legit|verify|safe|risky)/i.test(lower)) return 'Checking Opportunity';
+  if (/(youtube|video|watch|lesson video)/i.test(lower)) return 'Watching Lessons';
+  if (/(saved youtube lesson)/i.test(lower)) return 'Saved YouTube Lesson';
+  if (/(funding|grant|investor|pitch|startup|business plan)/i.test(lower)) return 'Funding & Investors';
+  if (/(nsfas|bursary|scholarship)/i.test(lower)) return 'NSFAS & Bursaries';
+  if (/(college|university|tvet|application)/i.test(lower)) return 'College Application';
+
+  const gradeMatch = lower.match(/grade\s*(8|9|10|11|12)/i);
+  const subjectMatch = lower.match(/(math|maths|mathematics|history|accounting|science|english|business studies|geography|economics)/i);
+  if (gradeMatch && subjectMatch) {
+    const subject = subjectMatch[1]
+      .replace('maths', 'Maths')
+      .replace('math', 'Maths')
+      .replace('mathematics', 'Maths')
+      .replace('business studies', 'Business Studies')
+      .replace(/^./, (char) => char.toUpperCase());
+    return `Grade ${gradeMatch[1]} ${subject}`;
+  }
+
+  const cleaned = value
+    .replace(/^(hi|hello|hey|please|can you|could you|help me|i need|i want|write me|show me|tell me)\s+/i, '')
+    .replace(/[?!.]+$/g, '')
+    .trim();
+
+  const words = cleaned.split(/\s+/).filter(Boolean).slice(0, 4);
+  const title = words.join(' ');
+  if (!title) return 'New chat';
+
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
 function buildChatSessionTitle(messages: ChatMessage[]) {
   const firstUserMessage = messages.find((message) => message.role === 'user' && clean(message.content));
-  const title = clean(firstUserMessage?.content || messages[0]?.content || 'New chat');
+  const title = buildPremiumRecentHeading(clean(firstUserMessage?.content || messages[0]?.content || 'New chat'));
 
   if (!title) return 'New chat';
-  if (title.length <= 58) return title;
+  if (title.length <= 34) return title;
 
-  return `${title.slice(0, 58).trim()}...`;
+  return `${title.slice(0, 34).trim()}...`;
 }
 
 function normalizeChatSessions(value: unknown): ChatSession[] {
@@ -2469,6 +2518,13 @@ export default function AIJobAssistantPage() {
   const [youtubeLessonVideos, setYoutubeLessonVideos] = useState<YouTubeLessonVideo[]>([]);
   const [activePlayingVideoId, setActivePlayingVideoId] = useState<string | null>(null);
   const [youtubeLessonsBusy, setYoutubeLessonsBusy] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [watchPanelOpen, setWatchPanelOpen] = useState(false);
+  const [watchSearch, setWatchSearch] = useState('');
+  const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
+  const [watchBusy, setWatchBusy] = useState(false);
+  const [watchPlayingVideoId, setWatchPlayingVideoId] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleStep, setScheduleStep] = useState<'choose' | 'custom'>('choose');
   const [schedulePrompt, setSchedulePrompt] = useState('');
@@ -3213,6 +3269,45 @@ export default function AIJobAssistantPage() {
       });
     } finally {
       setYoutubeLessonsBusy(false);
+    }
+  };
+
+  const openWatchSearch = async (value?: string) => {
+    const query = clean(value || watchSearch || 'useful educational videos');
+
+    if (!query) {
+      toast({ title: 'Search needed', description: 'Type a topic or video you want to watch.' });
+      return;
+    }
+
+    setWatchSearch(query);
+    setWatchBusy(true);
+    setWatchVideos([]);
+    setWatchPlayingVideoId(null);
+    setWatchPanelOpen(true);
+    setJobsOpen(true);
+
+    try {
+      const res = await api.get(
+        `/api/youtube/search?q=${encodeURIComponent(`${query} full lesson tutorial guide no shorts`)}&limit=5&duration=medium`
+      );
+      const data = unwrapApiResponse(res);
+      const videos = normalizeYouTubeLessonVideos(data).slice(0, 5);
+      setWatchVideos(videos);
+
+      if (videos.length === 0) {
+        toast({ title: 'No useful videos found', description: 'Try a clearer topic, subject or channel name.' });
+      }
+    } catch (error: any) {
+      setWatchVideos([]);
+      trackError('workspace_watch_youtube_failed', error?.message || 'Watch search failed', { query });
+      toast({
+        title: 'Watch search failed',
+        description: 'Check your YouTube API route and try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setWatchBusy(false);
     }
   };
 
@@ -4528,8 +4623,8 @@ ${message.content}`);
           }
 
           .fm-drawer-row {
-            min-height: 48px;
-            border-radius: 18px;
+            min-height: 42px;
+            border-radius: 16px;
           }
 
           .fm-drawer-row:active {
@@ -4537,7 +4632,7 @@ ${message.content}`);
           }
 
           .fm-drawer-heading {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             letter-spacing: -0.02em;
             color: #111827;
@@ -4716,12 +4811,12 @@ ${message.content}`);
 
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
-      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[76px] items-center justify-between px-4 pt-3 lg:hidden">
+      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between bg-white/55 px-4 pt-2 backdrop-blur-xl lg:hidden">
         <div className="pointer-events-auto flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
             aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
@@ -4730,7 +4825,7 @@ ${message.content}`);
           <button
             type="button"
             onClick={openNewChatCard}
-            className="flex h-12 max-w-[190px] items-center rounded-full border border-slate-200 bg-white px-4 text-[15px] font-semibold tracking-[-0.02em] text-slate-950 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            className="flex h-10 max-w-[170px] items-center rounded-full border border-slate-200/80 bg-white/85 px-4 text-[14px] font-semibold tracking-[-0.02em] text-slate-950 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
             aria-label="Start a new chat"
           >
             <span className="truncate">FaceMeX AI</span>
@@ -4741,9 +4836,9 @@ ${message.content}`);
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={() => setLibraryOpen(true)}
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
-            aria-label="Open Library"
+            onClick={() => setGlobalSearchOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            aria-label="Search FaceMeX"
           >
             <Search className="h-5 w-5" />
           </button>
@@ -4751,7 +4846,7 @@ ${message.content}`);
           <button
             type="button"
             onClick={() => navigate('/feed')}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
             aria-label="Back to FaceMeX feed"
           >
             {firstName?.[0]?.toUpperCase() || 'F'}
@@ -4759,7 +4854,7 @@ ${message.content}`);
         </div>
       </header>
 
-      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[78px] sm:px-4 sm:pb-4 lg:bg-black lg:px-0 lg:py-0 lg:pt-0">
+      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[66px] sm:px-4 sm:pb-4 lg:bg-black lg:px-0 lg:py-0 lg:pt-0">
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
@@ -5771,6 +5866,145 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
         </div>
       )}
 
+      {globalSearchOpen && (
+        <div className="fixed inset-0 z-[85] bg-white/60 px-4 pt-4 backdrop-blur-xl lg:hidden" onClick={() => setGlobalSearchOpen(false)}>
+          <div
+            className="mx-auto mt-2 max-h-[82dvh] w-full max-w-[440px] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.18)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 border-b border-slate-100 p-3">
+              <Search className="h-5 w-5 shrink-0 text-slate-500" />
+              <input
+                value={globalSearchQuery}
+                onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && clean(globalSearchQuery)) {
+                    setGlobalSearchOpen(false);
+                    openWatchSearch(globalSearchQuery);
+                  }
+                }}
+                autoFocus
+                placeholder="Search FaceMeX, recents, topics, videos..."
+                className="min-w-0 flex-1 bg-transparent text-[15px] text-slate-950 outline-none placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={() => setGlobalSearchOpen(false)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700"
+                aria-label="Close search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-[70dvh] overflow-y-auto p-3">
+              {(() => {
+                const q = clean(globalSearchQuery).toLowerCase();
+                const matches = (text: string) => !q || clean(text).toLowerCase().includes(q);
+                const recentResults = chatSessions.filter((session) => matches(session.title)).slice(0, 6);
+                const topicResults = youtubeLessonCategories.filter((category) => matches(`${category.label} ${category.description} ${category.badge}`)).slice(0, 8);
+
+                return (
+                  <div className="space-y-5">
+                    <section>
+                      <h3 className="px-2 text-[13px] font-semibold text-slate-500">Features</h3>
+                      <div className="mt-2 space-y-1">
+                        {[
+                          { label: 'Job Library', icon: Briefcase, action: () => { setActiveLibrarySection('jobs'); setLibraryOpen(true); } },
+                          { label: 'Investors Library', icon: Building2, action: () => { setActiveLibrarySection('investors'); setLibraryOpen(true); } },
+                          { label: 'Students Library', icon: Users, action: () => { setActiveLibrarySection('students'); setLibraryOpen(true); } },
+                          { label: 'Scheduled', icon: CalendarDays, action: () => openSchedulePanel() },
+                          { label: 'Job Tracker', icon: Clock, action: () => setTrackerOpen(true) },
+                        ]
+                          .filter((item) => matches(item.label))
+                          .map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <button
+                                key={item.label}
+                                type="button"
+                                onClick={() => {
+                                  setGlobalSearchOpen(false);
+                                  item.action();
+                                }}
+                                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] font-medium text-slate-900 transition hover:bg-slate-50"
+                              >
+                                <Icon className="h-5 w-5 text-slate-500" />
+                                {item.label}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </section>
+
+                    {(q || topicResults.length > 0) && (
+                      <section>
+                        <h3 className="px-2 text-[13px] font-semibold text-slate-500">YouTube topics</h3>
+                        <div className="mt-2 space-y-1">
+                          {topicResults.map((category) => (
+                            <button
+                              key={`${category.library}-${category.label}`}
+                              type="button"
+                              onClick={() => {
+                                setGlobalSearchOpen(false);
+                                setLibraryOpen(true);
+                                openYoutubeLessonCategory(category);
+                              }}
+                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50"
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-[15px] font-semibold text-slate-950">{category.label}</span>
+                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-slate-500">{category.description}</span>
+                              </span>
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-500">{category.badge}</span>
+                            </button>
+                          ))}
+
+                          {q && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setGlobalSearchOpen(false);
+                                openWatchSearch(globalSearchQuery);
+                              }}
+                              className="flex w-full items-center gap-3 rounded-2xl bg-slate-950 px-3 py-3 text-left text-[15px] font-semibold text-white transition active:scale-[0.99]"
+                            >
+                              <Globe2 className="h-5 w-5" />
+                              Search YouTube for “{globalSearchQuery}”
+                            </button>
+                          )}
+                        </div>
+                      </section>
+                    )}
+
+                    {recentResults.length > 0 && (
+                      <section>
+                        <h3 className="px-2 text-[13px] font-semibold text-slate-500">Recents</h3>
+                        <div className="mt-2 space-y-1">
+                          {recentResults.map((session) => (
+                            <button
+                              key={session.id}
+                              type="button"
+                              onClick={() => {
+                                setGlobalSearchOpen(false);
+                                openChatSession(session);
+                              }}
+                              className="block w-full rounded-2xl px-3 py-3 text-left text-[15px] text-slate-800 transition hover:bg-slate-50"
+                            >
+                              {session.title || 'New chat'}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {jobsOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[3px] lg:hidden" onClick={() => setJobsOpen(false)}>
           <div
@@ -5788,10 +6022,10 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                   type="button"
                   onClick={() => {
                     setJobsOpen(false);
-                    setLibraryOpen(true);
+                    setGlobalSearchOpen(true);
                   }}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-900 shadow-sm transition active:scale-[0.98] hover:bg-slate-200"
-                  aria-label="Search Library"
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-900 shadow-sm transition active:scale-[0.98] hover:bg-slate-200"
+                  aria-label="Search FaceMeX"
                 >
                   <Search className="h-5 w-5" />
                 </button>
@@ -5802,7 +6036,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     navigate('/feed');
                   }}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
                   aria-label="Back to FaceMeX feed"
                 >
                   {firstName?.[0]?.toUpperCase() || 'F'}
@@ -5818,9 +6052,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <FileText className="h-6 w-6 text-slate-900" />
+                  <FileText className="h-5 w-5 text-slate-900" />
                   Library
                 </button>
 
@@ -5831,9 +6065,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Briefcase className="h-6 w-6 text-slate-900" />
+                  <Briefcase className="h-5 w-5 text-slate-900" />
                   Job Library
                 </button>
 
@@ -5844,9 +6078,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Building2 className="h-6 w-6 text-slate-900" />
+                  <Building2 className="h-5 w-5 text-slate-900" />
                   Investors Library
                 </button>
 
@@ -5857,9 +6091,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Users className="h-6 w-6 text-slate-900" />
+                  <Users className="h-5 w-5 text-slate-900" />
                   Students Library
                 </button>
 
@@ -5869,9 +6103,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     openSchedulePanel();
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <CalendarDays className="h-6 w-6 text-slate-900" />
+                  <CalendarDays className="h-5 w-5 text-slate-900" />
                   Scheduled
                 </button>
 
@@ -5881,23 +6115,101 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setTrackerOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Clock className="h-6 w-6 text-slate-900" />
+                  <Clock className="h-5 w-5 text-slate-900" />
                   Job Tracker
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setJobsOpen(false);
-                    navigate('/feed');
-                  }}
-                  className="fm-drawer-row mt-2 flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  onClick={() => setWatchPanelOpen((value) => !value)}
+                  className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <ArrowLeft className="h-6 w-6 text-slate-900" />
-                  Back to FaceMeX feed
+                  <span className="flex min-w-0 items-center gap-4">
+                    <Globe2 className="h-5 w-5 text-slate-900" />
+                    <span className="min-w-0 truncate">Watch</span>
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-slate-400 transition ${watchPanelOpen ? 'rotate-180' : ''}`} />
                 </button>
+
+                {watchPanelOpen && (
+                  <div className="mt-3 rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_14px_35px_rgba(15,23,42,0.06)]">
+                    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
+                      <Search className="h-4 w-4 shrink-0 text-slate-500" />
+                      <input
+                        value={watchSearch}
+                        onChange={(e) => setWatchSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') openWatchSearch();
+                        }}
+                        placeholder="Search useful videos..."
+                        className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openWatchSearch()}
+                        className="rounded-full bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white transition active:scale-[0.98]"
+                      >
+                        Search
+                      </button>
+                    </div>
+
+                    <div className="mt-3 space-y-3">
+                      {watchBusy ? (
+                        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-[13px] text-slate-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading useful videos...
+                        </div>
+                      ) : watchVideos.length === 0 ? (
+                        <div className="rounded-2xl bg-slate-50 p-3 text-[13px] leading-5 text-slate-500">
+                          Search any lesson, funding topic, investor topic, or job guide and watch inside FaceMeX.
+                        </div>
+                      ) : (
+                        watchVideos.slice(0, 3).map((video) => {
+                          const isPlaying = watchPlayingVideoId === video.videoId;
+
+                          return (
+                            <div key={video.videoId} className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm">
+                              <div className="relative aspect-video bg-slate-950">
+                                {isPlaying ? (
+                                  <iframe
+                                    src={video.embedUrl}
+                                    title={video.title}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    allowFullScreen
+                                    className="h-full w-full"
+                                  />
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setWatchPlayingVideoId(video.videoId)}
+                                    className="group relative h-full w-full overflow-hidden bg-slate-950 text-left"
+                                  >
+                                    {video.thumbnail ? (
+                                      <img src={video.thumbnail} alt={video.title} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                                    ) : null}
+                                    <span className="absolute inset-0 bg-black/20" />
+                                    <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-950 shadow-lg">
+                                      ▶
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="p-3">
+                                <p className="line-clamp-2 text-[14px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
+                                  {video.title}
+                                </p>
+                                <p className="mt-1 line-clamp-1 text-[12px] text-slate-500">{video.channelTitle || 'YouTube'}</p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="mt-7">
@@ -5915,7 +6227,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         setJobsOpen(false);
                         item.action();
                       }}
-                      className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left text-[16px] text-slate-800 transition hover:bg-slate-100"
+                      className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left text-[15px] text-slate-800 transition hover:bg-slate-100"
                     >
                       <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm">
                         <MessageCircleIcon />
@@ -5938,7 +6250,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                           setJobsOpen(false);
                           openChatSession(session);
                         }}
-                        className={`block w-full rounded-2xl px-3 py-3 text-left text-[16px] leading-snug transition hover:bg-slate-100 ${
+                        className={`block w-full rounded-2xl px-3 py-3 text-left text-[15px] leading-snug transition hover:bg-slate-100 ${
                           session.id === activeSessionId ? 'bg-slate-100 font-semibold text-slate-950' : 'text-slate-700'
                         }`}
                       >
@@ -5957,7 +6269,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                   setJobsOpen(false);
                   openNewChatCard();
                 }}
-                className="fm-drawer-chat-button pointer-events-auto inline-flex h-14 items-center gap-2 rounded-full bg-blue-500 px-7 text-[18px] font-semibold text-white transition active:scale-[0.98] hover:bg-blue-600"
+                className="fm-drawer-chat-button pointer-events-auto inline-flex h-14 items-center gap-2 rounded-full bg-blue-500 px-7 text-[17px] font-semibold text-white transition active:scale-[0.98] hover:bg-blue-600"
               >
                 <Edit3 className="h-5 w-5" />
                 Chat
