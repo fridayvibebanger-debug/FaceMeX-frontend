@@ -28,6 +28,7 @@ import {
   Save,
   Search,
   Send,
+  Share2,
   ShieldCheck,
   Trash2,
   Users,
@@ -122,6 +123,18 @@ type ChatSession = {
   updatedAt: string;
 };
 
+type ScheduledTask = {
+  id: string;
+  title: string;
+  prompt: string;
+  frequency: 'every_morning' | 'every_afternoon' | 'twice_day' | 'hourly' | 'custom';
+  email: string;
+  emailEnabled: boolean;
+  createdAt: string;
+  nextRunLabel?: string;
+  status: 'active' | 'paused';
+};
+
 const AI_CV_BUILDER_PATH = '/ai/resume';
 const AI_COVER_LETTER_PATH = '/ai/cover-letter';
 const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
@@ -130,6 +143,7 @@ const JOBS_BATCH_SIZE = 10;
 const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
 const WORKSPACE_SESSIONS_STORAGE_KEY = 'facemex_opportunities_workspace_sessions';
 const WORKSPACE_ACTIVE_SESSION_STORAGE_KEY = 'facemex_opportunities_workspace_active_session';
+const WORKSPACE_SCHEDULES_STORAGE_KEY = 'facemex_opportunities_workspace_schedules';
 
 const BUILD_CV_QUICK_ACTION = '__OPEN_FACEMEX_AI_CV_BUILDER__';
 const COVER_LETTER_QUICK_ACTION = '__OPEN_FACEMEX_COVER_LETTER_AI__';
@@ -616,6 +630,8 @@ type ApplySheetTool = {
   action?: 'open_cv_builder' | 'open_cover_letter_builder';
 };
 
+type EducationTool = ApplySheetTool;
+
 const applySheetTools: ApplySheetTool[] = [
   {
     label: 'Apply Assistant',
@@ -796,6 +812,68 @@ function getFirstName(name: string) {
   const value = clean(name);
   if (!value || value.toLowerCase() === 'there') return 'there';
   return value.split(' ')[0] || 'there';
+}
+
+function getUserEmail(store: any) {
+  const user =
+    store?.user ||
+    store?.currentUser ||
+    store?.authUser ||
+    store?.profile ||
+    store?.account ||
+    store?.session?.user ||
+    store?.supabaseUser ||
+    null;
+
+  return clean(
+    store?.email ||
+      store?.profile?.email ||
+      user?.email ||
+      user?.user_metadata?.email ||
+      ''
+  );
+}
+
+function normalizeScheduledTasks(value: any): ScheduledTask[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => ({
+      id: clean(item?.id) || safeId(),
+      title: clean(item?.title) || 'FaceMeX scheduled help',
+      prompt: clean(item?.prompt) || 'Scan for anything that needs my attention.',
+      frequency:
+        item?.frequency === 'every_afternoon' ||
+        item?.frequency === 'twice_day' ||
+        item?.frequency === 'hourly' ||
+        item?.frequency === 'custom'
+          ? item.frequency
+          : 'every_morning',
+      email: clean(item?.email),
+      emailEnabled: item?.emailEnabled !== false,
+      createdAt: clean(item?.createdAt) || new Date().toISOString(),
+      nextRunLabel: clean(item?.nextRunLabel),
+      status: item?.status === 'paused' ? 'paused' : 'active',
+    }))
+    .slice(0, 20);
+}
+
+function scheduleFrequencyLabel(frequency: ScheduledTask['frequency']) {
+  if (frequency === 'every_morning') return 'Every morning';
+  if (frequency === 'every_afternoon') return 'Every afternoon';
+  if (frequency === 'twice_day') return 'Twice a day';
+  if (frequency === 'hourly') return 'Hourly';
+  return 'Custom schedule';
+}
+
+function getDefaultSchedulePrompt(messages: ChatMessage[]) {
+  const lastUserPrompt = [...messages].reverse().find((message) => message.role === 'user')?.content;
+
+  return clean(lastUserPrompt) || 'Scan FaceMeX opportunities, education tasks, and saved jobs. Email me if anything needs my attention.';
+}
+
+function getWhatsAppShareUrl(text: string) {
+  return `https://wa.me/?text=${encodeURIComponent(normalizeUssdCodes(text))}`;
 }
 
 function safeId() {
@@ -2114,6 +2192,13 @@ export default function AIJobAssistantPage() {
   const [busy, setBusy] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleStep, setScheduleStep] = useState<'choose' | 'custom'>('choose');
+  const [schedulePrompt, setSchedulePrompt] = useState('');
+  const [scheduleEmail, setScheduleEmail] = useState(() => getUserEmail(userStore));
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
   const [applySheetOpen, setApplySheetOpen] = useState(false);
   const [clearWorkspaceOpen, setClearWorkspaceOpen] = useState(false);
   const [applySheetContext, setApplySheetContext] = useState('');
@@ -2236,6 +2321,13 @@ export default function AIJobAssistantPage() {
       setChatSessions([]);
       setMessages([]);
       setActiveSessionId(safeId());
+    }
+
+    try {
+      const rawSchedules = localStorage.getItem(WORKSPACE_SCHEDULES_STORAGE_KEY);
+      setScheduledTasks(normalizeScheduledTasks(rawSchedules ? JSON.parse(rawSchedules) : []));
+    } catch {
+      setScheduledTasks([]);
     }
 
     trackWorkspaceOpen({
@@ -2567,6 +2659,8 @@ export default function AIJobAssistantPage() {
     setApplySheetJob(null);
     setLastSelectedJob(null);
     setJobsOpen(false);
+    setLibraryOpen(false);
+    setScheduleOpen(false);
     setTrackerOpen(false);
     setClearWorkspaceOpen(false);
   };
@@ -2604,6 +2698,134 @@ export default function AIJobAssistantPage() {
     }
   };
 
+
+  const clearCurrentChatOnly = () => {
+    setMessages([]);
+    setPrompt('');
+    setSelectedImages([]);
+    setJobVisibleCounts({});
+    setFollowUpExpanded(false);
+    setEditingMessageId(null);
+    setEditText('');
+    setApplySheetOpen(false);
+    setApplySheetContext('');
+    setApplySheetJob(null);
+    setLastSelectedJob(null);
+
+    try {
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+      setChatSessions((prev) => {
+        const next = prev.filter((session) => session.id !== activeSessionId);
+        localStorage.setItem(WORKSPACE_SESSIONS_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    } catch {
+      // ignore
+    }
+
+    toast({
+      title: 'Chat cleared',
+      description: 'This chat is now clean. Your other recent chats stay saved.',
+    });
+  };
+
+  const shareToWhatsApp = (text: string) => {
+    window.open(getWhatsAppShareUrl(text), '_blank', 'noopener,noreferrer');
+  };
+
+  const openSchedulePanel = (basePrompt?: string) => {
+    setSchedulePrompt(clean(basePrompt) || getDefaultSchedulePrompt(messages));
+    setScheduleEmail((prev) => prev || getUserEmail(userStore));
+    setScheduleStep('choose');
+    setScheduleOpen(true);
+  };
+
+  const createScheduledTask = async (frequency: ScheduledTask['frequency']) => {
+    const promptToSchedule = clean(schedulePrompt) || getDefaultSchedulePrompt(messages);
+    const emailToUse = clean(scheduleEmail) || getUserEmail(userStore);
+
+    if (!emailToUse) {
+      toast({
+        title: 'Email needed',
+        description: 'Add an email address so FaceMeX can send scheduled updates.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const task: ScheduledTask = {
+      id: safeId(),
+      title: 'FaceMeX scheduled update',
+      prompt: promptToSchedule,
+      frequency,
+      email: emailToUse,
+      emailEnabled: true,
+      createdAt: new Date().toISOString(),
+      nextRunLabel: scheduleFrequencyLabel(frequency),
+      status: 'active',
+    };
+
+    setScheduleBusy(true);
+
+    try {
+      const payload = {
+        ...task,
+        channel: 'email',
+        sendEmail: true,
+        userEmail: emailToUse,
+        source: 'facemex-job-ai',
+      };
+
+      await api.post('/api/ai/schedules', payload);
+
+      setScheduledTasks((prev) => {
+        const next = [task, ...prev].slice(0, 20);
+        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+
+      toast({
+        title: 'Schedule created',
+        description: `${scheduleFrequencyLabel(frequency)} updates will be emailed to ${emailToUse}.`,
+      });
+    } catch {
+      setScheduledTasks((prev) => {
+        const next = [task, ...prev].slice(0, 20);
+        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+
+      toast({
+        title: 'Schedule saved',
+        description: 'Saved on this device. Connect /api/ai/schedules on the backend to send automatic emails.',
+      });
+    } finally {
+      setScheduleBusy(false);
+      setScheduleOpen(false);
+    }
+  };
+
+  const openLibraryChat = (tool: EducationTool) => {
+    const nextId = safeId();
+
+    setActiveSessionId(nextId);
+    setMessages([]);
+    resetWorkspaceUiForNewChat();
+    setLibraryOpen(false);
+    setJobsOpen(false);
+
+    try {
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, nextId);
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+
+    window.setTimeout(() => {
+      sendPrompt(tool.prompt);
+    }, 120);
+  };
+
   const clearWorkspaceFromScratch = () => {
     setMessages([]);
     setChatSessions([]);
@@ -2619,6 +2841,8 @@ export default function AIJobAssistantPage() {
     setApplySheetJob(null);
     setLastSelectedJob(null);
     setJobsOpen(false);
+    setLibraryOpen(false);
+    setScheduleOpen(false);
     setTrackerOpen(false);
     setClearWorkspaceOpen(false);
 
@@ -3254,7 +3478,7 @@ Apply link: ${job.applyUrl}`;
     const needsVerification = /needs verification|not enough|unclear|verify/i.test(combined);
 
     return (
-      <div className="mb-4 rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="mb-4 rounded-2xl border border-black/5 bg-white p-3 text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white">
         <div className="flex gap-3">
           {message.images?.[0] ? (
             <img
@@ -3263,15 +3487,15 @@ Apply link: ${job.applyUrl}`;
               className="h-24 w-24 shrink-0 rounded-2xl object-cover"
             />
           ) : (
-            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-              <Briefcase className="h-7 w-7 text-slate-500" />
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
+              <Briefcase className="h-7 w-7 text-slate-500 lg:text-white/60" />
             </div>
           )}
 
           <div className="min-w-0 flex-1">
             <h3 className="line-clamp-2 text-base font-semibold leading-tight">{title}</h3>
 
-            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50 lg:text-white/60">
               <div className="flex items-center gap-2">
                 <Building2 className="h-3.5 w-3.5" />
                 <span className="truncate">{company}</span>
@@ -3419,19 +3643,27 @@ Apply link: ${job.applyUrl}`;
 
   const messageActions = (message: ChatMessage) => (
     <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-black/5 pt-2 opacity-80 dark:border-white/10">
-      <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         <Copy className="h-3.5 w-3.5" />
       </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => shareToWhatsApp(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Share to WhatsApp">
+        <Share2 className="h-3.5 w-3.5" />
+      </Button>
+
+      <Button size="sm" variant="ghost" onClick={() => openSchedulePanel(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Schedule this chat">
+        <CalendarDays className="h-3.5 w-3.5" />
+      </Button>
+
+      <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         <Edit3 className="h-3.5 w-3.5" />
       </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         {message.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
       </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => researchMessage(message)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => researchMessage(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         <Search className="h-3.5 w-3.5" />
       </Button>
 
@@ -3440,11 +3672,21 @@ Apply link: ${job.applyUrl}`;
           size="sm"
           variant="ghost"
           onClick={() => saveMessageAs(message.id, message.savedCategory || 'research')}
-          className="h-8 rounded-full px-2"
+          className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white"
         >
           <Save className="h-3.5 w-3.5" />
         </Button>
       )}
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={clearCurrentChatOnly}
+        className="h-8 rounded-full px-2 text-red-500"
+        aria-label="Clear current chat"
+      >
+        Clear chat
+      </Button>
 
       <Button
         size="sm"
@@ -3771,6 +4013,31 @@ Apply link: ${job.applyUrl}`;
           }
         }
 
+
+
+        @media (min-width: 1024px) {
+          .fm-desktop-sidebar-scroll {
+            padding-bottom: 36px;
+          }
+
+          .fm-sidebar-recent-list {
+            padding-bottom: 72px;
+          }
+
+          .fm-sidebar-recent-button {
+            min-height: auto;
+            max-height: none;
+            height: auto;
+          }
+
+          .fm-sidebar-recent-text {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+          }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
           .fm-treasure-shadow,
@@ -3828,11 +4095,20 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setJobsOpen(true)}
+            onClick={() => openSchedulePanel()}
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Scheduled
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLibraryOpen(true)}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <FileText className="h-4 w-4" />
-            Education AI
+            Library
           </button>
 
           <div className="mt-6 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">
@@ -3971,9 +4247,29 @@ Apply link: ${job.applyUrl}`;
             variant="ghost"
             onClick={() => setJobsOpen(true)}
             className="h-9 w-9 rounded-full"
-            aria-label="Automatic jobs and education tools"
+            aria-label="Automatic jobs and tools"
           >
             <Menu className="h-4 w-4" />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setLibraryOpen(true)}
+            className="h-9 w-9 rounded-full"
+            aria-label="Student Library"
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => openSchedulePanel()}
+            className="h-9 w-9 rounded-full"
+            aria-label="Schedule"
+          >
+            <CalendarDays className="h-4 w-4" />
           </Button>
 
           <Button
@@ -4071,7 +4367,7 @@ Apply link: ${job.applyUrl}`;
 
               {busy && (
                 <div className="flex items-start">
-                  <div className="rounded-[22px] border border-black/5 bg-slate-50 px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                  <div className="rounded-[22px] border border-black/5 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 lg:border-white/10 lg:bg-[#171717] lg:text-white">
                     <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                     Thinking...
                   </div>
@@ -4608,6 +4904,192 @@ Apply link: ${job.applyUrl}`;
         </div>
       )}
 
+
+      {libraryOpen && (
+        <div className="fixed inset-0 z-[72] bg-black/30 backdrop-blur-sm" onClick={() => setLibraryOpen(false)}>
+          <div
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-white shadow-2xl dark:bg-[#0b0b0c] lg:bg-[#111] lg:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
+              <div>
+                <h2 className="text-base font-semibold">Library</h2>
+                <p className="text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
+                  Student learning, notes and applications
+                </p>
+              </div>
+
+              <Button size="icon" variant="ghost" onClick={() => setLibraryOpen(false)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="rounded-2xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-[#171717]">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Start a student workspace</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50 lg:text-white/50">
+                  Each option opens a separate chat so homework, assignments, lesson notes, and applications do not mix.
+                </p>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {educationTools.map((tool) => {
+                    const Icon = tool.icon;
+
+                    return (
+                      <button
+                        key={tool.label}
+                        type="button"
+                        onClick={() => openLibraryChat(tool)}
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-white/5 lg:hover:bg-white/10"
+                      >
+                        <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70 lg:text-white/70" />
+                        <p className="text-sm font-semibold text-slate-950 dark:text-white lg:text-white">{tool.label}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-[#171717]">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Saved education notes</h3>
+                <div className="mt-3 space-y-2">
+                  {savedMessages.filter((item) => item.savedCategory === 'homework_help' || item.savedCategory === 'assignments' || item.savedCategory === 'youtube_lessons' || item.savedCategory === 'institution_applications').length === 0 ? (
+                    <p className="rounded-2xl bg-white p-3 text-sm text-slate-500 dark:bg-white/[0.06] dark:text-white/50 lg:bg-white/5 lg:text-white/50">
+                      No library notes yet. Start with Homework Help, Assignments, YouTube Lessons, or College / University.
+                    </p>
+                  ) : (
+                    savedMessages
+                      .filter((item) => item.savedCategory === 'homework_help' || item.savedCategory === 'assignments' || item.savedCategory === 'youtube_lessons' || item.savedCategory === 'institution_applications')
+                      .slice(0, 12)
+                      .map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setLibraryOpen(false)}
+                          className="w-full rounded-2xl bg-white p-3 text-left text-sm text-slate-700 dark:bg-white/[0.06] dark:text-white/70 lg:bg-white/5 lg:text-white/75"
+                        >
+                          <span className="block text-xs font-semibold text-slate-500 dark:text-white/45 lg:text-white/45">
+                            {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Library'}
+                          </span>
+                          <span className="mt-1 line-clamp-3 block">{normalizeUssdCodes(item.content)}</span>
+                        </button>
+                      ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scheduleOpen && (
+        <div className="fixed inset-0 z-[96] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setScheduleOpen(false)}>
+          <div
+            className="w-full rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-w-xl lg:rounded-[28px] lg:bg-[#202020] lg:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
+
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Create schedule</h2>
+                <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/50">
+                  FaceMeX will run this task and email the update.
+                </p>
+              </div>
+
+              <Button size="icon" variant="ghost" onClick={() => setScheduleOpen(false)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {scheduleStep === 'choose' ? (
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#2f2f2f]">
+                  <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Task</p>
+                  <Textarea
+                    value={schedulePrompt}
+                    onChange={(e) => setSchedulePrompt(e.target.value)}
+                    className="min-h-[80px] resize-none rounded-2xl border-black/10 bg-white text-sm text-slate-950 dark:border-white/10 dark:bg-black/20 dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+                    placeholder="What should FaceMeX check for you?"
+                  />
+                  <input
+                    value={scheduleEmail}
+                    onChange={(e) => setScheduleEmail(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm text-slate-950 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+                    placeholder="Email address for updates"
+                  />
+                </div>
+
+                <div className="rounded-2xl bg-[#242424] p-3 text-white lg:bg-[#242424]">
+                  <p className="mb-3 px-1 text-sm font-semibold">How often should FaceMeX run this?</p>
+                  {[
+                    ['every_morning', 'Every morning'],
+                    ['every_afternoon', 'Every afternoon'],
+                    ['twice_day', 'Twice a day'],
+                    ['hourly', 'Hourly'],
+                  ].map(([value, label], index) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => createScheduledTask(value as ScheduledTask['frequency'])}
+                      disabled={scheduleBusy}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/20 text-xs">{index + 1}</span>
+                      <span>{label}</span>
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => setScheduleStep('custom')}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-white/70 hover:bg-white/10 hover:text-white"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/20 text-xs">5</span>
+                    <span>Add another schedule</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600 dark:text-white/60 lg:text-white/60">Choose a schedule type.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['every_morning', 'every_afternoon', 'twice_day', 'hourly'] as ScheduledTask['frequency'][]).map((frequency) => (
+                    <button
+                      key={frequency}
+                      type="button"
+                      onClick={() => createScheduledTask(frequency)}
+                      className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-950 dark:border-white/10 dark:bg-white/[0.06] dark:text-white lg:border-white/10 lg:bg-white/5 lg:text-white"
+                    >
+                      {scheduleFrequencyLabel(frequency)}
+                    </button>
+                  ))}
+                </div>
+                <Button variant="ghost" onClick={() => setScheduleStep('choose')} className="w-full rounded-2xl lg:text-white lg:hover:bg-white/10">
+                  Back
+                </Button>
+              </div>
+            )}
+
+            {scheduledTasks.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#171717]">
+                <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Active schedules</p>
+                <div className="space-y-2">
+                  {scheduledTasks.slice(0, 3).map((task) => (
+                    <div key={task.id} className="rounded-xl bg-white p-3 text-xs text-slate-600 dark:bg-white/[0.06] dark:text-white/60 lg:bg-white/5 lg:text-white/60">
+                      <div className="font-semibold text-slate-950 dark:text-white lg:text-white">{scheduleFrequencyLabel(task.frequency)}</div>
+                      <div className="mt-1 line-clamp-2">{task.prompt}</div>
+                      <div className="mt-1 text-slate-400">Email: {task.email}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {jobsOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setJobsOpen(false)}>
           <div
@@ -4618,7 +5100,7 @@ Apply link: ${job.applyUrl}`;
               <div>
                 <h2 className="text-base font-semibold">FaceMeX Tools</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
-                  Jobs and Education AI
+                  Jobs and Library
                 </p>
               </div>
 
@@ -4628,33 +5110,23 @@ Apply link: ${job.applyUrl}`;
             </div>
 
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
-                <h3 className="text-base font-semibold">Education AI</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
-                  Homework, assignments, YouTube lessons, and college or university applications.
+              <button
+                type="button"
+                onClick={() => {
+                  setJobsOpen(false);
+                  setLibraryOpen(true);
+                }}
+                className="w-full rounded-2xl border border-black/5 bg-white p-4 text-left text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+              >
+                <h3 className="text-base font-semibold">Student Library</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50 lg:text-white/50">
+                  Homework, assignments, YouTube lesson notes, college and university applications are now saved in Library.
                 </p>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {educationTools.map((tool) => {
-                    const Icon = tool.icon;
-
-                    return (
-                      <button
-                        key={tool.label}
-                        type="button"
-                        onClick={() => {
-                          setJobsOpen(false);
-                          sendPrompt(tool.prompt);
-                        }}
-                        className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06]"
-                      >
-                        <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70" />
-                        <p className="text-sm font-semibold text-slate-950 dark:text-white">{tool.label}</p>
-                      </button>
-                    );
-                  })}
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/80 lg:bg-white/10 lg:text-white">
+                  <FileText className="h-4 w-4" />
+                  Open Library
                 </div>
-              </div>
+              </button>
 
               <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
                 {[
@@ -4715,7 +5187,7 @@ Apply link: ${job.applyUrl}`;
                               <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                             </div>
 
-                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50 lg:text-white/60">
                               <div className="flex items-center gap-2">
                                 <MapPin className="h-3.5 w-3.5" />
                                 <span className="truncate">{job.area}</span>
@@ -4786,7 +5258,7 @@ Apply link: ${job.applyUrl}`;
 
               <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
                 <strong className="block text-sm">FaceMeX rule</strong>
-                Each job category filters only related jobs. Education AI has separate workspaces for Homework Help, Assignments, YouTube Lessons, and College / University Applications.
+                Each job category filters only related jobs. Student learning tools now live inside Library as separate chats.
               </div>
             </div>
           </div>
