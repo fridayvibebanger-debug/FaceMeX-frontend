@@ -137,6 +137,23 @@ type ScheduledTask = {
   status: ScheduledTaskStatus;
 };
 
+type YouTubeLessonCategory = {
+  label: string;
+  query: string;
+  description: string;
+};
+
+type YouTubeLessonVideo = {
+  videoId: string;
+  title: string;
+  description?: string | null;
+  channelTitle?: string | null;
+  publishedAt?: string | null;
+  thumbnail?: string | null;
+  embedUrl: string;
+  watchUrl: string;
+};
+
 const AI_CV_BUILDER_PATH = '/ai/resume';
 const AI_COVER_LETTER_PATH = '/ai/cover-letter';
 const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
@@ -687,6 +704,69 @@ const educationTools: ApplySheetTool[] = [
     icon: Users,
     prompt:
       'Education Workspace: College and University Applications. First ask me which country, institution, course, intake year, results, and funding support I need. Then help me apply to colleges, universities, TVET colleges, private institutions, bursaries, scholarships, and institutions across Africa and beyond. Save the answer under Applications.',
+  },
+];
+
+const youtubeLessonCategories: YouTubeLessonCategory[] = [
+  {
+    label: 'Math',
+    query: 'grade 12 maths lesson tutorial explained South Africa',
+    description: 'Maths lessons, examples, exam prep and step-by-step explanations.',
+  },
+  {
+    label: 'History',
+    query: 'history grade 10 11 12 lesson explained South Africa',
+    description: 'History topics, timelines, essays, source-based questions and revision.',
+  },
+  {
+    label: 'Accounting',
+    query: 'grade 12 accounting lesson tutorial explained South Africa',
+    description: 'Accounting basics, journals, ledgers, financial statements and exam prep.',
+  },
+  {
+    label: 'Science',
+    query: 'physical science life sciences grade 12 lesson explained South Africa',
+    description: 'Physical Science, Life Sciences, experiments, formulas and revision.',
+  },
+  {
+    label: 'English',
+    query: 'English grade 12 grammar essay literature lesson South Africa',
+    description: 'English grammar, essays, literature, comprehension and writing skills.',
+  },
+  {
+    label: 'Business Studies',
+    query: 'business studies grade 12 lesson explained South Africa',
+    description: 'Business Studies topics, case studies, exam answers and summaries.',
+  },
+  {
+    label: 'Grants / Funding',
+    query: 'how to apply for grants funding in South Africa explained',
+    description: 'Grant applications, funding steps, requirements and mistakes to avoid.',
+  },
+  {
+    label: 'Investors',
+    query: 'what investors want in a startup pitch explained',
+    description: 'Investor readiness, pitch decks, traction, revenue and business proof.',
+  },
+  {
+    label: 'Jobs Abroad',
+    query: 'how to find jobs online abroad safely application guide',
+    description: 'Safe job search abroad, applications, CV tips and scam warning signs.',
+  },
+  {
+    label: 'Jobs South Africa',
+    query: 'how to find jobs online in South Africa safely application guide',
+    description: 'South African job platforms, CV sending, applications and interviews.',
+  },
+  {
+    label: 'University Applications',
+    query: 'how to apply for university in South Africa application guide',
+    description: 'University applications, documents, admission steps and deadlines to check.',
+  },
+  {
+    label: 'NSFAS / Bursaries',
+    query: 'how to apply for NSFAS bursaries South Africa explained',
+    description: 'NSFAS, bursaries, documents, funding steps and application help.',
   },
 ];
 
@@ -1601,6 +1681,34 @@ function normalizeAnswerText(raw: any, fallback: string) {
   return normalizeUssdCodes(clean(answer) || fallback);
 }
 
+function normalizeYouTubeLessonVideos(raw: any): YouTubeLessonVideo[] {
+  const videos = Array.isArray(raw?.videos) ? raw.videos : Array.isArray(raw?.items) ? raw.items : [];
+
+  return videos
+    .map((item: any) => {
+      const videoId = clean(item?.videoId || item?.id?.videoId || item?.id);
+      if (!videoId) return null;
+
+      return {
+        videoId,
+        title: clean(item?.title || item?.snippet?.title) || 'YouTube lesson',
+        description: clean(item?.description || item?.snippet?.description),
+        channelTitle: clean(item?.channelTitle || item?.snippet?.channelTitle),
+        publishedAt: clean(item?.publishedAt || item?.snippet?.publishedAt),
+        thumbnail:
+          clean(item?.thumbnail) ||
+          clean(item?.snippet?.thumbnails?.high?.url) ||
+          clean(item?.snippet?.thumbnails?.medium?.url) ||
+          clean(item?.snippet?.thumbnails?.default?.url) ||
+          null,
+        embedUrl: clean(item?.embedUrl) || `https://www.youtube.com/embed/${videoId}`,
+        watchUrl: clean(item?.watchUrl) || `https://www.youtube.com/watch?v=${videoId}`,
+      } satisfies YouTubeLessonVideo;
+    })
+    .filter(Boolean)
+    .slice(0, 8) as YouTubeLessonVideo[];
+}
+
 function normalizeBrokenMarkdownLinks(text: string) {
   return normalizeUssdCodes(String(text || ''))
     .replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/gi, '[$1]($2)')
@@ -2199,6 +2307,9 @@ export default function AIJobAssistantPage() {
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [activeYoutubeLessonCategory, setActiveYoutubeLessonCategory] = useState<YouTubeLessonCategory | null>(null);
+  const [youtubeLessonVideos, setYoutubeLessonVideos] = useState<YouTubeLessonVideo[]>([]);
+  const [youtubeLessonsBusy, setYoutubeLessonsBusy] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleStep, setScheduleStep] = useState<'choose' | 'custom'>('choose');
   const [schedulePrompt, setSchedulePrompt] = useState('');
@@ -2859,6 +2970,53 @@ export default function AIJobAssistantPage() {
     window.setTimeout(() => {
       sendPrompt(tool.prompt);
     }, 120);
+  };
+
+  const openYoutubeLessonCategory = async (category: YouTubeLessonCategory) => {
+    setActiveYoutubeLessonCategory(category);
+    setYoutubeLessonsBusy(true);
+    setYoutubeLessonVideos([]);
+
+    trackButtonClick('workspace_youtube_lesson_category', undefined, {
+      category: category.label,
+      query: category.query,
+    });
+
+    try {
+      const res = await api.get(
+        `/api/youtube/search?q=${encodeURIComponent(category.query)}&limit=6`
+      );
+      const data = unwrapApiResponse(res);
+      const videos = normalizeYouTubeLessonVideos(data);
+
+      setYoutubeLessonVideos(videos);
+
+      if (videos.length === 0) {
+        toast({
+          title: 'No videos found',
+          description: 'Try another YouTube lesson category or search topic.',
+        });
+      } else {
+        toast({
+          title: `${category.label} lessons loaded`,
+          description: 'You can watch the videos inside FaceMeX.',
+        });
+      }
+    } catch (error: any) {
+      setYoutubeLessonVideos([]);
+
+      trackError('workspace_youtube_lessons_failed', error?.message || 'YouTube lessons failed', {
+        category: category.label,
+      });
+
+      toast({
+        title: 'YouTube lessons failed',
+        description: 'Check your backend /api/youtube/search route and try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setYoutubeLessonsBusy(false);
+    }
   };
 
   const clearWorkspaceFromScratch = () => {
@@ -5009,6 +5167,136 @@ ${message.content}`);
                       </button>
                     );
                   })}
+                </div>
+
+
+                <div className="mt-4 rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04] lg:border-white/10 lg:bg-white/[0.04]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-950 dark:text-white lg:text-white">
+                        YouTube Lessons categories
+                      </h4>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-500 dark:text-white/45 lg:text-white/45">
+                        Tap a category to load videos inside FaceMeX.
+                      </p>
+                    </div>
+                    {youtubeLessonsBusy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {youtubeLessonCategories.map((category) => (
+                      <button
+                        key={category.label}
+                        type="button"
+                        onClick={() => openYoutubeLessonCategory(category)}
+                        className={`rounded-xl border p-2 text-left transition active:scale-[0.98] ${
+                          activeYoutubeLessonCategory?.label === category.label
+                            ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200 lg:border-blue-500/30 lg:bg-blue-500/10 lg:text-blue-200'
+                            : 'border-black/5 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/[0.08] lg:border-white/10 lg:bg-white/[0.04] lg:text-white/70 lg:hover:bg-white/[0.08]'
+                        }`}
+                      >
+                        <span className="block text-xs font-semibold">{category.label}</span>
+                        <span className="mt-1 line-clamp-2 block text-[10px] leading-3 opacity-70">
+                          {category.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeYoutubeLessonCategory && (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-950 dark:text-white lg:text-white">
+                          {activeYoutubeLessonCategory.label} videos
+                        </p>
+                        <p className="mt-1 text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
+                          Powered by your FaceMeX YouTube backend route.
+                        </p>
+                      </div>
+
+                      {youtubeLessonsBusy ? (
+                        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-white/[0.05] dark:text-white/50 lg:bg-white/5 lg:text-white/50">
+                          <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                          Loading videos...
+                        </div>
+                      ) : youtubeLessonVideos.length === 0 ? (
+                        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-white/[0.05] dark:text-white/50 lg:bg-white/5 lg:text-white/50">
+                          No videos loaded yet. Tap a category again or try another topic.
+                        </div>
+                      ) : (
+                        youtubeLessonVideos.map((video) => (
+                          <div
+                            key={video.videoId}
+                            className="overflow-hidden rounded-2xl border border-black/5 bg-slate-50 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-white/5"
+                          >
+                            <div className="aspect-video w-full overflow-hidden bg-black">
+                              <iframe
+                                src={video.embedUrl}
+                                title={video.title}
+                                className="h-full w-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                              />
+                            </div>
+
+                            <div className="p-3">
+                              <p className="line-clamp-2 text-sm font-semibold text-slate-950 dark:text-white lg:text-white">
+                                {video.title}
+                              </p>
+
+                              {video.channelTitle && (
+                                <p className="mt-1 text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
+                                  {video.channelTitle}
+                                </p>
+                              )}
+
+                              <div className="mt-3 flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const savedVideoMessage: ChatMessage = {
+                                      id: safeId(),
+                                      role: 'assistant',
+                                      content: `Saved YouTube lesson: ${video.title}\nChannel: ${video.channelTitle || 'YouTube'}\nWatch: ${video.watchUrl}`,
+                                      createdAt: new Date().toISOString(),
+                                      saved: true,
+                                      savedCategory: 'youtube_lessons',
+                                      intent: 'education_youtube',
+                                    };
+
+                                    setMessages((prev) => [...prev, savedVideoMessage]);
+
+                                    toast({
+                                      title: 'YouTube lesson saved',
+                                      description: 'Saved in Library under YouTube Lessons.',
+                                    });
+                                  }}
+                                  className="h-8 flex-1 rounded-xl text-xs"
+                                >
+                                  <Save className="mr-1.5 h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    trackLinkClick(video.watchUrl, 'youtube_lesson_watch_on_youtube');
+                                    window.open(video.watchUrl, '_blank', 'noopener,noreferrer');
+                                  }}
+                                  className="h-8 flex-1 rounded-xl text-xs"
+                                >
+                                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                                  YouTube
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
