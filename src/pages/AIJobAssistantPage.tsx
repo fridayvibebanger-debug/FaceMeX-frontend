@@ -2205,6 +2205,7 @@ export default function AIJobAssistantPage() {
   const [scheduleEmail, setScheduleEmail] = useState(() => getUserEmail(userStore));
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
+  const [savedReaderMessage, setSavedReaderMessage] = useState<ChatMessage | null>(null);
   const [applySheetOpen, setApplySheetOpen] = useState(false);
   const [clearWorkspaceOpen, setClearWorkspaceOpen] = useState(false);
   const [applySheetContext, setApplySheetContext] = useState('');
@@ -2809,6 +2810,25 @@ export default function AIJobAssistantPage() {
       setScheduleBusy(false);
       setScheduleOpen(false);
     }
+  };
+
+  const deleteScheduledTask = async (id: string) => {
+    setScheduledTasks((prev) => {
+      const next = prev.filter((task) => task.id !== id);
+      localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+
+    try {
+      await (api as any).delete(`/api/ai/schedules/${id}`);
+    } catch {
+      // Schedule already removed locally. Backend delete can be connected later.
+    }
+
+    toast({
+      title: 'Schedule deleted',
+      description: 'This scheduled update was removed.',
+    });
   };
 
   const openLibraryChat = (tool: EducationTool) => {
@@ -3572,22 +3592,22 @@ Apply link: ${job.applyUrl}`;
     if (showCvButtons) {
       return (
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
-          <Button size="sm" variant="outline" onClick={openCvBuilder} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={openCvBuilder} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <FileText className="mr-2 h-3.5 w-3.5" />
             AI CV Builder
           </Button>
 
-          <Button size="sm" variant="outline" onClick={openCoverLetterBuilder} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={openCoverLetterBuilder} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <Mail className="mr-2 h-3.5 w-3.5" />
             Cover Letter AI
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <Copy className="mr-2 h-3.5 w-3.5" />
             Copy Answer
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <Save className="mr-2 h-3.5 w-3.5" />
             Save Tips
           </Button>
@@ -3608,7 +3628,7 @@ Apply link: ${job.applyUrl}`;
             size="sm"
             variant="outline"
             onClick={() => saveMessageAs(message.id, message.savedCategory || 'homework_help')}
-            className="h-10 rounded-xl text-xs"
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
           >
             <Save className="mr-2 h-3.5 w-3.5" />
             Save Notes
@@ -3621,7 +3641,7 @@ Apply link: ${job.applyUrl}`;
               setPrompt(`Create a clearer study summary from this answer:\n\n${message.content}`);
               setFollowUpExpanded(true);
             }}
-            className="h-10 rounded-xl text-xs"
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
           >
             <FileText className="mr-2 h-3.5 w-3.5" />
             Make Notes
@@ -3638,7 +3658,7 @@ Apply link: ${job.applyUrl}`;
           size="sm"
           variant="outline"
           onClick={() => openApplySheet(message.content)}
-          className="h-10 w-full rounded-xl text-xs"
+          className="h-10 w-full rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
         >
           <Send className="mr-2 h-3.5 w-3.5" />
           Help me apply
@@ -4868,7 +4888,7 @@ Apply link: ${job.applyUrl}`;
                             <FileText className="h-4 w-4 text-slate-500" />
                           </div>
 
-                          <button type="button" onClick={() => setTrackerOpen(false)} className="min-w-0 flex-1 text-left">
+                          <button type="button" onClick={() => setSavedReaderMessage(item)} className="min-w-0 flex-1 text-left">
                             <div className="line-clamp-1 text-sm font-semibold">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item'}
                             </div>
@@ -4971,7 +4991,7 @@ Apply link: ${job.applyUrl}`;
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => setLibraryOpen(false)}
+                          onClick={() => setSavedReaderMessage(item)}
                           className="w-full rounded-2xl bg-white p-3 text-left text-sm text-slate-700 dark:bg-white/[0.06] dark:text-white/70 lg:bg-white/5 lg:text-white/75"
                         >
                           <span className="block text-xs font-semibold text-slate-500 dark:text-white/45 lg:text-white/45">
@@ -4988,10 +5008,52 @@ Apply link: ${job.applyUrl}`;
         </div>
       )}
 
+      {savedReaderMessage && (
+        <div className="fixed inset-0 z-[98] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
+          <div
+            className="flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-w-2xl lg:rounded-[28px] lg:border lg:border-white/10 lg:bg-[#171717] lg:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
+
+            <div className="mb-3 flex items-start justify-between gap-3 border-b border-black/5 pb-3 dark:border-white/10 lg:border-white/10">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">
+                  {savedReaderMessage.savedCategory ? savedCategoryLabels[savedReaderMessage.savedCategory] : 'Saved item'}
+                </p>
+                <h2 className="mt-1 text-base font-semibold text-slate-950 dark:text-white lg:text-white">Saved card</h2>
+              </div>
+
+              <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+              <ChatGPTStyleText text={savedReaderMessage.content} onLinkClick={handleGeneratedLinkClick} />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10 lg:border-white/10">
+              <Button variant="outline" onClick={() => copyText(savedReaderMessage.content)} className="h-11 rounded-2xl lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10">
+                <Copy className="mr-2 h-4 w-4" />
+                Copy
+              </Button>
+              <Button variant="ghost" onClick={() => {
+                removeFromSaved(savedReaderMessage.id);
+                setSavedReaderMessage(null);
+              }} className="h-11 rounded-2xl text-red-500 hover:text-red-600 lg:hover:bg-red-500/10">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {scheduleOpen && (
         <div className="fixed inset-0 z-[96] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setScheduleOpen(false)}>
           <div
-            className="w-full rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-w-xl lg:rounded-[28px] lg:bg-[#202020] lg:text-white"
+            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-h-[86dvh] lg:max-w-xl lg:rounded-[28px] lg:bg-[#202020] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
@@ -5009,8 +5071,9 @@ Apply link: ${job.applyUrl}`;
               </Button>
             </div>
 
-            {scheduleStep === 'choose' ? (
-              <div className="space-y-3">
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+              {scheduleStep === 'choose' ? (
+                <div className="space-y-3">
                 <div className="rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#2f2f2f]">
                   <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Task</p>
                   <Textarea
@@ -5057,8 +5120,8 @@ Apply link: ${job.applyUrl}`;
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-3">
+              ) : (
+                <div className="space-y-3">
                 <p className="text-sm text-slate-600 dark:text-white/60 lg:text-white/60">Choose a schedule type.</p>
                 <div className="grid grid-cols-2 gap-2">
                   {(['every_morning', 'every_afternoon', 'twice_day', 'hourly'] as ScheduledTask['frequency'][]).map((frequency) => (
@@ -5078,20 +5141,33 @@ Apply link: ${job.applyUrl}`;
               </div>
             )}
 
-            {scheduledTasks.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#171717]">
+              {scheduledTasks.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#171717]">
                 <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Active schedules</p>
                 <div className="space-y-2">
-                  {scheduledTasks.slice(0, 3).map((task) => (
+                  {scheduledTasks.map((task) => (
                     <div key={task.id} className="rounded-xl bg-white p-3 text-xs text-slate-600 dark:bg-white/[0.06] dark:text-white/60 lg:bg-white/5 lg:text-white/60">
-                      <div className="font-semibold text-slate-950 dark:text-white lg:text-white">{scheduleFrequencyLabel(task.frequency)}</div>
-                      <div className="mt-1 line-clamp-2">{task.prompt}</div>
-                      <div className="mt-1 text-slate-400">Email: {task.email}</div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-slate-950 dark:text-white lg:text-white">{scheduleFrequencyLabel(task.frequency)}</div>
+                          <div className="mt-1 whitespace-pre-wrap break-words">{task.prompt}</div>
+                          <div className="mt-1 text-slate-400">Email: {task.email}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => deleteScheduledTask(task.id)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-red-500 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 lg:hover:bg-red-500/10"
+                          aria-label="Delete scheduled update"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -5151,7 +5227,7 @@ Apply link: ${job.applyUrl}`;
                     key={item.label}
                     variant="outline"
                     onClick={() => loadAutomaticJobs({ query: item.query, area: item.area })}
-                    className="h-9 shrink-0 rounded-full px-4 text-xs"
+                    className="h-9 shrink-0 rounded-full px-4 text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
                   >
                     {item.label}
                   </Button>
@@ -5170,10 +5246,10 @@ Apply link: ${job.applyUrl}`;
                     return (
                       <div
                         key={job.id}
-                        className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
                       >
                         <div className="flex gap-3">
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
                             {job.verificationStatus === 'verified' ? (
                               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                             ) : job.verificationStatus === 'avoid' ? (
@@ -5201,7 +5277,7 @@ Apply link: ${job.applyUrl}`;
 
                               <div
                                 className={`flex items-center gap-2 ${
-                                  deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
+                                  deadlineInfo.urgent ? 'text-orange-500' : 'text-slate-500 dark:text-white/50 lg:text-white/60'
                                 }`}
                               >
                                 <Clock className="h-3.5 w-3.5" />
@@ -5210,7 +5286,7 @@ Apply link: ${job.applyUrl}`;
                             </div>
 
                             <div className="mt-2 flex flex-wrap gap-2">
-                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 lg:bg-blue-500/10 lg:text-blue-300">
                                 {job.sourceLabel}
                               </span>
 
@@ -5229,7 +5305,7 @@ Apply link: ${job.applyUrl}`;
                                 variant="outline"
                                 onClick={() => openOfficialApplyPage(job)}
                                 disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
-                                className="h-8 rounded-xl text-xs"
+                                className="h-8 rounded-xl text-xs lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10"
                               >
                                 {job.isSourceCard ? (
                                   <Globe2 className="mr-1.5 h-3.5 w-3.5" />
@@ -5248,7 +5324,7 @@ Apply link: ${job.applyUrl}`;
                                   setLastSelectedJob(job);
                                   saveLocalJob(job);
                                 }}
-                                className="h-8 rounded-xl text-xs"
+                                className="h-8 rounded-xl text-xs lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10"
                               >
                                 <Save className="mr-1.5 h-3.5 w-3.5" />
                                 Save
@@ -5262,7 +5338,7 @@ Apply link: ${job.applyUrl}`;
                 )}
               </div>
 
-              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200 lg:border-white/10 lg:bg-[#171717] lg:text-white/70">
                 <strong className="block text-sm">FaceMeX rule</strong>
                 Each job category filters only related jobs. Student learning tools now live inside Library as separate chats.
               </div>
