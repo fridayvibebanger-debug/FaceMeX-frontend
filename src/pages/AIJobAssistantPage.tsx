@@ -123,6 +123,8 @@ type ChatSession = {
   updatedAt: string;
 };
 
+type ScheduledTaskStatus = 'active' | 'paused';
+
 type ScheduledTask = {
   id: string;
   title: string;
@@ -132,7 +134,7 @@ type ScheduledTask = {
   emailEnabled: boolean;
   createdAt: string;
   nextRunLabel?: string;
-  status: 'active' | 'paused';
+  status: ScheduledTaskStatus;
 };
 
 const AI_CV_BUILDER_PATH = '/ai/resume';
@@ -834,11 +836,15 @@ function getUserEmail(store: any) {
   );
 }
 
+function normalizeScheduledTaskStatus(status: unknown): ScheduledTaskStatus {
+  return status === 'paused' ? 'paused' : 'active';
+}
+
 function normalizeScheduledTasks(value: any): ScheduledTask[] {
   if (!Array.isArray(value)) return [];
 
   return value
-    .map((item) => ({
+    .map((item): ScheduledTask => ({
       id: clean(item?.id) || safeId(),
       title: clean(item?.title) || 'FaceMeX scheduled help',
       prompt: clean(item?.prompt) || 'Scan for anything that needs my attention.',
@@ -853,7 +859,7 @@ function normalizeScheduledTasks(value: any): ScheduledTask[] {
       emailEnabled: item?.emailEnabled !== false,
       createdAt: clean(item?.createdAt) || new Date().toISOString(),
       nextRunLabel: clean(item?.nextRunLabel),
-      status: item?.status === 'paused' ? 'paused' : 'active',
+      status: normalizeScheduledTaskStatus(item?.status),
     }))
     .slice(0, 20);
 }
