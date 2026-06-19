@@ -137,10 +137,23 @@ type ScheduledTask = {
   status: ScheduledTaskStatus;
 };
 
+type LibrarySectionKey = 'jobs' | 'investors' | 'students';
+
+type LibrarySection = {
+  key: LibrarySectionKey;
+  title: string;
+  shortTitle: string;
+  description: string;
+  icon: any;
+  prompt: string;
+};
+
 type YouTubeLessonCategory = {
   label: string;
   query: string;
   description: string;
+  library: LibrarySectionKey;
+  badge: string;
 };
 
 type YouTubeLessonVideo = {
@@ -707,66 +720,151 @@ const educationTools: ApplySheetTool[] = [
   },
 ];
 
+const librarySections: LibrarySection[] = [
+  {
+    key: 'jobs',
+    title: 'Job Library',
+    shortTitle: 'Jobs',
+    icon: Briefcase,
+    description:
+      'Clean job-search lessons, South African job platforms, abroad applications, CV sending, interviews and safe online applications.',
+    prompt:
+      'FaceMeX Job Library. Help me with job searching, safe applications, CV sending, interviews, local South African jobs, jobs abroad, and avoiding scams. Ask what job, country, area, experience level, and documents I have before giving a plan.',
+  },
+  {
+    key: 'investors',
+    title: 'Investors Library',
+    shortTitle: 'Investors',
+    icon: Building2,
+    description:
+      'Funding, grants, investor readiness, pitch decks, traction, revenue, business proof and application steps.',
+    prompt:
+      'FaceMeX Investors Library. Help me understand grants, funding, investors, pitch decks, business models, traction, revenue proof, due diligence and application steps. Ask what business, stage, location, amount needed and documents I have.',
+  },
+  {
+    key: 'students',
+    title: 'Students Library',
+    shortTitle: 'Students',
+    icon: Users,
+    description:
+      'School subjects, homework, assignments, lesson videos, university applications, NSFAS, bursaries and study notes.',
+    prompt:
+      'FaceMeX Students Library. Help me with school subjects, homework, assignments, YouTube lesson notes, university or TVET applications, NSFAS, bursaries and study plans. Ask my grade or level, subject, topic and goal first.',
+  },
+];
+
 const youtubeLessonCategories: YouTubeLessonCategory[] = [
   {
     label: 'Math',
-    query: 'grade 12 maths lesson tutorial explained South Africa',
+    library: 'students',
+    badge: 'School',
+    query: 'full maths lesson tutorial grade 12 South Africa exam revision step by step no shorts',
     description: 'Maths lessons, examples, exam prep and step-by-step explanations.',
   },
   {
     label: 'History',
-    query: 'history grade 10 11 12 lesson explained South Africa',
+    library: 'students',
+    badge: 'School',
+    query: 'full history lesson grade 10 11 12 South Africa source based questions essay revision no shorts',
     description: 'History topics, timelines, essays, source-based questions and revision.',
   },
   {
     label: 'Accounting',
-    query: 'grade 12 accounting lesson tutorial explained South Africa',
+    library: 'students',
+    badge: 'School',
+    query: 'full accounting lesson grade 12 South Africa financial statements ledgers exam revision no shorts',
     description: 'Accounting basics, journals, ledgers, financial statements and exam prep.',
   },
   {
     label: 'Science',
-    query: 'physical science life sciences grade 12 lesson explained South Africa',
+    library: 'students',
+    badge: 'School',
+    query: 'full physical science life sciences grade 12 South Africa lesson revision no shorts',
     description: 'Physical Science, Life Sciences, experiments, formulas and revision.',
   },
   {
     label: 'English',
-    query: 'English grade 12 grammar essay literature lesson South Africa',
+    library: 'students',
+    badge: 'School',
+    query: 'full English lesson grade 12 essay writing literature comprehension grammar South Africa no shorts',
     description: 'English grammar, essays, literature, comprehension and writing skills.',
   },
   {
     label: 'Business Studies',
-    query: 'business studies grade 12 lesson explained South Africa',
+    library: 'students',
+    badge: 'School',
+    query: 'full business studies grade 12 lesson South Africa exam revision case studies no shorts',
     description: 'Business Studies topics, case studies, exam answers and summaries.',
   },
   {
-    label: 'Grants / Funding',
-    query: 'how to apply for grants funding in South Africa explained',
-    description: 'Grant applications, funding steps, requirements and mistakes to avoid.',
-  },
-  {
-    label: 'Investors',
-    query: 'what investors want in a startup pitch explained',
-    description: 'Investor readiness, pitch decks, traction, revenue and business proof.',
-  },
-  {
-    label: 'Jobs Abroad',
-    query: 'how to find jobs online abroad safely application guide',
-    description: 'Safe job search abroad, applications, CV tips and scam warning signs.',
-  },
-  {
-    label: 'Jobs South Africa',
-    query: 'how to find jobs online in South Africa safely application guide',
-    description: 'South African job platforms, CV sending, applications and interviews.',
-  },
-  {
     label: 'University Applications',
-    query: 'how to apply for university in South Africa application guide',
+    library: 'students',
+    badge: 'Applications',
+    query: 'how to apply for university in South Africa full application guide documents deadlines no shorts',
     description: 'University applications, documents, admission steps and deadlines to check.',
   },
   {
     label: 'NSFAS / Bursaries',
-    query: 'how to apply for NSFAS bursaries South Africa explained',
+    library: 'students',
+    badge: 'Funding',
+    query: 'how to apply for NSFAS bursaries South Africa full guide documents requirements no shorts',
     description: 'NSFAS, bursaries, documents, funding steps and application help.',
+  },
+  {
+    label: 'Grants / Funding',
+    library: 'investors',
+    badge: 'Funding',
+    query: 'how to apply for business grants funding South Africa full guide requirements no shorts',
+    description: 'Grant applications, funding steps, requirements and mistakes to avoid.',
+  },
+  {
+    label: 'Investors',
+    library: 'investors',
+    badge: 'Investor-ready',
+    query: 'what investors want in a startup pitch deck traction revenue full lesson no shorts',
+    description: 'Investor readiness, pitch decks, traction, revenue and business proof.',
+  },
+  {
+    label: 'Pitch Decks',
+    library: 'investors',
+    badge: 'Startup',
+    query: 'how to create a startup pitch deck investors full tutorial no shorts',
+    description: 'Problem, solution, market, traction, revenue, team and funding ask.',
+  },
+  {
+    label: 'Business Funding',
+    library: 'investors',
+    badge: 'Business',
+    query: 'business funding options South Africa grants loans investors full guide no shorts',
+    description: 'Funding routes, documents, due diligence and application planning.',
+  },
+  {
+    label: 'Jobs Abroad',
+    library: 'jobs',
+    badge: 'Global',
+    query: 'how to find legitimate jobs abroad online full guide work visa CV no shorts',
+    description: 'Safe job search abroad, applications, CV tips and scam warning signs.',
+  },
+  {
+    label: 'Jobs South Africa',
+    library: 'jobs',
+    badge: 'Local',
+    query: 'how to find jobs online in South Africa safely full guide CV applications no shorts',
+    description: 'South African job platforms, CV sending, applications and interviews.',
+  },
+  {
+    label: 'CV & Interview Prep',
+    library: 'jobs',
+    badge: 'Career',
+    query: 'how to write a CV and prepare for interviews South Africa full guide no shorts',
+    description: 'CV structure, interview questions, answers and application follow-up.',
+  },
+  {
+    label: 'Learnerships',
+    library: 'jobs',
+    badge: 'Youth',
+    query: 'how to apply for learnerships internships South Africa full guide no shorts',
+    description: 'Learnerships, internships, youth opportunities and application documents.',
   },
 ];
 
@@ -1706,7 +1804,62 @@ function normalizeYouTubeLessonVideos(raw: any): YouTubeLessonVideo[] {
       } satisfies YouTubeLessonVideo;
     })
     .filter(Boolean)
+    .filter((video: YouTubeLessonVideo) => isUsefulYouTubeLessonVideo(video))
     .slice(0, 8) as YouTubeLessonVideo[];
+}
+
+function isUsefulYouTubeLessonVideo(video: YouTubeLessonVideo) {
+  const text = `${video.title} ${video.channelTitle || ''} ${video.description || ''}`.toLowerCase();
+
+  if (!video.videoId || !video.embedUrl) return false;
+
+  if (
+    /#shorts|youtube shorts|tiktok|reels?|funny|comedy|prank|meme|music video|lyrics|status video|whatsapp status/i.test(
+      text
+    )
+  ) {
+    return false;
+  }
+
+  if (clean(video.title).length < 12) return false;
+
+  return true;
+}
+
+function buildWorkspaceMemoryContext(messages: ChatMessage[], sessions: ChatSession[]) {
+  const currentConversation = messages
+    .filter((message) => !message.deletedFromChat)
+    .slice(-14)
+    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
+    .join('\n\n');
+
+  const savedLibraryItems = [
+    ...messages,
+    ...sessions.flatMap((session) => session.messages || []),
+  ]
+    .filter((message) => !message.deletedFromChat && (message.saved || message.pinned || message.savedCategory))
+    .slice(-24)
+    .map((message) => {
+      const label = message.savedCategory ? savedCategoryLabels[message.savedCategory] : 'Saved';
+      return `${label}: ${message.content}`;
+    })
+    .join('\n\n');
+
+  const recentChats = sessions
+    .slice(0, 8)
+    .map((session) => {
+      const last = [...(session.messages || [])].reverse().find((message) => !message.deletedFromChat);
+      return `${session.title || 'Chat'}: ${last?.content || 'No recent message'}`;
+    })
+    .join('\n');
+
+  return [
+    currentConversation ? `Current conversation:\n${currentConversation}` : '',
+    savedLibraryItems ? `Saved library and pinned notes:\n${savedLibraryItems}` : '',
+    recentChats ? `Recent chat history:\n${recentChats}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n---\n\n');
 }
 
 function normalizeBrokenMarkdownLinks(text: string) {
@@ -2307,8 +2460,10 @@ export default function AIJobAssistantPage() {
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [activeLibrarySection, setActiveLibrarySection] = useState<LibrarySectionKey>('students');
   const [activeYoutubeLessonCategory, setActiveYoutubeLessonCategory] = useState<YouTubeLessonCategory | null>(null);
   const [youtubeLessonVideos, setYoutubeLessonVideos] = useState<YouTubeLessonVideo[]>([]);
+  const [activePlayingVideoId, setActivePlayingVideoId] = useState<string | null>(null);
   const [youtubeLessonsBusy, setYoutubeLessonsBusy] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleStep, setScheduleStep] = useState<'choose' | 'custom'>('choose');
@@ -2338,6 +2493,16 @@ export default function AIJobAssistantPage() {
     if (deepSeekLimit === null) return null;
     return Math.max(0, deepSeekLimit - deepSeekUsage);
   }, [deepSeekLimit, deepSeekUsage]);
+
+  const activeLibrary = useMemo(
+    () => librarySections.find((section) => section.key === activeLibrarySection) || librarySections[2],
+    [activeLibrarySection]
+  );
+
+  const activeLibraryYoutubeCategories = useMemo(
+    () => youtubeLessonCategories.filter((category) => category.library === activeLibrarySection),
+    [activeLibrarySection]
+  );
 
   const chatMessages = useMemo(() => {
     return messages.filter((message) => !message.deletedFromChat);
@@ -2972,10 +3137,38 @@ export default function AIJobAssistantPage() {
     }, 120);
   };
 
+  const openLibrarySectionChat = (section: LibrarySection) => {
+    setActiveLibrarySection(section.key);
+    setActiveYoutubeLessonCategory(null);
+    setYoutubeLessonVideos([]);
+    setActivePlayingVideoId(null);
+
+    const nextId = safeId();
+
+    setActiveSessionId(nextId);
+    setMessages([]);
+    resetWorkspaceUiForNewChat();
+    setLibraryOpen(false);
+    setJobsOpen(false);
+
+    try {
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, nextId);
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+
+    window.setTimeout(() => {
+      sendPrompt(section.prompt);
+    }, 120);
+  };
+
   const openYoutubeLessonCategory = async (category: YouTubeLessonCategory) => {
+    setActiveLibrarySection(category.library);
     setActiveYoutubeLessonCategory(category);
     setYoutubeLessonsBusy(true);
     setYoutubeLessonVideos([]);
+    setActivePlayingVideoId(null);
 
     trackButtonClick('workspace_youtube_lesson_category', undefined, {
       category: category.label,
@@ -2984,7 +3177,7 @@ export default function AIJobAssistantPage() {
 
     try {
       const res = await api.get(
-        `/api/youtube/search?q=${encodeURIComponent(category.query)}&limit=6`
+        `/api/youtube/search?q=${encodeURIComponent(category.query)}&limit=8&duration=medium`
       );
       const data = unwrapApiResponse(res);
       const videos = normalizeYouTubeLessonVideos(data);
@@ -3188,7 +3381,18 @@ Respond based on the previous question/task. Do not ask what the user means if t
     }
 
     try {
+      const workspaceMemoryContext = buildWorkspaceMemoryContext(messages, chatSessions);
+
       const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
+
+FaceMeX intelligence rules:
+- Behave like a polished ChatGPT-style assistant, but focused on FaceMeX users: jobs, students, founders, funding, applications, business and daily practical help.
+- Use previous messages, saved notes and recent chats when the user says short replies like "yes", "continue", "same", "help me apply", "make notes", "more", or "explain".
+- Do not fumble or restart when context is clear. Continue the exact task.
+- When the user asks for videos or lessons, guide them to the correct FaceMeX Library section and YouTube category.
+- Keep YouTube recommendations useful: full lessons, tutorials, guides and professional explainers. Avoid Shorts, reels, jokes and entertainment clips.
+- Keep libraries separate: Job Library for job-search skills, Investors Library for funding/investors/business, Students Library for subjects/applications/NSFAS.
+- Ask one smart clarifying question only when needed. Otherwise give the answer directly.
 
 User name: ${userDisplayName}
 Current automatic job results in FaceMeX:
@@ -3201,6 +3405,10 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         question: aiPromptWithToolDirection,
         originalPrompt: finalPrompt,
         conversationContext,
+        memoryContext: workspaceMemoryContext,
+        userMemoryContext: workspaceMemoryContext,
+        previousChatMemory: workspaceMemoryContext,
+        savedLibraryContext: workspaceMemoryContext,
         conversationMessages: messages
           .filter((message) => !message.deletedFromChat)
           .slice(-10)
@@ -4434,73 +4642,54 @@ ${message.content}`);
 
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
-      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-black/5 bg-white/95 px-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:h-16 sm:px-5 lg:hidden">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0f0f10] px-4 text-white lg:hidden">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate('/feed')}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1]"
-            aria-label="Back"
+            onClick={() => setJobsOpen(true)}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
+            aria-label="Open menu"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <Menu className="h-5 w-5" />
           </button>
 
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-sm font-semibold sm:text-base">FaceMeX Job AI</h1>
-
-              <Badge className="hidden rounded-full border border-black/5 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 shadow-none hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/50 sm:inline-flex">
-                {creatorPlus && <Crown className="mr-1 h-3 w-3" />}
-                {usageLabel}
-              </Badge>
-            </div>
-
-            <p className="truncate text-[11px] text-slate-500 dark:text-white/45">
-              Ask anything. Jobs, CVs, interviews, life, business
-            </p>
+            <h1 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-white">FaceMeX</h1>
+            <p className="truncate text-[11px] text-white/45">Job AI · Library · YouTube lessons</p>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => setJobsOpen(true)}
-            className="h-9 w-9 rounded-full"
-            aria-label="Automatic jobs and tools"
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-
-          <Button
-            size="icon"
-            variant="ghost"
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
             onClick={() => setLibraryOpen(true)}
-            className="h-9 w-9 rounded-full"
-            aria-label="Student Library"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
+            aria-label="Open Library"
           >
-            <FileText className="h-4 w-4" />
-          </Button>
+            <FileText className="h-5 w-5" />
+          </button>
 
-          <Button
-            size="icon"
-            variant="ghost"
+          <button
+            type="button"
+            onClick={openNewChatCard}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
+            aria-label="New chat"
+          >
+            <Edit3 className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
             onClick={() => openSchedulePanel()}
-            className="h-9 w-9 rounded-full"
-            aria-label="Schedule"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
+            aria-label="Scheduled"
           >
-            <CalendarDays className="h-4 w-4" />
-          </Button>
+            <CalendarDays className="h-5 w-5" />
+          </button>
 
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => setTrackerOpen(true)}
-            className="h-9 w-9 rounded-full"
-            aria-label="Job Tracker"
-          >
-            <Clock className="h-4 w-4" />
-          </Button>
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white">
+            {firstName?.[0]?.toUpperCase() || 'F'}
+          </div>
         </div>
       </header>
 
@@ -5126,131 +5315,214 @@ ${message.content}`);
 
 
       {libraryOpen && (
-        <div className="fixed inset-0 z-[72] bg-black/30 backdrop-blur-sm" onClick={() => setLibraryOpen(false)}>
+        <div className="fixed inset-0 z-[72] bg-black/60 backdrop-blur-sm" onClick={() => setLibraryOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-white shadow-2xl dark:bg-[#0b0b0c] lg:bg-[#111] lg:text-white"
+            className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-[#0f0f10] text-white shadow-2xl lg:max-w-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
-              <div>
-                <h2 className="text-base font-semibold">Library</h2>
-                <p className="text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
-                  Student learning, notes and applications
+            <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-[#0f0f10] px-4">
+              <div className="min-w-0">
+                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-white">Library</h2>
+                <p className="truncate text-xs text-white/45">
+                  Jobs, investors and students — clean and organised.
                 </p>
               </div>
 
-              <Button size="icon" variant="ghost" onClick={() => setLibraryOpen(false)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+              <button
+                type="button"
+                onClick={() => setLibraryOpen(false)}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
+                aria-label="Close Library"
+              >
                 <X className="h-5 w-5" />
-              </Button>
+              </button>
             </div>
 
-            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="rounded-2xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-[#171717]">
-                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Start a student workspace</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50 lg:text-white/50">
-                  Each option opens a separate chat so homework, assignments, lesson notes, and applications do not mix.
-                </p>
-
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {educationTools.map((tool) => {
-                    const Icon = tool.icon;
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
+              <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {librarySections.map((section) => {
+                    const Icon = section.icon;
+                    const active = activeLibrarySection === section.key;
 
                     return (
                       <button
-                        key={tool.label}
+                        key={section.key}
                         type="button"
-                        onClick={() => openLibraryChat(tool)}
-                        className="rounded-2xl border border-black/5 bg-white p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-white/5 lg:hover:bg-white/10"
+                        onClick={() => {
+                          setActiveLibrarySection(section.key);
+                          setActiveYoutubeLessonCategory(null);
+                          setYoutubeLessonVideos([]);
+                          setActivePlayingVideoId(null);
+                        }}
+                        className={`rounded-2xl px-2 py-3 text-center transition active:scale-[0.98] ${
+                          active
+                            ? 'bg-white text-black shadow-sm'
+                            : 'bg-transparent text-white/65 hover:bg-white/[0.08] hover:text-white'
+                        }`}
                       >
-                        <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70 lg:text-white/70" />
-                        <p className="text-sm font-semibold text-slate-950 dark:text-white lg:text-white">{tool.label}</p>
+                        <Icon className="mx-auto mb-1 h-5 w-5" />
+                        <span className="block text-[11px] font-semibold leading-tight">{section.shortTitle}</span>
                       </button>
                     );
                   })}
                 </div>
+              </div>
 
+              <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
+                      {activeLibrary.title}
+                    </p>
+                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">
+                      Start the right workspace
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-white/55">{activeLibrary.description}</p>
+                  </div>
+                </div>
 
-                <div className="mt-4 rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04] lg:border-white/10 lg:bg-white/[0.04]">
-                  <div className="flex items-start justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => openLibrarySectionChat(activeLibrary)}
+                  className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left text-sm font-semibold text-black transition hover:bg-white/90 active:scale-[0.99]"
+                >
+                  <span>Open {activeLibrary.title} chat</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              {activeLibrarySection === 'students' && (
+                <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+                  <div className="grid grid-cols-2 gap-2">
+                    {educationTools.map((tool) => {
+                      const Icon = tool.icon;
+
+                      return (
+                        <button
+                          key={tool.label}
+                          type="button"
+                          onClick={() => openLibraryChat(tool)}
+                          className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-left transition hover:bg-white/[0.09] active:scale-[0.98]"
+                        >
+                          <Icon className="mb-3 h-5 w-5 text-white/65" />
+                          <p className="text-sm font-semibold text-white">{tool.label}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-semibold tracking-[-0.02em] text-white">
+                      YouTube lessons inside {activeLibrary.shortTitle}
+                    </h4>
+                    <p className="mt-1 text-xs leading-5 text-white/45">
+                      Useful full videos only. No reels, no funny clips, no mixed categories.
+                    </p>
+                  </div>
+                  {youtubeLessonsBusy && <Loader2 className="h-4 w-4 animate-spin text-white/45" />}
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {activeLibraryYoutubeCategories.map((category) => (
+                    <button
+                      key={category.label}
+                      type="button"
+                      onClick={() => openYoutubeLessonCategory(category)}
+                      className={`rounded-2xl border p-3 text-left transition active:scale-[0.98] ${
+                        activeYoutubeLessonCategory?.label === category.label
+                          ? 'border-white bg-white text-black'
+                          : 'border-white/10 bg-white/[0.05] text-white hover:bg-white/[0.09]'
+                      }`}
+                    >
+                      <span className="mb-2 inline-flex rounded-full bg-white/[0.1] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                        {category.badge}
+                      </span>
+                      <span className="block text-sm font-semibold">{category.label}</span>
+                      <span className="mt-1 line-clamp-3 block text-[11px] leading-4 opacity-65">
+                        {category.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {activeYoutubeLessonCategory && (
+                  <div className="mt-5 space-y-3">
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-950 dark:text-white lg:text-white">
-                        YouTube Lessons categories
-                      </h4>
-                      <p className="mt-1 text-[11px] leading-4 text-slate-500 dark:text-white/45 lg:text-white/45">
-                        Tap a category to load videos inside FaceMeX.
+                      <p className="text-sm font-semibold text-white">
+                        {activeYoutubeLessonCategory.label} videos
+                      </p>
+                      <p className="mt-1 text-xs text-white/45">
+                        Powered by your FaceMeX YouTube API. Tap Watch to play inside FaceMeX.
                       </p>
                     </div>
-                    {youtubeLessonsBusy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-                  </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {youtubeLessonCategories.map((category) => (
-                      <button
-                        key={category.label}
-                        type="button"
-                        onClick={() => openYoutubeLessonCategory(category)}
-                        className={`rounded-xl border p-2 text-left transition active:scale-[0.98] ${
-                          activeYoutubeLessonCategory?.label === category.label
-                            ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200 lg:border-blue-500/30 lg:bg-blue-500/10 lg:text-blue-200'
-                            : 'border-black/5 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/[0.08] lg:border-white/10 lg:bg-white/[0.04] lg:text-white/70 lg:hover:bg-white/[0.08]'
-                        }`}
-                      >
-                        <span className="block text-xs font-semibold">{category.label}</span>
-                        <span className="mt-1 line-clamp-2 block text-[10px] leading-3 opacity-70">
-                          {category.description}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {activeYoutubeLessonCategory && (
-                    <div className="mt-4 space-y-3">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-950 dark:text-white lg:text-white">
-                          {activeYoutubeLessonCategory.label} videos
-                        </p>
-                        <p className="mt-1 text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
-                          Powered by your FaceMeX YouTube backend route.
-                        </p>
+                    {youtubeLessonsBusy ? (
+                      <div className="rounded-3xl bg-white/[0.05] p-5 text-sm text-white/55">
+                        <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                        Loading useful videos...
                       </div>
+                    ) : youtubeLessonVideos.length === 0 ? (
+                      <div className="rounded-3xl bg-white/[0.05] p-5 text-sm text-white/55">
+                        No useful videos loaded yet. Tap the category again or try another topic.
+                      </div>
+                    ) : (
+                      youtubeLessonVideos.map((video) => {
+                        const isPlaying = activePlayingVideoId === video.videoId;
 
-                      {youtubeLessonsBusy ? (
-                        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-white/[0.05] dark:text-white/50 lg:bg-white/5 lg:text-white/50">
-                          <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                          Loading videos...
-                        </div>
-                      ) : youtubeLessonVideos.length === 0 ? (
-                        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-white/[0.05] dark:text-white/50 lg:bg-white/5 lg:text-white/50">
-                          No videos loaded yet. Tap a category again or try another topic.
-                        </div>
-                      ) : (
-                        youtubeLessonVideos.map((video) => (
-                          <div
+                        return (
+                          <article
                             key={video.videoId}
-                            className="overflow-hidden rounded-2xl border border-black/5 bg-slate-50 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-white/5"
+                            className="overflow-hidden rounded-[28px] border border-white/10 bg-[#171717] shadow-[0_18px_48px_rgba(0,0,0,0.25)]"
                           >
                             <div className="aspect-video w-full overflow-hidden bg-black">
-                              <iframe
-                                src={video.embedUrl}
-                                title={video.title}
-                                className="h-full w-full"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                allowFullScreen
-                              />
+                              {isPlaying ? (
+                                <iframe
+                                  src={video.embedUrl}
+                                  title={video.title}
+                                  className="h-full w-full"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                  allowFullScreen
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setActivePlayingVideoId(video.videoId)}
+                                  className="relative h-full w-full bg-black text-left"
+                                >
+                                  {video.thumbnail ? (
+                                    <img src={video.thumbnail} alt="" className="h-full w-full object-cover opacity-90" />
+                                  ) : (
+                                    <div className="h-full w-full bg-white/[0.06]" />
+                                  )}
+                                  <span className="absolute inset-0 bg-black/20" />
+                                  <span className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                                    ▶
+                                  </span>
+                                </button>
+                              )}
                             </div>
 
-                            <div className="p-3">
-                              <p className="line-clamp-2 text-sm font-semibold text-slate-950 dark:text-white lg:text-white">
-                                {video.title}
-                              </p>
+                            <div className="p-4">
+                              <p className="line-clamp-2 text-base font-semibold leading-6 text-white">{video.title}</p>
 
                               {video.channelTitle && (
-                                <p className="mt-1 text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
-                                  {video.channelTitle}
-                                </p>
+                                <p className="mt-1 text-xs text-white/45">{video.channelTitle}</p>
                               )}
 
-                              <div className="mt-3 flex gap-2">
+                              <div className="mt-4 grid grid-cols-2 gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => setActivePlayingVideoId(video.videoId)}
+                                  className="h-10 rounded-2xl bg-white text-xs font-semibold text-black hover:bg-white/90"
+                                >
+                                  Watch in FaceMeX
+                                </Button>
+
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -5258,7 +5530,9 @@ ${message.content}`);
                                     const savedVideoMessage: ChatMessage = {
                                       id: safeId(),
                                       role: 'assistant',
-                                      content: `Saved YouTube lesson: ${video.title}\nChannel: ${video.channelTitle || 'YouTube'}\nWatch: ${video.watchUrl}`,
+                                      content: `Saved YouTube lesson: ${video.title}
+Channel: ${video.channelTitle || 'YouTube'}
+Watch: ${video.watchUrl}`,
                                       createdAt: new Date().toISOString(),
                                       saved: true,
                                       savedCategory: 'youtube_lessons',
@@ -5269,10 +5543,10 @@ ${message.content}`);
 
                                     toast({
                                       title: 'YouTube lesson saved',
-                                      description: 'Saved in Library under YouTube Lessons.',
+                                      description: `Saved under ${activeLibrary.title}.`,
                                     });
                                   }}
-                                  className="h-8 flex-1 rounded-xl text-xs"
+                                  className="h-10 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-semibold text-white hover:bg-white/[0.09]"
                                 >
                                   <Save className="mr-1.5 h-3.5 w-3.5" />
                                   Save
@@ -5282,93 +5556,93 @@ ${message.content}`);
                                   size="sm"
                                   variant="outline"
                                   onClick={() => {
+                                    setLibraryOpen(false);
+                                    sendPrompt(
+                                      `Create useful notes from this YouTube lesson for ${activeLibrary.title}.
+
+Video title: ${video.title}
+Channel: ${video.channelTitle || 'YouTube'}
+Link: ${video.watchUrl}
+
+Give me: main idea, key points, step-by-step explanation, action steps, and quick revision notes. Be honest that you cannot watch the full video unless transcript/details are provided.`
+                                    );
+                                  }}
+                                  className="h-10 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-semibold text-white hover:bg-white/[0.09]"
+                                >
+                                  Make notes
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
                                     trackLinkClick(video.watchUrl, 'youtube_lesson_watch_on_youtube');
                                     window.open(video.watchUrl, '_blank', 'noopener,noreferrer');
                                   }}
-                                  className="h-8 flex-1 rounded-xl text-xs"
+                                  className="h-10 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-semibold text-white hover:bg-white/[0.09]"
                                 >
                                   <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                                   YouTube
                                 </Button>
                               </div>
                             </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
+                          </article>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-[#171717]">
-                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Saved education notes</h3>
-                <div className="mt-3 space-y-2">
-                  {savedMessages.filter((item) => item.savedCategory === 'homework_help' || item.savedCategory === 'assignments' || item.savedCategory === 'youtube_lessons' || item.savedCategory === 'institution_applications').length === 0 ? (
-                    <p className="rounded-2xl bg-white p-3 text-sm text-slate-500 dark:bg-white/[0.06] dark:text-white/50 lg:bg-white/5 lg:text-white/50">
-                      No library notes yet. Start with Homework Help, Assignments, YouTube Lessons, or College / University.
+              <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+                <h3 className="text-base font-semibold text-white">Saved library notes</h3>
+                <p className="mt-1 text-xs leading-5 text-white/45">
+                  Saved answers stay separated by Jobs, Investors and Students so users can come back later.
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(['all', 'career_plan', 'research', 'homework_help', 'assignments', 'youtube_lessons', 'institution_applications'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setSavedFilter(filter as any)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                        savedFilter === filter ? 'bg-white text-black' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1] hover:text-white'
+                      }`}
+                    >
+                      {filter === 'all' ? 'All' : savedCategoryLabels[filter as SavedCategory]}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {savedMessages.length === 0 ? (
+                    <p className="rounded-2xl bg-white/[0.04] p-4 text-sm text-white/45">
+                      No saved notes yet. Save useful answers and videos to build your library.
                     </p>
                   ) : (
                     savedMessages
-                      .filter((item) => item.savedCategory === 'homework_help' || item.savedCategory === 'assignments' || item.savedCategory === 'youtube_lessons' || item.savedCategory === 'institution_applications')
-                      .slice(0, 12)
+                      .filter((item) => savedFilter === 'all' || item.savedCategory === savedFilter)
+                      .slice(0, 18)
                       .map((item) => (
                         <button
                           key={item.id}
                           type="button"
                           onClick={() => setSavedReaderMessage(item)}
-                          className="w-full rounded-2xl bg-white p-3 text-left text-sm text-slate-700 dark:bg-white/[0.06] dark:text-white/70 lg:bg-white/5 lg:text-white/75"
+                          className="w-full rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.08]"
                         >
-                          <span className="block text-xs font-semibold text-slate-500 dark:text-white/45 lg:text-white/45">
-                            {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Library'}
-                          </span>
-                          <span className="mt-1 line-clamp-3 block">{normalizeUssdCodes(item.content)}</span>
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                              {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Library'}
+                            </span>
+                            {item.pinned && <Pin className="h-3.5 w-3.5 text-white/45" />}
+                          </div>
+                          <p className="line-clamp-2 text-xs leading-5 text-white/70">{item.content}</p>
                         </button>
                       ))
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {savedReaderMessage && (
-        <div className="fixed inset-0 z-[98] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
-          <div
-            className="flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-w-2xl lg:rounded-[28px] lg:border lg:border-white/10 lg:bg-[#171717] lg:text-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
-
-            <div className="mb-3 flex items-start justify-between gap-3 border-b border-black/5 pb-3 dark:border-white/10 lg:border-white/10">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">
-                  {savedReaderMessage.savedCategory ? savedCategoryLabels[savedReaderMessage.savedCategory] : 'Saved item'}
-                </p>
-                <h2 className="mt-1 text-base font-semibold text-slate-950 dark:text-white lg:text-white">Saved card</h2>
-              </div>
-
-              <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
-              <ChatGPTStyleText text={savedReaderMessage.content} onLinkClick={handleGeneratedLinkClick} />
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10 lg:border-white/10">
-              <Button variant="outline" onClick={() => copyText(savedReaderMessage.content)} className="h-11 rounded-2xl lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10">
-                <Copy className="mr-2 h-4 w-4" />
-                Copy
-              </Button>
-              <Button variant="ghost" onClick={() => {
-                removeFromSaved(savedReaderMessage.id);
-                setSavedReaderMessage(null);
-              }} className="h-11 rounded-2xl text-red-500 hover:text-red-600 lg:hover:bg-red-500/10">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
             </div>
           </div>
         </div>
