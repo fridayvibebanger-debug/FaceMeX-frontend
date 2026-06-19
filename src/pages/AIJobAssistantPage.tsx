@@ -146,6 +146,7 @@ const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
 const WORKSPACE_SESSIONS_STORAGE_KEY = 'facemex_opportunities_workspace_sessions';
 const WORKSPACE_ACTIVE_SESSION_STORAGE_KEY = 'facemex_opportunities_workspace_active_session';
 const WORKSPACE_SCHEDULES_STORAGE_KEY = 'facemex_opportunities_workspace_schedules';
+const WORKSPACE_USER_MEMORY_STORAGE_KEY = 'facemex_opportunities_workspace_user_memory';
 
 const BUILD_CV_QUICK_ACTION = '__OPEN_FACEMEX_AI_CV_BUILDER__';
 const COVER_LETTER_QUICK_ACTION = '__OPEN_FACEMEX_COVER_LETTER_AI__';
@@ -487,6 +488,10 @@ You are FaceMeX Job AI, but you must behave like a helpful ChatGPT-style assista
 
 Main rule:
 - Answer any normal helpful question clearly and calmly.
+- Use the FaceMeX memory context to understand what the user previously asked, saved, scheduled, or worked on in older chats.
+- If the user asks a short follow-up like 'continue', 'more', 'same one', 'help me apply', or 'do it', connect it to the most relevant previous chat, saved item, selected job, schedule, or education workspace.
+- Do not mention memory unless it helps the user. Use it quietly to give a more relevant answer.
+- If memory is not enough to safely answer, ask one clear follow-up question.
 - Only search jobs when the user clearly asks for jobs, vacancies, hiring, work, learnerships, internships, employment, or a specific job role.
 - Do not treat location words like Tzaneen, Polokwane, Letsitele, Limpopo, or South Africa as job-search intent by themselves.
 - If the user asks about business ideas, life advice, app improvement, transport, money planning, studies, messages, or strategy, answer normally without showing job cards.
@@ -1922,6 +1927,240 @@ function buildConversationContext(messages: ChatMessage[]) {
     .join('\n\n');
 }
 
+
+function memorySnippet(value: string, maxLength = 190) {
+  const normalized = normalizeUssdCodes(clean(value)).replace(/\s+/g, ' ').trim();
+
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+
+  return `${normalized.slice(0, maxLength).trim()}...`;
+}
+
+function uniqueMemoryItems(items: string[], limit = 12) {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  items.forEach((item) => {
+    const value = memorySnippet(item, 260);
+    const key = value.toLowerCase();
+
+    if (!value || seen.has(key)) return;
+
+    seen.add(key);
+    output.push(value);
+  });
+
+  return output.slice(0, limit);
+}
+
+function readStoredMemorySnapshot() {
+  try {
+    return clean(localStorage.getItem(WORKSPACE_USER_MEMORY_STORAGE_KEY) || '');
+  } catch {
+    return '';
+  }
+}
+
+function saveStoredMemorySnapshot(value: string) {
+  try {
+    localStorage.setItem(WORKSPACE_USER_MEMORY_STORAGE_KEY, value);
+  } catch {
+    // ignore local storage failures
+  }
+}
+
+function collectMemoryMessages(currentMessages: ChatMessage[], chatSessions: ChatSession[]) {
+  const map = new Map<string, ChatMessage>();
+
+  [...currentMessages, ...chatSessions.flatMap((session) => session.messages || [])]
+    .filter((message) => message && !message.deletedFromChat && clean(message.content))
+    .forEach((message) => {
+      map.set(message.id || `${message.createdAt}-${message.role}-${message.content}`, message);
+    });
+
+  return Array.from(map.values()).sort((a, b) => {
+    const aTime = new Date(a.createdAt || 0).getTime();
+    const bTime = new Date(b.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
+function getRecentUserQuestionsForMemory(messages: ChatMessage[], limit = 8) {
+  return uniqueMemoryItems(
+    messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.content),
+    limit
+  );
+}
+
+function getSavedMemoryItems(currentMessages: ChatMessage[], chatSessions: ChatSession[], limit = 8) {
+  const saved = collectMemoryMessages(currentMessages, chatSessions)
+    .filter((message) => message.saved && message.savedCategory)
+    .map((message) => `${message.savedCategory ? savedCategoryLabels[message.savedCategory] : 'Saved'}: ${message.content}`);
+
+  return uniqueMemoryItems(saved, limit);
+}
+
+function detectMemorySignals(messages: ChatMessage[]) {
+  const text = messages
+    .filter((message) => message.role === 'user')
+    .map((message) => message.content)
+    .join('\n')
+    .toLowerCase();
+
+  const signals: string[] = [];
+
+  if (/(tzaneen|lenyenye|nkowankowa|maake|letsitele|limpopo)/i.test(text)) {
+    signals.push('User often works around Tzaneen / Limpopo context.');
+  }
+
+  if (/(job|jobs|work|vacancy|apply|cv|cover letter|interview|learnership|internship)/i.test(text)) {
+    signals.push('User often asks for job search, applications, CVs, cover letters, and interview help.');
+  }
+
+  if (/(homework|assignment|study|college|university|tvet|bursary|nsfas|youtube lesson|notes)/i.test(text)) {
+    signals.push('User also uses FaceMeX for education, study notes, assignments, and institution applications.');
+  }
+
+  if (/(fake|scam|verify|legit|source|closing date|deadline)/i.test(text)) {
+    signals.push('User cares about verifying job sources, closing dates, and avoiding fake opportunities.');
+  }
+
+  if (/(business|startup|users|app|facemex|marketing|retention|analytics|supabase|react|typescript|netlify|render)/i.test(text)) {
+    signals.push('User works on FaceMeX product, startup growth, app code, analytics, and user retention.');
+  }
+
+  return signals;
+}
+
+function getLastKnownJobSearchFromMemory(currentMessages: ChatMessage[], chatSessions: ChatSession[]) {
+  const allMessages = collectMemoryMessages(currentMessages, chatSessions);
+
+  const assistantJob = allMessages.find(
+    (message) =>
+      message.role === 'assistant' &&
+      (message.jobSearchArea || message.jobSearchQuery || Boolean(message.jobs?.length))
+  );
+
+  if (assistantJob) {
+    return {
+      area: assistantJob.jobSearchArea || 'Tzaneen',
+      query: assistantJob.jobSearchQuery || 'jobs',
+      title: memorySnippet(assistantJob.content, 140),
+    };
+  }
+
+  const userJob = allMessages.find((message) => message.role === 'user' && hasJobSearchWords(message.content));
+
+  if (!userJob) return null;
+
+  return {
+    area: extractAreaFromPrompt(userJob.content),
+    query: extractKeywordFromPrompt(userJob.content),
+    title: memorySnippet(userJob.content, 140),
+  };
+}
+
+function getLastKnownEducationFocusFromMemory(messages: ChatMessage[]) {
+  const educationMessage = messages.find((message) => message.role === 'user' && isEducationText(message.content));
+
+  if (!educationMessage) return '';
+
+  const intent = getEducationIntent(educationMessage.content);
+  const label =
+    intent === 'education_assignment'
+      ? 'Assignments'
+      : intent === 'education_youtube'
+        ? 'YouTube Lessons'
+        : intent === 'education_institution'
+          ? 'College / University Applications'
+          : 'Homework Help';
+
+  return `${label}: ${memorySnippet(educationMessage.content, 180)}`;
+}
+
+function buildUserMemoryContext({
+  finalPrompt,
+  currentMessages,
+  chatSessions,
+  scheduledTasks,
+}: {
+  finalPrompt: string;
+  currentMessages: ChatMessage[];
+  chatSessions: ChatSession[];
+  scheduledTasks: ScheduledTask[];
+}) {
+  const allMessages = collectMemoryMessages(currentMessages, chatSessions);
+  const storedSnapshot = readStoredMemorySnapshot();
+  const recentQuestions = getRecentUserQuestionsForMemory(allMessages, 8);
+  const savedItems = getSavedMemoryItems(currentMessages, chatSessions, 8);
+  const signals = detectMemorySignals(allMessages);
+  const lastJobSearch = getLastKnownJobSearchFromMemory(currentMessages, chatSessions);
+  const lastEducationFocus = getLastKnownEducationFocusFromMemory(allMessages);
+  const activeSchedules = scheduledTasks
+    .filter((task) => task.status !== 'paused')
+    .slice(0, 5)
+    .map((task) => `${scheduleFrequencyLabel(task.frequency)}: ${memorySnippet(task.prompt, 160)}`);
+
+  const lines = [
+    'FACE MEX AI MEMORY CONTEXT:',
+    `Current user prompt: ${memorySnippet(finalPrompt, 220)}`,
+    storedSnapshot ? `Saved memory snapshot:\n${storedSnapshot}` : '',
+    signals.length ? `Observed user patterns:\n- ${signals.join('\n- ')}` : '',
+    lastJobSearch
+      ? `Last known job-search context: area=${lastJobSearch.area}; query=${lastJobSearch.query}; previous request=${lastJobSearch.title}`
+      : '',
+    lastEducationFocus ? `Last known education context: ${lastEducationFocus}` : '',
+    recentQuestions.length ? `Recent user questions across chats:\n- ${recentQuestions.join('\n- ')}` : '',
+    savedItems.length ? `Saved items and notes:\n- ${savedItems.join('\n- ')}` : '',
+    activeSchedules.length ? `Active scheduled tasks:\n- ${activeSchedules.join('\n- ')}` : '',
+    'Instruction: Use this memory quietly to connect the response to the user intention. When the prompt is short or vague, infer the most likely context from memory. Do not invent facts that are not in memory. Ask one clear follow-up only if memory is not enough.',
+  ].filter(Boolean);
+
+  return lines.join('\n\n');
+}
+
+function buildMemoryAwarePrompt(promptText: string, memoryContext: string) {
+  if (!memoryContext) return promptText;
+
+  return `${promptText}\n\n${memoryContext}`;
+}
+
+function updateLocalUserMemorySnapshot({
+  prompt,
+  answer,
+  intent,
+}: {
+  prompt: string;
+  answer: string;
+  intent: string;
+}) {
+  const previous = readStoredMemorySnapshot();
+  const existingLines = previous
+    .split('\n')
+    .map((line) => clean(line))
+    .filter(Boolean);
+
+  const newLine = `[${new Date().toISOString().slice(0, 10)}] ${intent}: User asked "${memorySnippet(
+    prompt,
+    140
+  )}". FaceMeX helped with "${memorySnippet(answer, 170)}".`;
+
+  const next = uniqueMemoryItems([newLine, ...existingLines], 26).join('\n');
+  saveStoredMemorySnapshot(next);
+  return next;
+}
+
+function shouldUsePreviousJobContext(text: string) {
+  const value = clean(text).toLowerCase();
+
+  return /^(more|show more|same|same one|similar|continue|help me apply|apply|verify|check it|no experience|nearby|around me|again)$/i.test(
+    value
+  );
+}
+
 function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
   const [failed, setFailed] = useState(false);
 
@@ -2876,6 +3115,7 @@ export default function AIJobAssistantPage() {
       localStorage.removeItem(WORKSPACE_STORAGE_KEY);
       localStorage.removeItem(WORKSPACE_SESSIONS_STORAGE_KEY);
       localStorage.removeItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY);
+      localStorage.removeItem(WORKSPACE_USER_MEMORY_STORAGE_KEY);
     } catch {
       // ignore
     }
@@ -2903,7 +3143,13 @@ export default function AIJobAssistantPage() {
       'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
 
     const conversationContext = buildConversationContext(messages);
-    const shouldUseContext = isShortContextReply(finalPrompt) && conversationContext;
+    const userMemoryContext = buildUserMemoryContext({
+      finalPrompt,
+      currentMessages: messages,
+      chatSessions,
+      scheduledTasks,
+    });
+    const shouldUseContext = isShortContextReply(finalPrompt) && (conversationContext || userMemoryContext);
 
     const intent = detectIntent(finalPrompt, hasImages);
     const suggestedSavedCategory = savedCategoryFromIntent(intent);
@@ -2917,7 +3163,9 @@ export default function AIJobAssistantPage() {
       ? `Use the recent conversation to understand this short reply and continue from the last assistant question.
 
 Recent conversation:
-${conversationContext}
+${conversationContext || 'No current conversation context.'}
+
+${userMemoryContext}
 
 Latest user reply:
 ${finalPrompt}
@@ -2925,7 +3173,8 @@ ${finalPrompt}
 Respond based on the previous question/task. Do not ask what the user means if the context is clear.`
       : finalPrompt;
 
-    const aiPromptWithToolDirection = addFaceMeXCareerToolInstruction(contextualPrompt, intent);
+    const memoryAwarePrompt = buildMemoryAwarePrompt(contextualPrompt, userMemoryContext);
+    const aiPromptWithToolDirection = addFaceMeXCareerToolInstruction(memoryAwarePrompt, intent);
 
     const userMessage: ChatMessage = {
       id: safeId(),
@@ -2967,8 +3216,16 @@ Respond based on the previous question/task. Do not ask what the user means if t
 
     if (shouldAutoSearchJobs) {
       try {
-        const area = extractAreaFromPrompt(finalPrompt);
-        const keyword = extractKeywordFromPrompt(finalPrompt);
+        const previousJobContext = getLastKnownJobSearchFromMemory(messages, chatSessions);
+        const hasExplicitArea = PRIORITY_AREAS.some((areaName) =>
+          finalPrompt.toLowerCase().includes(areaName.toLowerCase())
+        );
+        const area = hasExplicitArea || !previousJobContext ? extractAreaFromPrompt(finalPrompt) : previousJobContext.area;
+        const keywordFromPrompt = extractKeywordFromPrompt(finalPrompt);
+        const keyword =
+          keywordFromPrompt === 'jobs' && shouldUsePreviousJobContext(finalPrompt) && previousJobContext?.query
+            ? previousJobContext.query
+            : keywordFromPrompt;
         const jobs = await loadAutomaticJobs({ query: keyword || 'jobs', area });
         const exactJobs = jobs.filter((job) => !job.isSourceCard);
         const shouldHideSourceCards = isNoExperienceSearchKeyword(keyword || 'jobs');
@@ -2989,6 +3246,12 @@ Respond based on the previous question/task. Do not ask what the user means if t
             jobSearchQuery: keyword || 'jobs',
           },
         ]);
+
+        updateLocalUserMemorySnapshot({
+          prompt: finalPrompt,
+          answer,
+          intent,
+        });
 
         setBusy(false);
         return;
@@ -3024,6 +3287,9 @@ Respond based on the previous question/task. Do not ask what the user means if t
       const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
 
 User name: ${userDisplayName}
+
+${userMemoryContext}
+
 Current automatic job results in FaceMeX:
 ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
 `;
@@ -3034,6 +3300,9 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         question: aiPromptWithToolDirection,
         originalPrompt: finalPrompt,
         conversationContext,
+        userMemoryContext,
+        memoryContext: userMemoryContext,
+        previousChatMemory: userMemoryContext,
         conversationMessages: messages
           .filter((message) => !message.deletedFromChat)
           .slice(-10)
@@ -3096,6 +3365,12 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         },
       ]);
 
+      updateLocalUserMemorySnapshot({
+        prompt: finalPrompt,
+        answer,
+        intent,
+      });
+
       recordAIUse();
 
       trackWorkspaceResponse({
@@ -3119,6 +3394,12 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
           intent,
         },
       ]);
+
+      updateLocalUserMemorySnapshot({
+        prompt: finalPrompt,
+        answer,
+        intent,
+      });
 
       trackError('workspace_ai_failed', error?.message || 'AI failed', {
         intent,
