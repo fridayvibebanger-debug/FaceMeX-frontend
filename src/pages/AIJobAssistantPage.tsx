@@ -28,6 +28,7 @@ import {
   Save,
   Search,
   Send,
+  Share2,
   ShieldCheck,
   Trash2,
   Users,
@@ -114,12 +115,37 @@ type ChatMessage = {
   jobSearchQuery?: string;
 };
 
+type ChatSession = {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ScheduledTaskStatus = 'active' | 'paused';
+
+type ScheduledTask = {
+  id: string;
+  title: string;
+  prompt: string;
+  frequency: 'every_morning' | 'every_afternoon' | 'twice_day' | 'hourly' | 'custom';
+  email: string;
+  emailEnabled: boolean;
+  createdAt: string;
+  nextRunLabel?: string;
+  status: ScheduledTaskStatus;
+};
+
 const AI_CV_BUILDER_PATH = '/ai/resume';
 const AI_COVER_LETTER_PATH = '/ai/cover-letter';
 const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
 
 const JOBS_BATCH_SIZE = 10;
 const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
+const WORKSPACE_SESSIONS_STORAGE_KEY = 'facemex_opportunities_workspace_sessions';
+const WORKSPACE_ACTIVE_SESSION_STORAGE_KEY = 'facemex_opportunities_workspace_active_session';
+const WORKSPACE_SCHEDULES_STORAGE_KEY = 'facemex_opportunities_workspace_schedules';
 
 const BUILD_CV_QUICK_ACTION = '__OPEN_FACEMEX_AI_CV_BUILDER__';
 const COVER_LETTER_QUICK_ACTION = '__OPEN_FACEMEX_COVER_LETTER_AI__';
@@ -606,6 +632,8 @@ type ApplySheetTool = {
   action?: 'open_cv_builder' | 'open_cover_letter_builder';
 };
 
+type EducationTool = ApplySheetTool;
+
 const applySheetTools: ApplySheetTool[] = [
   {
     label: 'Apply Assistant',
@@ -786,6 +814,72 @@ function getFirstName(name: string) {
   const value = clean(name);
   if (!value || value.toLowerCase() === 'there') return 'there';
   return value.split(' ')[0] || 'there';
+}
+
+function getUserEmail(store: any) {
+  const user =
+    store?.user ||
+    store?.currentUser ||
+    store?.authUser ||
+    store?.profile ||
+    store?.account ||
+    store?.session?.user ||
+    store?.supabaseUser ||
+    null;
+
+  return clean(
+    store?.email ||
+      store?.profile?.email ||
+      user?.email ||
+      user?.user_metadata?.email ||
+      ''
+  );
+}
+
+function normalizeScheduledTaskStatus(status: unknown): ScheduledTaskStatus {
+  return status === 'paused' ? 'paused' : 'active';
+}
+
+function normalizeScheduledTasks(value: any): ScheduledTask[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item): ScheduledTask => ({
+      id: clean(item?.id) || safeId(),
+      title: clean(item?.title) || 'FaceMeX scheduled help',
+      prompt: clean(item?.prompt) || 'Scan for anything that needs my attention.',
+      frequency:
+        item?.frequency === 'every_afternoon' ||
+        item?.frequency === 'twice_day' ||
+        item?.frequency === 'hourly' ||
+        item?.frequency === 'custom'
+          ? item.frequency
+          : 'every_morning',
+      email: clean(item?.email),
+      emailEnabled: item?.emailEnabled !== false,
+      createdAt: clean(item?.createdAt) || new Date().toISOString(),
+      nextRunLabel: clean(item?.nextRunLabel),
+      status: normalizeScheduledTaskStatus(item?.status),
+    }))
+    .slice(0, 20);
+}
+
+function scheduleFrequencyLabel(frequency: ScheduledTask['frequency']) {
+  if (frequency === 'every_morning') return 'Every morning';
+  if (frequency === 'every_afternoon') return 'Every afternoon';
+  if (frequency === 'twice_day') return 'Twice a day';
+  if (frequency === 'hourly') return 'Hourly';
+  return 'Custom schedule';
+}
+
+function getDefaultSchedulePrompt(messages: ChatMessage[]) {
+  const lastUserPrompt = [...messages].reverse().find((message) => message.role === 'user')?.content;
+
+  return clean(lastUserPrompt) || 'Scan FaceMeX opportunities, education tasks, and saved jobs. Email me if anything needs my attention.';
+}
+
+function getWhatsAppShareUrl(text: string) {
+  return `https://wa.me/?text=${encodeURIComponent(normalizeUssdCodes(text))}`;
 }
 
 function safeId() {
@@ -1663,15 +1757,15 @@ function renderMarkdownTable(
   return (
     <div
       key={key}
-      className="my-4 w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.03]"
+      className="my-4 w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.03] lg:border-white/10 lg:bg-[#171717]"
     >
-      <table className="w-full min-w-[520px] border-collapse text-left text-sm">
-        <thead className="bg-slate-100 dark:bg-white/[0.06]">
+      <table className="w-full min-w-[520px] border-collapse text-left text-sm lg:text-white">
+        <thead className="bg-slate-100 dark:bg-white/[0.06] lg:bg-[#242424]">
           <tr>
             {Array.from({ length: columnCount }).map((_, index) => (
               <th
                 key={`head-${index}`}
-                className="border-b border-slate-200 px-3 py-3 font-semibold text-slate-950 dark:border-white/10 dark:text-white"
+                className="border-b border-slate-200 px-3 py-3 font-semibold text-slate-950 dark:border-white/10 dark:text-white lg:border-white/10 lg:text-white"
               >
                 {renderInlineText(header[index] || '', onLinkClick)}
               </th>
@@ -1683,12 +1777,12 @@ function renderMarkdownTable(
           {body.map((row, rowIndex) => (
             <tr
               key={`row-${rowIndex}`}
-              className="border-b border-slate-100 last:border-0 dark:border-white/10"
+              className="border-b border-slate-100 last:border-0 dark:border-white/10 lg:border-white/10"
             >
               {Array.from({ length: columnCount }).map((_, cellIndex) => (
                 <td
                   key={`cell-${rowIndex}-${cellIndex}`}
-                  className="align-top px-3 py-3 text-slate-700 dark:text-white/75"
+                  className="align-top px-3 py-3 text-slate-700 dark:text-white/75 lg:text-white/80"
                 >
                   {renderInlineText(row[cellIndex] || '', onLinkClick)}
                 </td>
@@ -1785,6 +1879,39 @@ function isShortContextReply(text: string) {
   return /^(yes|yebo|yeah|yep|ok|okay|sure|continue|do it|please do|go ahead|no|not now|send it|draft it)$/i.test(
     clean(text)
   );
+}
+
+
+function buildChatSessionTitle(messages: ChatMessage[]) {
+  const firstUserMessage = messages.find((message) => message.role === 'user' && clean(message.content));
+  const title = clean(firstUserMessage?.content || messages[0]?.content || 'New chat');
+
+  if (!title) return 'New chat';
+  if (title.length <= 58) return title;
+
+  return `${title.slice(0, 58).trim()}...`;
+}
+
+function normalizeChatSessions(value: unknown): ChatSession[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item: any) => {
+      const messages = Array.isArray(item?.messages) ? item.messages : [];
+      const id = clean(item?.id) || safeId();
+      const createdAt = clean(item?.createdAt) || new Date().toISOString();
+      const updatedAt = clean(item?.updatedAt) || createdAt;
+
+      return {
+        id,
+        title: clean(item?.title) || buildChatSessionTitle(messages),
+        messages,
+        createdAt,
+        updatedAt,
+      } as ChatSession;
+    })
+    .filter((session) => session.messages.length > 0)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
 function buildConversationContext(messages: ChatMessage[]) {
@@ -2065,10 +2192,20 @@ export default function AIJobAssistantPage() {
   const [prompt, setPrompt] = useState('');
   const [selectedImages, setSelectedImages] = useState<WorkspaceImage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState(() => safeId());
   const [localJobs, setLocalJobs] = useState<LocalVerifiedJob[]>(OFFICIAL_JOB_SOURCE_CARDS);
   const [busy, setBusy] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleStep, setScheduleStep] = useState<'choose' | 'custom'>('choose');
+  const [schedulePrompt, setSchedulePrompt] = useState('');
+  const [scheduleEmail, setScheduleEmail] = useState(() => getUserEmail(userStore));
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
+  const [savedReaderMessage, setSavedReaderMessage] = useState<ChatMessage | null>(null);
   const [applySheetOpen, setApplySheetOpen] = useState(false);
   const [clearWorkspaceOpen, setClearWorkspaceOpen] = useState(false);
   const [applySheetContext, setApplySheetContext] = useState('');
@@ -2150,6 +2287,19 @@ export default function AIJobAssistantPage() {
   }, [sortedLocalJobs, nowTick]);
 
   useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -2158,10 +2308,33 @@ export default function AIJobAssistantPage() {
     setDeepSeekUsage(getDeepSeekUsage(currentTier));
 
     try {
+      const rawSessions = localStorage.getItem(WORKSPACE_SESSIONS_STORAGE_KEY);
+      const storedSessions = normalizeChatSessions(rawSessions ? JSON.parse(rawSessions) : []);
+      const storedActiveId = clean(localStorage.getItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY));
       const rawMessages = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-      setMessages(rawMessages ? JSON.parse(rawMessages) : []);
+      const storedMessages = rawMessages ? JSON.parse(rawMessages) : [];
+      const fallbackSessionId = storedActiveId || safeId();
+
+      setChatSessions(storedSessions);
+      setActiveSessionId(fallbackSessionId);
+
+      const activeSession = storedSessions.find((session) => session.id === storedActiveId);
+      if (activeSession) {
+        setMessages(activeSession.messages);
+      } else {
+        setMessages(Array.isArray(storedMessages) ? storedMessages : []);
+      }
     } catch {
+      setChatSessions([]);
       setMessages([]);
+      setActiveSessionId(safeId());
+    }
+
+    try {
+      const rawSchedules = localStorage.getItem(WORKSPACE_SCHEDULES_STORAGE_KEY);
+      setScheduledTasks(normalizeScheduledTasks(rawSchedules ? JSON.parse(rawSchedules) : []));
+    } catch {
+      setScheduledTasks([]);
     }
 
     trackWorkspaceOpen({
@@ -2181,10 +2354,31 @@ export default function AIJobAssistantPage() {
   useEffect(() => {
     try {
       localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(messages));
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, activeSessionId);
+
+      if (messages.length > 0) {
+        const now = new Date().toISOString();
+        const nextSession: ChatSession = {
+          id: activeSessionId,
+          title: buildChatSessionTitle(messages),
+          messages,
+          createdAt: messages[0]?.createdAt || now,
+          updatedAt: now,
+        };
+
+        setChatSessions((prev) => {
+          const next = [nextSession, ...prev.filter((session) => session.id !== activeSessionId)]
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+            .slice(0, 24);
+
+          localStorage.setItem(WORKSPACE_SESSIONS_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+      }
     } catch {
       // ignore
     }
-  }, [messages]);
+  }, [messages, activeSessionId]);
 
   useEffect(() => {
     if (busy) return;
@@ -2460,8 +2654,7 @@ export default function AIJobAssistantPage() {
     }
   };
 
-  const clearWorkspaceFromScratch = () => {
-    setMessages([]);
+  const resetWorkspaceUiForNewChat = () => {
     setPrompt('');
     setSelectedImages([]);
     setJobVisibleCounts({});
@@ -2473,11 +2666,225 @@ export default function AIJobAssistantPage() {
     setApplySheetJob(null);
     setLastSelectedJob(null);
     setJobsOpen(false);
+    setLibraryOpen(false);
+    setScheduleOpen(false);
+    setTrackerOpen(false);
+    setClearWorkspaceOpen(false);
+  };
+
+  const openNewChatCard = () => {
+    const nextId = safeId();
+
+    setActiveSessionId(nextId);
+    setMessages([]);
+    resetWorkspaceUiForNewChat();
+
+    try {
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, nextId);
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+
+    toast({
+      title: 'New chat opened',
+      description: 'Your previous chat stays in Recent.',
+    });
+  };
+
+  const openChatSession = (session: ChatSession) => {
+    setActiveSessionId(session.id);
+    setMessages(session.messages);
+    resetWorkspaceUiForNewChat();
+
+    try {
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, session.id);
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(session.messages));
+    } catch {
+      // ignore
+    }
+  };
+
+
+  const clearCurrentChatOnly = () => {
+    setMessages([]);
+    setPrompt('');
+    setSelectedImages([]);
+    setJobVisibleCounts({});
+    setFollowUpExpanded(false);
+    setEditingMessageId(null);
+    setEditText('');
+    setApplySheetOpen(false);
+    setApplySheetContext('');
+    setApplySheetJob(null);
+    setLastSelectedJob(null);
+
+    try {
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+      setChatSessions((prev) => {
+        const next = prev.filter((session) => session.id !== activeSessionId);
+        localStorage.setItem(WORKSPACE_SESSIONS_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    } catch {
+      // ignore
+    }
+
+    toast({
+      title: 'Chat cleared',
+      description: 'This chat is now clean. Your other recent chats stay saved.',
+    });
+  };
+
+  const shareToWhatsApp = (text: string) => {
+    window.open(getWhatsAppShareUrl(text), '_blank', 'noopener,noreferrer');
+  };
+
+  const openSchedulePanel = (basePrompt?: string) => {
+    setSchedulePrompt(clean(basePrompt) || getDefaultSchedulePrompt(messages));
+    setScheduleEmail((prev) => prev || getUserEmail(userStore));
+    setScheduleStep('choose');
+    setScheduleOpen(true);
+  };
+
+  const createScheduledTask = async (frequency: ScheduledTask['frequency']) => {
+    const promptToSchedule = clean(schedulePrompt) || getDefaultSchedulePrompt(messages);
+    const emailToUse = clean(scheduleEmail) || getUserEmail(userStore);
+
+    if (!emailToUse) {
+      toast({
+        title: 'Email needed',
+        description: 'Add an email address so FaceMeX can send scheduled updates.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!creatorPlus) {
+      toast({
+        title: 'Schedule is Creator+ only',
+        description: 'Free and Pro users can open Schedule and prepare a task, but automatic email scheduling is available on Creator, Business, and Exclusive.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const task: ScheduledTask = {
+      id: safeId(),
+      title: 'FaceMeX scheduled update',
+      prompt: promptToSchedule,
+      frequency,
+      email: emailToUse,
+      emailEnabled: true,
+      createdAt: new Date().toISOString(),
+      nextRunLabel: scheduleFrequencyLabel(frequency),
+      status: 'active',
+    };
+
+    setScheduleBusy(true);
+
+    try {
+      const payload = {
+        ...task,
+        channel: 'email',
+        sendEmail: true,
+        userEmail: emailToUse,
+        source: 'facemex-job-ai',
+      };
+
+      await api.post('/api/ai/schedules', payload);
+
+      setScheduledTasks((prev) => {
+        const next = [task, ...prev].slice(0, 20);
+        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+
+      toast({
+        title: 'Schedule created',
+        description: `${scheduleFrequencyLabel(frequency)} updates will be emailed to ${emailToUse}.`,
+      });
+    } catch {
+      setScheduledTasks((prev) => {
+        const next = [task, ...prev].slice(0, 20);
+        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+
+      toast({
+        title: 'Schedule saved',
+        description: 'Saved on this device. Connect /api/ai/schedules on the backend to send automatic emails.',
+      });
+    } finally {
+      setScheduleBusy(false);
+      setScheduleOpen(false);
+    }
+  };
+
+  const deleteScheduledTask = async (id: string) => {
+    setScheduledTasks((prev) => {
+      const next = prev.filter((task) => task.id !== id);
+      localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+
+    try {
+      await (api as any).delete(`/api/ai/schedules/${id}`);
+    } catch {
+      // Schedule already removed locally. Backend delete can be connected later.
+    }
+
+    toast({
+      title: 'Schedule deleted',
+      description: 'This scheduled update was removed.',
+    });
+  };
+
+  const openLibraryChat = (tool: EducationTool) => {
+    const nextId = safeId();
+
+    setActiveSessionId(nextId);
+    setMessages([]);
+    resetWorkspaceUiForNewChat();
+    setLibraryOpen(false);
+    setJobsOpen(false);
+
+    try {
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, nextId);
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+
+    window.setTimeout(() => {
+      sendPrompt(tool.prompt);
+    }, 120);
+  };
+
+  const clearWorkspaceFromScratch = () => {
+    setMessages([]);
+    setChatSessions([]);
+    setActiveSessionId(safeId());
+    setPrompt('');
+    setSelectedImages([]);
+    setJobVisibleCounts({});
+    setFollowUpExpanded(false);
+    setEditingMessageId(null);
+    setEditText('');
+    setApplySheetOpen(false);
+    setApplySheetContext('');
+    setApplySheetJob(null);
+    setLastSelectedJob(null);
+    setJobsOpen(false);
+    setLibraryOpen(false);
+    setScheduleOpen(false);
     setTrackerOpen(false);
     setClearWorkspaceOpen(false);
 
     try {
       localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+      localStorage.removeItem(WORKSPACE_SESSIONS_STORAGE_KEY);
+      localStorage.removeItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY);
     } catch {
       // ignore
     }
@@ -3106,7 +3513,7 @@ Apply link: ${job.applyUrl}`;
     const needsVerification = /needs verification|not enough|unclear|verify/i.test(combined);
 
     return (
-      <div className="mb-4 rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="mb-4 rounded-2xl border border-black/5 bg-white p-3 text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white">
         <div className="flex gap-3">
           {message.images?.[0] ? (
             <img
@@ -3115,15 +3522,15 @@ Apply link: ${job.applyUrl}`;
               className="h-24 w-24 shrink-0 rounded-2xl object-cover"
             />
           ) : (
-            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
-              <Briefcase className="h-7 w-7 text-slate-500" />
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
+              <Briefcase className="h-7 w-7 text-slate-500 lg:text-white/60" />
             </div>
           )}
 
           <div className="min-w-0 flex-1">
             <h3 className="line-clamp-2 text-base font-semibold leading-tight">{title}</h3>
 
-            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50 lg:text-white/60">
               <div className="flex items-center gap-2">
                 <Building2 className="h-3.5 w-3.5" />
                 <span className="truncate">{company}</span>
@@ -3194,22 +3601,22 @@ Apply link: ${job.applyUrl}`;
     if (showCvButtons) {
       return (
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
-          <Button size="sm" variant="outline" onClick={openCvBuilder} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={openCvBuilder} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <FileText className="mr-2 h-3.5 w-3.5" />
             AI CV Builder
           </Button>
 
-          <Button size="sm" variant="outline" onClick={openCoverLetterBuilder} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={openCoverLetterBuilder} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <Mail className="mr-2 h-3.5 w-3.5" />
             Cover Letter AI
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <Copy className="mr-2 h-3.5 w-3.5" />
             Copy Answer
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-10 rounded-xl text-xs">
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <Save className="mr-2 h-3.5 w-3.5" />
             Save Tips
           </Button>
@@ -3230,7 +3637,7 @@ Apply link: ${job.applyUrl}`;
             size="sm"
             variant="outline"
             onClick={() => saveMessageAs(message.id, message.savedCategory || 'homework_help')}
-            className="h-10 rounded-xl text-xs"
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
           >
             <Save className="mr-2 h-3.5 w-3.5" />
             Save Notes
@@ -3243,10 +3650,49 @@ Apply link: ${job.applyUrl}`;
               setPrompt(`Create a clearer study summary from this answer:\n\n${message.content}`);
               setFollowUpExpanded(true);
             }}
-            className="h-10 rounded-xl text-xs"
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
           >
             <FileText className="mr-2 h-3.5 w-3.5" />
             Make Notes
+          </Button>
+        </div>
+      );
+    }
+
+    const isResearchLike =
+      message.savedCategory === 'research' ||
+      message.intent === 'research' ||
+      message.intent === 'general-question' ||
+      message.intent === 'general-help' ||
+      message.intent === 'image_or_document_analysis' ||
+      message.intent === 'verify-opportunity';
+
+    if (isResearchLike) {
+      return (
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10 lg:border-white/10">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => saveMessageAs(message.id, 'research')}
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
+          >
+            <Save className="mr-2 h-3.5 w-3.5" />
+            Save Note
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setPrompt(`Turn this answer into a clear note with headings, key points, and next steps. Keep it easy to revise and save it as a note:
+
+${message.content}`);
+              setFollowUpExpanded(true);
+            }}
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
+          >
+            <FileText className="mr-2 h-3.5 w-3.5" />
+            Make a Note
           </Button>
         </div>
       );
@@ -3260,7 +3706,7 @@ Apply link: ${job.applyUrl}`;
           size="sm"
           variant="outline"
           onClick={() => openApplySheet(message.content)}
-          className="h-10 w-full rounded-xl text-xs"
+          className="h-10 w-full rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
         >
           <Send className="mr-2 h-3.5 w-3.5" />
           Help me apply
@@ -3271,19 +3717,27 @@ Apply link: ${job.applyUrl}`;
 
   const messageActions = (message: ChatMessage) => (
     <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-black/5 pt-2 opacity-80 dark:border-white/10">
-      <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         <Copy className="h-3.5 w-3.5" />
       </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => shareToWhatsApp(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Share to WhatsApp">
+        <Share2 className="h-3.5 w-3.5" />
+      </Button>
+
+      <Button size="sm" variant="ghost" onClick={() => openSchedulePanel(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Schedule this chat">
+        <CalendarDays className="h-3.5 w-3.5" />
+      </Button>
+
+      <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         <Edit3 className="h-3.5 w-3.5" />
       </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         {message.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
       </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => researchMessage(message)} className="h-8 rounded-full px-2">
+      <Button size="sm" variant="ghost" onClick={() => researchMessage(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
         <Search className="h-3.5 w-3.5" />
       </Button>
 
@@ -3292,11 +3746,21 @@ Apply link: ${job.applyUrl}`;
           size="sm"
           variant="ghost"
           onClick={() => saveMessageAs(message.id, message.savedCategory || 'research')}
-          className="h-8 rounded-full px-2"
+          className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white"
         >
           <Save className="h-3.5 w-3.5" />
         </Button>
       )}
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={clearCurrentChatOnly}
+        className="h-8 rounded-full px-2 text-red-500"
+        aria-label="Clear current chat"
+      >
+        Clear chat
+      </Button>
 
       <Button
         size="sm"
@@ -3310,7 +3774,7 @@ Apply link: ${job.applyUrl}`;
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white lg:bg-black lg:text-white">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white lg:bg-black lg:text-white">
       <style>{`
         @keyframes fmSoftFloatIn {
           from {
@@ -3504,22 +3968,92 @@ Apply link: ${job.applyUrl}`;
         }
 
         .fm-desktop-sidebar-scroll {
+          overscroll-behavior: contain;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
           scrollbar-gutter: stable;
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar-thumb {
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.34);
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.48);
+        }
+
+        .fm-desktop-sidebar-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+
+
+        .fm-sidebar-recent-list {
+          padding-bottom: 22px;
+        }
+
+        .fm-sidebar-recent-button {
+          display: block;
+          white-space: normal;
+          overflow: visible;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+
+        .fm-sidebar-recent-text {
+          display: block;
+          max-width: 100%;
+          white-space: normal;
+          overflow: visible;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          line-height: 1.35;
+        }
+
+        .fm-panel-scroll {
+          overscroll-behavior: contain;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
+          scrollbar-gutter: stable;
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar-thumb {
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.34);
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.48);
+        }
+
+        .fm-panel-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .fm-chat-scroll {
           overscroll-behavior: contain;
         }
 
-        .fm-desktop-sidebar-scroll::-webkit-scrollbar,
         .fm-chat-scroll::-webkit-scrollbar {
           width: 8px;
         }
 
-        .fm-desktop-sidebar-scroll::-webkit-scrollbar-thumb,
         .fm-chat-scroll::-webkit-scrollbar-thumb {
           border-radius: 999px;
           background: rgba(255, 255, 255, 0.18);
         }
 
-        .fm-desktop-sidebar-scroll::-webkit-scrollbar-track,
         .fm-chat-scroll::-webkit-scrollbar-track {
           background: transparent;
         }
@@ -3527,6 +4061,10 @@ Apply link: ${job.applyUrl}`;
         .fm-user-prompt-bubble {
           background: #020617;
           color: #ffffff;
+        }
+
+        .fm-user-prompt-bubble * {
+          color: inherit;
         }
 
         .dark .fm-user-prompt-bubble {
@@ -3539,6 +4077,38 @@ Apply link: ${job.applyUrl}`;
           .dark .fm-user-prompt-bubble {
             background: #2f2f2f;
             color: #ffffff;
+          }
+        }
+
+        @media (max-width: 1023px) {
+          .dark .fm-user-prompt-bubble,
+          .dark .fm-user-prompt-bubble * {
+            color: #000000;
+          }
+        }
+
+
+
+        @media (min-width: 1024px) {
+          .fm-desktop-sidebar-scroll {
+            padding-bottom: 36px;
+          }
+
+          .fm-sidebar-recent-list {
+            padding-bottom: 72px;
+          }
+
+          .fm-sidebar-recent-button {
+            min-height: auto;
+            max-height: none;
+            height: auto;
+          }
+
+          .fm-sidebar-recent-text {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
           }
         }
 
@@ -3555,13 +4125,13 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className="hidden h-full w-[260px] min-w-[260px] shrink-0 overflow-hidden flex-col border-r border-white/5 bg-[#050505] text-white lg:flex">
-        <div className="flex h-14 shrink-0 items-center justify-between px-4">
+      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-white/5 bg-[#050505] text-white lg:flex lg:flex-col">
+        <div className="flex h-14 shrink-0 items-center justify-between bg-[#050505] px-4">
           <div className="min-w-0 truncate text-sm font-semibold">FaceMeX</div>
 
           <button
             type="button"
-            onClick={() => setClearWorkspaceOpen(true)}
+            onClick={openNewChatCard}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
             aria-label="New chat"
           >
@@ -3569,14 +4139,14 @@ Apply link: ${job.applyUrl}`;
           </button>
         </div>
 
-        <div className="fm-desktop-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2">
+        <div className="fm-desktop-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2 pl-3 pr-2">
           <button
             type="button"
-            onClick={() => setClearWorkspaceOpen(true)}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+            onClick={openNewChatCard}
+            className="mb-2 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-white hover:bg-white/10"
           >
-            <Edit3 className="h-4 w-4" />
-            New chat
+            <Edit3 className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">New chat</span>
           </button>
 
           <button
@@ -3599,11 +4169,20 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setJobsOpen(true)}
+            onClick={() => openSchedulePanel()}
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Scheduled
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLibraryOpen(true)}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <FileText className="h-4 w-4" />
-            Education AI
+            Library
           </button>
 
           <div className="mt-6 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">
@@ -3646,38 +4225,33 @@ Apply link: ${job.applyUrl}`;
             </button>
           </div>
 
-          {chatMessages.length > 0 && (
+          {chatSessions.length > 0 && (
             <>
               <div className="mt-6 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">
                 Recent
               </div>
 
-              <div className="mt-2 space-y-1">
-                {chatMessages
-                  .filter((message) => message.role === 'user')
-                  .slice(-8)
-                  .reverse()
-                  .map((message) => (
-                    <button
-                      key={message.id}
-                      type="button"
-                      onClick={() =>
-                        messageRefs.current[message.id]?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'start',
-                        })
-                      }
-                      className="line-clamp-1 w-full rounded-lg px-3 py-2 text-left text-sm text-white/65 hover:bg-white/10 hover:text-white"
-                    >
-                      {message.content || 'New chat'}
-                    </button>
-                  ))}
+              <div className="fm-sidebar-recent-list mt-2 space-y-1">
+                {chatSessions.slice(0, 12).map((session) => (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => openChatSession(session)}
+                    className={`fm-sidebar-recent-button w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                      session.id === activeSessionId
+                        ? 'bg-white/10 text-white'
+                        : 'text-white/65 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span className="fm-sidebar-recent-text">{session.title || 'New chat'}</span>
+                  </button>
+                ))}
               </div>
             </>
           )}
         </div>
 
-        <div className="border-t border-white/5 p-3">
+        <div className="shrink-0 border-t border-white/5 bg-[#050505] p-3">
           <button
             type="button"
             onClick={() => navigate('/feed')}
@@ -3730,26 +4304,34 @@ Apply link: ${job.applyUrl}`;
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          {chatMessages.length > 0 && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setClearWorkspaceOpen(true)}
-              className="h-9 w-9 rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
-              aria-label="Clear chat and start from scratch"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-
           <Button
             size="icon"
             variant="ghost"
             onClick={() => setJobsOpen(true)}
             className="h-9 w-9 rounded-full"
-            aria-label="Automatic jobs and education tools"
+            aria-label="Automatic jobs and tools"
           >
             <Menu className="h-4 w-4" />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setLibraryOpen(true)}
+            className="h-9 w-9 rounded-full"
+            aria-label="Student Library"
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => openSchedulePanel()}
+            className="h-9 w-9 rounded-full"
+            aria-label="Schedule"
+          >
+            <CalendarDays className="h-4 w-4" />
           </Button>
 
           <Button
@@ -3847,7 +4429,7 @@ Apply link: ${job.applyUrl}`;
 
               {busy && (
                 <div className="flex items-start">
-                  <div className="rounded-[22px] border border-black/5 bg-slate-50 px-4 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                  <div className="rounded-[22px] border border-black/5 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 lg:border-white/10 lg:bg-[#171717] lg:text-white">
                     <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                     Thinking...
                   </div>
@@ -4074,7 +4656,7 @@ Apply link: ${job.applyUrl}`;
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-base font-semibold text-slate-950 dark:text-white">Help me apply</h2>
-                <p className="truncate text-xs text-slate-500 dark:text-white/50">
+                <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
                   {applySheetJob ? applySheetJob.title : 'Choose what you need now.'}
                 </p>
               </div>
@@ -4143,7 +4725,7 @@ Apply link: ${job.applyUrl}`;
       {trackerOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setTrackerOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:bg-[#111] lg:text-white"
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:border-l lg:border-white/10 lg:bg-[#111] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
@@ -4154,30 +4736,30 @@ Apply link: ${job.applyUrl}`;
                 </p>
               </div>
 
-              <Button size="icon" variant="ghost" onClick={() => setTrackerOpen(false)} className="h-10 w-10 rounded-full">
+              <Button size="icon" variant="ghost" onClick={() => setTrackerOpen(false)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
                 <X className="h-5 w-5" />
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                   <Save className="h-5 w-5 text-blue-500" />
-                  <p className="mt-2 text-[11px] text-slate-500">Saved</p>
+                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Saved</p>
                   <p className="text-xl font-semibold">{savedMessages.length}</p>
                 </div>
 
-                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  <p className="mt-2 text-[11px] text-slate-500">Verified</p>
+                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Verified</p>
                   <p className="text-xl font-semibold">
                     {sortedLocalJobs.filter((job) => job.verificationStatus === 'verified').length}
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
+                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                   <FileText className="h-5 w-5 text-purple-500" />
-                  <p className="mt-2 text-[11px] text-slate-500">Education</p>
+                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Education</p>
                   <p className="text-xl font-semibold">
                     {savedStats.homework_help + savedStats.assignments + savedStats.youtube_lessons + savedStats.institution_applications}
                   </p>
@@ -4194,9 +4776,9 @@ Apply link: ${job.applyUrl}`;
                 ].map(([label, count]) => (
                   <div
                     key={String(label)}
-                    className="rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]"
+                    className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white"
                   >
-                    <p className="text-xs text-slate-500 dark:text-white/50">{label}</p>
+                    <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{label}</p>
                     <p className="mt-1 text-lg font-semibold">{count}</p>
                   </div>
                 ))}
@@ -4212,7 +4794,7 @@ Apply link: ${job.applyUrl}`;
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-red-600 dark:text-red-300">Closing soon</p>
                       <h3 className="truncate font-semibold">{closingSoonJob.title}</h3>
-                      <p className="text-xs text-slate-500 dark:text-white/50">
+                      <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
                         {getDeadlineInfo(closingSoonJob.deadline).label}
                       </p>
                     </div>
@@ -4224,8 +4806,8 @@ Apply link: ${job.applyUrl}`;
                 </div>
               )}
 
-              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
-                <h3 className="text-base font-semibold">Your pipeline</h3>
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Your pipeline</h3>
 
                 <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
                   {sortedLocalJobs.slice(0, 5).map((job) => {
@@ -4233,7 +4815,7 @@ Apply link: ${job.applyUrl}`;
 
                     return (
                       <div key={job.id} className="flex items-center gap-3 py-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
                           {job.verificationStatus === 'verified' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                           ) : (
@@ -4243,11 +4825,11 @@ Apply link: ${job.applyUrl}`;
 
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold">{job.title}</p>
-                          <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{job.company}</p>
                         </div>
 
                         <div className="text-right">
-                          <p className="text-xs text-slate-500 dark:text-white/50">
+                          <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
                             {job.deadline || 'Check source'}
                           </p>
                           <span
@@ -4266,8 +4848,8 @@ Apply link: ${job.applyUrl}`;
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
-                <h3 className="text-base font-semibold">Daily tasks</h3>
+              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Daily tasks</h3>
 
                 <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
                   {[
@@ -4285,7 +4867,7 @@ Apply link: ${job.applyUrl}`;
                         setTrackerOpen(false);
                         sendPrompt(String(label));
                       }}
-                      className="flex w-full items-center gap-3 py-3 text-left"
+                      className="flex w-full items-center gap-3 rounded-xl py-3 text-left text-slate-900 dark:text-white lg:px-2 lg:text-white lg:hover:bg-white/10"
                     >
                       <Icon className="h-4 w-4 text-blue-500" />
                       <span className="flex-1 text-sm">{label}</span>
@@ -4300,7 +4882,7 @@ Apply link: ${job.applyUrl}`;
                   <Button
                     variant={savedFilter === 'all' ? 'default' : 'outline'}
                     onClick={() => setSavedFilter('all')}
-                    className="h-9 rounded-full px-4 text-xs"
+                    className="h-9 rounded-full px-4 text-xs lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/[0.1]"
                   >
                     All
                   </Button>
@@ -4319,7 +4901,7 @@ Apply link: ${job.applyUrl}`;
                       key={category}
                       variant={savedFilter === category ? 'default' : 'outline'}
                       onClick={() => setSavedFilter(category)}
-                      className="h-9 rounded-full px-4 text-xs"
+                      className="h-9 rounded-full px-4 text-xs lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/[0.1]"
                     >
                       {savedCategoryLabels[category]} ({savedStats[category]})
                     </Button>
@@ -4328,26 +4910,26 @@ Apply link: ${job.applyUrl}`;
 
                 <div className="mt-3 space-y-3">
                   {visibleSavedMessages.length === 0 ? (
-                    <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50">
+                    <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white/60">
                       No saved items yet.
                     </div>
                   ) : (
                     visibleSavedMessages.map((item) => (
                       <div
                         key={item.id}
-                        className="rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-left text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08]">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
                             <FileText className="h-4 w-4 text-slate-500" />
                           </div>
 
-                          <button type="button" onClick={() => setTrackerOpen(false)} className="min-w-0 flex-1 text-left">
+                          <button type="button" onClick={() => setSavedReaderMessage(item)} className="min-w-0 flex-1 text-left">
                             <div className="line-clamp-1 text-sm font-semibold">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item'}
                             </div>
 
-                            <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50">
+                            <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50 lg:text-white/55">
                               {normalizeUssdCodes(item.content)}
                             </div>
                           </button>
@@ -4370,11 +4952,11 @@ Apply link: ${job.applyUrl}`;
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-black/5 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="shrink-0 border-t border-black/5 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.03] lg:border-white/10 lg:bg-[#111]">
               <Button
                 variant="ghost"
                 onClick={clearSavedItems}
-                className="w-full rounded-2xl text-red-500 hover:text-red-600"
+                className="w-full rounded-2xl text-red-500 hover:text-red-600 lg:hover:bg-red-500/10"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Clear tracker
@@ -4384,17 +4966,264 @@ Apply link: ${job.applyUrl}`;
         </div>
       )}
 
+
+      {libraryOpen && (
+        <div className="fixed inset-0 z-[72] bg-black/30 backdrop-blur-sm" onClick={() => setLibraryOpen(false)}>
+          <div
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-white shadow-2xl dark:bg-[#0b0b0c] lg:bg-[#111] lg:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
+              <div>
+                <h2 className="text-base font-semibold">Library</h2>
+                <p className="text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
+                  Student learning, notes and applications
+                </p>
+              </div>
+
+              <Button size="icon" variant="ghost" onClick={() => setLibraryOpen(false)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="rounded-2xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-[#171717]">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Start a student workspace</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50 lg:text-white/50">
+                  Each option opens a separate chat so homework, assignments, lesson notes, and applications do not mix.
+                </p>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {educationTools.map((tool) => {
+                    const Icon = tool.icon;
+
+                    return (
+                      <button
+                        key={tool.label}
+                        type="button"
+                        onClick={() => openLibraryChat(tool)}
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-white/5 lg:hover:bg-white/10"
+                      >
+                        <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70 lg:text-white/70" />
+                        <p className="text-sm font-semibold text-slate-950 dark:text-white lg:text-white">{tool.label}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.05] lg:border-white/10 lg:bg-[#171717]">
+                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Saved education notes</h3>
+                <div className="mt-3 space-y-2">
+                  {savedMessages.filter((item) => item.savedCategory === 'homework_help' || item.savedCategory === 'assignments' || item.savedCategory === 'youtube_lessons' || item.savedCategory === 'institution_applications').length === 0 ? (
+                    <p className="rounded-2xl bg-white p-3 text-sm text-slate-500 dark:bg-white/[0.06] dark:text-white/50 lg:bg-white/5 lg:text-white/50">
+                      No library notes yet. Start with Homework Help, Assignments, YouTube Lessons, or College / University.
+                    </p>
+                  ) : (
+                    savedMessages
+                      .filter((item) => item.savedCategory === 'homework_help' || item.savedCategory === 'assignments' || item.savedCategory === 'youtube_lessons' || item.savedCategory === 'institution_applications')
+                      .slice(0, 12)
+                      .map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSavedReaderMessage(item)}
+                          className="w-full rounded-2xl bg-white p-3 text-left text-sm text-slate-700 dark:bg-white/[0.06] dark:text-white/70 lg:bg-white/5 lg:text-white/75"
+                        >
+                          <span className="block text-xs font-semibold text-slate-500 dark:text-white/45 lg:text-white/45">
+                            {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Library'}
+                          </span>
+                          <span className="mt-1 line-clamp-3 block">{normalizeUssdCodes(item.content)}</span>
+                        </button>
+                      ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {savedReaderMessage && (
+        <div className="fixed inset-0 z-[98] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
+          <div
+            className="flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-w-2xl lg:rounded-[28px] lg:border lg:border-white/10 lg:bg-[#171717] lg:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
+
+            <div className="mb-3 flex items-start justify-between gap-3 border-b border-black/5 pb-3 dark:border-white/10 lg:border-white/10">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">
+                  {savedReaderMessage.savedCategory ? savedCategoryLabels[savedReaderMessage.savedCategory] : 'Saved item'}
+                </p>
+                <h2 className="mt-1 text-base font-semibold text-slate-950 dark:text-white lg:text-white">Saved card</h2>
+              </div>
+
+              <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+              <ChatGPTStyleText text={savedReaderMessage.content} onLinkClick={handleGeneratedLinkClick} />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10 lg:border-white/10">
+              <Button variant="outline" onClick={() => copyText(savedReaderMessage.content)} className="h-11 rounded-2xl lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10">
+                <Copy className="mr-2 h-4 w-4" />
+                Copy
+              </Button>
+              <Button variant="ghost" onClick={() => {
+                removeFromSaved(savedReaderMessage.id);
+                setSavedReaderMessage(null);
+              }} className="h-11 rounded-2xl text-red-500 hover:text-red-600 lg:hover:bg-red-500/10">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scheduleOpen && (
+        <div className="fixed inset-0 z-[96] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setScheduleOpen(false)}>
+          <div
+            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-h-[86dvh] lg:max-w-xl lg:rounded-[28px] lg:bg-[#202020] lg:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
+
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Create schedule</h2>
+                <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/50">
+                  FaceMeX will run this task and email the update.
+                </p>
+              </div>
+
+              <Button size="icon" variant="ghost" onClick={() => setScheduleOpen(false)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+              {!creatorPlus && (
+                <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 lg:border-amber-500/20 lg:bg-amber-500/10 lg:text-amber-100">
+                  Schedule is available for Creator, Business, and Exclusive users. Free and Pro users can open this panel and prepare the task, but FaceMeX will not activate automatic email scheduling.
+                </div>
+              )}
+              {scheduleStep === 'choose' ? (
+                <div className="space-y-3">
+                <div className="rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#2f2f2f]">
+                  <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Task</p>
+                  <Textarea
+                    value={schedulePrompt}
+                    onChange={(e) => setSchedulePrompt(e.target.value)}
+                    className="min-h-[80px] resize-none rounded-2xl border-black/10 bg-white text-sm text-slate-950 dark:border-white/10 dark:bg-black/20 dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+                    placeholder="What should FaceMeX check for you?"
+                  />
+                  <input
+                    value={scheduleEmail}
+                    onChange={(e) => setScheduleEmail(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm text-slate-950 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+                    placeholder="Email address for updates"
+                  />
+                </div>
+
+                <div className="rounded-2xl bg-[#242424] p-3 text-white lg:bg-[#242424]">
+                  <p className="mb-3 px-1 text-sm font-semibold">How often should FaceMeX run this?</p>
+                  {[
+                    ['every_morning', 'Every morning'],
+                    ['every_afternoon', 'Every afternoon'],
+                    ['twice_day', 'Twice a day'],
+                    ['hourly', 'Hourly'],
+                  ].map(([value, label], index) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => createScheduledTask(value as ScheduledTask['frequency'])}
+                      disabled={scheduleBusy}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/20 text-xs">{index + 1}</span>
+                      <span>{label}</span>
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => setScheduleStep('custom')}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-white/70 hover:bg-white/10 hover:text-white"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/20 text-xs">5</span>
+                    <span>Add another schedule</span>
+                  </button>
+                </div>
+              </div>
+              ) : (
+                <div className="space-y-3">
+                <p className="text-sm text-slate-600 dark:text-white/60 lg:text-white/60">Choose a schedule type.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['every_morning', 'every_afternoon', 'twice_day', 'hourly'] as ScheduledTask['frequency'][]).map((frequency) => (
+                    <button
+                      key={frequency}
+                      type="button"
+                      onClick={() => createScheduledTask(frequency)}
+                      className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-950 dark:border-white/10 dark:bg-white/[0.06] dark:text-white lg:border-white/10 lg:bg-white/5 lg:text-white"
+                    >
+                      {scheduleFrequencyLabel(frequency)}
+                    </button>
+                  ))}
+                </div>
+                <Button variant="ghost" onClick={() => setScheduleStep('choose')} className="w-full rounded-2xl lg:text-white lg:hover:bg-white/10">
+                  Back
+                </Button>
+              </div>
+            )}
+
+              {scheduledTasks.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#171717]">
+                <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Active schedules</p>
+                <div className="space-y-2">
+                  {scheduledTasks.map((task) => (
+                    <div key={task.id} className="rounded-xl bg-white p-3 text-xs text-slate-600 dark:bg-white/[0.06] dark:text-white/60 lg:bg-white/5 lg:text-white/60">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-slate-950 dark:text-white lg:text-white">{scheduleFrequencyLabel(task.frequency)}</div>
+                          <div className="mt-1 whitespace-pre-wrap break-words">{task.prompt}</div>
+                          <div className="mt-1 text-slate-400">Email: {task.email}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => deleteScheduledTask(task.id)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-red-500 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 lg:hover:bg-red-500/10"
+                          aria-label="Delete scheduled update"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {jobsOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setJobsOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:bg-[#111] lg:text-white"
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:border-l lg:border-white/10 lg:bg-[#111] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
               <div>
                 <h2 className="text-base font-semibold">FaceMeX Tools</h2>
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
-                  Jobs and Education AI
+                  Jobs and Library
                 </p>
               </div>
 
@@ -4403,34 +5232,24 @@ Apply link: ${job.applyUrl}`;
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="rounded-2xl border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-white/[0.05]">
-                <h3 className="text-base font-semibold">Education AI</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50">
-                  Homework, assignments, YouTube lessons, and college or university applications.
+            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setJobsOpen(false);
+                  setLibraryOpen(true);
+                }}
+                className="w-full rounded-2xl border border-black/5 bg-white p-4 text-left text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+              >
+                <h3 className="text-base font-semibold">Student Library</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50 lg:text-white/50">
+                  Homework, assignments, YouTube lesson notes, college and university applications are now saved in Library.
                 </p>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {educationTools.map((tool) => {
-                    const Icon = tool.icon;
-
-                    return (
-                      <button
-                        key={tool.label}
-                        type="button"
-                        onClick={() => {
-                          setJobsOpen(false);
-                          sendPrompt(tool.prompt);
-                        }}
-                        className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06]"
-                      >
-                        <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70" />
-                        <p className="text-sm font-semibold text-slate-950 dark:text-white">{tool.label}</p>
-                      </button>
-                    );
-                  })}
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/80 lg:bg-white/10 lg:text-white">
+                  <FileText className="h-4 w-4" />
+                  Open Library
                 </div>
-              </div>
+              </button>
 
               <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
                 {[
@@ -4449,7 +5268,7 @@ Apply link: ${job.applyUrl}`;
                     key={item.label}
                     variant="outline"
                     onClick={() => loadAutomaticJobs({ query: item.query, area: item.area })}
-                    className="h-9 shrink-0 rounded-full px-4 text-xs"
+                    className="h-9 shrink-0 rounded-full px-4 text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
                   >
                     {item.label}
                   </Button>
@@ -4468,10 +5287,10 @@ Apply link: ${job.applyUrl}`;
                     return (
                       <div
                         key={job.id}
-                        className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.05]"
+                        className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
                       >
                         <div className="flex gap-3">
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08]">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
                             {job.verificationStatus === 'verified' ? (
                               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                             ) : job.verificationStatus === 'avoid' ? (
@@ -4485,13 +5304,13 @@ Apply link: ${job.applyUrl}`;
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <h4 className="truncate text-sm font-semibold">{job.title}</h4>
-                                <p className="truncate text-xs text-slate-500 dark:text-white/50">{job.company}</p>
+                                <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{job.company}</p>
                               </div>
 
                               <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
                             </div>
 
-                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50">
+                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50 lg:text-white/60">
                               <div className="flex items-center gap-2">
                                 <MapPin className="h-3.5 w-3.5" />
                                 <span className="truncate">{job.area}</span>
@@ -4499,7 +5318,7 @@ Apply link: ${job.applyUrl}`;
 
                               <div
                                 className={`flex items-center gap-2 ${
-                                  deadlineInfo.urgent ? 'text-orange-600' : 'text-slate-500 dark:text-white/50'
+                                  deadlineInfo.urgent ? 'text-orange-500' : 'text-slate-500 dark:text-white/50 lg:text-white/60'
                                 }`}
                               >
                                 <Clock className="h-3.5 w-3.5" />
@@ -4508,7 +5327,7 @@ Apply link: ${job.applyUrl}`;
                             </div>
 
                             <div className="mt-2 flex flex-wrap gap-2">
-                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 lg:bg-blue-500/10 lg:text-blue-300">
                                 {job.sourceLabel}
                               </span>
 
@@ -4527,7 +5346,7 @@ Apply link: ${job.applyUrl}`;
                                 variant="outline"
                                 onClick={() => openOfficialApplyPage(job)}
                                 disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
-                                className="h-8 rounded-xl text-xs"
+                                className="h-8 rounded-xl text-xs lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10"
                               >
                                 {job.isSourceCard ? (
                                   <Globe2 className="mr-1.5 h-3.5 w-3.5" />
@@ -4546,7 +5365,7 @@ Apply link: ${job.applyUrl}`;
                                   setLastSelectedJob(job);
                                   saveLocalJob(job);
                                 }}
-                                className="h-8 rounded-xl text-xs"
+                                className="h-8 rounded-xl text-xs lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10"
                               >
                                 <Save className="mr-1.5 h-3.5 w-3.5" />
                                 Save
@@ -4560,9 +5379,9 @@ Apply link: ${job.applyUrl}`;
                 )}
               </div>
 
-              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200 lg:border-white/10 lg:bg-[#171717] lg:text-white/70">
                 <strong className="block text-sm">FaceMeX rule</strong>
-                Each job category filters only related jobs. Education AI has separate workspaces for Homework Help, Assignments, YouTube Lessons, and College / University Applications.
+                Each job category filters only related jobs. Student learning tools now live inside Library as separate chats.
               </div>
             </div>
           </div>
