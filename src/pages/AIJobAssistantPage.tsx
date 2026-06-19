@@ -4482,6 +4482,72 @@ ${message.content}`);
           }
         }
 
+
+
+        @media (max-width: 1023px) {
+          .fm-user-prompt-bubble,
+          .dark .fm-user-prompt-bubble {
+            background: #f4f4f5 !important;
+            color: #111827 !important;
+            border: 1px solid rgba(15, 23, 42, 0.04);
+            box-shadow: none !important;
+          }
+
+          .fm-user-prompt-bubble * {
+            color: inherit !important;
+          }
+
+          .fm-assistant-message {
+            font-size: 16px;
+            line-height: 1.68;
+            letter-spacing: -0.01em;
+            color: #111827;
+          }
+
+          .fm-assistant-message h3 {
+            font-size: 17px;
+            line-height: 1.35;
+          }
+
+          .fm-composer-card {
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.09);
+            box-shadow: 0 14px 45px rgba(15, 23, 42, 0.12);
+          }
+
+          .fm-mobile-chat-shell {
+            background:
+              radial-gradient(circle at 50% 0%, rgba(241, 245, 249, 0.86), rgba(255, 255, 255, 0) 34%),
+              #ffffff;
+          }
+
+          .fm-premium-drawer {
+            background:
+              linear-gradient(180deg, #ffffff 0%, #fbfbfc 64%, #f8fafc 100%);
+            box-shadow: 28px 0 80px rgba(15, 23, 42, 0.18);
+          }
+
+          .fm-drawer-row {
+            min-height: 48px;
+            border-radius: 18px;
+          }
+
+          .fm-drawer-row:active {
+            transform: scale(0.99);
+          }
+
+          .fm-drawer-heading {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #111827;
+          }
+
+          .fm-drawer-chat-button {
+            box-shadow: 0 16px 34px rgba(37, 99, 235, 0.26);
+          }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .fm-treasure-ring,
           .fm-treasure-shadow,
@@ -4631,27 +4697,31 @@ ${message.content}`);
             Back to FaceMeX
           </button>
 
-          <div className="mt-2 flex items-center gap-3 rounded-lg px-3 py-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+          <button
+            type="button"
+            onClick={() => navigate('/feed')}
+            className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/10"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-2 ring-emerald-400/20">
               {firstName?.[0]?.toUpperCase() || 'F'}
             </div>
 
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-white">{firstName}</p>
-              <p className="text-xs text-white/40">FaceMeX AI</p>
+              <p className="text-xs text-white/40">Back to FaceMeX feed</p>
             </div>
-          </div>
+          </button>
         </div>
       </aside>
 
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
-      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[72px] items-center justify-between px-4 pt-2 lg:hidden">
+      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[76px] items-center justify-between px-4 pt-3 lg:hidden">
         <div className="pointer-events-auto flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
             aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
@@ -4660,7 +4730,7 @@ ${message.content}`);
           <button
             type="button"
             onClick={openNewChatCard}
-            className="flex h-11 max-w-[190px] items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-slate-50"
+            className="flex h-12 max-w-[190px] items-center rounded-full border border-slate-200 bg-white px-4 text-[15px] font-semibold tracking-[-0.02em] text-slate-950 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
             aria-label="Start a new chat"
           >
             <span className="truncate">FaceMeX AI</span>
@@ -4672,19 +4742,24 @@ ${message.content}`);
           <button
             type="button"
             onClick={() => setLibraryOpen(true)}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50"
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
             aria-label="Open Library"
           >
             <Search className="h-5 w-5" />
           </button>
 
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => navigate('/feed')}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
+            aria-label="Back to FaceMeX feed"
+          >
             {firstName?.[0]?.toUpperCase() || 'F'}
-          </div>
+          </button>
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[74px] sm:px-4 sm:pb-4 lg:bg-black lg:px-0 lg:py-0 lg:pt-0">
+      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[78px] sm:px-4 sm:pb-4 lg:bg-black lg:px-0 lg:py-0 lg:pt-0">
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
@@ -4712,12 +4787,12 @@ ${message.content}`);
                     }`}
                   >
                     <div
-                      className={`rounded-[22px] px-4 py-3 text-sm leading-7 shadow-sm sm:rounded-[24px] ${
+                      className={`text-sm leading-7 ${
                         message.role === 'user'
-                          ? 'fm-user-prompt-bubble max-w-[88%] sm:max-w-[82%] lg:max-w-[72%] lg:rounded-[18px] lg:px-4 lg:py-3'
+                          ? 'fm-user-prompt-bubble max-w-[84%] rounded-[18px] px-4 py-3 text-[15px] leading-6 sm:max-w-[78%] lg:max-w-[72%] lg:bg-[#2f2f2f] lg:px-4 lg:py-3 lg:text-white'
                           : isJobResultsMessage
                             ? 'w-full max-w-full bg-transparent px-0 py-0 shadow-none'
-                            : 'max-w-[96%] border border-black/5 bg-slate-50 text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white sm:max-w-[88%] lg:w-full lg:max-w-full lg:border-0 lg:bg-transparent lg:px-0 lg:py-1 lg:text-white lg:shadow-none'
+                            : 'fm-assistant-message w-full max-w-full bg-transparent px-0 py-1 text-slate-950 shadow-none lg:text-white'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -4739,7 +4814,7 @@ ${message.content}`);
                           </div>
                         </div>
                       ) : (
-                        <div className={message.role === 'assistant' && !isJobResultsMessage ? 'max-h-[58vh] overflow-y-auto pr-1 lg:max-h-none lg:overflow-visible lg:pr-0 lg:text-white' : ''}>
+                        <div className={message.role === 'assistant' && !isJobResultsMessage ? 'pr-0 lg:text-white' : ''}>
                           {renderMessageImages(message.images)}
 
                           {message.role === 'assistant' && renderJobSummaryCard(message, previousUserText)}
@@ -4767,7 +4842,7 @@ ${message.content}`);
 
               {busy && (
                 <div className="flex items-start">
-                  <div className="rounded-[22px] border border-black/5 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 lg:border-white/10 lg:bg-[#171717] lg:text-white">
+                  <div className="rounded-full bg-transparent px-0 py-2 text-[15px] text-slate-500 shadow-none lg:text-white/60">
                     <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                     Thinking...
                   </div>
@@ -4797,63 +4872,24 @@ ${message.content}`);
                 </div>
               )}
 
-              {hasJobResultsOnScreen && !followUpExpanded && selectedImages.length === 0 && !prompt.trim() ? (
-                <div className="flex items-center gap-2 rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717] lg:rounded-[28px] lg:border-0 lg:bg-[#2f2f2f] lg:shadow-none">
-                  <button
-                    type="button"
-                    onClick={() => setFollowUpExpanded(true)}
-                    className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl bg-slate-100 px-3 text-left text-sm font-medium text-slate-500 dark:bg-white/[0.08] dark:text-white/50"
-                  >
-                    <Search className="h-4 w-4 shrink-0" />
-                    <span className="truncate">Ask a follow-up...</span>
-                  </button>
-
+              <div className="fm-composer-card rounded-[30px] bg-white px-3 py-2 sm:px-4">
+                <div className="flex items-end gap-2">
                   <button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/[0.08] dark:text-white lg:bg-transparent lg:text-white/75 lg:hover:bg-white/10"
+                    className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-[0.98] hover:bg-slate-200 lg:bg-white/10 lg:text-white/80 lg:hover:bg-white/15"
                     aria-label="Upload image"
                   >
                     <ImagePlus className="h-4 w-4" />
                   </button>
 
-                  <Button
-                    onClick={() => sendPrompt()}
-                    disabled
-                    className="h-11 w-11 shrink-0 rounded-2xl bg-slate-950 p-0 text-white disabled:opacity-40 dark:bg-white dark:text-black lg:bg-white lg:text-black"
-                    aria-label="Send"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-
-                  <input
-                    ref={imageInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={handlePickImages}
-                  />
-                </div>
-              ) : (
-                <div className="rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_14px_40px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#171717] sm:rounded-[24px] lg:rounded-[28px] lg:border-0 lg:bg-[#2f2f2f] lg:shadow-none">
                   <Textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     onFocus={() => setFollowUpExpanded(true)}
-                    placeholder={
-                      hasJobResultsOnScreen
-                        ? 'Ask a follow-up...'
-                        : 'Search jobs, check advert, or ask CV help...'
-                    }
-                    className={`resize-none border-0 bg-transparent px-3 py-2 text-[15px] leading-relaxed text-slate-950 shadow-none placeholder:text-slate-500 focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-white lg:text-white lg:placeholder:text-white/55 ${
-                      hasJobResultsOnScreen
-                        ? inputHasContent || followUpExpanded
-                          ? 'max-h-24 min-h-[46px]'
-                          : 'h-10 min-h-[40px] max-h-[40px] overflow-hidden'
-                        : inputHasContent
-                          ? 'max-h-28 min-h-[48px] sm:max-h-32 sm:min-h-[52px]'
-                          : 'h-10 min-h-[40px] max-h-[40px] overflow-hidden'
+                    placeholder={hasJobResultsOnScreen ? 'Ask a follow-up...' : 'Ask FaceMeX anything'}
+                    className={`min-h-[44px] flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-[16px] leading-6 text-slate-950 shadow-none outline-none placeholder:text-slate-400 focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-slate-950 lg:text-white lg:placeholder:text-white/45 ${
+                      inputHasContent ? 'max-h-28' : 'h-11 max-h-11 overflow-hidden'
                     }`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -4863,65 +4899,34 @@ ${message.content}`);
                     }}
                   />
 
-                  <div className="flex items-center justify-between gap-2 border-t border-black/5 px-1 pt-2 dark:border-white/10">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => imageInputRef.current?.click()}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/[0.08] dark:text-white lg:bg-transparent lg:text-white/75 lg:hover:bg-white/10"
-                        aria-label="Upload image"
-                      >
-                        <ImagePlus className="h-4 w-4" />
-                      </button>
-
-                      <div className="min-w-0 text-[11px] text-slate-500 dark:text-white/45 lg:text-white/45">
-                        <div className="flex min-w-0 items-center gap-1">
-                          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">Helpful answers. Verify jobs before applying.</span>
-                        </div>
-
-                        {selectedImages.length > 0 && (
-                          <button type="button" onClick={clearSelectedImages} className="font-semibold text-red-500">
-                            Clear images
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {hasJobResultsOnScreen && followUpExpanded && !prompt.trim() && selectedImages.length === 0 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setFollowUpExpanded(false)}
-                          className="h-10 w-10 shrink-0 rounded-full p-0"
-                          aria-label="Collapse input"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-
-                      <Button
-                        onClick={() => sendPrompt()}
-                        disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
-                        className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-slate-800 lg:bg-white lg:text-black lg:hover:bg-slate-800"
-                        aria-label="Send"
-                      >
-                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <input
-                    ref={imageInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={handlePickImages}
-                  />
+                  <Button
+                    onClick={() => sendPrompt()}
+                    disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
+                    className="mb-1 h-10 w-10 shrink-0 rounded-full bg-slate-900 p-0 text-white shadow-none transition hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 lg:bg-white lg:text-black lg:hover:bg-slate-200"
+                    aria-label="Send"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </Button>
                 </div>
-              )}
+
+                {selectedImages.length > 0 && (
+                  <div className="mt-1 flex items-center justify-between px-2 text-[11px] text-slate-500 lg:text-white/45">
+                    <span>{selectedImages.length} image{selectedImages.length > 1 ? 's' : ''} ready</span>
+                    <button type="button" onClick={clearSelectedImages} className="font-semibold text-red-500">
+                      Clear
+                    </button>
+                  </div>
+                )}
+
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handlePickImages}
+                />
+              </div>
 
               {remainingAIUses !== null && (
                 <div className="mt-2 text-center text-[11px] text-slate-400">
@@ -5767,15 +5772,15 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
       )}
 
       {jobsOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/20 backdrop-blur-[2px] lg:hidden" onClick={() => setJobsOpen(false)}>
+        <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[3px] lg:hidden" onClick={() => setJobsOpen(false)}>
           <div
-            className="absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col bg-white text-slate-950 shadow-2xl"
+            className="fm-premium-drawer absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col overflow-hidden rounded-r-[28px] bg-white text-slate-950"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-20 shrink-0 items-center justify-between px-5 pt-3">
+            <div className="flex h-[92px] shrink-0 items-center justify-between px-5 pt-4">
               <div className="min-w-0">
-                <h2 className="truncate text-[28px] font-semibold tracking-[-0.04em] text-slate-950">FaceMeX</h2>
-                <p className="mt-0.5 truncate text-xs text-slate-500">Your AI workspace</p>
+                <h2 className="truncate text-[28px] font-semibold tracking-[-0.045em] text-slate-950">FaceMeX</h2>
+                <p className="mt-1 truncate text-[13px] text-slate-500">Your AI workspace</p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -5785,15 +5790,23 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-900 transition hover:bg-slate-200"
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-900 shadow-sm transition active:scale-[0.98] hover:bg-slate-200"
                   aria-label="Search Library"
                 >
                   <Search className="h-5 w-5" />
                 </button>
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJobsOpen(false);
+                    navigate('/feed');
+                  }}
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
+                  aria-label="Back to FaceMeX feed"
+                >
                   {firstName?.[0]?.toUpperCase() || 'F'}
-                </div>
+                </button>
               </div>
             </div>
 
@@ -5805,9 +5818,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <FileText className="h-7 w-7 text-slate-900" />
+                  <FileText className="h-6 w-6 text-slate-900" />
                   Library
                 </button>
 
@@ -5818,9 +5831,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Briefcase className="h-7 w-7 text-slate-900" />
+                  <Briefcase className="h-6 w-6 text-slate-900" />
                   Job Library
                 </button>
 
@@ -5831,9 +5844,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Building2 className="h-7 w-7 text-slate-900" />
+                  <Building2 className="h-6 w-6 text-slate-900" />
                   Investors Library
                 </button>
 
@@ -5844,9 +5857,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Users className="h-7 w-7 text-slate-900" />
+                  <Users className="h-6 w-6 text-slate-900" />
                   Students Library
                 </button>
 
@@ -5856,9 +5869,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     openSchedulePanel();
                   }}
-                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <CalendarDays className="h-7 w-7 text-slate-900" />
+                  <CalendarDays className="h-6 w-6 text-slate-900" />
                   Scheduled
                 </button>
 
@@ -5868,15 +5881,27 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setTrackerOpen(true);
                   }}
-                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
-                  <Clock className="h-7 w-7 text-slate-900" />
+                  <Clock className="h-6 w-6 text-slate-900" />
                   Job Tracker
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJobsOpen(false);
+                    navigate('/feed');
+                  }}
+                  className="fm-drawer-row mt-2 flex w-full items-center gap-4 px-3 py-3 text-left text-[17px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                >
+                  <ArrowLeft className="h-6 w-6 text-slate-900" />
+                  Back to FaceMeX feed
                 </button>
               </div>
 
               <div className="mt-7">
-                <h3 className="text-[18px] font-semibold text-slate-950">Pinned</h3>
+                <h3 className="fm-drawer-heading">Pinned</h3>
                 <div className="mt-3 space-y-1">
                   {[
                     { label: 'Find jobs', action: () => quickAsk('I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.') },
@@ -5890,9 +5915,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         setJobsOpen(false);
                         item.action();
                       }}
-                      className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[17px] text-slate-800 transition hover:bg-slate-50"
+                      className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left text-[16px] text-slate-800 transition hover:bg-slate-100"
                     >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-700">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm">
                         <MessageCircleIcon />
                       </span>
                       <span className="min-w-0 truncate">{item.label}</span>
@@ -5903,7 +5928,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
               {chatSessions.length > 0 && (
                 <div className="mt-7">
-                  <h3 className="text-[18px] font-semibold text-slate-950">Recents</h3>
+                  <h3 className="fm-drawer-heading">Recents</h3>
                   <div className="mt-3 space-y-1">
                     {chatSessions.slice(0, 10).map((session) => (
                       <button
@@ -5913,8 +5938,8 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                           setJobsOpen(false);
                           openChatSession(session);
                         }}
-                        className={`block w-full rounded-2xl px-1 py-3 text-left text-[17px] leading-snug transition hover:bg-slate-50 ${
-                          session.id === activeSessionId ? 'font-semibold text-slate-950' : 'text-slate-700'
+                        className={`block w-full rounded-2xl px-3 py-3 text-left text-[16px] leading-snug transition hover:bg-slate-100 ${
+                          session.id === activeSessionId ? 'bg-slate-100 font-semibold text-slate-950' : 'text-slate-700'
                         }`}
                       >
                         <span className="line-clamp-2">{session.title || 'New chat'}</span>
@@ -5932,7 +5957,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                   setJobsOpen(false);
                   openNewChatCard();
                 }}
-                className="pointer-events-auto inline-flex h-14 items-center gap-2 rounded-full bg-blue-500 px-7 text-[18px] font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-600"
+                className="fm-drawer-chat-button pointer-events-auto inline-flex h-14 items-center gap-2 rounded-full bg-blue-500 px-7 text-[18px] font-semibold text-white transition active:scale-[0.98] hover:bg-blue-600"
               >
                 <Edit3 className="h-5 w-5" />
                 Chat
