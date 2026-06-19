@@ -2183,6 +2183,10 @@ function buildConversationContext(messages: ChatMessage[]) {
     .join('\n\n');
 }
 
+function MessageCircleIcon() {
+  return <span className="block h-4 w-4 rounded-full border-2 border-current" />;
+}
+
 function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
   const [failed, setFailed] = useState(false);
 
@@ -4140,7 +4144,7 @@ ${message.content}`);
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-[#f7f7f5] text-slate-950 dark:bg-[#0b0b0c] dark:text-white lg:bg-black lg:text-white">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-white text-slate-950 lg:bg-black lg:text-white">
       <style>{`
         @keyframes fmSoftFloatIn {
           from {
@@ -4642,59 +4646,46 @@ ${message.content}`);
 
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
-      <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0f0f10] px-4 text-white lg:hidden">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[72px] items-center justify-between px-4 pt-2 lg:hidden">
+        <div className="pointer-events-auto flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
-            aria-label="Open menu"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50"
+            aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
-          </button>
-
-          <div className="min-w-0">
-            <h1 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-white">FaceMeX</h1>
-            <p className="truncate text-[11px] text-white/45">Job AI · Library · YouTube lessons</p>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setLibraryOpen(true)}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
-            aria-label="Open Library"
-          >
-            <FileText className="h-5 w-5" />
           </button>
 
           <button
             type="button"
             onClick={openNewChatCard}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
-            aria-label="New chat"
+            className="flex h-11 max-w-[190px] items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-slate-50"
+            aria-label="Start a new chat"
           >
-            <Edit3 className="h-5 w-5" />
+            <span className="truncate">FaceMeX AI</span>
+            <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-slate-500" />
           </button>
+        </div>
 
+        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={() => openSchedulePanel()}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
-            aria-label="Scheduled"
+            onClick={() => setLibraryOpen(true)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-50"
+            aria-label="Open Library"
           >
-            <CalendarDays className="h-5 w-5" />
+            <Search className="h-5 w-5" />
           </button>
 
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-sm">
             {firstName?.[0]?.toUpperCase() || 'F'}
           </div>
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-hidden px-2 py-2 sm:px-4 sm:py-4 lg:bg-black lg:px-0 lg:py-0">
-        <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-white/[0.045] sm:rounded-[30px] lg:max-w-none lg:rounded-none lg:border-0 lg:bg-black lg:shadow-none">
+      <main className="min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[74px] sm:px-4 sm:pb-4 lg:bg-black lg:px-0 lg:py-0 lg:pt-0">
+        <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
               {chatMessages.length === 0 && !busy && (
@@ -4913,7 +4904,7 @@ ${message.content}`);
                       <Button
                         onClick={() => sendPrompt()}
                         disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
-                        className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/90 lg:bg-white lg:text-black lg:hover:bg-white/90"
+                        className="h-10 w-10 shrink-0 rounded-full bg-slate-950 p-0 text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-slate-800 lg:bg-white lg:text-black lg:hover:bg-slate-800"
                         aria-label="Send"
                       >
                         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -5315,15 +5306,15 @@ ${message.content}`);
 
 
       {libraryOpen && (
-        <div className="fixed inset-0 z-[72] bg-black/60 backdrop-blur-sm" onClick={() => setLibraryOpen(false)}>
+        <div className="fixed inset-0 z-[72] bg-black/20 backdrop-blur-[2px]" onClick={() => setLibraryOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-[#0f0f10] text-white shadow-2xl lg:max-w-lg"
+            className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white text-slate-950 shadow-2xl lg:max-w-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-[#0f0f10] px-4">
+            <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
               <div className="min-w-0">
-                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-white">Library</h2>
-                <p className="truncate text-xs text-white/45">
+                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950">Library</h2>
+                <p className="truncate text-xs text-slate-500">
                   Jobs, investors and students — clean and organised.
                 </p>
               </div>
@@ -5331,7 +5322,7 @@ ${message.content}`);
               <button
                 type="button"
                 onClick={() => setLibraryOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.14]"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-950 hover:bg-white/[0.14]"
                 aria-label="Close Library"
               >
                 <X className="h-5 w-5" />
@@ -5339,7 +5330,7 @@ ${message.content}`);
             </div>
 
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
-              <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-3">
+              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-3">
                 <div className="grid grid-cols-3 gap-2">
                   {librarySections.map((section) => {
                     const Icon = section.icon;
@@ -5357,8 +5348,8 @@ ${message.content}`);
                         }}
                         className={`rounded-2xl px-2 py-3 text-center transition active:scale-[0.98] ${
                           active
-                            ? 'bg-white text-black shadow-sm'
-                            : 'bg-transparent text-white/65 hover:bg-white/[0.08] hover:text-white'
+                            ? 'bg-slate-950 text-white shadow-sm'
+                            : 'bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950'
                         }`}
                       >
                         <Icon className="mx-auto mb-1 h-5 w-5" />
@@ -5369,23 +5360,23 @@ ${message.content}`);
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                       {activeLibrary.title}
                     </p>
-                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">
+                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950">
                       Start the right workspace
                     </h3>
-                    <p className="mt-2 text-sm leading-6 text-white/55">{activeLibrary.description}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{activeLibrary.description}</p>
                   </div>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => openLibrarySectionChat(activeLibrary)}
-                  className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left text-sm font-semibold text-black transition hover:bg-white/90 active:scale-[0.99]"
+                  className="mt-4 flex w-full items-center justify-between rounded-2xl bg-slate-950 px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.99]"
                 >
                   <span>Open {activeLibrary.title} chat</span>
                   <ChevronRight className="h-4 w-4" />
@@ -5393,7 +5384,7 @@ ${message.content}`);
               </div>
 
               {activeLibrarySection === 'students' && (
-                <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+                <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                   <div className="grid grid-cols-2 gap-2">
                     {educationTools.map((tool) => {
                       const Icon = tool.icon;
@@ -5403,10 +5394,10 @@ ${message.content}`);
                           key={tool.label}
                           type="button"
                           onClick={() => openLibraryChat(tool)}
-                          className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-left transition hover:bg-white/[0.09] active:scale-[0.98]"
+                          className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:bg-slate-100 active:scale-[0.98]"
                         >
-                          <Icon className="mb-3 h-5 w-5 text-white/65" />
-                          <p className="text-sm font-semibold text-white">{tool.label}</p>
+                          <Icon className="mb-3 h-5 w-5 text-slate-700" />
+                          <p className="text-sm font-semibold text-slate-950">{tool.label}</p>
                         </button>
                       );
                     })}
@@ -5414,17 +5405,17 @@ ${message.content}`);
                 </div>
               )}
 
-              <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
+              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h4 className="text-base font-semibold tracking-[-0.02em] text-white">
+                    <h4 className="text-base font-semibold tracking-[-0.02em] text-slate-950">
                       YouTube lessons inside {activeLibrary.shortTitle}
                     </h4>
-                    <p className="mt-1 text-xs leading-5 text-white/45">
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
                       Useful full videos only. No reels, no funny clips, no mixed categories.
                     </p>
                   </div>
-                  {youtubeLessonsBusy && <Loader2 className="h-4 w-4 animate-spin text-white/45" />}
+                  {youtubeLessonsBusy && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
@@ -5435,11 +5426,11 @@ ${message.content}`);
                       onClick={() => openYoutubeLessonCategory(category)}
                       className={`rounded-2xl border p-3 text-left transition active:scale-[0.98] ${
                         activeYoutubeLessonCategory?.label === category.label
-                          ? 'border-white bg-white text-black'
-                          : 'border-white/10 bg-white/[0.05] text-white hover:bg-white/[0.09]'
+                          ? 'border-white bg-slate-950 text-white'
+                          : 'border-slate-200 bg-white text-slate-950 hover:bg-slate-100'
                       }`}
                     >
-                      <span className="mb-2 inline-flex rounded-full bg-white/[0.1] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                      <span className="mb-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
                         {category.badge}
                       </span>
                       <span className="block text-sm font-semibold">{category.label}</span>
@@ -5453,21 +5444,21 @@ ${message.content}`);
                 {activeYoutubeLessonCategory && (
                   <div className="mt-5 space-y-3">
                     <div>
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-slate-950">
                         {activeYoutubeLessonCategory.label} videos
                       </p>
-                      <p className="mt-1 text-xs text-white/45">
+                      <p className="mt-1 text-xs text-slate-500">
                         Powered by your FaceMeX YouTube API. Tap Watch to play inside FaceMeX.
                       </p>
                     </div>
 
                     {youtubeLessonsBusy ? (
-                      <div className="rounded-3xl bg-white/[0.05] p-5 text-sm text-white/55">
+                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600">
                         <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                         Loading useful videos...
                       </div>
                     ) : youtubeLessonVideos.length === 0 ? (
-                      <div className="rounded-3xl bg-white/[0.05] p-5 text-sm text-white/55">
+                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600">
                         No useful videos loaded yet. Tap the category again or try another topic.
                       </div>
                     ) : (
@@ -5477,7 +5468,7 @@ ${message.content}`);
                         return (
                           <article
                             key={video.videoId}
-                            className="overflow-hidden rounded-[28px] border border-white/10 bg-[#171717] shadow-[0_18px_48px_rgba(0,0,0,0.25)]"
+                            className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_48px_rgba(0,0,0,0.25)]"
                           >
                             <div className="aspect-video w-full overflow-hidden bg-black">
                               {isPlaying ? (
@@ -5492,15 +5483,15 @@ ${message.content}`);
                                 <button
                                   type="button"
                                   onClick={() => setActivePlayingVideoId(video.videoId)}
-                                  className="relative h-full w-full bg-black text-left"
+                                  className="relative h-full w-full bg-slate-100 text-left"
                                 >
                                   {video.thumbnail ? (
                                     <img src={video.thumbnail} alt="" className="h-full w-full object-cover opacity-90" />
                                   ) : (
-                                    <div className="h-full w-full bg-white/[0.06]" />
+                                    <div className="h-full w-full bg-slate-100" />
                                   )}
                                   <span className="absolute inset-0 bg-black/20" />
-                                  <span className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                                  <span className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950 text-white shadow-xl">
                                     ▶
                                   </span>
                                 </button>
@@ -5508,17 +5499,17 @@ ${message.content}`);
                             </div>
 
                             <div className="p-4">
-                              <p className="line-clamp-2 text-base font-semibold leading-6 text-white">{video.title}</p>
+                              <p className="line-clamp-2 text-base font-semibold leading-6 text-slate-950">{video.title}</p>
 
                               {video.channelTitle && (
-                                <p className="mt-1 text-xs text-white/45">{video.channelTitle}</p>
+                                <p className="mt-1 text-xs text-slate-500">{video.channelTitle}</p>
                               )}
 
                               <div className="mt-4 grid grid-cols-2 gap-2">
                                 <Button
                                   size="sm"
                                   onClick={() => setActivePlayingVideoId(video.videoId)}
-                                  className="h-10 rounded-2xl bg-white text-xs font-semibold text-black hover:bg-white/90"
+                                  className="h-10 rounded-2xl bg-slate-950 text-xs font-semibold text-white hover:bg-slate-800"
                                 >
                                   Watch in FaceMeX
                                 </Button>
@@ -5546,7 +5537,7 @@ Watch: ${video.watchUrl}`,
                                       description: `Saved under ${activeLibrary.title}.`,
                                     });
                                   }}
-                                  className="h-10 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-semibold text-white hover:bg-white/[0.09]"
+                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100"
                                 >
                                   <Save className="mr-1.5 h-3.5 w-3.5" />
                                   Save
@@ -5567,7 +5558,7 @@ Link: ${video.watchUrl}
 Give me: main idea, key points, step-by-step explanation, action steps, and quick revision notes. Be honest that you cannot watch the full video unless transcript/details are provided.`
                                     );
                                   }}
-                                  className="h-10 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-semibold text-white hover:bg-white/[0.09]"
+                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100"
                                 >
                                   Make notes
                                 </Button>
@@ -5579,7 +5570,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                     trackLinkClick(video.watchUrl, 'youtube_lesson_watch_on_youtube');
                                     window.open(video.watchUrl, '_blank', 'noopener,noreferrer');
                                   }}
-                                  className="h-10 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-semibold text-white hover:bg-white/[0.09]"
+                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100"
                                 >
                                   <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                                   YouTube
@@ -5594,9 +5585,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 )}
               </div>
 
-              <div className="mt-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
-                <h3 className="text-base font-semibold text-white">Saved library notes</h3>
-                <p className="mt-1 text-xs leading-5 text-white/45">
+              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                <h3 className="text-base font-semibold text-slate-950">Saved library notes</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
                   Saved answers stay separated by Jobs, Investors and Students so users can come back later.
                 </p>
 
@@ -5607,7 +5598,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                       type="button"
                       onClick={() => setSavedFilter(filter as any)}
                       className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                        savedFilter === filter ? 'bg-white text-black' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1] hover:text-white'
+                        savedFilter === filter ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-100 hover:text-slate-950'
                       }`}
                     >
                       {filter === 'all' ? 'All' : savedCategoryLabels[filter as SavedCategory]}
@@ -5617,7 +5608,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
                 <div className="mt-4 space-y-2">
                   {savedMessages.length === 0 ? (
-                    <p className="rounded-2xl bg-white/[0.04] p-4 text-sm text-white/45">
+                    <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
                       No saved notes yet. Save useful answers and videos to build your library.
                     </p>
                   ) : (
@@ -5629,15 +5620,15 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                           key={item.id}
                           type="button"
                           onClick={() => setSavedReaderMessage(item)}
-                          className="w-full rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.08]"
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:bg-slate-100"
                         >
                           <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Library'}
                             </span>
-                            {item.pinned && <Pin className="h-3.5 w-3.5 text-white/45" />}
+                            {item.pinned && <Pin className="h-3.5 w-3.5 text-slate-500" />}
                           </div>
-                          <p className="line-clamp-2 text-xs leading-5 text-white/70">{item.content}</p>
+                          <p className="line-clamp-2 text-xs leading-5 text-slate-700">{item.content}</p>
                         </button>
                       ))
                   )}
@@ -5776,179 +5767,181 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
       )}
 
       {jobsOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setJobsOpen(false)}>
+        <div className="fixed inset-0 z-[70] bg-black/20 backdrop-blur-[2px] lg:hidden" onClick={() => setJobsOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:border-l lg:border-white/10 lg:bg-[#111] lg:text-white"
+            className="absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col bg-white text-slate-950 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
-              <div>
-                <h2 className="text-base font-semibold">FaceMeX Tools</h2>
-                <p className="text-[11px] text-slate-500 dark:text-white/45">
-                  Jobs and Library
-                </p>
+            <div className="flex h-20 shrink-0 items-center justify-between px-5 pt-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-[28px] font-semibold tracking-[-0.04em] text-slate-950">FaceMeX</h2>
+                <p className="mt-0.5 truncate text-xs text-slate-500">Your AI workspace</p>
               </div>
 
-              <Button size="icon" variant="ghost" onClick={() => setJobsOpen(false)} className="h-10 w-10 rounded-full">
-                <X className="h-5 w-5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJobsOpen(false);
+                    setLibraryOpen(true);
+                  }}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-900 transition hover:bg-slate-200"
+                  aria-label="Search Library"
+                >
+                  <Search className="h-5 w-5" />
+                </button>
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white">
+                  {firstName?.[0]?.toUpperCase() || 'F'}
+                </div>
+              </div>
             </div>
 
-            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-24 pt-2">
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJobsOpen(false);
+                    setLibraryOpen(true);
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                >
+                  <FileText className="h-7 w-7 text-slate-900" />
+                  Library
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveLibrarySection('jobs');
+                    setJobsOpen(false);
+                    setLibraryOpen(true);
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                >
+                  <Briefcase className="h-7 w-7 text-slate-900" />
+                  Job Library
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveLibrarySection('investors');
+                    setJobsOpen(false);
+                    setLibraryOpen(true);
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                >
+                  <Building2 className="h-7 w-7 text-slate-900" />
+                  Investors Library
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveLibrarySection('students');
+                    setJobsOpen(false);
+                    setLibraryOpen(true);
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                >
+                  <Users className="h-7 w-7 text-slate-900" />
+                  Students Library
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJobsOpen(false);
+                    openSchedulePanel();
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                >
+                  <CalendarDays className="h-7 w-7 text-slate-900" />
+                  Scheduled
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJobsOpen(false);
+                    setTrackerOpen(true);
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[20px] font-semibold text-slate-950 transition hover:bg-slate-50"
+                >
+                  <Clock className="h-7 w-7 text-slate-900" />
+                  Job Tracker
+                </button>
+              </div>
+
+              <div className="mt-7">
+                <h3 className="text-[18px] font-semibold text-slate-950">Pinned</h3>
+                <div className="mt-3 space-y-1">
+                  {[
+                    { label: 'Find jobs', action: () => quickAsk('I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.') },
+                    { label: 'Build My CV', action: openCvBuilder },
+                    { label: 'Cover Letter AI', action: openCoverLetterBuilder },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => {
+                        setJobsOpen(false);
+                        item.action();
+                      }}
+                      className="flex w-full items-center gap-4 rounded-2xl px-1 py-3 text-left text-[17px] text-slate-800 transition hover:bg-slate-50"
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-700">
+                        <MessageCircleIcon />
+                      </span>
+                      <span className="min-w-0 truncate">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {chatSessions.length > 0 && (
+                <div className="mt-7">
+                  <h3 className="text-[18px] font-semibold text-slate-950">Recents</h3>
+                  <div className="mt-3 space-y-1">
+                    {chatSessions.slice(0, 10).map((session) => (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => {
+                          setJobsOpen(false);
+                          openChatSession(session);
+                        }}
+                        className={`block w-full rounded-2xl px-1 py-3 text-left text-[17px] leading-snug transition hover:bg-slate-50 ${
+                          session.id === activeSessionId ? 'font-semibold text-slate-950' : 'text-slate-700'
+                        }`}
+                      >
+                        <span className="line-clamp-2">{session.title || 'New chat'}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-end bg-gradient-to-t from-white via-white to-white/0 px-6 py-5">
               <button
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  setLibraryOpen(true);
+                  openNewChatCard();
                 }}
-                className="w-full rounded-2xl border border-black/5 bg-white p-4 text-left text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+                className="pointer-events-auto inline-flex h-14 items-center gap-2 rounded-full bg-blue-500 px-7 text-[18px] font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-600"
               >
-                <h3 className="text-base font-semibold">Student Library</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-white/50 lg:text-white/50">
-                  Homework, assignments, YouTube lesson notes, college and university applications are now saved in Library.
-                </p>
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/80 lg:bg-white/10 lg:text-white">
-                  <FileText className="h-4 w-4" />
-                  Open Library
-                </div>
+                <Edit3 className="h-5 w-5" />
+                Chat
               </button>
-
-              <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-                {[
-                  { label: 'Tzaneen', query: 'jobs', area: 'Tzaneen' },
-                  { label: 'Retail', query: 'retail', area: 'Tzaneen' },
-                  { label: 'Farm', query: 'farm', area: 'Tzaneen' },
-                  { label: 'Admin', query: 'admin', area: 'Tzaneen' },
-                  { label: 'Security', query: 'security', area: 'Tzaneen' },
-                  { label: 'Driver', query: 'driver', area: 'Tzaneen' },
-                  { label: 'Teacher', query: 'teacher', area: 'Tzaneen' },
-                  { label: 'Polokwane', query: 'jobs', area: 'Polokwane' },
-                  { label: 'Phalaborwa', query: 'jobs', area: 'Phalaborwa' },
-                  { label: 'Hoedspruit', query: 'jobs', area: 'Hoedspruit' },
-                ].map((item) => (
-                  <Button
-                    key={item.label}
-                    variant="outline"
-                    onClick={() => loadAutomaticJobs({ query: item.query, area: item.area })}
-                    className="h-9 shrink-0 rounded-full px-4 text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
-                  >
-                    {item.label}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {sortedLocalJobs.length === 0 ? (
-                  <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm leading-6 text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50">
-                    No matching jobs found for this category right now. Try another category or search from the main AI page.
-                  </div>
-                ) : (
-                  sortedLocalJobs.map((job) => {
-                    const deadlineInfo = getDeadlineInfo(job.deadline);
-
-                    return (
-                      <div
-                        key={job.id}
-                        className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
-                      >
-                        <div className="flex gap-3">
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
-                            {job.verificationStatus === 'verified' ? (
-                              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                            ) : job.verificationStatus === 'avoid' ? (
-                              <AlertTriangle className="h-5 w-5 text-red-500" />
-                            ) : (
-                              <ShieldCheck className="h-5 w-5 text-blue-600" />
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <h4 className="truncate text-sm font-semibold">{job.title}</h4>
-                                <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{job.company}</p>
-                              </div>
-
-                              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
-                            </div>
-
-                            <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/50 lg:text-white/60">
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-3.5 w-3.5" />
-                                <span className="truncate">{job.area}</span>
-                              </div>
-
-                              <div
-                                className={`flex items-center gap-2 ${
-                                  deadlineInfo.urgent ? 'text-orange-500' : 'text-slate-500 dark:text-white/50 lg:text-white/60'
-                                }`}
-                              >
-                                <Clock className="h-3.5 w-3.5" />
-                                <span>{job.deadline ? deadlineInfo.label : 'Closing date not stated by source'}</span>
-                              </div>
-                            </div>
-
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 lg:bg-blue-500/10 lg:text-blue-300">
-                                {job.sourceLabel}
-                              </span>
-
-                              <span
-                                className={`rounded-full px-2 py-1 text-[11px] font-medium ${verificationStatusStyles(
-                                  job.verificationStatus
-                                )}`}
-                              >
-                                {verificationStatusLabel(job.verificationStatus)}
-                              </span>
-                            </div>
-
-                            <div className="mt-3 grid grid-cols-2 gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openOfficialApplyPage(job)}
-                                disabled={job.verificationStatus === 'avoid' || deadlineInfo.expired}
-                                className="h-8 rounded-xl text-xs lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10"
-                              >
-                                {job.isSourceCard ? (
-                                  <Globe2 className="mr-1.5 h-3.5 w-3.5" />
-                                ) : job.verificationStatus === 'needs_verification' ? (
-                                  <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                                ) : (
-                                  <Send className="mr-1.5 h-3.5 w-3.5" />
-                                )}
-                                {deadlineInfo.expired ? 'Closed' : job.actionLabel}
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setLastSelectedJob(job);
-                                  saveLocalJob(job);
-                                }}
-                                className="h-8 rounded-xl text-xs lg:border-white/10 lg:bg-[#202020] lg:text-white lg:hover:bg-white/10"
-                              >
-                                <Save className="mr-1.5 h-3.5 w-3.5" />
-                                Save
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs leading-5 text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200 lg:border-white/10 lg:bg-[#171717] lg:text-white/70">
-                <strong className="block text-sm">FaceMeX rule</strong>
-                Each job category filters only related jobs. Student learning tools now live inside Library as separate chats.
-              </div>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
