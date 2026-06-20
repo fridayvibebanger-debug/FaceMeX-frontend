@@ -1641,6 +1641,87 @@ function shouldShowGovernmentSourceAction(content: string, previousUserText = ''
   return isGovernmentServiceText(`${content}\n${previousUserText}`);
 }
 
+
+function isApplicationOpportunityText(content: string) {
+  const text = clean(content).toLowerCase();
+
+  if (!text) return false;
+
+  if (hasJobSearchWords(text)) return false;
+
+  return /(university|college|tvet|institution|admission|apply to|application form|intake|course|faculty|nsfas|bursary|bursaries|scholarship|grant|grants|funding|funders|investor|investors|pitch deck|startup funding|business funding|seed funding|pre[-\s]?seed|series a|accelerator|incubator)/i.test(
+    text
+  );
+}
+
+function isResearchIntentText(content: string) {
+  const text = clean(content).toLowerCase();
+
+  if (!text) return false;
+  if (hasJobSearchWords(text)) return false;
+  if (isApplicationOpportunityText(text)) return false;
+
+  return /(research|analyse|analyze|analysis|market research|competitor|industry|case study|summarise|summarize|break down|compare|investigate|find out|explain this document|study this|report|strategy research)/i.test(
+    text
+  );
+}
+
+function shouldShowApplicationActions(message: ChatMessage, previousUserText = '') {
+  const combined = `${message.content}\n${previousUserText}`;
+
+  if (isGovernmentServiceText(combined)) return false;
+  if (message.intent === 'job-search') return false;
+  if (hasJobSearchWords(previousUserText) || hasJobSearchWords(message.content)) return false;
+
+  return (
+    message.intent === 'education_institution' ||
+    isApplicationOpportunityText(combined)
+  );
+}
+
+function shouldShowResearchActions(message: ChatMessage, previousUserText = '') {
+  const combined = `${message.content}\n${previousUserText}`;
+
+  if (isGovernmentServiceText(combined)) return false;
+  if (shouldShowApplicationActions(message, previousUserText)) return false;
+  if (message.intent === 'job-search' || hasJobSearchWords(previousUserText)) return false;
+  if (message.intent === 'general-question' || message.intent === 'general-help') return false;
+
+  return (
+    message.intent === 'research' ||
+    message.intent === 'verify-opportunity' ||
+    message.intent === 'image_or_document_analysis' ||
+    isResearchIntentText(combined)
+  );
+}
+
+function shouldShowGeneralOnly(message: ChatMessage, previousUserText = '') {
+  if (message.role !== 'assistant') return false;
+  if (message.jobs?.length) return false;
+  if (message.intent !== 'general-question' && message.intent !== 'general-help') return false;
+  if (shouldShowApplicationActions(message, previousUserText)) return false;
+  if (shouldShowResearchActions(message, previousUserText)) return false;
+  if (shouldShowCvBuilderActions(message.content, previousUserText)) return false;
+  if (shouldShowApplyActions(message.content, previousUserText)) return false;
+
+  return true;
+}
+
+function buildSavedItemFollowUpPrompt(item: ChatMessage, mode: 'continue' | 'deeper' | 'apply' = 'continue') {
+  const label = item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item';
+  const content = normalizeUssdCodes(item.content);
+
+  if (mode === 'apply') {
+    return `Use this saved ${label} and help me apply or take action step by step. Ask only for missing details if needed.\n\nSaved item:\n${content}`;
+  }
+
+  if (mode === 'deeper') {
+    return `Use this saved ${label} and go deeper. Give me better details, next steps, useful questions to ask, and what I should do next.\n\nSaved item:\n${content}`;
+  }
+
+  return `Continue from this saved ${label}. Help me understand it better and guide me to the next step.\n\nSaved item:\n${content}`;
+}
+
 function extractJobTitle(text: string) {
   const value = normalizeUssdCodes(text);
 
@@ -3041,6 +3122,30 @@ export default function AIJobAssistantPage() {
     }
   };
 
+  const startSavedItemNewChat = (item: ChatMessage, mode: 'continue' | 'deeper' | 'apply' = 'continue') => {
+    const nextId = safeId();
+    const nextPrompt = buildSavedItemFollowUpPrompt(item, mode);
+
+    setActiveSessionId(nextId);
+    setMessages([]);
+    resetWorkspaceUiForNewChat();
+    setSavedReaderMessage(null);
+    setPrompt(nextPrompt);
+    setFollowUpExpanded(true);
+
+    try {
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, nextId);
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+
+    toast({
+      title: 'Saved item opened in a new chat',
+      description: 'Ask FaceMeX AI to continue, research deeper, or help you apply.',
+    });
+  };
+
 
   const clearCurrentChatOnly = () => {
     setMessages([]);
@@ -3492,6 +3597,11 @@ FaceMeX intelligence rules:
 - Keep YouTube recommendations useful: full lessons, tutorials, guides and professional explainers. Avoid Shorts, reels, jokes and entertainment clips.
 - Keep libraries separate: Job Library for job-search skills, Investors Library for funding/investors/business, Students Library for subjects/applications/NSFAS.
 - Ask one smart clarifying question only when needed. Otherwise give the answer directly.
+- Response routing must be strict: general questions must receive a clean answer only, with no CV, cover letter, save note, make note, job or application ending.
+- If the user asks for jobs, vacancies, hiring, learnerships or work, use FaceMeX job search/results and support CV + cover letter next steps.
+- If the user asks for research, analysis, strategy, market or breakdown, answer like a research assistant and make the answer easy to save as a note.
+- If the user asks about university, college, TVET, NSFAS, bursaries, grants, funding, investors or pitch decks, answer like an application assistant and guide them toward applying or scheduling follow-up.
+- Never mix Library sections. Students = school/university/NSFAS. Investors = grants/funding/investors/pitching. Jobs = jobs/CV/interviews/learnerships.
 
 User name: ${userDisplayName}
 Current automatic job results in FaceMeX:
@@ -3945,6 +4055,22 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
+            onClick={openCvBuilder}
+            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70 lg:bg-white/10 lg:text-white/80"
+          >
+            Build CV
+          </button>
+
+          <button
+            type="button"
+            onClick={openCoverLetterBuilder}
+            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70 lg:bg-white/10 lg:text-white/80"
+          >
+            Cover letter
+          </button>
+
+          <button
+            type="button"
             onClick={() => sendPrompt('Teach me how to check if a job advert is fake before I apply.')}
             className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70 lg:bg-white/10 lg:text-white/80"
           >
@@ -4031,9 +4157,14 @@ Apply link: ${job.applyUrl}`;
     if (message.role !== 'assistant') return null;
     if (message.jobs?.length) return null;
 
-    const canApply = shouldShowApplyActions(message.content, previousUserText);
     const isGovernment = shouldShowGovernmentSourceAction(message.content, previousUserText);
     const showCvButtons = shouldShowCvBuilderActions(message.content, previousUserText);
+    const showApplicationButtons = shouldShowApplicationActions(message, previousUserText);
+    const showResearchButtons = shouldShowResearchActions(message, previousUserText);
+
+    if (shouldShowGeneralOnly(message, previousUserText)) {
+      return null;
+    }
 
     if (isGovernment) {
       return (
@@ -4089,12 +4220,66 @@ Apply link: ${job.applyUrl}`;
       );
     }
 
+    if (showApplicationButtons) {
+      return (
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10 lg:border-white/10">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              sendPrompt(
+                `Help me apply or take action step by step using this answer. Ask only for missing details if needed:\n\n${message.content}`
+              )
+            }
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
+          >
+            <Send className="mr-2 h-3.5 w-3.5" />
+            Help to apply
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => openSchedulePanel(message.content)}
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
+          >
+            <CalendarDays className="mr-2 h-3.5 w-3.5" />
+            Schedule
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => saveMessageAs(message.id, message.savedCategory || 'institution_applications')}
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
+          >
+            <Save className="mr-2 h-3.5 w-3.5" />
+            Save
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setPrompt(`Create a clear application action plan from this answer:\n\n${message.content}`);
+              setFollowUpExpanded(true);
+            }}
+            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
+          >
+            <FileText className="mr-2 h-3.5 w-3.5" />
+            Action plan
+          </Button>
+        </div>
+      );
+    }
+
     if (
       message.savedCategory === 'homework_help' ||
       message.savedCategory === 'assignments' ||
       message.savedCategory === 'youtube_lessons' ||
-      message.savedCategory === 'institution_applications' ||
-      message.intent?.startsWith('education_')
+      message.intent === 'education_homework' ||
+      message.intent === 'education_assignment' ||
+      message.intent === 'education_youtube'
     ) {
       return (
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10">
@@ -4124,15 +4309,7 @@ Apply link: ${job.applyUrl}`;
       );
     }
 
-    const isResearchLike =
-      message.savedCategory === 'research' ||
-      message.intent === 'research' ||
-      message.intent === 'general-question' ||
-      message.intent === 'general-help' ||
-      message.intent === 'image_or_document_analysis' ||
-      message.intent === 'verify-opportunity';
-
-    if (isResearchLike) {
+    if (showResearchButtons) {
       return (
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10 lg:border-white/10">
           <Button
@@ -4149,9 +4326,7 @@ Apply link: ${job.applyUrl}`;
             size="sm"
             variant="outline"
             onClick={() => {
-              setPrompt(`Turn this answer into a clear note with headings, key points, and next steps. Keep it easy to revise and save it as a note:
-
-${message.content}`);
+              setPrompt(`Turn this answer into a clear research note with headings, key points, and next steps. Keep it easy to revise and save it as a note:\n\n${message.content}`);
               setFollowUpExpanded(true);
             }}
             className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
@@ -4163,23 +4338,8 @@ ${message.content}`);
       );
     }
 
-    if (!canApply) return null;
-
-    return (
-      <div className="mt-3 border-t border-black/5 pt-3 dark:border-white/10">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => openApplySheet(message.content)}
-          className="h-10 w-full rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
-        >
-          <Send className="mr-2 h-3.5 w-3.5" />
-          Help me apply
-        </Button>
-      </div>
-    );
+    return null;
   };
-
   const messageActions = (message: ChatMessage) => (
     <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-black/5 pt-2 opacity-80 dark:border-white/10">
       <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
@@ -4206,7 +4366,7 @@ ${message.content}`);
         <Search className="h-3.5 w-3.5" />
       </Button>
 
-      {message.role === 'assistant' && (
+      {message.role === 'assistant' && message.intent !== 'general-question' && message.intent !== 'general-help' && (
         <Button
           size="sm"
           variant="ghost"
@@ -5734,6 +5894,81 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {savedReaderMessage && (
+        <div className="fixed inset-0 z-[97] flex items-end bg-black/35 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
+          <div
+            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[30px] bg-white text-slate-950 shadow-2xl dark:bg-[#111] dark:text-white lg:max-h-[86dvh] lg:max-w-2xl lg:rounded-[30px] lg:bg-[#202020]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
+
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
+              <div className="min-w-0">
+                <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-white/55">
+                  {savedReaderMessage.savedCategory ? savedCategoryLabels[savedReaderMessage.savedCategory] : 'Saved item'}
+                </div>
+                <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-slate-950 dark:text-white lg:text-white">
+                  Saved card
+                </h2>
+                <p className="mt-1 text-[13px] text-slate-500 dark:text-white/50">
+                  Read it, copy it, or open it in a new chat to continue.
+                </p>
+              </div>
+
+              <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 text-[15px] leading-7 text-slate-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/78 lg:border-white/10 lg:bg-white/[0.06]">
+                <ChatGPTStyleText text={savedReaderMessage.content} onLinkClick={handleGeneratedLinkClick} />
+              </div>
+
+              <div className="mt-4 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04] lg:border-white/10">
+                <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-slate-950 dark:text-white lg:text-white">
+                  Ask more about this
+                </h3>
+                <p className="mt-1 text-[13px] leading-5 text-slate-500 dark:text-white/50">
+                  Start a clean chat using this saved item as memory so the answer continues from the right topic.
+                </p>
+
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button onClick={() => startSavedItemNewChat(savedReaderMessage, 'continue')} className="h-11 rounded-2xl bg-slate-950 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                    Continue in new chat
+                  </Button>
+
+                  <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'deeper')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                    Research deeper
+                  </Button>
+
+                  <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'apply')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                    Help me apply
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
+              <Button variant="outline" onClick={() => copyText(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Copy
+              </Button>
+
+              <Button variant="outline" onClick={() => shareToWhatsApp(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                <Share2 className="mr-2 h-3.5 w-3.5" />
+                Share
+              </Button>
+
+              <Button variant="outline" onClick={() => openSchedulePanel(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                <CalendarDays className="mr-2 h-3.5 w-3.5" />
+                Schedule
+              </Button>
             </div>
           </div>
         </div>
