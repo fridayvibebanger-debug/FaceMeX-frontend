@@ -1056,8 +1056,31 @@ function getDefaultSchedulePrompt(messages: ChatMessage[]) {
   return clean(lastUserPrompt) || 'Scan FaceMeX opportunities, education tasks, and saved jobs. Email me if anything needs my attention.';
 }
 
+function getCurrentShareUrl() {
+  try {
+    return window.location.href || 'https://facemexsocial.com/ai/job-assistant';
+  } catch {
+    return 'https://facemexsocial.com/ai/job-assistant';
+  }
+}
+
+function buildShareText(text: string) {
+  const preview = normalizeUssdCodes(text)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+
+  const url = getCurrentShareUrl();
+
+  if (!preview) return `Open this on FaceMeX: ${url}`;
+
+  return `${preview}
+
+Open in FaceMeX: ${url}`;
+}
+
 function getWhatsAppShareUrl(text: string) {
-  return `https://wa.me/?text=${encodeURIComponent(normalizeUssdCodes(text))}`;
+  return `https://wa.me/?text=${encodeURIComponent(buildShareText(text))}`;
 }
 
 function safeId() {
@@ -1127,9 +1150,17 @@ function normalizeUssdCodes(text: string) {
 }
 
 function hasJobSearchWords(text: string) {
-  return /(job|jobs|vacancy|vacancies|hiring|learnership|internship|employment|apply for work|looking for work|looking for a job|work opportunity|career opportunity|available posts|post available|position available|cashier|packer|clerk|security|general worker|driver|drivers|admin job|cleaner job|retail job|store assistant|teacher job|creche job|crèche job|no experience|entry level|first job|training provided)/i.test(
-    text
-  );
+  const value = clean(text).toLowerCase();
+
+  if (!value) return false;
+
+  const strongJobIntent = /(looking for (a )?(job|work)|find (me )?(a )?(job|jobs|work|vacanc(y|ies))|search (for )?(job|jobs|vacanc(y|ies))|show me (job|jobs|vacanc(y|ies))|any (job|jobs|vacanc(y|ies))|available (job|jobs|vacanc(y|ies)|posts)|who is hiring|hiring near me|apply for work|work opportunity|career opportunity|learnership|internship|employment opportunity|no experience job|entry level job|first job|training provided)/i.test(value);
+
+  const roleJobIntent = /\b(cashier|packer|clerk|security|general worker|driver|drivers|admin|cleaner|retail|store assistant|teacher|creche|crèche)\s+(job|jobs|vacanc(y|ies)|work|post|posts)\b/i.test(value);
+
+  const directJobNoun = /\b(job|jobs|vacancy|vacancies|hiring)\b/i.test(value);
+
+  return strongJobIntent || roleJobIntent || directJobNoun;
 }
 
 function hasGeneralHelpWords(text: string) {
@@ -1606,9 +1637,17 @@ function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus'])
 }
 
 function isJobRelatedText(content: string) {
-  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|cover letter|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|drivers|admin)/i.test(
-    content
+  const text = clean(content).toLowerCase();
+
+  if (!text) return false;
+
+  return /(job|jobs|vacancy|vacancies|employer|interview|hiring|learnership|internship|position|closing date|salary|verification status|public advert|verified employer|cashier|packer|security job|teacher job|creche job|general worker|driver job|admin job)/i.test(
+    text
   );
+}
+
+function isJobIntentText(content: string) {
+  return hasJobSearchWords(content) || /(send my cv|email cv|apply for this job|help me apply for this job|cover letter for this job|job advert|job post|job screenshot|is this job legit|check this job)/i.test(clean(content));
 }
 
 function isCvRelatedText(content: string) {
@@ -1630,11 +1669,26 @@ function shouldShowCvBuilderActions(content: string, previousUserText = '') {
 }
 
 function shouldShowApplyActions(content: string, previousUserText = '') {
-  const combined = `${content}\n${previousUserText}`;
+  const previous = clean(previousUserText);
+  const current = clean(content);
+  const combined = `${current}
+${previous}`;
 
   if (isGovernmentServiceText(combined)) return false;
 
-  return isJobRelatedText(combined);
+  // Job buttons/cards must be triggered by the user's job intent.
+  // This prevents general answers that mention "company", "shares" or "cash"
+  // from showing a fake Job opportunity card.
+  if (isJobIntentText(previous)) return true;
+
+  if (
+    isJobIntentText(current) &&
+    /(job|vacancy|hiring|learnership|internship|cv|cover letter|interview|closing date|job advert|job post)/i.test(current)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function shouldShowGovernmentSourceAction(content: string, previousUserText = '') {
@@ -3177,7 +3231,23 @@ export default function AIJobAssistantPage() {
     });
   };
 
-  const shareToWhatsApp = (text: string) => {
+  const shareToWhatsApp = async (text: string) => {
+    const url = getCurrentShareUrl();
+    const preview = normalizeUssdCodes(text).replace(/\s+/g, ' ').trim().slice(0, 180);
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'FaceMeX AI',
+          text: preview || 'Open this in FaceMeX',
+          url,
+        });
+        return;
+      }
+    } catch {
+      // If the user cancels native share, fall back to WhatsApp link.
+    }
+
     window.open(getWhatsAppShareUrl(text), '_blank', 'noopener,noreferrer');
   };
 
@@ -3201,15 +3271,6 @@ export default function AIJobAssistantPage() {
       return;
     }
 
-    if (!creatorPlus) {
-      toast({
-        title: 'Schedule is Creator+ only',
-        description: 'Free and Pro users can open Schedule and prepare a task, but automatic email scheduling is available on Creator, Business, and Exclusive.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     const task: ScheduledTask = {
       id: safeId(),
       title: 'FaceMeX scheduled update',
@@ -3225,36 +3286,37 @@ export default function AIJobAssistantPage() {
     setScheduleBusy(true);
 
     try {
-      const payload = {
-        ...task,
-        channel: 'email',
-        sendEmail: true,
-        userEmail: emailToUse,
-        source: 'facemex-job-ai',
-      };
-
-      await api.post('/api/ai/schedules', payload);
-
       setScheduledTasks((prev) => {
         const next = [task, ...prev].slice(0, 20);
         localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
         return next;
       });
 
-      toast({
-        title: 'Schedule created',
-        description: `${scheduleFrequencyLabel(frequency)} updates will be emailed to ${emailToUse}.`,
-      });
+      if (creatorPlus) {
+        const payload = {
+          ...task,
+          channel: 'email',
+          sendEmail: true,
+          userEmail: emailToUse,
+          source: 'facemex-job-ai',
+        };
+
+        await api.post('/api/ai/schedules', payload);
+
+        toast({
+          title: 'Schedule created',
+          description: `${scheduleFrequencyLabel(frequency)} updates will be emailed to ${emailToUse}.`,
+        });
+      } else {
+        toast({
+          title: 'Schedule saved',
+          description: 'Saved in FaceMeX. Automatic email scheduling can be activated later on Creator, Business, or Exclusive.',
+        });
+      }
     } catch {
-      setScheduledTasks((prev) => {
-        const next = [task, ...prev].slice(0, 20);
-        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
-
       toast({
         title: 'Schedule saved',
-        description: 'Saved on this device. Connect /api/ai/schedules on the backend to send automatic emails.',
+        description: 'Saved in FaceMeX. Backend email scheduling can be connected at /api/ai/schedules.',
       });
     } finally {
       setScheduleBusy(false);
@@ -3597,7 +3659,9 @@ FaceMeX intelligence rules:
 - Keep YouTube recommendations useful: full lessons, tutorials, guides and professional explainers. Avoid Shorts, reels, jokes and entertainment clips.
 - Keep libraries separate: Job Library for job-search skills, Investors Library for funding/investors/business, Students Library for subjects/applications/NSFAS.
 - Ask one smart clarifying question only when needed. Otherwise give the answer directly.
-- Response routing must be strict: general questions must receive a clean answer only, with no CV, cover letter, save note, make note, job or application ending.
+- Response routing must be strict: general questions must receive a clean answer only, with no CV, cover letter, save note, make note, job, homework heading or application ending.
+- Do not label normal factual questions as Homework Help. Only use Homework Help when the user clearly asks for homework, schoolwork, assignment, exam prep, a grade/subject task, or opens the Students Library homework tool.
+- For general factual questions, answer directly like ChatGPT with concise sections and no extra action CTA.
 - If the user asks for jobs, vacancies, hiring, learnerships or work, use FaceMeX job search/results and support CV + cover letter next steps.
 - If the user asks for research, analysis, strategy, market or breakdown, answer like a research assistant and make the answer easy to save as a note.
 - If the user asks about university, college, TVET, NSFAS, bursaries, grants, funding, investors or pitch decks, answer like an application assistant and guide them toward applying or scheduling follow-up.
@@ -4091,9 +4155,11 @@ Apply link: ${job.applyUrl}`;
     const combined = `${previousUserText}\n${message.content}`;
 
     if (message.jobs?.length) return null;
+    if (message.intent === 'general-question' || message.intent === 'general-help') return null;
+    if (!isJobIntentText(previousUserText) && message.intent !== 'job-search' && message.intent !== 'verify-opportunity') return null;
     if (!shouldShowApplyActions(message.content, previousUserText)) return null;
 
-    if (!/(verdict|needs verification|verified|avoid|job|vacancy|apply|cv|email|deadline|closing date|cashier|packer|clerk|security|teacher|general worker)/i.test(combined)) {
+    if (!/(verdict|needs verification|verified|avoid|job|vacancy|cv|email|deadline|closing date|cashier|packer|clerk|security|teacher|general worker)/i.test(combined)) {
       return null;
     }
 
@@ -5998,7 +6064,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
               {!creatorPlus && (
                 <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 lg:border-amber-500/20 lg:bg-amber-500/10 lg:text-amber-100">
-                  Schedule is available for Creator, Business, and Exclusive users. Free and Pro users can open this panel and prepare the task, but FaceMeX will not activate automatic email scheduling.
+                  You can save this schedule in FaceMeX now. Automatic email sending is activated for Creator, Business, and Exclusive users when the backend schedule route is connected.
                 </div>
               )}
               {scheduleStep === 'choose' ? (
