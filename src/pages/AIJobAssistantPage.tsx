@@ -1056,31 +1056,23 @@ function getDefaultSchedulePrompt(messages: ChatMessage[]) {
   return clean(lastUserPrompt) || 'Scan FaceMeX opportunities, education tasks, and saved jobs. Email me if anything needs my attention.';
 }
 
-function getCurrentShareUrl() {
-  try {
-    return window.location.href || 'https://facemexsocial.com/ai/job-assistant';
-  } catch {
-    return 'https://facemexsocial.com/ai/job-assistant';
-  }
-}
-
-function buildShareText(text: string) {
-  const preview = normalizeUssdCodes(text)
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 240);
-
-  const url = getCurrentShareUrl();
-
-  if (!preview) return `Open this on FaceMeX: ${url}`;
-
-  return `${preview}
-
-Open in FaceMeX: ${url}`;
-}
-
 function getWhatsAppShareUrl(text: string) {
-  return `https://wa.me/?text=${encodeURIComponent(buildShareText(text))}`;
+  return `https://wa.me/?text=${encodeURIComponent(normalizeUssdCodes(text))}`;
+}
+
+function buildSharePayload(text: string, title = 'FaceMeX AI') {
+  const cleaned = normalizeUssdCodes(clean(text));
+  const excerpt = cleaned.length > 220 ? `${cleaned.slice(0, 220)}...` : cleaned;
+  const url = typeof window !== 'undefined' ? window.location.href : 'https://facemexsocial.com/ai';
+
+  return {
+    title,
+    text: excerpt,
+    url,
+    combined: `${excerpt}
+
+Open in FaceMeX: ${url}`,
+  };
 }
 
 function safeId() {
@@ -1150,17 +1142,9 @@ function normalizeUssdCodes(text: string) {
 }
 
 function hasJobSearchWords(text: string) {
-  const value = clean(text).toLowerCase();
-
-  if (!value) return false;
-
-  const strongJobIntent = /(looking for (a )?(job|work)|find (me )?(a )?(job|jobs|work|vacanc(y|ies))|search (for )?(job|jobs|vacanc(y|ies))|show me (job|jobs|vacanc(y|ies))|any (job|jobs|vacanc(y|ies))|available (job|jobs|vacanc(y|ies)|posts)|who is hiring|hiring near me|apply for work|work opportunity|career opportunity|learnership|internship|employment opportunity|no experience job|entry level job|first job|training provided)/i.test(value);
-
-  const roleJobIntent = /\b(cashier|packer|clerk|security|general worker|driver|drivers|admin|cleaner|retail|store assistant|teacher|creche|crèche)\s+(job|jobs|vacanc(y|ies)|work|post|posts)\b/i.test(value);
-
-  const directJobNoun = /\b(job|jobs|vacancy|vacancies|hiring)\b/i.test(value);
-
-  return strongJobIntent || roleJobIntent || directJobNoun;
+  return /(job|jobs|vacancy|vacancies|hiring|learnership|internship|employment|apply for work|looking for work|looking for a job|work opportunity|career opportunity|available posts|post available|position available|cashier|packer|clerk|security|general worker|driver|drivers|admin job|cleaner job|retail job|store assistant|teacher job|creche job|crèche job|no experience|entry level|first job|training provided)/i.test(
+    text
+  );
 }
 
 function hasGeneralHelpWords(text: string) {
@@ -1618,6 +1602,80 @@ function getClosingDateDisplay(deadline?: string | null) {
   return info.label;
 }
 
+function getJobPostedTime(value?: string | null) {
+  const raw = clean(value);
+
+  if (!raw) return 0;
+
+  const direct = new Date(raw).getTime();
+  if (!Number.isNaN(direct)) return direct;
+
+  const normalized = raw.replace(/(\d{1,2})\/(\d{1,2})\/(\d{4})/, '$3-$2-$1');
+  const parsed = new Date(normalized).getTime();
+
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getJobPostedLabel(value?: string | null) {
+  const postedTime = getJobPostedTime(value);
+
+  if (!postedTime) return 'Posted date not stated';
+
+  const diffMs = Date.now() - postedTime;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return 'Posted today';
+  if (diffDays === 1) return 'Posted yesterday';
+  if (diffDays < 31) return `Posted ${diffDays} days ago`;
+
+  const date = new Date(postedTime);
+  return `Posted ${date.toLocaleDateString('en-ZA', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })}`;
+}
+
+function jobFreshnessScore(job: LocalVerifiedJob) {
+  const posted = getJobPostedTime(job.createdAt);
+  if (!posted) return 0;
+
+  const ageDays = Math.max(0, Math.floor((Date.now() - posted) / (1000 * 60 * 60 * 24)));
+  if (ageDays <= 1) return 500;
+  if (ageDays <= 3) return 420;
+  if (ageDays <= 7) return 320;
+  if (ageDays <= 14) return 220;
+  if (ageDays <= 30) return 120;
+  return 20;
+}
+
+function stableJobTieBreaker(job: LocalVerifiedJob) {
+  const key = `${job.title}|${job.company}|${job.area}|${job.applyUrl}`.toLowerCase();
+  let hash = 0;
+
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+}
+
+function compareJobsForDisplay(a: LocalVerifiedJob, b: LocalVerifiedJob, requestedArea = '') {
+  const areaDiff = areaRelevanceScore(b, requestedArea) - areaRelevanceScore(a, requestedArea);
+  if (areaDiff !== 0) return areaDiff;
+
+  const postedDiff = getJobPostedTime(b.createdAt) - getJobPostedTime(a.createdAt);
+  if (postedDiff !== 0) return postedDiff;
+
+  if (a.verificationStatus === 'verified' && b.verificationStatus !== 'verified') return -1;
+  if (a.verificationStatus !== 'verified' && b.verificationStatus === 'verified') return 1;
+
+  const freshDiff = jobFreshnessScore(b) - jobFreshnessScore(a);
+  if (freshDiff !== 0) return freshDiff;
+
+  return stableJobTieBreaker(a) - stableJobTieBreaker(b);
+}
+
 function verificationStatusStyles(status: LocalVerifiedJob['verificationStatus']) {
   if (status === 'verified') {
     return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20';
@@ -1637,17 +1695,9 @@ function verificationStatusLabel(status: LocalVerifiedJob['verificationStatus'])
 }
 
 function isJobRelatedText(content: string) {
-  const text = clean(content).toLowerCase();
-
-  if (!text) return false;
-
-  return /(job|jobs|vacancy|vacancies|employer|interview|hiring|learnership|internship|position|closing date|salary|verification status|public advert|verified employer|cashier|packer|security job|teacher job|creche job|general worker|driver job|admin job)/i.test(
-    text
+  return /(job|jobs|vacancy|vacancies|apply|application|cv|resume|cover letter|employer|company|interview|hiring|learnership|internship|position|closing date|salary|source|verification status|public advert|verified employer|cashier|packer|clerk|security|teacher|creche|general worker|driver|drivers|admin)/i.test(
+    content
   );
-}
-
-function isJobIntentText(content: string) {
-  return hasJobSearchWords(content) || /(send my cv|email cv|apply for this job|help me apply for this job|cover letter for this job|job advert|job post|job screenshot|is this job legit|check this job)/i.test(clean(content));
 }
 
 function isCvRelatedText(content: string) {
@@ -1669,26 +1719,11 @@ function shouldShowCvBuilderActions(content: string, previousUserText = '') {
 }
 
 function shouldShowApplyActions(content: string, previousUserText = '') {
-  const previous = clean(previousUserText);
-  const current = clean(content);
-  const combined = `${current}
-${previous}`;
+  const combined = `${content}\n${previousUserText}`;
 
   if (isGovernmentServiceText(combined)) return false;
 
-  // Job buttons/cards must be triggered by the user's job intent.
-  // This prevents general answers that mention "company", "shares" or "cash"
-  // from showing a fake Job opportunity card.
-  if (isJobIntentText(previous)) return true;
-
-  if (
-    isJobIntentText(current) &&
-    /(job|vacancy|hiring|learnership|internship|cv|cover letter|interview|closing date|job advert|job post)/i.test(current)
-  ) {
-    return true;
-  }
-
-  return false;
+  return isJobRelatedText(combined);
 }
 
 function shouldShowGovernmentSourceAction(content: string, previousUserText = '') {
@@ -1700,8 +1735,11 @@ function isApplicationOpportunityText(content: string) {
   const text = clean(content).toLowerCase();
 
   if (!text) return false;
-
   if (hasJobSearchWords(text)) return false;
+
+  if (/(homework|assignment|essay|exam|test|study notes|another homework question|subject|grade\s?\d|teacher|student|lesson|mathematics|maths|history|accounting|science|english|business studies)/i.test(text)) {
+    return false;
+  }
 
   return /(university|college|tvet|institution|admission|apply to|application form|intake|course|faculty|nsfas|bursary|bursaries|scholarship|grant|grants|funding|funders|investor|investors|pitch deck|startup funding|business funding|seed funding|pre[-\s]?seed|series a|accelerator|incubator)/i.test(
     text
@@ -1721,13 +1759,29 @@ function isResearchIntentText(content: string) {
 }
 
 function shouldShowApplicationActions(message: ChatMessage, previousUserText = '') {
-  const combined = `${message.content}\n${previousUserText}`;
+  const combined = `${message.content}
+${previousUserText}`;
 
   if (isGovernmentServiceText(combined)) return false;
   if (message.intent === 'job-search') return false;
   if (hasJobSearchWords(previousUserText) || hasJobSearchWords(message.content)) return false;
 
+  if (
+    message.savedCategory === 'homework_help' ||
+    message.savedCategory === 'assignments' ||
+    message.savedCategory === 'youtube_lessons' ||
+    message.intent === 'education_homework' ||
+    message.intent === 'education_assignment' ||
+    message.intent === 'education_youtube' ||
+    message.intent === 'general-question' ||
+    message.intent === 'general-help' ||
+    isResearchIntentText(combined)
+  ) {
+    return false;
+  }
+
   return (
+    message.savedCategory === 'institution_applications' ||
     message.intent === 'education_institution' ||
     isApplicationOpportunityText(combined)
   );
@@ -1821,6 +1875,7 @@ Area: ${job.area}
 Category: ${job.category || 'Not stated'}
 Source: ${job.sourceLabel}
 Verification status: ${verificationStatusLabel(job.verificationStatus)}
+Posted: ${getJobPostedLabel(job.createdAt)}
 Closing date status: ${getClosingDateDisplay(job.deadline)}
 Apply link: ${job.applyUrl}
 Source link: ${job.sourceUrl}
@@ -2547,6 +2602,11 @@ function CompactAssistantJobCard({
           >
             {verificationStatusLabel(job.verificationStatus)}
           </span>
+
+          <span className="inline-flex items-center gap-1 text-slate-500 dark:text-white/50 lg:text-white/50">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span>{getJobPostedLabel(job.createdAt)}</span>
+          </span>
         </div>
 
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -2595,6 +2655,11 @@ function CompactAssistantJobCard({
 
         {detailsOpen && (
           <div className="mt-2 rounded-xl bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600 dark:bg-white/[0.06] dark:text-white/60 lg:bg-white/5 lg:text-white/65">
+            <p>
+              <span className="font-semibold text-slate-800 dark:text-white lg:text-white">Posted:</span>{' '}
+              {getJobPostedLabel(job.createdAt)}
+            </p>
+
             <p>
               <span className="font-semibold text-slate-800 dark:text-white lg:text-white">Closing date:</span>{' '}
               {getClosingDateDisplay(job.deadline)}
@@ -2740,12 +2805,8 @@ export default function AIJobAssistantPage() {
   }, [creatorPlus, currentTier, deepSeekUsage]);
 
   const sortedLocalJobs = useMemo(() => {
-    return [...localJobs].sort((a, b) => {
-      if (a.verificationStatus === 'verified' && b.verificationStatus !== 'verified') return -1;
-      if (a.verificationStatus !== 'verified' && b.verificationStatus === 'verified') return 1;
-      return a.title.localeCompare(b.title);
-    });
-  }, [localJobs]);
+    return [...localJobs].sort((a, b) => compareJobsForDisplay(a, b, ''));
+  }, [localJobs, nowTick]);
 
   const closingSoonJob = useMemo(() => {
     return sortedLocalJobs
@@ -2895,22 +2956,25 @@ export default function AIJobAssistantPage() {
           salary: clean(job.salary || job.salary_text) || null,
           category: clean(job.category) || null,
           description: description || null,
-          createdAt: clean(job.createdAt || job.created_at) || null,
+          createdAt:
+            clean(
+              job.createdAt ||
+                job.created_at ||
+                job.created ||
+                job.postedAt ||
+                job.posted_at ||
+                job.publicationDate ||
+                job.publication_date ||
+                job.date ||
+                job.created_at_raw
+            ) || null,
         };
       })
       .filter((job: LocalVerifiedJob) => job.title && job.applyUrl)
       .filter((job: LocalVerifiedJob) => !isForeignLookingJob(job))
       .filter((job: LocalVerifiedJob) => jobMatchesKeywordIntent(job, keyword))
       .filter((job: LocalVerifiedJob) => jobMatchesRequestedArea(job, requestedArea))
-      .sort((a: LocalVerifiedJob, b: LocalVerifiedJob) => {
-        const areaDiff = areaRelevanceScore(b, requestedArea) - areaRelevanceScore(a, requestedArea);
-        if (areaDiff !== 0) return areaDiff;
-
-        if (a.verificationStatus === 'verified' && b.verificationStatus !== 'verified') return -1;
-        if (a.verificationStatus !== 'verified' && b.verificationStatus === 'verified') return 1;
-
-        return a.title.localeCompare(b.title);
-      });
+      .sort((a: LocalVerifiedJob, b: LocalVerifiedJob) => compareJobsForDisplay(a, b, requestedArea));
 
     return dedupeJobs(normalized);
   };
@@ -2927,7 +2991,7 @@ export default function AIJobAssistantPage() {
     try {
       const url = `/api/jobs/auto-search?query=${encodeURIComponent(query)}&area=${encodeURIComponent(
         area
-      )}&includeExternal=true&includeOfficialSources=true&limit=80`;
+      )}&includeExternal=true&includeOfficialSources=true&limit=80&sort=date&fresh=true&days=30&cacheBust=${Date.now()}`;
 
       const res = await api.get(url);
       const data = unwrapApiResponse(res);
@@ -2966,7 +3030,7 @@ export default function AIJobAssistantPage() {
     const areaLabel = isBroadSearchArea(areaText) ? areaText : `${areaText} • Limpopo`;
     const searchLabel = getSearchDisplayLabel(queryText);
 
-    if (exactJobs.length) return `${count} ${searchLabel} found ${areaLabel}`;
+    if (exactJobs.length) return `${count} ${searchLabel} found ${areaLabel} — newest first`;
     if (sourceCards.length) return `${count} official job sources found ${areaLabel}`;
 
     return `No clear local ${searchLabel} found ${areaLabel}`;
@@ -3057,6 +3121,57 @@ export default function AIJobAssistantPage() {
       total_jobs: total,
       batch_size: JOBS_BATCH_SIZE,
     });
+  };
+
+  const refreshJobsForMessage = async (message: ChatMessage) => {
+    const searchArea = message.jobSearchArea || 'Tzaneen';
+    const searchQuery = message.jobSearchQuery || 'jobs';
+    const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
+
+    setBusy(true);
+
+    try {
+      const liveJobs = await loadAutomaticJobs({
+        query: searchQuery,
+        area: searchArea,
+        silent: true,
+      });
+
+      const exactJobs = liveJobs.filter((job) => !job.isSourceCard);
+      const finalJobs = dedupeJobs(exactJobs.length ? exactJobs : liveJobs).sort((a, b) => compareJobsForDisplay(a, b, searchArea));
+      const content = finalJobs.length
+        ? `${finalJobs.length} ${getSearchDisplayLabel(searchQuery)} found ${areaLabel} — refreshed newest first`
+        : `No fresh ${getSearchDisplayLabel(searchQuery)} found ${areaLabel}`;
+
+      setJobVisibleCounts((prev) => ({ ...prev, [message.id]: JOBS_BATCH_SIZE }));
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === message.id
+            ? {
+                ...item,
+                content,
+                jobs: finalJobs.length ? finalJobs : undefined,
+                jobSearchArea: searchArea,
+                jobSearchQuery: searchQuery,
+              }
+            : item
+        )
+      );
+
+      toast({
+        title: 'Jobs refreshed',
+        description: 'Showing fresh jobs first where the source provides posted dates.',
+      });
+    } catch {
+      toast({
+        title: 'Refresh failed',
+        description: 'Could not refresh jobs right now. Try again shortly.',
+        variant: 'destructive',
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const filterNoExperienceJobsForMessage = async (message: ChatMessage) => {
@@ -3231,24 +3346,35 @@ export default function AIJobAssistantPage() {
     });
   };
 
-  const shareToWhatsApp = async (text: string) => {
-    const url = getCurrentShareUrl();
-    const preview = normalizeUssdCodes(text).replace(/\s+/g, ' ').trim().slice(0, 180);
+  const shareMessageLink = async (text: string, title = 'FaceMeX AI') => {
+    const payload = buildSharePayload(text, title);
 
     try {
-      if (navigator.share) {
+      if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({
-          title: 'FaceMeX AI',
-          text: preview || 'Open this in FaceMeX',
-          url,
+          title: payload.title,
+          text: payload.text,
+          url: payload.url,
         });
+
         return;
       }
     } catch {
-      // If the user cancels native share, fall back to WhatsApp link.
+      // fall through to clipboard fallback
     }
 
-    window.open(getWhatsAppShareUrl(text), '_blank', 'noopener,noreferrer');
+    try {
+      await navigator.clipboard.writeText(payload.combined);
+      toast({
+        title: 'Link copied',
+        description: 'A FaceMeX share link and preview text were copied.',
+      });
+      return;
+    } catch {
+      // fall through to WhatsApp fallback
+    }
+
+    window.open(getWhatsAppShareUrl(payload.combined), '_blank', 'noopener,noreferrer');
   };
 
   const openSchedulePanel = (basePrompt?: string) => {
@@ -3286,12 +3412,6 @@ export default function AIJobAssistantPage() {
     setScheduleBusy(true);
 
     try {
-      setScheduledTasks((prev) => {
-        const next = [task, ...prev].slice(0, 20);
-        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
-
       if (creatorPlus) {
         const payload = {
           ...task,
@@ -3302,21 +3422,30 @@ export default function AIJobAssistantPage() {
         };
 
         await api.post('/api/ai/schedules', payload);
-
-        toast({
-          title: 'Schedule created',
-          description: `${scheduleFrequencyLabel(frequency)} updates will be emailed to ${emailToUse}.`,
-        });
-      } else {
-        toast({
-          title: 'Schedule saved',
-          description: 'Saved in FaceMeX. Automatic email scheduling can be activated later on Creator, Business, or Exclusive.',
-        });
       }
+
+      setScheduledTasks((prev) => {
+        const next = [task, ...prev].slice(0, 20);
+        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+
+      toast({
+        title: creatorPlus ? 'Schedule created' : 'Schedule saved',
+        description: creatorPlus
+          ? `${scheduleFrequencyLabel(frequency)} updates will be emailed to ${emailToUse}.`
+          : 'Saved on this device. Upgrade to Creator+ when you want automatic email delivery.',
+      });
     } catch {
+      setScheduledTasks((prev) => {
+        const next = [task, ...prev].slice(0, 20);
+        localStorage.setItem(WORKSPACE_SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+
       toast({
         title: 'Schedule saved',
-        description: 'Saved in FaceMeX. Backend email scheduling can be connected at /api/ai/schedules.',
+        description: 'Saved on this device. Connect /api/ai/schedules on the backend to send automatic emails.',
       });
     } finally {
       setScheduleBusy(false);
@@ -3659,9 +3788,7 @@ FaceMeX intelligence rules:
 - Keep YouTube recommendations useful: full lessons, tutorials, guides and professional explainers. Avoid Shorts, reels, jokes and entertainment clips.
 - Keep libraries separate: Job Library for job-search skills, Investors Library for funding/investors/business, Students Library for subjects/applications/NSFAS.
 - Ask one smart clarifying question only when needed. Otherwise give the answer directly.
-- Response routing must be strict: general questions must receive a clean answer only, with no CV, cover letter, save note, make note, job, homework heading or application ending.
-- Do not label normal factual questions as Homework Help. Only use Homework Help when the user clearly asks for homework, schoolwork, assignment, exam prep, a grade/subject task, or opens the Students Library homework tool.
-- For general factual questions, answer directly like ChatGPT with concise sections and no extra action CTA.
+- Response routing must be strict: general questions must receive a clean answer only, with no CV, cover letter, save note, make note, job or application ending.
 - If the user asks for jobs, vacancies, hiring, learnerships or work, use FaceMeX job search/results and support CV + cover letter next steps.
 - If the user asks for research, analysis, strategy, market or breakdown, answer like a research assistant and make the answer easy to save as a note.
 - If the user asks about university, college, TVET, NSFAS, bursaries, grants, funding, investors or pitch decks, answer like an application assistant and guide them toward applying or scheduling follow-up.
@@ -4090,6 +4217,14 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
+            onClick={() => refreshJobsForMessage(message)}
+            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70 lg:bg-white/10 lg:text-white/80"
+          >
+            Refresh jobs
+          </button>
+
+          <button
+            type="button"
             onClick={() => filterNoExperienceJobsForMessage(message)}
             className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70 lg:bg-white/10 lg:text-white/80"
           >
@@ -4155,11 +4290,12 @@ Apply link: ${job.applyUrl}`;
     const combined = `${previousUserText}\n${message.content}`;
 
     if (message.jobs?.length) return null;
-    if (message.intent === 'general-question' || message.intent === 'general-help') return null;
-    if (!isJobIntentText(previousUserText) && message.intent !== 'job-search' && message.intent !== 'verify-opportunity') return null;
+    if (!['job-search', 'verify-opportunity', 'cv-profile', 'cover-letter', 'email-application', 'message-application', 'interview-prep'].includes(message.intent || '')) {
+      return null;
+    }
     if (!shouldShowApplyActions(message.content, previousUserText)) return null;
 
-    if (!/(verdict|needs verification|verified|avoid|job|vacancy|cv|email|deadline|closing date|cashier|packer|clerk|security|teacher|general worker)/i.test(combined)) {
+    if (!/(verdict|needs verification|verified|avoid|job|vacancy|apply|cv|email|deadline|closing date|cashier|packer|clerk|security|teacher|general worker)/i.test(combined)) {
       return null;
     }
 
@@ -4412,7 +4548,7 @@ Apply link: ${job.applyUrl}`;
         <Copy className="h-3.5 w-3.5" />
       </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => shareToWhatsApp(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Share to WhatsApp">
+      <Button size="sm" variant="ghost" onClick={() => shareMessageLink(message.content, 'FaceMeX AI answer')} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Share answer link">
         <Share2 className="h-3.5 w-3.5" />
       </Button>
 
@@ -5965,7 +6101,26 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
         </div>
       )}
 
-      {savedReaderMessage && (
+      {savedReaderMessage && (() => {
+        const savedReaderIsApplication =
+          savedReaderMessage.savedCategory === 'institution_applications' ||
+          savedReaderMessage.intent === 'education_institution' ||
+          shouldShowApplicationActions(savedReaderMessage, '');
+        const savedReaderIsEducation =
+          savedReaderMessage.savedCategory === 'homework_help' ||
+          savedReaderMessage.savedCategory === 'assignments' ||
+          savedReaderMessage.savedCategory === 'youtube_lessons' ||
+          savedReaderMessage.intent === 'education_homework' ||
+          savedReaderMessage.intent === 'education_assignment' ||
+          savedReaderMessage.intent === 'education_youtube';
+        const savedReaderIsResearch =
+          savedReaderMessage.savedCategory === 'research' ||
+          savedReaderMessage.intent === 'research' ||
+          savedReaderMessage.intent === 'verify-opportunity' ||
+          savedReaderMessage.intent === 'image_or_document_analysis' ||
+          shouldShowResearchActions(savedReaderMessage, '');
+
+        return (
         <div className="fixed inset-0 z-[97] flex items-end bg-black/35 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
           <div
             className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[30px] bg-white text-slate-950 shadow-2xl dark:bg-[#111] dark:text-white lg:max-h-[86dvh] lg:max-w-2xl lg:rounded-[30px] lg:bg-[#202020]"
@@ -6009,13 +6164,17 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     Continue in new chat
                   </Button>
 
-                  <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'deeper')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                    Research deeper
-                  </Button>
+                  {(savedReaderIsResearch || savedReaderIsEducation || !savedReaderIsApplication) && (
+                    <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'deeper')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                      {savedReaderIsEducation ? 'Ask more about this' : 'Research deeper'}
+                    </Button>
+                  )}
 
-                  <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'apply')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                    Help me apply
-                  </Button>
+                  {savedReaderIsApplication && (
+                    <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'apply')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                      Help me apply
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -6026,19 +6185,22 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 Copy
               </Button>
 
-              <Button variant="outline" onClick={() => shareToWhatsApp(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+              <Button variant="outline" onClick={() => shareMessageLink(savedReaderMessage.content, 'FaceMeX saved card')} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
                 <Share2 className="mr-2 h-3.5 w-3.5" />
                 Share
               </Button>
 
-              <Button variant="outline" onClick={() => openSchedulePanel(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                <CalendarDays className="mr-2 h-3.5 w-3.5" />
-                Schedule
-              </Button>
+              {savedReaderIsApplication && (
+                <Button variant="outline" onClick={() => openSchedulePanel(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                  <CalendarDays className="mr-2 h-3.5 w-3.5" />
+                  Schedule
+                </Button>
+              )}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {scheduleOpen && (
         <div className="fixed inset-0 z-[96] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setScheduleOpen(false)}>
@@ -6064,7 +6226,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
               {!creatorPlus && (
                 <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 lg:border-amber-500/20 lg:bg-amber-500/10 lg:text-amber-100">
-                  You can save this schedule in FaceMeX now. Automatic email sending is activated for Creator, Business, and Exclusive users when the backend schedule route is connected.
+                  Free and Pro users can save schedules on this device. Creator, Business, and Exclusive users also get automatic email scheduling when the backend route is connected.
                 </div>
               )}
               {scheduleStep === 'choose' ? (
