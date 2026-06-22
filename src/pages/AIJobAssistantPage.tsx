@@ -1154,7 +1154,8 @@ function hasGeneralHelpWords(text: string) {
 }
 
 function detectIntent(text: string, hasImages = false) {
-  const t = clean(text).toLowerCase();
+  const t = clean(text).toLowerCase().trim();
+}
 
   if (isEducationText(t)) return getEducationIntent(t);
   if (hasImages) return 'image_or_document_analysis';
@@ -3706,19 +3707,29 @@ export default function AIJobAssistantPage() {
       suggestedSavedCategory === 'youtube_lessons' ||
       suggestedSavedCategory === 'institution_applications';
 
-    const contextualPrompt = shouldUseContext
-      ? `Use the recent conversation to understand this short reply and continue from the last assistant question.
+    const shouldUseContext = shouldUsePreviousContext(finalPrompt, conversationContext);
 
-Recent conversation:
-${conversationContext}
-
-Latest user reply:
-${finalPrompt}
-
-Respond based on the previous question/task. Do not ask what the user means if the context is clear.`
-      : finalPrompt;
-
-    const aiPromptWithToolDirection = addFaceMeXCareerToolInstruction(contextualPrompt, intent);
+    const messagesToSend = [
+      {
+        role: 'system',
+        content: systemPrompt,
+      },
+    
+      ...(shouldUseContext
+        ? messages.slice(-10).map(m => ({
+            role: m.role,
+            content: m.content,
+          }))
+        : []),
+    
+      {
+        role: 'user',
+        content: finalPrompt,
+      },
+    ];
+    
+    const aiPromptWithToolDirection =
+      addFaceMeXCareerToolInstruction(intent);
 
     const userMessage: ChatMessage = {
       id: safeId(),
