@@ -2327,8 +2327,45 @@ function ChatGPTStyleText({
 }
 
 function isShortContextReply(text: string) {
-  return /^(yes|yebo|yeah|yep|ok|okay|sure|continue|do it|please do|go ahead|no|not now|send it|draft it)$/i.test(
-    clean(text)
+  const value = clean(text).toLowerCase();
+
+  if (!value) return false;
+
+  const followUps = [
+    'yes',
+    'yebo',
+    'yeah',
+    'yep',
+    'ok',
+    'okay',
+    'sure',
+    'continue',
+    'go ahead',
+    'do it',
+    'please do',
+    'send it',
+    'draft it',
+    'tell me more',
+    'what about',
+    'how much',
+    'how do',
+    'why',
+    'when',
+    'where',
+    'who',
+    'can i',
+    'should i',
+    'would that',
+    'is it possible',
+    'and',
+    'also',
+    'then',
+    'next'
+  ];
+
+  return (
+    value.length < 120 &&
+    followUps.some((item) => value.startsWith(item))
   );
 }
 
@@ -2457,6 +2494,7 @@ function WelcomeHero({
       "Let's start with positive attitude.",
       'Which job are we hunting today?',
       'Which college or university are we applying to today?',
+      'Learning is fun too?',
       "Tomorrow starts today. Let's prepare for it.",
       `Ask me anything, ${displayName}.`,
     ],
@@ -3799,25 +3837,29 @@ Current automatic job results in FaceMeX:
 ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
 `;
 
-      const payload = {
-        prompt: aiPromptWithToolDirection,
-        message: aiPromptWithToolDirection,
-        question: aiPromptWithToolDirection,
-        originalPrompt: finalPrompt,
-        conversationContext,
-        memoryContext: workspaceMemoryContext,
-        userMemoryContext: workspaceMemoryContext,
-        previousChatMemory: workspaceMemoryContext,
-        savedLibraryContext: workspaceMemoryContext,
-        conversationMessages: messages
-          .filter((message) => !message.deletedFromChat)
-          .slice(-10)
-          .map((message) => ({
-            role: message.role,
-            content: message.content,
-            createdAt: message.createdAt,
-            intent: message.intent,
-          })),
+     const payload = {
+  prompt: aiPromptWithToolDirection,
+  message: aiPromptWithToolDirection,
+  question: aiPromptWithToolDirection,
+  originalPrompt: finalPrompt,
+
+  // ONLY send context if needed
+  conversationContext: shouldUseContext ? conversationContext : '',
+
+  // KEEP memory BUT CLEAN IT
+  memoryContext: workspaceMemoryContext || null,
+  userMemoryContext: workspaceMemoryContext || null,
+  previousChatMemory: workspaceMemoryContext || null,
+
+  // IMPORTANT FIX 👇 only last 6–8 messages
+  conversationMessages: messages
+    .filter((m) => !m.deletedFromChat)
+    .slice(-6)
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+       
         tier: currentTier,
         creatorPlus,
         intent,
