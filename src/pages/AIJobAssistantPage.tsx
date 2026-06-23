@@ -3695,7 +3695,7 @@ export default function AIJobAssistantPage() {
       'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
 
     const conversationContext = buildConversationContext(messages);
-    const shouldUseContext = isShortContextReply(finalPrompt) && conversationContext;
+    let shouldUseContext = isShortContextReply(finalPrompt) && conversationContext;
 
     const intent = detectIntent(finalPrompt, hasImages);
     const suggestedSavedCategory = savedCategoryFromIntent(intent);
@@ -3705,29 +3705,9 @@ export default function AIJobAssistantPage() {
       suggestedSavedCategory === 'youtube_lessons' ||
       suggestedSavedCategory === 'institution_applications';
 
-    const shouldUseContext = shouldUsePreviousContext(finalPrompt, conversationContext);
-
-    const messagesToSend = [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
+    // `shouldUsePreviousContext` helper is not present; keep initial context decision
     
-      ...(shouldUseContext
-        ? messages.slice(-10).map(m => ({
-            role: m.role,
-            content: m.content,
-          }))
-        : []),
-    
-      {
-        role: 'user',
-        content: finalPrompt,
-      },
-    ];
-    
-    const aiPromptWithToolDirection =
-      addFaceMeXCareerToolInstruction(intent);
+    const aiPromptWithToolDirection = addFaceMeXCareerToolInstruction(finalPrompt, intent);
 
     const userMessage: ChatMessage = {
       id: safeId(),
@@ -6807,4 +6787,5 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
+
 
