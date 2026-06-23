@@ -3897,6 +3897,8 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
           size: image.size,
           dataUrl: image.dataUrl,
         })),
+        // Hint to backend: prefer a direct AI answer for general questions
+        directAnswer: true,
       };
 
       let data: any = null;
@@ -4219,7 +4221,7 @@ Apply link: ${job.applyUrl}`;
 
     return (
       <div className="space-y-2.5">
-        <div className="sticky top-0 z-10 rounded-2xl border border-black/5 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#171717]/95 lg:border-white/10 lg:bg-black/90">
+        <div className="sticky top-0 z-10 rounded-2xl border border-black/5 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#171717]/95 lg:border-white/10 lg:bg-black lg:bg-black/90">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <Briefcase className="h-4 w-4 shrink-0 text-slate-600 dark:text-white/60 lg:text-white/60" />
@@ -5131,6 +5133,15 @@ Apply link: ${job.applyUrl}`;
             Library
           </button>
 
+          <button
+            type="button"
+            onClick={() => setWatchPanelOpen((v) => !v)}
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+          >
+            <Globe2 className="h-4 w-4" />
+            Watch
+          </button>
+
           <div className="mt-6 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">
             Quick tools
           </div>
@@ -5231,7 +5242,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50 lg:bg-black lg:text-white lg:border-white/10 lg:hover:bg-white/5"
             aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
@@ -5252,7 +5263,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setGlobalSearchOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50 lg:bg-black lg:text-white lg:border-white/10 lg:hover:bg-white/5"
             aria-label="Search FaceMeX"
           >
             <Search className="h-5 w-5" />
@@ -5269,7 +5280,7 @@ Apply link: ${job.applyUrl}`;
         </div>
       </header>
 
-      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[66px] sm:px-4 sm:pb-4 lg:bg-black lg:px-0 lg:py-0 lg:pt-0">
+      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[66px] sm:px-4 sm:pb-4 lg:bg-black lg:text-white lg:px-0 lg:py-0 lg:pt-0">
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
@@ -5412,7 +5423,7 @@ Apply link: ${job.applyUrl}`;
                   <Button
                     onClick={() => sendPrompt()}
                     disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
-                    className="mb-1 h-10 w-10 shrink-0 rounded-full bg-slate-900 p-0 text-white shadow-none transition hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 lg:bg-white lg:text-black lg:hover:bg-slate-200"
+                    className="mb-1 h-10 w-10 shrink-0 rounded-full bg-slate-900 p-0 text-white shadow-none transition hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 lg:bg-black lg:text-white lg:hover:bg-white/5"
                     aria-label="Send"
                   >
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -6443,7 +6454,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                   setGlobalSearchOpen(false);
                                   item.action();
                                 }}
-                                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] font-medium text-slate-900 transition hover:bg-slate-50"
+                                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] font-medium text-slate-900 transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
                               >
                                 <Icon className="h-5 w-5 text-slate-500" />
                                 {item.label}
@@ -6540,7 +6551,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setGlobalSearchOpen(true);
                   }}
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-900 shadow-sm transition active:scale-[0.98] hover:bg-slate-200"
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-900 shadow-sm transition active:scale-[0.98] hover:bg-slate-200 lg:bg-black lg:text-white lg:border-white/10 lg:hover:bg-white/5"
                   aria-label="Search FaceMeX"
                 >
                   <Search className="h-5 w-5" />
@@ -6650,8 +6661,8 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 </button>
 
                 {watchPanelOpen && (
-                  <div className="mt-3 rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_14px_35px_rgba(15,23,42,0.06)]">
-                    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="mt-3 rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_14px_35px_rgba(15,23,42,0.06)] lg:bg-[#0b0b0b] lg:border-white/10 lg:text-white">
+                    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 lg:bg-[#111] lg:border-white/10 lg:text-white">
                       <Search className="h-4 w-4 shrink-0 text-slate-500" />
                       <input
                         value={watchSearch}
