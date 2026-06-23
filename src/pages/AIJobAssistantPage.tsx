@@ -1155,8 +1155,6 @@ function hasGeneralHelpWords(text: string) {
 
 function detectIntent(text: string, hasImages = false) {
   const t = clean(text).toLowerCase().trim();
-}
-
   if (isEducationText(t)) return getEducationIntent(t);
   if (hasImages) return 'image_or_document_analysis';
 
@@ -6809,3 +6807,4 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
+
