@@ -2489,13 +2489,19 @@ function WelcomeHero({
 
   const rotatingPrompts = useMemo(
     () => [
-      `Hi ${displayName}, how can I help you today?`,
-      "Let's start with positive attitude.",
-      'Which job are we hunting today?',
-      'Which college or university are we applying to today?',
-      'Learning is fun too?',
-      "Tomorrow starts today. Let's prepare for it.",
-      `Ask me anything, ${displayName}.`,
+  `Hi ${displayName}, how can I help you today?`,
+  "Let's start today with a positive attitude.",
+  "What job are we searching for today?",
+  "Which college or university are you applying to today?",
+  "Learning is fun! What would you like to learn today?",
+  "Open the sidebar to explore educational videos and learning resources.",
+  "Search the sidebar for maths, science, interview tips, career guidance, and more.",
+  "Discover new skills by watching a lesson from the sidebar today.",
+  "Need help with homework? Just ask me.",
+  "Preparing for an interview? I can help.",
+  "Looking for career advice? Let's work on it together.",
+  "Tomorrow starts today. Let's prepare for your future.",
+  `Ask me anything, ${displayName}.`
     ],
     [displayName]
   );
