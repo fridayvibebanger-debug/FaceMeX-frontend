@@ -3892,11 +3892,29 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       let data: any = null;
 
       try {
+        console.log('Sending AI request to /api/ai/pro/job-assistant');
+      
         const res = await api.post('/api/ai/pro/job-assistant', payload);
+      
+        console.log('AI Response:', res);
+      
         data = unwrapApiResponse(res);
-      } catch {
-        const res = await api.post('/api/ai/workspace', payload);
-        data = unwrapApiResponse(res);
+      } catch (err: any) {
+        console.error('Primary AI endpoint failed:', err);
+      
+        try {
+          console.log('Trying fallback endpoint /api/ai/workspace');
+      
+          const res = await api.post('/api/ai/workspace', payload);
+      
+          console.log('Fallback AI Response:', res);
+      
+          data = unwrapApiResponse(res);
+        } catch (fallbackErr: any) {
+          console.error('Fallback endpoint also failed:', fallbackErr);
+      
+          throw fallbackErr;
+        }
       }
 
       const answer = normalizeAnswerText(data, createUnavailableAnswer(hasImages));
