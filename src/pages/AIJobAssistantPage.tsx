@@ -6656,68 +6656,37 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
                 <button
                   type="button"
-                  onClick={() => {
-                    const next = !watchPanelOpen;
-                    setWatchPanelOpen(next);
-                
-                    // Automatically load videos the first time the panel opens
-                    if (next && watchVideos.length === 0 && !watchBusy) {
-                      openWatchSearch(
-                        watchSearch.trim() || "Trending educational videos South Africa"
-                      );
-                    }
-                  }}
+                  onClick={() => setWatchPanelOpen((value) => !value)}
                   className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
                   <span className="flex min-w-0 items-center gap-4">
                     <Globe2 className="h-5 w-5 text-slate-900" />
                     <span className="min-w-0 truncate">Watch</span>
                   </span>
-                
-                  <ChevronDown
-                    className={`h-4 w-4 text-slate-400 transition ${
-                      watchPanelOpen ? "rotate-180" : ""
-                    }`}
-                  />
+                  <ChevronDown className={`h-4 w-4 text-slate-400 transition ${watchPanelOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {watchPanelOpen && (
                   <div className="mt-3 rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_14px_35px_rgba(15,23,42,0.06)] lg:bg-[#0b0b0b] lg:border-white/10 lg:text-white">
                     <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 lg:bg-[#111] lg:border-white/10 lg:text-white">
                       <Search className="h-4 w-4 shrink-0 text-slate-500" />
-                
                       <input
                         value={watchSearch}
                         onChange={(e) => setWatchSearch(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            openWatchSearch(
-                              watchSearch.trim() ||
-                              "Trending educational videos South Africa"
-                            );
-                          }
+                          if (e.key === 'Enter') openWatchSearch();
                         }}
-                        placeholder="Search YouTube videos..."
-                        className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:text-white lg:placeholder:text-white/45"
+                        placeholder="Search useful videos..."
+                        className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45"
                       />
-                
                       <button
                         type="button"
-                        disabled={watchBusy}
-                        onClick={() =>
-                          openWatchSearch(
-                            watchSearch.trim() ||
-                            "Trending educational videos South Africa"
-                          )
-                        }
-                        className="rounded-full bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 lg:bg-white lg:text-black"
+                        onClick={() => openWatchSearch()}
+                        className="rounded-full bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white transition active:scale-[0.98]"
                       >
-                        {watchBusy ? "Searching..." : "Search"}
+                        Search
                       </button>
                     </div>
-                  </div>
-                )}
 
                     <div className="mt-3 space-y-3">
                       {watchBusy ? (
@@ -6846,3 +6815,5 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
+
+
