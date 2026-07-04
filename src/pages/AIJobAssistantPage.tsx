@@ -6683,7 +6683,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         onChange={(e) => setWatchSearch(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            openWatchSearch(watchSearch);
+                            openWatchSearch();
                           }
                         }}
                         placeholder="Search useful videos..."
@@ -6692,7 +6692,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                       
                       <button
                         type="button"
-                         onClick={() => openWatchSearch(watchSearch)}
+                        onClick={() => openWatchSearch()}
                         className="rounded-full bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white transition active:scale-[0.98]"
                       >
                         Search
@@ -6826,5 +6826,4 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
-
 
