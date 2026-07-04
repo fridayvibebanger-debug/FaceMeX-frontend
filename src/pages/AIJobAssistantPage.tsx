@@ -6681,15 +6681,18 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                       <input
                         value={watchSearch}
                         onChange={(e) => setWatchSearch(e.target.value)}
-                    openWatchSearch    onKeyDown={(e) => {
-                          if (e.key === 'Enter') openWatchSearch();
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            openWatchSearch();
+                          }
                         }}
                         placeholder="Search useful videos..."
                         className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45"
                       />
+                      
                       <button
                         type="button"
-                        onClick={() => openWatchSearch()}
+                        onClick={openWatchSearch}
                         className="rounded-full bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white transition active:scale-[0.98]"
                       >
                         Search
