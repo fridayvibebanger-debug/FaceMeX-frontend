@@ -6656,7 +6656,15 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
                 <button
                   type="button"
-                  onClick={() => setWatchPanelOpen((value) => !value)}
+                  onClick={() => {
+                    setWatchPanelOpen(true);
+                    setWatchPlayingVideoId(null);
+                  
+                    if (watchVideos.length === 0) {
+                      setWatchSearch('Programming');
+                      openWatchSearch('Programming');
+                    }
+                  }}
                   className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
                   <span className="flex min-w-0 items-center gap-4">
@@ -6673,7 +6681,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                       <input
                         value={watchSearch}
                         onChange={(e) => setWatchSearch(e.target.value)}
-                        onKeyDown={(e) => {
+                    openWatchSearch    onKeyDown={(e) => {
                           if (e.key === 'Enter') openWatchSearch();
                         }}
                         placeholder="Search useful videos..."
