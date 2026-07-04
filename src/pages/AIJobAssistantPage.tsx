@@ -6846,5 +6846,3 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
-
-
