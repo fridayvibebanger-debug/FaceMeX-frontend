@@ -5399,7 +5399,7 @@ Apply link: ${job.applyUrl}`;
                 </div>
               )}
 
-              <div className="fm-composer-card rounded-[30px] bg-white px-3 py-2 sm:px-4">
+              <div className="fm-composer-card rounded-[30px] bg-white dark:bg-[#2b2b2b] lg:bg-[#2b2b2b] px-3 py-2 sm:px-4">
                 <div className="flex items-end gap-2">
                   <button
                     type="button"
@@ -5415,7 +5415,7 @@ Apply link: ${job.applyUrl}`;
                     onChange={(e) => setPrompt(e.target.value)}
                     onFocus={() => setFollowUpExpanded(true)}
                     placeholder={hasJobResultsOnScreen ? 'Ask a follow-up...' : 'Ask FaceMeX anything'}
-                    className={`min-h-[44px] flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-[16px] leading-6 text-slate-950 shadow-none outline-none placeholder:text-slate-400 focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-slate-950 lg:text-white lg:placeholder:text-white/45 ${
+                    className={`min-h-[44px] flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-[16px] leading-6 text-slate-950 dark:text-white lg:text-white placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45 lg:placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
                       inputHasContent ? 'max-h-28' : 'h-11 max-h-11 overflow-hidden'
                     }`}
                     onKeyDown={(e) => {
@@ -6418,7 +6418,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 }}
                 autoFocus
                 placeholder="Search FaceMeX, recents, topics, videos..."
-                className="min-w-0 flex-1 bg-transparent text-[15px] text-slate-950 outline-none placeholder:text-slate-400"
+                className="min-w-0 flex-1 bg-transparent text-[15px] text-slate-950 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45"
               />
               <button
                 type="button"
@@ -6677,7 +6677,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                           if (e.key === 'Enter') openWatchSearch();
                         }}
                         placeholder="Search useful videos..."
-                        className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-400"
+                        className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45"
                       />
                       <button
                         type="button"
