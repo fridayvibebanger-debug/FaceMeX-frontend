@@ -6656,15 +6656,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setWatchPanelOpen(true);
-                    setWatchPlayingVideoId(null);
-                  
-                    if (watchVideos.length === 0) {
-                      setWatchSearch('Programming');
-                      openWatchSearch('Programming');
-                    }
-                  }}
+                  onClick={() => setWatchPanelOpen((value) => !value)}
                   className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
                   <span className="flex min-w-0 items-center gap-4">
@@ -6682,14 +6674,11 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         value={watchSearch}
                         onChange={(e) => setWatchSearch(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            openWatchSearch();
-                          }
+                          if (e.key === 'Enter') openWatchSearch();
                         }}
                         placeholder="Search useful videos..."
                         className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45"
                       />
-                      
                       <button
                         type="button"
                         onClick={() => openWatchSearch()}
@@ -6826,4 +6815,6 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
+
+
 
