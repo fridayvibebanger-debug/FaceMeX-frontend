@@ -5141,7 +5141,14 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setWatchPanelOpen((v) => !v)}
+            onClick={() => {
+              setWatchPanelOpen(true);
+              setWatchPlayingVideoId(null);
+          
+              // Optional: clear previous search each time
+              setWatchSearch('');
+              setWatchVideos([]);
+            }}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <Globe2 className="h-4 w-4" />
