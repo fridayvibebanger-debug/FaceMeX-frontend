@@ -5252,99 +5252,71 @@ Apply link: ${job.applyUrl}`;
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
       <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between bg-white/55 px-4 pt-2 backdrop-blur-xl lg:hidden">
+
+        {/* Left */}
         <div className="pointer-events-auto flex min-w-0 items-center gap-3">
+      
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50 lg:bg-black lg:text-white lg:border-white/10 lg:hover:bg-white/5"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
             aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
           </button>
-
+      
           <button
             type="button"
-            onClick={openNewChatCard}
-            className="flex h-10 max-w-[170px] items-center rounded-full border border-slate-200/80 bg-white/85 px-4 text-[14px] font-semibold tracking-[-0.02em] text-slate-950 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
-            aria-label="Start a new chat"
+            onClick={() => setSubscriptionOpen(true)}
+            className="flex h-10 max-w-[170px] items-center rounded-full border border-slate-200/80 bg-white/85 px-4 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
           >
-            <div className="flex min-w-0 flex-1 items-center">
-              <div className="flex flex-col text-left">
-                <span className="truncate text-sm font-semibold">
-                  {creatorPlus || currentTier === "pro" || currentTier === "plus"
-                    ? "FaceMeX AI"
-                    : "Upgrade"}
-                </span>
-              </div>
+            <Sparkles className="mr-2 h-4 w-4 text-emerald-500" />
+      
+            <div className="flex flex-col items-start leading-tight">
+              <span className="truncate text-sm font-semibold">
+                {creatorPlus || currentTier === "plus" || currentTier === "pro"
+                  ? "FaceMeX AI"
+                  : "Upgrade"}
+              </span>
+      
+              <span className="text-[10px] text-slate-500">
+                {creatorPlus
+                  ? "Creator"
+                  : currentTier === "pro"
+                  ? "Pro"
+                  : currentTier === "plus"
+                  ? "Plus"
+                  : "Free Plan"}
+              </span>
             </div>
           </button>
-          
-              <header>
-              <div>
-                <button>Menu</button>
-            
-                <button>
-                  FaceMeX AI
-                </button>
-              </div>
-            
-              <div>
-                Upgrade button
-                Search button
-                Feed button
-              </div>
-            </header>
-
+      
+        </div>
+      
+        {/* Right */}
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-        {/* FaceMeX AI / Upgrade */}
-        <button
-          type="button"
-          onClick={() => setSubscriptionOpen(true)}
-          className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 lg:border-white/10 lg:bg-[#111] lg:text-white"
-        >
-          <Sparkles className="h-4 w-4 text-emerald-500" />
       
-          <div className="flex flex-col items-start leading-tight">
-            <span>
-              {creatorPlus || currentTier === "plus" || currentTier === "pro"
-                ? "FaceMeX AI"
-                : "Upgrade"}
-            </span>
+          <button
+            type="button"
+            onClick={() => setGlobalSearchOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            aria-label="Search FaceMeX"
+          >
+            <Search className="h-5 w-5" />
+          </button>
       
-            <span className="text-[10px] font-normal text-slate-500 lg:text-white/45">
-              {creatorPlus
-                ? "Creator"
-                : currentTier === "pro"
-                ? "Pro"
-                : currentTier === "plus"
-                ? "Plus"
-                : "Free Plan"}
-            </span>
-          </div>
-        </button>
+          <button
+            type="button"
+            onClick={() => navigate("/feed")}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
+            aria-label="Back to FaceMeX"
+          >
+            {firstName?.[0]?.toUpperCase() || "F"}
+          </button>
       
-        {/* Search */}
-        <button
-          type="button"
-          onClick={() => setGlobalSearchOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50 lg:border-white/10 lg:bg-black lg:text-white lg:hover:bg-white/5"
-          aria-label="Search FaceMeX"
-        >
-          <Search className="h-5 w-5" />
-        </button>
+        </div>
       
-        {/* Back to Feed */}
-        <button
-          type="button"
-          onClick={() => navigate("/feed")}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
-          aria-label="Back to FaceMeX feed"
-        >
-          {firstName?.[0]?.toUpperCase() || "F"}
-        </button>
-      </div>
       </header>
-
       <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[66px] sm:px-4 sm:pb-4 lg:bg-black lg:text-white lg:px-0 lg:py-0 lg:pt-0">
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
