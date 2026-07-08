@@ -5268,27 +5268,32 @@ Apply link: ${job.applyUrl}`;
             className="flex h-10 max-w-[170px] items-center rounded-full border border-slate-200/80 bg-white/85 px-4 text-[14px] font-semibold tracking-[-0.02em] text-slate-950 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
             aria-label="Start a new chat"
           >
-           <div className="flex min-w-0 flex-1 items-center">
-            <div className="flex flex-col text-left">
-              <span className="truncate text-sm font-semibold">
-                {creatorPlus || currentTier === "pro" || currentTier === "plus"
-                  ? "FaceMeX AI"
-                  : "Upgrade"}
-              </span>
-          
-              <span className="text-[11px] text-slate-500 dark:text-white/45">
-                {creatorPlus
-                  ? "Creator"
-                  : currentTier === "pro"
-                  ? "Pro"
-                  : currentTier === "plus"
-                  ? "Plus"
-                  : "Free Plan"}
-              </span>
+            <div className="flex min-w-0 flex-1 items-center">
+              <div className="flex flex-col text-left">
+                <span className="truncate text-sm font-semibold">
+                  {creatorPlus || currentTier === "pro" || currentTier === "plus"
+                    ? "FaceMeX AI"
+                    : "Upgrade"}
+                </span>
+              </div>
             </div>
+          </button>
           
-            <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-slate-500" />
-          </div>
+              <header>
+              <div>
+                <button>Menu</button>
+            
+                <button>
+                  FaceMeX AI
+                </button>
+              </div>
+            
+              <div>
+                Upgrade button
+                Search button
+                Feed button
+              </div>
+            </header>
 
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
         {/* FaceMeX AI / Upgrade */}
