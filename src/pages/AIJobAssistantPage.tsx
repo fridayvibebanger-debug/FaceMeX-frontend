@@ -19,6 +19,7 @@ import {
   Globe2,
   ImagePlus,
   Loader2,
+  Sparkles,
   Mail,
   MapPin,
   Menu,
