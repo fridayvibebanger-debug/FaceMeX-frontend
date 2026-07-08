@@ -5271,7 +5271,7 @@ Apply link: ${job.applyUrl}`;
             onClick={() => setSubscriptionOpen(true)}
             className="flex h-10 max-w-[170px] items-center rounded-full border border-slate-200/80 bg-white/85 px-4 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
           >
-            <Sparkles className="mr-2 h-4 w-4 text-emerald-500" />
+            <Zap className="mr-2 h-4 w-4 text-emerald-500" />
       
             <div className="flex flex-col items-start leading-tight">
               <span className="truncate text-sm font-semibold">
