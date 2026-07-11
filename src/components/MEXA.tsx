@@ -298,8 +298,9 @@ const sendToMexa = async (text: string) => {
                   </p>
                 
                 </div>
-                ))}
-
+              ))}
+            
+            </div>
         {/* Input */}
 
         <div className="border-t border-white/10 p-5">
