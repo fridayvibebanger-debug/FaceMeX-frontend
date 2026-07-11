@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import SubscriptionModal from "../components/SubscriptionModal";
 import type { ChangeEvent, ReactNode } from 'react';
+import { ChevronRight } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -5273,32 +5274,38 @@ Apply link: ${job.applyUrl}`;
           </button>
       
           <button
-            type="button"
-            onClick={() => setSubscriptionOpen(true)}
-            className="flex h-10 max-w-[170px] items-center rounded-full border border-slate-200/80 bg-white/85 px-4 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
-          >
-            <Sparkles className="mr-2 h-4 w-4 text-emerald-500" />
-      
-            <div className="flex flex-col items-start leading-tight">
-              <span className="truncate text-sm font-semibold">
-                {creatorPlus || currentTier === "plus" || currentTier === "pro"
-                  ? "FaceMeX AI"
-                  : "Upgrade"}
-              </span>
-      
-              <span className="text-[10px] text-slate-500">
-                {creatorPlus
-                  ? "Creator"
-                  : currentTier === "pro"
-                  ? "Pro"
-                  : currentTier === "plus"
-                  ? "Plus"
-                  : "Free Plan"}
-              </span>
-            </div>
-          </button>
-      
-        </div>
+          type="button"
+          onClick={() => navigate("/mexa")}
+          className="group flex h-11 max-w-[210px] items-center rounded-full border border-emerald-500/20 bg-gradient-to-r from-[#111] via-[#161616] to-[#111] px-4 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:border-emerald-400/40"
+        >
+        
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-black font-bold">
+            M
+          </div>
+        
+          <div className="ml-3 flex flex-col items-start leading-tight">
+        
+            <span className="text-sm font-semibold text-white">
+              MEXA
+            </span>
+        
+            <span className="text-[11px] text-emerald-300">
+              AI Companion
+            </span>
+        
+          </div>
+        
+          <div className="ml-auto flex items-center">
+        
+            <span className="mr-2 rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-300">
+              NEW
+            </span>
+        
+            <ChevronRight className="h-4 w-4 text-white/60 group-hover:translate-x-1 transition-transform" />
+        
+          </div>
+        
+        </button>
       
         {/* Right */}
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
