@@ -206,103 +206,113 @@ const sendToMexa = async (text: string) => {
         
         </header>
 
-        {/* Messages */}
-
-       <div className="flex flex-1 flex-col items-center justify-center px-6">
-
+       {/* Messages */}
+        
+        <div className="flex flex-1 flex-col items-center justify-center px-6">
+        
+          <button
+            type="button"
+            onClick={startListening}
+            className={`relative flex h-44 w-44 items-center justify-center rounded-full transition-all duration-300
+              ${
+                isListening
+                  ? "bg-blue-500 scale-110 animate-pulse"
+                  : isThinking
+                  ? "bg-orange-500 animate-pulse"
+                  : isSpeaking
+                  ? "bg-green-500"
+                  : "bg-emerald-500 hover:scale-105"
+              }
+              shadow-[0_0_80px_rgba(16,185,129,.45)]
+            `}
+          >
+            <span className="text-6xl">🎤</span>
+          </button>
+        
+          <h2 className="mt-8 text-3xl font-bold">
+            {isListening
+              ? "I'm listening..."
+              : isThinking
+              ? "Thinking..."
+              : isSpeaking
+              ? "Speaking..."
+              : "Hi, I'm MEXA"}
+          </h2>
+        
+          <p className="mt-3 max-w-xl text-center text-white/60">
+            {isListening
+              ? "Tell me anything."
+              : transcript
+              ? transcript
+              : "Tap the orb and speak naturally. I can help with jobs, school, business, research, coding and everyday questions."}
+          </p>
+        
+          <div className="mt-10 w-full max-w-3xl space-y-4">
+            {messages.map((message, index) => (
+              <div
+                key={index}
+                className={`rounded-3xl border p-6 ${
+                  message.role === "assistant"
+                    ? "border-white/10 bg-[#171717]"
+                    : "border-emerald-500/20 bg-emerald-900/20"
+                }`}
+              >
+                <div className="mb-3 flex items-center gap-3">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                      message.role === "assistant"
+                        ? "bg-emerald-500"
+                        : "bg-blue-500"
+                    }`}
+                  >
+                    {message.role === "assistant" ? "M" : "U"}
+                  </div>
+        
+                  <h3 className="font-semibold">
+                    {message.role === "assistant" ? "MEXA" : "You"}
+                  </h3>
+                </div>
+        
+                <p className="leading-8">
+                  {message.content}
+                </p>
+              </div>
+            ))}
+        
+        </div>
+        
+        {/* Input */}
+          
+        <div className="border-t border-white/10 p-5">
+          <div className="flex items-center rounded-3xl border border-white/10 bg-[#171717] px-4 py-3">
+        
+            <button type="button">
+              <Paperclip size={18} />
+            </button>
+        
+            <input
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Message MEXA..."
+              className="flex-1 bg-transparent px-4 outline-none"
+            />
+        
+            <button type="button">
+              <Mic size={20} />
+            </button>
+        
             <button
               type="button"
-              onClick={startListening}
-              className={`relative flex h-44 w-44 items-center justify-center rounded-full transition-all duration-300
-          
-                ${
-                  isListening
-                    ? "bg-blue-500 scale-110 animate-pulse"
-                    : isThinking
-                    ? "bg-orange-500 animate-pulse"
-                    : isSpeaking
-                    ? "bg-green-500"
-                    : "bg-emerald-500 hover:scale-105"
-                }
-          
-                shadow-[0_0_80px_rgba(16,185,129,.45)]
-              `}
+              className="ml-3 rounded-full bg-white p-2 text-black"
             >
-          
-              <span className="text-6xl">
-                🎤
-              </span>
-          
+              <ArrowUp size={18} />
             </button>
-          
-            <h2 className="mt-8 text-3xl font-bold">
-
-              {isListening
-                ? "I'm listening..."
-                : isThinking
-                ? "Thinking..."
-                : isSpeaking
-                ? "Speaking..."
-                : "Hi, I'm MEXA"}
-            
-            </h2>
-            
-            <p className="mt-3 max-w-xl text-center text-white/60">
-            
-              {isListening
-                ? "Tell me anything."
-                : transcript
-                ? transcript
-                : "Tap the orb and speak naturally. I can help with jobs, school, business, research, coding and everyday questions."}
-            
-            </p>
-           <div className="mt-10 w-full max-w-3xl">
-  
-              {messages.map((message, index) => (
-            
-                <div
-                  key={index}
-                  className={`rounded-3xl p-6 border ${
-                    message.role === "assistant"
-                      ? "border-white/10 bg-[#171717]"
-                      : "border-emerald-500/20 bg-emerald-900/20"
-                  }`}
-                >
-                
-                  <div className="mb-3 flex items-center gap-3">
-                
-                    <div
-                      className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                        message.role === "assistant"
-                          ? "bg-emerald-500"
-                          : "bg-blue-500"
-                      }`}
-                    >
-                      {message.role === "assistant" ? "M" : "U"}
-                    </div>
-                
-                    <div>
-                
-                      <h3 className="font-semibold">
-                        {message.role === "assistant" ? "MEXA" : "You"}
-                      </h3>
-                
-                    </div>
-                
-                  </div>
-                
-                  <p className="leading-8">
-                
-                    {message.content}
-                
-                  </p>
-                
-                </div>
-              ))}
-            
-               </div>
+        
+          </div>
+        </div>
 
         {/* Input */}
+          
         <div className="border-t border-white/10 p-5">
           <div className="flex items-center rounded-3xl border border-white/10 bg-[#171717] px-4 py-3">
   
