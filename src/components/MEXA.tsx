@@ -246,12 +246,12 @@ const sendToMexa = async (text: string) => {
               ? transcript
               : "Tap the orb and speak naturally. I can help with jobs, school, business, research, coding and everyday questions."}
           </p>
-        
-          <div className="mt-10 w-full max-w-3xl space-y-4">
+          
+          <div className="mt-10 w-full max-w-3xl">
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`rounded-3xl border p-6 ${
+                className={`rounded-3xl p-6 border ${
                   message.role === "assistant"
                     ? "border-white/10 bg-[#171717]"
                     : "border-emerald-500/20 bg-emerald-900/20"
@@ -267,49 +267,19 @@ const sendToMexa = async (text: string) => {
                   >
                     {message.role === "assistant" ? "M" : "U"}
                   </div>
-        
-                  <h3 className="font-semibold">
-                    {message.role === "assistant" ? "MEXA" : "You"}
-                  </h3>
+          
+                  <div>
+                    <h3 className="font-semibold">
+                      {message.role === "assistant" ? "MEXA" : "You"}
+                    </h3>
+                  </div>
                 </div>
-        
-                <p className="leading-8">
-                  {message.content}
-                </p>
+          
+                <p className="leading-8">{message.content}</p>
               </div>
             ))}
-        </div>
-      
-        {/* Input */}
-          
-        <div className="border-t border-white/10 p-5">
-          <div className="flex items-center rounded-3xl border border-white/10 bg-[#171717] px-4 py-3">
-        
-            <button type="button">
-              <Paperclip size={18} />
-            </button>
-        
-            <input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Message MEXA..."
-              className="flex-1 bg-transparent px-4 outline-none"
-            />
-        
-            <button type="button">
-              <Mic size={20} />
-            </button>
-        
-            <button
-              type="button"
-              className="ml-3 rounded-full bg-white p-2 text-black"
-            >
-              <ArrowUp size={18} />
-            </button>
-        
           </div>
-        </div>
-
+     
         {/* Input */}
           
         <div className="border-t border-white/10 p-5">
