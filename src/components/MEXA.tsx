@@ -281,43 +281,45 @@ const sendToMexa = async (text: string) => {
           </div>
      
         {/* Input */}
-          
+
         <div className="border-t border-white/10 p-5">
           <div className="flex items-center rounded-3xl border border-white/10 bg-[#171717] px-4 py-3">
-  
+        
             <button
               type="button"
               className="text-white/70 hover:text-white"
             >
               <Paperclip size={18} />
             </button>
-  
+        
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Message MEXA..."
               className="flex-1 bg-transparent px-4 outline-none text-white placeholder:text-white/40"
             />
-  
+        
             <button
               type="button"
               className="text-white/70 hover:text-white"
             >
               <Mic size={20} />
             </button>
-  
+        
             <button
               type="button"
               className="ml-3 rounded-full bg-white p-2 text-black hover:scale-105 transition"
             >
               <ArrowUp size={18} />
             </button>
-  
+        
           </div>
         </div>
-  
-      </main>
-  
-    </div>
-  );
-  }
+        
+        </div> {/* closes Messages */}
+        
+        </main>
+        
+        </div>
+        );
+        }
