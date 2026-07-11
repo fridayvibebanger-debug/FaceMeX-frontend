@@ -2770,6 +2770,11 @@ export default function AIJobAssistantPage() {
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [watchPanelOpen, setWatchPanelOpen] = useState(false);
+  const [mexaMode, setMexaMode] = useState<
+  "auto" | "study" | "career" | "business" | "research" | "creative" | "coding"
+>("auto");
+
+const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [watchSearch, setWatchSearch] = useState('');
   const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
