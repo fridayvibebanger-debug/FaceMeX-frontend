@@ -5279,14 +5279,14 @@ Apply link: ${job.applyUrl}`;
           className="group flex h-11 max-w-[210px] items-center rounded-full border border-emerald-500/20 bg-gradient-to-r from-[#111] via-[#161616] to-[#111] px-4 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:border-emerald-400/40"
         >
         
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-black font-bold">
-            M
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white font-bold">
+            X
           </div>
         
           <div className="ml-3 flex flex-col items-start leading-tight">
         
-            <span className="text-sm font-semibold text-white">
-              MEXA
+           <span className="text-sm font-semibold text-red-500">
+              TEST MEXA
             </span>
         
             <span className="text-[11px] text-emerald-300">
