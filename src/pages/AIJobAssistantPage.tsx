@@ -5274,6 +5274,35 @@ Apply link: ${job.applyUrl}`;
 
       <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between bg-white/55 px-4 pt-2 backdrop-blur-xl lg:hidden">
 
+        {isDeveloper && developerMode && (
+          <div className="mx-auto mb-6 max-w-xl rounded-2xl border border-red-200 bg-white p-4 shadow-lg">
+            <h3 className="mb-3 text-lg font-bold">
+              Developer Mode
+            </h3>
+        
+            <div className="grid grid-cols-2 gap-2">
+              {["free", "plus", "pro", "business"].map((plan) => (
+                <button
+                  key={plan}
+                  onClick={() => setDeveloperPlan(plan as any)}
+                  className={`rounded-xl border px-4 py-3 font-semibold transition ${
+                    developerPlan === plan
+                      ? "bg-black text-white"
+                      : "bg-white hover:bg-gray-100"
+                  }`}
+                >
+                  {plan.toUpperCase()}
+                </button>
+              ))}
+            </div>
+        
+            <div className="mt-4 rounded-lg bg-gray-100 p-3 text-sm">
+              Current Test Plan:
+              <strong> {developerPlan.toUpperCase()}</strong>
+            </div>
+          </div>
+        )}
+
         {/* Left */}
         <div className="pointer-events-auto flex min-w-0 items-center gap-3">
         
