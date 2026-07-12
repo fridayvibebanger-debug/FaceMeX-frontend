@@ -5307,7 +5307,17 @@ Apply link: ${job.applyUrl}`;
                 : "MEXA Pro"}
             </span>
           </button>
-        
+          
+          {isDeveloper && (
+            <button
+              type="button"
+              onClick={() => setDeveloperMode(!developerMode)}
+              className="ml-2 h-10 rounded-full border border-red-500/30 bg-red-500/10 px-3 text-xs font-semibold text-red-600 transition hover:bg-red-500 hover:text-white"
+            >
+              DEV
+            </button>
+          )}
+          
         </div>
       
         {/* Right */}
