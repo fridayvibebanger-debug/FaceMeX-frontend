@@ -2516,6 +2516,8 @@ function WelcomeHero({
   const [typedPrompt, setTypedPrompt] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [mexaPlan, setMexaPlan] = useState<"free" | "plus" | "pro">("free");
+
   useEffect(() => {
     const currentText = rotatingPrompts[promptIndex];
 
@@ -5274,27 +5276,35 @@ Apply link: ${job.applyUrl}`;
         
           <button
             type="button"
-            onClick={() => navigate("/mexa")}
-            className="group flex h-11 max-w-[210px] items-center rounded-full border border-emerald-500/20 bg-gradient-to-r from-[#111] via-[#161616] to-[#111] px-4 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:border-emerald-400/40"
+            onClick={() => {
+              if (mexaPlan === "free") {
+                navigate("/mexa-upgrade");
+              } else {
+                navigate("/mexa");
+              }
+            }}
+            className="group flex h-11 max-w-[220px] items-center rounded-full border border-emerald-500/20 bg-gradient-to-r from-[#111] via-[#161616] to-[#111] px-4 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:border-emerald-400/40"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white font-bold">
-              X
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
+              M
             </div>
         
-            <div className="ml-3 flex flex-col items-start leading-tight">
-              <span className="text-sm font-semibold text-red-500">
-                TEST MEXA
+            <div className="ml-3 flex flex-col items-start overflow-hidden">
+              <span className="text-[10px] uppercase tracking-wider text-white/50">
+                FaceMeX
               </span>
         
-              <span className="text-[11px] text-emerald-300">
-                AI Companion
+              <span className="truncate text-sm font-semibold text-white">
+                {mexaPlan === "free" ? "Upgrade" : "FaceMeX AI"}
               </span>
             </div>
         
             <div className="ml-auto flex items-center">
-              <span className="mr-2 rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-300">
-                NEW
-              </span>
+              {mexaPlan === "free" && (
+                <span className="mr-2 rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-300">
+                  NEW
+                </span>
+              )}
         
               <ChevronRight className="h-4 w-4 text-white/60 transition-transform group-hover:translate-x-1" />
             </div>
