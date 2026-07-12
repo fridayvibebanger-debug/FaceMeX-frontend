@@ -5282,31 +5282,13 @@ Apply link: ${job.applyUrl}`;
                 navigate("/mexa");
               }
             }}
-            className="group flex h-11 max-w-[220px] items-center rounded-full border border-emerald-500/20 bg-gradient-to-r from-[#111] via-[#161616] to-[#111] px-4 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:border-emerald-400/40"
+            className="flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-5 text-slate-900 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-[#1f1f1f] dark:text-white dark:hover:bg-[#2a2a2a]"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
-              M
-            </div>
-        
-            <div className="ml-3 flex flex-col items-start overflow-hidden">
-              <span className="text-[10px] uppercase tracking-wider text-white/50">
-                FaceMeX
-              </span>
-        
-              <span className="truncate text-sm font-semibold text-white">
-                {mexaPlan === "free" ? "Upgrade" : "MEXA"}
-              </span>
-            </div>
-        
-            <div className="ml-auto flex items-center">
-              {mexaPlan === "free" && (
-                <span className="mr-2 rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-300">
-                  NEW
-                </span>
-              )}
-        
-              <ChevronRight className="h-4 w-4 text-white/60 transition-transform group-hover:translate-x-1" />
-            </div>
+            <Sparkles className="h-4 w-4 text-violet-500" />
+          
+            <span className="font-semibold">
+              {mexaPlan === "free" ? "Get MEXA"}
+            </span>
           </button>
         
         </div>
