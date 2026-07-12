@@ -2744,6 +2744,8 @@ export default function AIJobAssistantPage() {
   const userStore = useUserStore() as any;
   const { tier, hasTier } = userStore;
 
+  const mexaPlan = userStore?.mexaPlan ?? "free";
+
   const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
   const firstName = useMemo(() => getFirstName(userDisplayName), [userDisplayName]);
 
@@ -5287,7 +5289,11 @@ Apply link: ${job.applyUrl}`;
             <Sparkles className="h-4 w-4 text-violet-500" />
           
             <span className="font-semibold">
-              {mexaPlan === "free" ? "Get MEXA" : "FaceMeX AI"}
+              {mexaPlan === "free"
+                ? "Get MEXA"
+                : mexaPlan === "plus"
+                ? "MEXA Plus"
+                : "MEXA Pro"}
             </span>
           </button>
         
