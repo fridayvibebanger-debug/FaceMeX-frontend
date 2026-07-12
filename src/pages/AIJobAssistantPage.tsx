@@ -5263,7 +5263,7 @@ Apply link: ${job.applyUrl}`;
 
         {/* Left */}
         <div className="pointer-events-auto flex min-w-0 items-center gap-3">
-      
+        
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
@@ -5272,40 +5272,36 @@ Apply link: ${job.applyUrl}`;
           >
             <Menu className="h-5 w-5" />
           </button>
-      
+        
           <button
-          type="button"
-          onClick={() => navigate("/mexa")}
-          className="group flex h-11 max-w-[210px] items-center rounded-full border border-emerald-500/20 bg-gradient-to-r from-[#111] via-[#161616] to-[#111] px-4 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:border-emerald-400/40"
-        >
+            type="button"
+            onClick={() => navigate("/mexa")}
+            className="group flex h-11 max-w-[210px] items-center rounded-full border border-emerald-500/20 bg-gradient-to-r from-[#111] via-[#161616] to-[#111] px-4 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:border-emerald-400/40"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white font-bold">
+              X
+            </div>
         
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white font-bold">
-            X
-          </div>
+            <div className="ml-3 flex flex-col items-start leading-tight">
+              <span className="text-sm font-semibold text-red-500">
+                TEST MEXA
+              </span>
         
-          <div className="ml-3 flex flex-col items-start leading-tight">
+              <span className="text-[11px] text-emerald-300">
+                AI Companion
+              </span>
+            </div>
         
-           <span className="text-sm font-semibold text-red-500">
-              TEST MEXA
-            </span>
+            <div className="ml-auto flex items-center">
+              <span className="mr-2 rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-300">
+                NEW
+              </span>
         
-            <span className="text-[11px] text-emerald-300">
-              AI Companion
-            </span>
+              <ChevronRight className="h-4 w-4 text-white/60 transition-transform group-hover:translate-x-1" />
+            </div>
+          </button>
         
-          </div>
-        
-          <div className="ml-auto flex items-center">
-        
-            <span className="mr-2 rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-300">
-              NEW
-            </span>
-        
-            <ChevronRight className="h-4 w-4 text-white/60 group-hover:translate-x-1 transition-transform" />
-        
-          </div>
-        
-        </button>
+        </div>
       
         {/* Right */}
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
