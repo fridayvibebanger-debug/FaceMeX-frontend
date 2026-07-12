@@ -2778,6 +2778,7 @@ export default function AIJobAssistantPage() {
 
 const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [mexaPlan, setMexaPlan] = useState<"free" | "plus" | "pro">("free");
   const [watchSearch, setWatchSearch] = useState('');
   const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
   const [watchBusy, setWatchBusy] = useState(false);
