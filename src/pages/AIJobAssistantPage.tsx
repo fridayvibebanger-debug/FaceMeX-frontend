@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import SubscriptionModal from "../components/SubscriptionModal";
 import type { ChangeEvent, ReactNode } from 'react';
-import { ChevronRight } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
