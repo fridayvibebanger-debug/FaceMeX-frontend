@@ -1,325 +1,343 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Menu,
-  Plus,
-  Search,
-  Settings,
   Sparkles,
   Mic,
-  Paperclip,
-  ArrowUp,
+  Keyboard,
+  Settings
 } from "lucide-react";
 
 export default function MEXA() {
-  const [message, setMessage] = useState("");
-  const [isListening, setIsListening] = useState(false);
-  const [isThinking, setIsThinking] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  
-  const [transcript, setTranscript] = useState("");
-  
-  const [messages, setMessages] = useState<
-  {
-    role: "user" | "assistant";
-    content: string;
-  }[]
->([]);
-  
-  const recognitionRef = useRef<any>(null);
-  // ===========================
-// Voice Recognition
-// ===========================
+  const [greeting, setGreeting] = useState("");
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [orbState, setOrbState] = useState<
+    "idle" | "listening" | "thinking" | "speaking"
+  >("idle");
 
-useEffect(() => {
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const hour = new Date().getHours();
+
+    if (hour < 12)
+      setGreeting("Good morning, Keem.");
+    else if (hour < 18)
+      setGreeting("Good afternoon, Keem.");
+    else
+      setGreeting("Good evening, Keem.");
+
+    setOrbState("listening");
+  }, []);
+
+  useEffect(() => {
+
+  const cycle = [
+
+    "listening",
+
+    "thinking",
+
+    "speaking",
+
+    "idle"
+
+  ] as const;
+
+  let index = 0;
+
+  const timer = setInterval(() => {
+
+    index++;
+
+    setOrbState(cycle[index % cycle.length]);
+
+  }, 3000);
+
+  return () => clearInterval(timer);
+
+}, []);
+
+  useEffect(() => {
+
   const SpeechRecognition =
     (window as any).SpeechRecognition ||
     (window as any).webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    console.warn("Speech Recognition is not supported in this browser.");
+    console.warn("Speech Recognition not supported");
     return;
   }
 
   const recognition = new SpeechRecognition();
 
   recognition.lang = "en-US";
-  recognition.continuous = false;
+
   recognition.interimResults = false;
+
+  recognition.continuous = true;
+
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
-    setIsListening(true);
+
+    setOrbState("listening");
+
   };
 
   recognition.onend = () => {
-    setIsListening(false);
-  };
 
-  recognition.onerror = (event: any) => {
-    console.error("Speech Recognition Error:", event);
-    setIsListening(false);
+    recognition.start();
+
   };
 
   recognition.onresult = (event: any) => {
-    const text = event.results[0][0].transcript;
 
-    setTranscript(text);
+    const speech =
+      event.results[event.results.length - 1][0].transcript;
 
-    sendToMexa(text);
+    console.log(speech);
+
+    if (
+      speech.toLowerCase().includes("mexa") ||
+      speech.toLowerCase().includes("hey mexa") ||
+      speech.toLowerCase().includes("hello mexa")
+    ) {
+
+      setOrbState("thinking");
+
+      // AI comes next
+
+    }
+
   };
 
   recognitionRef.current = recognition;
 
-  return () => {
-    recognition.stop();
-  };
+  recognition.start();
+
+  return () => recognition.stop();
+
 }, []);
 
-
-// ===========================
-// Start Listening
-// ===========================
-
-const startListening = () => {
-  recognitionRef.current?.start();
-};
-
-
-// ===========================
-// Send to MEXA
-// ===========================
-
-const sendToMexa = async (text: string) => {
-  setIsThinking(true);
-
-  try {
-    // Temporary response
-    setTimeout(() => {
-     setMessages((prev) => [
-        ...prev,
-        {
-          role: "user",
-          content: text,
-        },
-        {
-          role: "assistant",
-          content: `You said: ${text}`,
-        },
-      ]);
-      setIsThinking(false);
-    }, 1200);
-
-  } catch (error) {
-    console.error(error);
-    setIsThinking(false);
-  }
-};
-
   return (
-    <div className="flex h-screen bg-[#0f0f0f] text-white">
+    <div className="flex h-screen w-full flex-col bg-[#0b0b0d] text-white">
 
-      {/* Sidebar */}
+      {/* Header */}
 
-      <aside className="hidden w-72 border-r border-white/10 bg-[#171717] lg:flex lg:flex-col">
+      <header className="flex items-center justify-between p-5">
 
-        <div className="flex items-center justify-between p-4">
-
-          <h1 className="text-xl font-bold">
-            MEXA
-          </h1>
-
-          <button>
-            <Menu size={20}/>
-          </button>
-
-        </div>
-
-        <button className="mx-4 flex items-center gap-2 rounded-xl bg-white/10 p-3 hover:bg-white/20">
-
-          <Plus size={18}/>
-
-          New Chat
-
+        <button>
+          <Menu className="h-6 w-6"/>
         </button>
 
-        <div className="mt-6 flex-1 overflow-y-auto">
+        <h1 className="font-semibold text-lg">
+          MEXA
+        </h1>
 
+        <button>
+          <Settings className="h-5 w-5"/>
+        </button>
+
+      </header>
+
+      {/* Center */}
+
+      <main className="flex flex-1 flex-col items-center justify-center px-8">
+
+        {/* AI Orb */}
+
+        <div className="relative flex items-center justify-center">
+
+        {/* Outer Glow */}
+      
+        <div
+          className={`
+            absolute
+            h-72
+            w-72
+            rounded-full
+            blur-3xl
+            transition-all
+            duration-700
+            ${
+              orbState === "listening"
+                ? "bg-cyan-500/35 animate-pulse scale-105"
+                : orbState === "thinking"
+                ? "bg-violet-500/35 animate-ping"
+                : orbState === "speaking"
+                ? "bg-emerald-400/40 animate-pulse scale-110"
+                : "bg-cyan-500/20"
+            }
+          `}
+        />
+      
+        {/* Rotating Ring */}
+      
+        <div
+          className="
+            absolute
+            h-56
+            w-56
+            rounded-full
+            border
+            border-cyan-400/30
+            animate-spin
+          "
+          style={{
+            animationDuration: "10s",
+          }}
+        />
+      
+        {/* Second Ring */}
+      
+        <div
+          className="
+            absolute
+            h-48
+            w-48
+            rounded-full
+            border
+            border-emerald-400/20
+            animate-spin
+          "
+          style={{
+            animationDuration: "6s",
+            animationDirection: "reverse",
+          }}
+        />
+      
+        {/* Main Orb */}
+      
+        <div
+          className={`
+            relative
+            h-40
+            w-40
+            rounded-full
+            bg-gradient-to-br
+            from-cyan-300
+            via-sky-400
+            to-emerald-400
+            shadow-[0_0_120px_rgba(34,211,238,.45)]
+            transition-all
+            duration-700
+            ${
+              orbState === "speaking"
+                ? "scale-110"
+                : orbState === "thinking"
+                ? "animate-bounce"
+                : "animate-pulse"
+            }
+          `}
+        >
+      
+          <div className="absolute inset-4 rounded-full bg-[#07080c]" />
+      
+          <div
+            className="
+              absolute
+              inset-8
+              rounded-full
+              bg-gradient-to-br
+              from-cyan-400
+              to-emerald-400
+              opacity-70
+              blur-md
+            "
+          />
+      
         </div>
+      
+      </div>
 
-        <div className="border-t border-white/10 p-4">
+        <div className="mt-10 text-center">
 
-          <button className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 p-3">
+          <div className="flex items-center justify-center gap-2">
 
-            <Sparkles size={18}/>
+            <Sparkles className="h-5 w-5 text-emerald-400"/>
 
-            Upgrade
+            <span className="text-xl font-semibold">
+              {greeting}
+            </span>
 
-          </button>
-
-        </div>
-
-      </aside>
-
-      {/* Main */}
-
-      <main className="flex flex-1 flex-col">
-
-        {/* Header */}
-
-        <header className="flex h-16 items-center justify-between border-b border-white/10 px-5">
-
-          <div className="flex items-center gap-3">
-        
-            <button className="rounded-xl p-2 hover:bg-white/10 lg:hidden">
-              <Menu size={20}/>
-            </button>
-        
-            <div>
-        
-              <h2 className="text-lg font-bold">
-                MEXA
-              </h2>
-        
-              <p className="text-xs text-white/50">
-                Your AI Companion
-              </p>
-        
-            </div>
-        
           </div>
-        
-          <div className="flex items-center gap-2">
-        
-            <button className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10">
-              Deep Research
-            </button>
-        
-            <button className="rounded-xl border border-white/10 p-2 hover:bg-white/10">
-              <Search size={18}/>
-            </button>
-        
-            <button className="rounded-xl border border-white/10 p-2 hover:bg-white/10">
-              <Settings size={18}/>
-            </button>
-        
-          </div>
-        
-        </header>
 
-       {/* Messages */}
-        
-        <div className="flex flex-1 flex-col items-center justify-center px-6">
-        
-          <button
-            type="button"
-            onClick={startListening}
-            className={`relative flex h-44 w-44 items-center justify-center rounded-full transition-all duration-300
-              ${
-                isListening
-                  ? "bg-blue-500 scale-110 animate-pulse"
-                  : isThinking
-                  ? "bg-orange-500 animate-pulse"
-                  : isSpeaking
-                  ? "bg-green-500"
-                  : "bg-emerald-500 hover:scale-105"
-              }
-              shadow-[0_0_80px_rgba(16,185,129,.45)]
-            `}
-          >
-            <span className="text-6xl">🎤</span>
-          </button>
-        
-          <h2 className="mt-8 text-3xl font-bold">
-            {isListening
-              ? "I'm listening..."
-              : isThinking
-              ? "Thinking..."
-              : isSpeaking
-              ? "Speaking..."
-              : "Hi, I'm MEXA"}
-          </h2>
-        
-          <p className="mt-3 max-w-xl text-center text-white/60">
-            {isListening
-              ? "Tell me anything."
-              : transcript
-              ? transcript
-              : "Tap the orb and speak naturally. I can help with jobs, school, business, research, coding and everyday questions."}
+          <p className="mt-6 max-w-xl text-base text-zinc-400 leading-8">
+
+            FaceMeX gained <b>4,218</b> new users overnight.
+
+            <br/><br/>
+
+            Two investors replied.
+
+            <br/>
+
+            Three schools requested demos.
+
+            <br/>
+
+            Primelink Deliver has 18 deliveries today.
+
+            <br/><br/>
+
+            I've already prepared everything.
+
+            <br/><br/>
+
+            What would you like to work on first?
+
           </p>
-          
-          <div className="mt-10 w-full max-w-3xl">
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`rounded-3xl p-6 border ${
-                  message.role === "assistant"
-                    ? "border-white/10 bg-[#171717]"
-                    : "border-emerald-500/20 bg-emerald-900/20"
-                }`}
-              >
-                <div className="mb-3 flex items-center gap-3">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                      message.role === "assistant"
-                        ? "bg-emerald-500"
-                        : "bg-blue-500"
-                    }`}
-                  >
-                    {message.role === "assistant" ? "M" : "U"}
-                  </div>
-          
-                  <div>
-                    <h3 className="font-semibold">
-                      {message.role === "assistant" ? "MEXA" : "You"}
-                    </h3>
-                  </div>
-                </div>
-          
-                <p className="leading-8">{message.content}</p>
-              </div>
-            ))}
-          </div>
-     
-        {/* Input */}
 
-        <div className="border-t border-white/10 p-5">
-          <div className="flex items-center rounded-3xl border border-white/10 bg-[#171717] px-4 py-3">
-        
-            <button
-              type="button"
-              className="text-white/70 hover:text-white"
-            >
-              <Paperclip size={18} />
-            </button>
-        
-            <input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Message MEXA..."
-              className="flex-1 bg-transparent px-4 outline-none text-white placeholder:text-white/40"
-            />
-        
-            <button
-              type="button"
-              className="text-white/70 hover:text-white"
-            >
-              <Mic size={20} />
-            </button>
-        
-            <button
-              type="button"
-              className="ml-3 rounded-full bg-white p-2 text-black hover:scale-105 transition"
-            >
-              <ArrowUp size={18} />
-            </button>
-        
-          </div>
         </div>
-        
-        </div> {/* closes Messages */}
-        
-        </main>
-        
+
+      </main>
+
+      {/* Bottom */}
+
+      <footer className="p-5">
+
+        <div className="flex justify-center gap-4">
+
+          <button
+            onClick={() => setKeyboardOpen(true)}
+            className="flex items-center gap-2 rounded-full border border-zinc-700 px-5 py-3 hover:bg-zinc-900"
+          >
+            <Keyboard size={18}/>
+            Keyboard
+          </button>
+
+          <button
+            className="flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-3 font-semibold text-black"
+          >
+            <Mic size={18}/>
+            Listening...
+          </button>
+
         </div>
-        );
-        }
+
+      </footer>
+
+      {keyboardOpen && (
+
+        <div className="border-t border-zinc-800 bg-[#111] p-4">
+
+          <input
+            autoFocus
+            placeholder="Ask MEXA anything..."
+            className="
+            w-full
+            rounded-xl
+            bg-[#1b1b1b]
+            p-4
+            outline-none
+            text-white
+            "
+          />
+
+        </div>
+
+      )}
+
+    </div>
+  );
+}
