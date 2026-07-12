@@ -5287,7 +5287,7 @@ Apply link: ${job.applyUrl}`;
             <Sparkles className="h-4 w-4 text-violet-500" />
           
             <span className="font-semibold">
-              {mexaPlan === "free" ? "Get MEXA"}
+              {mexaPlan === "free" ? "Get MEXA" : "FaceMeX AI"}
             </span>
           </button>
         
