@@ -2516,8 +2516,6 @@ function WelcomeHero({
   const [typedPrompt, setTypedPrompt] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const [mexaPlan, setMexaPlan] = useState<"free" | "plus" | "pro">("free");
-
   useEffect(() => {
     const currentText = rotatingPrompts[promptIndex];
 
@@ -5296,7 +5294,7 @@ Apply link: ${job.applyUrl}`;
               </span>
         
               <span className="truncate text-sm font-semibold text-white">
-                {mexaPlan === "free" ? "Upgrade" : "FaceMeX AI"}
+                {mexaPlan === "free" ? "Upgrade" : "MEXA"}
               </span>
             </div>
         
