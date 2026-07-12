@@ -2744,7 +2744,19 @@ export default function AIJobAssistantPage() {
   const userStore = useUserStore() as any;
   const { tier, hasTier } = userStore;
 
-  const mexaPlan = userStore?.mexaPlan ?? "free";
+  const isDeveloper =
+  userStore?.email === "luckymawasha72@gmail.com";
+
+const [developerMode, setDeveloperMode] = useState(false);
+
+const [developerPlan, setDeveloperPlan] = useState<
+  "free" | "plus" | "pro" | "business"
+>("free");
+
+ const mexaPlan =
+  isDeveloper && developerMode
+    ? developerPlan
+    : userStore?.mexaPlan ?? "free";
 
   const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
   const firstName = useMemo(() => getFirstName(userDisplayName), [userDisplayName]);
