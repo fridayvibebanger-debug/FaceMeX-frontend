@@ -7,6 +7,8 @@ import { useAuthStore } from './store/authStore';
 import AuthPage from './components/auth/AuthPage';
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
 import EmotionAIPage from './pages/EmotionAIPage';
+import MEXA from "./components/MEXA";
+import MEXAUpgrade from "./pages/MEXAUpgrade";
 import FeedPage from './pages/FeedPage';
 import WatchPage from './pages/WatchPage';
 import ProfilePage from './pages/ProfilePage';
@@ -132,6 +134,8 @@ function App() {
         <Route path="/community-rules" element={<CommunityRules />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/mexa" element={<MEXA />} />
+        <Route path="/mexa-upgrade" element={<MEXAUpgrade />} />
 
         <Route
           path="/recruiter-portal"
