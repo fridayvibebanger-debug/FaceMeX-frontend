@@ -13,10 +13,28 @@ export default function MEXA() {
   // Functions
 
   return (
-    <div className="min-h-screen bg-[#04060D] text-white overflow-hidden">
+    <div className="relative min-h-screen overflow-hidden bg-[#04060D] text-white">
  
       {/* Background */}
+      <div className="absolute inset-0 overflow-hidden">
 
+        <div className="absolute inset-0 bg-[#04060D]" />
+      
+        {/* Blue glow */}
+        <div className="absolute left-1/2 top-1/3 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-cyan-500/10 blur-[180px]" />
+      
+        {/* Purple glow */}
+        <div className="absolute bottom-[-150px] left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-violet-500/10 blur-[180px]" />
+      
+        {/* Small floating lights */}
+        <div className="absolute left-[18%] top-[20%] h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
+      
+        <div className="absolute right-[22%] top-[32%] h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" />
+      
+        <div className="absolute bottom-[28%] left-[30%] h-2 w-2 animate-pulse rounded-full bg-cyan-300" />
+      
+      <div className="relative z-10">
+        
       {/* Header */}
       <header className="flex items-center justify-between px-6 pt-10">
 
