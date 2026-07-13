@@ -141,7 +141,6 @@ export default function MEXA() {
         <p className="mt-3 text-2xl text-white/55">
           How can I help you today?
         </p>
-        </h2>
       
       </div>
 
