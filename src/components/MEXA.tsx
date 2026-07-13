@@ -3,6 +3,9 @@ import {
   Briefcase,
   GraduationCap,
   Building2,
+  Menu,
+  SlidersHorizontal,
+  ArrowUp,
 } from "lucide-react";
 
 export default function MEXA() {
