@@ -74,7 +74,7 @@ export default function MEXA() {
       {/* ================= HERO ================= */}
 
       <div className="flex flex-1 flex-col items-center px-6 pt-5 pb-36">
-      
+
         {/* ORB */}
         <div className="relative mt-4 flex h-[220px] w-[220px] items-center justify-center">
       
@@ -146,66 +146,50 @@ export default function MEXA() {
       
       </div>
       
-            {/* ================= INPUT BAR ================= */}
+          {/* ================= INPUT BAR ================= */}
 
-            <div className="fixed bottom-[86px] left-0 right-0 z-40 px-5">
-              <div className="mx-auto flex max-w-md items-center rounded-full border border-white/10 bg-[#111827]/80 px-5 py-3 backdrop-blur-2xl">
-                <input
-                  type="text"
-                  placeholder="Ask MEXA anything..."
-                  className="flex-1 bg-transparent text-[15px] text-white placeholder:text-white/35 outline-none"
-                />
-      
-                <button className="ml-3 flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,255,255,.45)]">
-                  <ArrowUp className="h-5 w-5 text-[#041018]" />
-                </button>
-              </div>
+          <div className="fixed bottom-[86px] left-0 right-0 z-40 px-5">
+            <div className="mx-auto flex max-w-md items-center rounded-full border border-white/10 bg-[#111827]/80 px-5 py-3 backdrop-blur-2xl">
+              <input
+                type="text"
+                placeholder="Ask MEXA anything..."
+                className="flex-1 bg-transparent text-[15px] text-white placeholder:text-white/35 outline-none"
+              />
+          
+              <button className="ml-3 flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,255,255,.45)]">
+                <ArrowUp className="h-5 w-5 text-[#041018]" />
+              </button>
             </div>
-      
-            {/* Bottom Spacer */}
-            <div className="h-40" />
           </div>
-      
-          {/* ================= BOTTOM NAVIGATION ================= */}
-      
-          <nav
-            className="
-              fixed
-              bottom-0
-              left-0
-              right-0
-              z-50
-              border-t
-              border-white/10
-              bg-[#07111D]/95
-              backdrop-blur-3xl
-            "
-          >
+          
+          {/* Bottom Navigation */}
+          
+          <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#07111D]/95 backdrop-blur-3xl">
             <div className="mx-auto grid h-20 max-w-md grid-cols-4">
               <button className="flex flex-col items-center justify-center gap-1 text-cyan-300">
                 <Sparkles size={22} />
                 <span className="text-[11px] font-medium">Assistant</span>
               </button>
-      
+          
               <button className="flex flex-col items-center justify-center gap-1 text-white/60">
                 <Briefcase size={22} />
                 <span className="text-[11px]">Career</span>
               </button>
-      
+          
               <button className="flex flex-col items-center justify-center gap-1 text-white/60">
                 <GraduationCap size={22} />
                 <span className="text-[11px]">Study</span>
               </button>
-      
+          
               <button className="flex flex-col items-center justify-center gap-1 text-white/60">
                 <Building2 size={22} />
                 <span className="text-[11px]">Business</span>
               </button>
             </div>
           </nav>
-      
-          {/* Overlay */}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
-        </main>
-      );
-      }
+          
+          </section>
+          
+          </main>
+          );
+          }
