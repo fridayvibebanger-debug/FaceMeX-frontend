@@ -1,3 +1,11 @@
+import {
+  Menu,
+  SlidersHorizontal,
+  Mic,
+  Sparkles,
+  ArrowUp,
+} from "lucide-react";
+
 export default function MEXA() {
   // Hooks
   // State
