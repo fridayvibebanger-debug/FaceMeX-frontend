@@ -81,108 +81,91 @@ export default function MEXA() {
         </header>
 
         {/* HERO */}
-
-        <div className="flex flex-1 flex-col items-center justify-center px-6">
-
-            {/* ================= ORB ================= */}
+    <div className="flex flex-1 flex-col items-center justify-center px-6">
     
-            <div className="relative flex h-[330px] w-[330px] items-center justify-center">
+      {/* ================= ORB ================= */}
+      <div className="relative flex h-[330px] w-[330px] items-center justify-center">
     
-                {/* Main Glow */}
+        {/* Main Glow */}
+        <div className="absolute h-[330px] w-[330px] rounded-full bg-cyan-400/10 blur-[120px]" />
+        <div className="absolute h-[250px] w-[250px] rounded-full bg-violet-500/15 blur-[90px]" />
     
-                <div className="absolute h-[330px] w-[330px] rounded-full bg-cyan-400/10 blur-[120px]" />
+        {/* Ring 1 */}
+        <div
+          className="
+            absolute
+            h-[255px]
+            w-[255px]
+            rounded-[42%]
+            border
+            border-cyan-300/35
+            animate-[spin_18s_linear_infinite]
+          "
+        />
     
-                <div className="absolute h-[250px] w-[250px] rounded-full bg-violet-500/15 blur-[90px]" />
+        {/* Ring 2 */}
+        <div
+          className="
+            absolute
+            h-[248px]
+            w-[248px]
+            rounded-[48%]
+            border
+            border-cyan-400/25
+            animate-[spin_12s_linear_infinite_reverse]
+          "
+        />
     
-                {/* Ring 1 */}
+        {/* Ring 3 */}
+        <div
+          className="
+            absolute
+            h-[240px]
+            w-[240px]
+            rounded-[38%]
+            border
+            border-indigo-400/30
+            animate-[spin_8s_linear_infinite]
+          "
+        />
     
-                <div
-                  className="
-                    absolute
-                    h-[255px]
-                    w-[255px]
-                    rounded-[42%]
-                    border
-                    border-cyan-300/35
-                    animate-[spin_18s_linear_infinite]
-                  "
-                />
+        {/* Floating Energy */}
+        <div className="absolute h-[210px] w-[210px] rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
+        <div className="absolute h-[170px] w-[170px] rounded-full bg-blue-500/10 blur-3xl animate-pulse" />
     
-                {/* Ring 2 */}
+        {/* Glass Core */}
+        <div
+          className="
+            relative
+            flex
+            h-[165px]
+            w-[165px]
+            items-center
+            justify-center
+            rounded-full
+            bg-gradient-to-br
+            from-[#071424]
+            via-[#101C38]
+            to-[#050B16]
+            shadow-[0_0_80px_rgba(0,220,255,.28)]
+          "
+        >
+          {/* Inner Glow */}
+          <div className="absolute h-28 w-28 rounded-full bg-cyan-300/10 blur-3xl" />
     
-                <div
-                  className="
-                    absolute
-                    h-[248px]
-                    w-[248px]
-                    rounded-[48%]
-                    border
-                    border-cyan-400/25
-                    animate-[spin_12s_linear_infinite_reverse]
-                  "
-                />
+          {/* Glass Reflection */}
+          <div className="absolute left-7 top-7 h-10 w-5 rotate-[-25deg] rounded-full bg-white/10 blur-md" />
     
-                {/* Ring 3 */}
+          {/* Logo */}
+          <span className="text-[74px] text-cyan-300 drop-shadow-[0_0_35px_rgba(0,255,255,.9)]">
+            ✦
+          </span>
+        </div>
     
-                <div
-                  className="
-                    absolute
-                    h-[240px]
-                    w-[240px]
-                    rounded-[38%]
-                    border
-                    border-indigo-400/30
-                    animate-[spin_8s_linear_infinite]
-                  "
-                />
+      </div>
     
-                {/* Floating Energy */}
+      {/* ================= END ORB ================= */}
     
-                <div className="absolute h-[210px] w-[210px] rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
-    
-                <div className="absolute h-[170px] w-[170px] rounded-full bg-blue-500/10 blur-3xl animate-pulse" />
-    
-                {/* Glass Core */}
-    
-                <div
-                  className="
-                    relative
-                    flex
-                    h-[165px]
-                    w-[165px]
-                    items-center
-                    justify-center
-                    rounded-full
-                    bg-gradient-to-br
-                    from-[#071424]
-                    via-[#101C38]
-                    to-[#050B16]
-                    shadow-[0_0_80px_rgba(0,220,255,.28)]
-                  "
-                >
-    
-                  {/* Inner Glow */}
-    
-                  <div className="absolute h-28 w-28 rounded-full bg-cyan-300/10 blur-3xl" />
-    
-                  {/* Glass Reflection */}
-    
-                  <div className="absolute left-7 top-7 h-10 w-5 rotate-[-25deg] rounded-full bg-white/10 blur-md" />
-    
-                  {/* Logo */}
-    
-                  <span className="text-[74px] text-cyan-300 drop-shadow-[0_0_35px_rgba(0,255,255,.9)]">
-    
-                    ✦
-    
-                  </span>
-    
-                </div>
-    
-              </div>
-    
-              {/* ================= END ORB ================= */}
-
       {/* ================= VOICE WAVE ================= */}
 
       <div className="mt-4 flex items-center justify-center gap-[5px]">
