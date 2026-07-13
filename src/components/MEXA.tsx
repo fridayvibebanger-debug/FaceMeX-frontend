@@ -48,121 +48,109 @@ export default function MEXA() {
 
         {/* HEADER */}
 
-        <header className="flex items-center justify-between px-6 pt-14">
-
-          <button className="flex h-11 w-11 items-center justify-center">
-
-            <Menu size={30} strokeWidth={2} />
-
+        <header className="fixed top-0 left-0 right-0 z-50 px-5 pt-5">
+        <div className="flex items-center justify-between">
+      
+          <button className="h-11 w-11 rounded-full bg-white/5 backdrop-blur-md">
+            <Menu className="h-6 w-6 text-white"/>
           </button>
-
+      
           <div className="text-center">
-
-            <h1 className="text-[30px] font-extralight tracking-[0.34em]">
-
+            <h1 className="text-4xl font-extralight tracking-[0.45em] text-white">
               MEXA
-
             </h1>
-
-            <p className="mt-2 text-sm text-white/45">
-
+      
+            <p className="mt-1 text-xs text-white/45 tracking-wide">
               Your AI Life Operating System
-
             </p>
-
           </div>
-
-          <button className="flex h-11 w-11 items-center justify-center">
-
-            <SlidersHorizontal size={24} strokeWidth={2} />
-
+      
+          <button className="h-11 w-11 rounded-full bg-white/5 backdrop-blur-md">
+            <SlidersHorizontal className="h-5 w-5 text-white"/>
           </button>
-
-        </header>
-
-        {/* HERO */}
-    <div className="flex flex-1 flex-col items-center justify-center px-6">
-    
-      {/* ================= ORB ================= */}
-      <div className="relative flex h-[330px] w-[330px] items-center justify-center">
-    
-        {/* Main Glow */}
-        <div className="absolute h-[330px] w-[330px] rounded-full bg-cyan-400/10 blur-[120px]" />
-        <div className="absolute h-[250px] w-[250px] rounded-full bg-violet-500/15 blur-[90px]" />
-    
-        {/* Ring 1 */}
-        <div
-          className="
-            absolute
-            h-[255px]
-            w-[255px]
-            rounded-[42%]
-            border
-            border-cyan-300/35
-            animate-[spin_18s_linear_infinite]
-          "
-        />
-    
-        {/* Ring 2 */}
-        <div
-          className="
-            absolute
-            h-[248px]
-            w-[248px]
-            rounded-[48%]
-            border
-            border-cyan-400/25
-            animate-[spin_12s_linear_infinite_reverse]
-          "
-        />
-    
-        {/* Ring 3 */}
-        <div
-          className="
-            absolute
-            h-[240px]
-            w-[240px]
-            rounded-[38%]
-            border
-            border-indigo-400/30
-            animate-[spin_8s_linear_infinite]
-          "
-        />
-    
-        {/* Floating Energy */}
-        <div className="absolute h-[210px] w-[210px] rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
-        <div className="absolute h-[170px] w-[170px] rounded-full bg-blue-500/10 blur-3xl animate-pulse" />
-    
-        {/* Glass Core */}
-        <div
-          className="
-            relative
-            flex
-            h-[165px]
-            w-[165px]
-            items-center
-            justify-center
-            rounded-full
-            bg-gradient-to-br
-            from-[#071424]
-            via-[#101C38]
-            to-[#050B16]
-            shadow-[0_0_80px_rgba(0,220,255,.28)]
-          "
-        >
-          {/* Inner Glow */}
-          <div className="absolute h-28 w-28 rounded-full bg-cyan-300/10 blur-3xl" />
-    
-          {/* Glass Reflection */}
-          <div className="absolute left-7 top-7 h-10 w-5 rotate-[-25deg] rounded-full bg-white/10 blur-md" />
-    
-          {/* Logo */}
-          <span className="text-[74px] text-cyan-300 drop-shadow-[0_0_35px_rgba(0,255,255,.9)]">
-            ✦
-          </span>
+      
         </div>
-    
-      </div>
+      </header>
+
+      {/* HERO */}
+      <div className="flex flex-1 flex-col items-center justify-center px-5">
+      
+        {/* ORB */}
+        <div className="relative flex h-[240px] w-[240px] items-center justify-center">
+      
+          {/* Background Glow */}
+          <div className="absolute h-[240px] w-[240px] rounded-full bg-cyan-400/10 blur-[90px]" />
+          <div className="absolute h-[170px] w-[170px] rounded-full bg-violet-500/10 blur-[70px]" />
+      
+          {/* Ring 1 */}
+          <div
+            className="
+              absolute
+              h-[195px]
+              w-[195px]
+              rounded-[42%]
+              border
+              border-cyan-300/30
+              animate-[spin_18s_linear_infinite]
+            "
+          />
+      
+          {/* Ring 2 */}
+          <div
+            className="
+              absolute
+              h-[188px]
+              w-[188px]
+              rounded-[48%]
+              border
+              border-cyan-400/20
+              animate-[spin_12s_linear_infinite_reverse]
+            "
+          />
+      
+          {/* Ring 3 */}
+          <div
+            className="
+              absolute
+              h-[182px]
+              w-[182px]
+              rounded-[38%]
+              border
+              border-indigo-400/25
+              animate-[spin_8s_linear_infinite]
+            "
+          />
+      
+          {/* Glow */}
+          <div className="absolute h-[160px] w-[160px] rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
+      
+          {/* Core */}
+          <div
+            className="
+              relative
+              flex
+              h-[128px]
+              w-[128px]
+              items-center
+              justify-center
+              rounded-full
+              bg-gradient-to-br
+              from-[#071424]
+              via-[#101C38]
+              to-[#050B16]
+              shadow-[0_0_50px_rgba(0,220,255,.28)]
+            "
+          >
+            <div className="absolute h-20 w-20 rounded-full bg-cyan-300/10 blur-3xl" />
+      
+            <div className="absolute left-5 top-5 h-8 w-4 rotate-[-25deg] rounded-full bg-white/10 blur-md" />
+      
+            <span className="text-[58px] text-cyan-300 drop-shadow-[0_0_25px_rgba(0,255,255,.9)]">
+              ✦
+            </span>
+          </div>
+      
+        </div>
     
       {/* ================= END ORB ================= */}
     
