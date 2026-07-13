@@ -76,94 +76,166 @@ export default function MEXA() {
 
       {/* ================= HERO ================= */}
 
-      <div className="flex flex-1 flex-col items-center px-6 pt-5 pb-36">
-
-        {/* ORB */}
-        <div className="relative mt-4 flex h-[220px] w-[220px] items-center justify-center">
-      
-          {/* Glow */}
-          <div className="absolute h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-[80px]" />
-          <div className="absolute h-[150px] w-[150px] rounded-full bg-violet-500/10 blur-[60px]" />
-      
-          {/* Rings */}
-          <div className="absolute h-[185px] w-[185px] rounded-[42%] border border-cyan-300/25 animate-[spin_18s_linear_infinite]" />
-          <div className="absolute h-[178px] w-[178px] rounded-[48%] border border-cyan-400/20 animate-[spin_12s_linear_infinite_reverse]" />
-          <div className="absolute h-[170px] w-[170px] rounded-[38%] border border-indigo-400/20 animate-[spin_8s_linear_infinite]" />
-      
-          {/* Core */}
-          <div className="relative flex h-[118px] w-[118px] items-center justify-center rounded-full bg-gradient-to-br from-[#071424] via-[#101C38] to-[#050B16] shadow-[0_0_40px_rgba(0,220,255,.25)]">
-      
-            <div className="absolute h-20 w-20 rounded-full bg-cyan-300/10 blur-3xl" />
-      
-            <span className="text-[54px] text-cyan-300 drop-shadow-[0_0_20px_rgba(0,255,255,.8)]">
-              ✦
-            </span>
-      
+        <div className="flex flex-1 flex-col items-center justify-center px-6 pt-20 pb-28">
+        
+          {/* ORB */}
+        
+          <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+        
+            <div className="absolute h-[180px] w-[180px] rounded-full bg-cyan-400/10 blur-[70px]" />
+            <div className="absolute h-[130px] w-[130px] rounded-full bg-violet-500/10 blur-[60px]" />
+        
+            <div className="absolute h-[155px] w-[155px] rounded-[42%] border border-cyan-300/25 animate-[spin_18s_linear_infinite]" />
+        
+            <div className="absolute h-[148px] w-[148px] rounded-[48%] border border-cyan-400/20 animate-[spin_12s_linear_infinite_reverse]" />
+        
+            <div className="absolute h-[142px] w-[142px] rounded-[38%] border border-indigo-400/20 animate-[spin_8s_linear_infinite]" />
+        
+            <div className="relative flex h-[98px] w-[98px] items-center justify-center rounded-full bg-gradient-to-br from-[#071424] via-[#101C38] to-[#050B16] shadow-[0_0_40px_rgba(0,220,255,.25)]">
+        
+              <div className="absolute h-16 w-16 rounded-full bg-cyan-300/10 blur-3xl" />
+        
+              <span className="text-[46px] text-cyan-300 drop-shadow-[0_0_18px_rgba(0,255,255,.8)]">
+                ✦
+              </span>
+        
+            </div>
+        
           </div>
-      
+        
+          {/* Voice Wave */}
+        
+          <div className="mt-7 flex items-end gap-[3px]">
+            {[8, 14, 22, 30, 40, 30, 22, 14, 8].map((h, i) => (
+              <span
+                key={i}
+                className="w-[3px] rounded-full bg-cyan-300 animate-pulse"
+                style={{
+                  height: `${h}px`,
+                  animationDelay: `${i * 0.08}s`,
+                }}
+              />
+            ))}
+          </div>
+        
+          {/* TEXT */}
+        
+          <h2 className="mt-8 text-center text-[30px] font-light tracking-tight text-white">
+            MEXA
+          </h2>
+        
+          <p className="mt-2 max-w-[270px] text-center text-[15px] leading-7 text-white/45">
+            Ready whenever you are
+          </p>
+        
+          {/* TYPE BUTTON */}
+        
+          <button
+            onClick={() => setShowKeyboard(true)}
+            className="
+              mt-8
+              rounded-full
+              border
+              border-white/10
+              bg-white/[0.04]
+              px-6
+              py-2.5
+              text-sm
+              font-medium
+              text-white/75
+              backdrop-blur-xl
+              transition-all
+              hover:bg-white/[0.08]
+              active:scale-95
+            "
+          >
+            ⌨ Type instead
+          </button>
+        
+          {/* MICROPHONE */}
+        
+          <button
+            className="
+              mt-12
+              flex
+              h-[72px]
+              w-[72px]
+              items-center
+              justify-center
+              rounded-full
+              bg-gradient-to-br
+              from-cyan-400
+              via-cyan-500
+              to-blue-500
+              shadow-[0_0_35px_rgba(0,255,255,.35)]
+              transition-all
+              duration-300
+              hover:scale-105
+              active:scale-95
+            "
+          >
+            <Mic className="h-8 w-8 text-white" strokeWidth={2.4} />
+          </button>
+        
         </div>
-      
-        {/* Voice Wave */}
-      
-        <div className="mt-6 flex items-end gap-[4px]">
-          {[10,16,24,36,48,36,24,16,10].map((h,i)=>(
-            <span
-              key={i}
-              className="w-[4px] rounded-full bg-cyan-300 animate-pulse"
-              style={{
-                height:h,
-                animationDelay:`${i*0.1}s`
-              }}
-            />
-          ))}
-        </div>
-      
-        {/* Text */}
-      
-        <h2 className="mt-8 text-center text-[38px] font-extralight leading-none text-white">
-            I'm listening...
-        </h2>
-      
-        <p className="mt-3 max-w-[280px] text-center text-[16px] leading-7 text-white/50">
-            How can I help you today?
-        </p>
-      
-        {/* Type Button */}
-      
-        <button
-          className="
-            mt-8
-            rounded-full
-            border
-            border-white/10
-            bg-white/5
-            px-7
-            py-3
-            text-sm
-            text-white/70
-            backdrop-blur-xl
-          "
-        >
-            Type instead
-        </button>
-      
-      </div>
-      
-          {/* ================= INPUT BAR ================= */}
-
-          <div className="fixed bottom-[86px] left-0 right-0 z-40 px-5">
-            <div className="mx-auto flex max-w-md items-center rounded-full border border-white/10 bg-[#111827]/80 px-5 py-3 backdrop-blur-2xl">
+        
+        {/* ================= CHAT BAR ================= */}
+        
+        {showKeyboard && (
+          <div className="fixed bottom-[88px] left-0 right-0 z-40 px-4">
+        
+            <div
+              className="
+                mx-auto
+                flex
+                max-w-md
+                items-end
+                rounded-[28px]
+                border
+                border-white/10
+                bg-[#171717]/90
+                px-4
+                py-3
+                backdrop-blur-3xl
+                shadow-[0_10px_40px_rgba(0,0,0,.45)]
+              "
+            >
+        
               <input
                 type="text"
-                placeholder="Ask MEXA anything..."
-                className="flex-1 bg-transparent text-[15px] text-white placeholder:text-white/35 outline-none"
+                placeholder="Message MEXA..."
+                className="
+                  flex-1
+                  bg-transparent
+                  text-[15px]
+                  text-white
+                  placeholder:text-white/40
+                  outline-none
+                "
               />
-          
-              <button className="ml-3 flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,255,255,.45)]">
-                <ArrowUp className="h-5 w-5 text-[#041018]" />
+        
+              <button
+                className="
+                  ml-3
+                  flex
+                  h-10
+                  w-10
+                  items-center
+                  justify-center
+                  rounded-full
+                  bg-white
+                  text-black
+                  transition-all
+                  hover:scale-105
+                "
+              >
+                <ArrowUp className="h-4 w-4" />
               </button>
+        
             </div>
+        
           </div>
+        )}
           
           {/* Bottom Navigation */}
           
