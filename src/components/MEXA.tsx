@@ -142,25 +142,25 @@ export default function MEXA() {
           How can I help you today?
         </p>
       
-      </div>
+       </div> {/* Outer Glow */}
 
-      {/* Wave Animation */}
+    </div> {/* Hero */}
 
-      {/* Microphone */}
+    {/* Wave Animation */}
 
-      {/* Keyboard Button */}
+    {/* Microphone */}
 
-      {/* Bottom Navigation */}
+    {/* Keyboard Button */}
 
-      {/* Drawer */}
+    {/* Bottom Navigation */}
 
-      {/* Settings */}
+    {/* Drawer */}
 
-      </div> {/* relative z-10 */}
+    {/* Settings */}
 
-    </div> {/* absolute background */}
+  </div> {/* relative z-10 */}
 
-  </div> {/* page */}
+</div> {/* page */}
 
 );
 }
