@@ -1,9 +1,8 @@
 import {
-  Menu,
-  SlidersHorizontal,
-  Mic,
   Sparkles,
-  ArrowUp,
+  Briefcase,
+  GraduationCap,
+  Building2,
 } from "lucide-react";
 
 export default function MEXA() {
@@ -56,7 +55,7 @@ export default function MEXA() {
           </button>
       
           <div className="text-center">
-            <h1 className="text-4xl font-extralight tracking-[0.45em] text-white">
+            <h1 className="text-2xl font-extralight tracking-[0.40em] text-white">
               MEXA
             </h1>
       
@@ -65,228 +64,108 @@ export default function MEXA() {
             </p>
           </div>
       
-          <button className="h-11 w-11 rounded-full bg-white/5 backdrop-blur-md">
+          <button className="h-10 w-10 rounded-full bg-white/5 backdrop-blur-md">
             <SlidersHorizontal className="h-5 w-5 text-white"/>
           </button>
       
         </div>
       </header>
 
-      {/* HERO */}
-      <div className="flex flex-1 flex-col items-center justify-center px-5">
+      {/* ================= HERO ================= */}
+
+      <div className="flex flex-1 flex-col items-center px-6 pt-5 pb-36">
       
         {/* ORB */}
-        <div className="relative flex h-[240px] w-[240px] items-center justify-center">
-      
-          {/* Background Glow */}
-          <div className="absolute h-[240px] w-[240px] rounded-full bg-cyan-400/10 blur-[90px]" />
-          <div className="absolute h-[170px] w-[170px] rounded-full bg-violet-500/10 blur-[70px]" />
-      
-          {/* Ring 1 */}
-          <div
-            className="
-              absolute
-              h-[195px]
-              w-[195px]
-              rounded-[42%]
-              border
-              border-cyan-300/30
-              animate-[spin_18s_linear_infinite]
-            "
-          />
-      
-          {/* Ring 2 */}
-          <div
-            className="
-              absolute
-              h-[188px]
-              w-[188px]
-              rounded-[48%]
-              border
-              border-cyan-400/20
-              animate-[spin_12s_linear_infinite_reverse]
-            "
-          />
-      
-          {/* Ring 3 */}
-          <div
-            className="
-              absolute
-              h-[182px]
-              w-[182px]
-              rounded-[38%]
-              border
-              border-indigo-400/25
-              animate-[spin_8s_linear_infinite]
-            "
-          />
+        <div className="relative mt-4 flex h-[220px] w-[220px] items-center justify-center">
       
           {/* Glow */}
-          <div className="absolute h-[160px] w-[160px] rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
+          <div className="absolute h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-[80px]" />
+          <div className="absolute h-[150px] w-[150px] rounded-full bg-violet-500/10 blur-[60px]" />
+      
+          {/* Rings */}
+          <div className="absolute h-[185px] w-[185px] rounded-[42%] border border-cyan-300/25 animate-[spin_18s_linear_infinite]" />
+          <div className="absolute h-[178px] w-[178px] rounded-[48%] border border-cyan-400/20 animate-[spin_12s_linear_infinite_reverse]" />
+          <div className="absolute h-[170px] w-[170px] rounded-[38%] border border-indigo-400/20 animate-[spin_8s_linear_infinite]" />
       
           {/* Core */}
-          <div
-            className="
-              relative
-              flex
-              h-[128px]
-              w-[128px]
-              items-center
-              justify-center
-              rounded-full
-              bg-gradient-to-br
-              from-[#071424]
-              via-[#101C38]
-              to-[#050B16]
-              shadow-[0_0_50px_rgba(0,220,255,.28)]
-            "
-          >
+          <div className="relative flex h-[118px] w-[118px] items-center justify-center rounded-full bg-gradient-to-br from-[#071424] via-[#101C38] to-[#050B16] shadow-[0_0_40px_rgba(0,220,255,.25)]">
+      
             <div className="absolute h-20 w-20 rounded-full bg-cyan-300/10 blur-3xl" />
       
-            <div className="absolute left-5 top-5 h-8 w-4 rotate-[-25deg] rounded-full bg-white/10 blur-md" />
-      
-            <span className="text-[58px] text-cyan-300 drop-shadow-[0_0_25px_rgba(0,255,255,.9)]">
+            <span className="text-[54px] text-cyan-300 drop-shadow-[0_0_20px_rgba(0,255,255,.8)]">
               ✦
             </span>
+      
           </div>
       
         </div>
-    
-      {/* ================= END ORB ================= */}
-    
-      {/* ================= VOICE WAVE ================= */}
-
-      <div className="mt-4 flex items-center justify-center gap-[5px]">
-        {[10, 18, 28, 40, 56, 40, 28, 18, 10].map((h, i) => (
-          <span
-            key={i}
-            className="w-[4px] rounded-full bg-cyan-300 animate-pulse"
-            style={{
-              height: `${h}px`,
-              animationDelay: `${i * 0.12}s`,
-            }}
-          />
-        ))}
-      </div>
       
-      {/* ================= TEXT ================= */}
+        {/* Voice Wave */}
       
-      <h2 className="mt-10 text-center text-[44px] font-extralight leading-none tracking-tight text-white">
-        I'm listening...
-      </h2>
+        <div className="mt-6 flex items-end gap-[4px]">
+          {[10,16,24,36,48,36,24,16,10].map((h,i)=>(
+            <span
+              key={i}
+              className="w-[4px] rounded-full bg-cyan-300 animate-pulse"
+              style={{
+                height:h,
+                animationDelay:`${i*0.1}s`
+              }}
+            />
+          ))}
+        </div>
       
-      <p className="mt-4 max-w-[280px] text-center text-[19px] font-light leading-relaxed text-white/50">
-        How can I help you today?
-      </p>
+        {/* Text */}
       
-      {/* ================= MICROPHONE ================= */}
-
-      <div className="mt-14 flex justify-center">
+        <h2 className="mt-8 text-center text-[38px] font-extralight leading-none text-white">
+            I'm listening...
+        </h2>
+      
+        <p className="mt-3 max-w-[280px] text-center text-[16px] leading-7 text-white/50">
+            How can I help you today?
+        </p>
+      
+        {/* Type Button */}
+      
         <button
           className="
-            relative
-            flex
-            h-[92px]
-            w-[92px]
-            items-center
-            justify-center
-            rounded-full
-            bg-gradient-to-br
-            from-cyan-400
-            via-cyan-500
-            to-blue-500
-            shadow-[0_0_70px_rgba(0,255,255,.55)]
-            transition-all
-            duration-300
-            hover:scale-105
-            active:scale-95
-          "
-        >
-          <div className="absolute inset-0 rounded-full bg-cyan-400/20 blur-xl" />
-      
-          <Mic
-            className="relative h-10 w-10 text-white"
-            strokeWidth={2.3}
-          />
-        </button>
-      </div>
-      
-      {/* ================= KEYBOARD ================= */}
-      
-      <div className="mt-8 flex justify-center">
-        <button
-          className="
+            mt-8
             rounded-full
             border
             border-white/10
             bg-white/5
-            px-8
+            px-7
             py-3
             text-sm
-            font-medium
             text-white/70
             backdrop-blur-xl
-            transition-all
-            hover:bg-white/10
           "
         >
-          Type instead
+            Type instead
         </button>
+      
       </div>
       
       {/* ================= INPUT BAR ================= */}
       
-      <div className="fixed bottom-24 left-0 right-0 z-40 flex justify-center px-5">
-        <div
-          className="
-            flex
-            w-full
-            max-w-md
-            items-center
-            gap-3
-            rounded-full
-            border
-            border-white/10
-            bg-white/5
-            px-5
-            py-4
-            backdrop-blur-3xl
-            shadow-[0_0_40px_rgba(0,0,0,.35)]
-          "
-        >
-          <input
-            type="text"
-            placeholder="Ask MEXA anything..."
-            className="
-              flex-1
-              bg-transparent
-              text-[15px]
-              text-white
-              placeholder:text-white/35
-              outline-none
-            "
-          />
-      
-          <button
-            className="
-              flex
-              h-11
-              w-11
-              items-center
-              justify-center
-              rounded-full
-              bg-cyan-400
-              text-[#041018]
-              shadow-[0_0_25px_rgba(0,255,255,.45)]
-              transition
-              hover:scale-105
-              active:scale-95
-            "
-          >
-            <ArrowUp size={18} strokeWidth={2.8} />
-          </button>
+      <div className="fixed bottom-[86px] left-0 right-0 z-40 px-5">
+
+        <div className="mx-auto flex max-w-md items-center rounded-full border border-white/10 bg-[#111827]/80 px-5 py-3 backdrop-blur-2xl">
+    
+            <input
+                className="flex-1 bg-transparent text-[15px] text-white placeholder:text-white/35 outline-none"
+                placeholder="Ask MEXA anything..."
+            />
+    
+            <button
+                className="ml-3 flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,255,255,.45)]"
+            >
+                <ArrowUp className="h-5 w-5 text-[#041018]" />
+            </button>
+    
         </div>
-      </div>
+    
+    </div>
       
       {/* Bottom Spacer */}
       
@@ -305,30 +184,42 @@ export default function MEXA() {
           z-50
           border-t
           border-white/10
-          bg-black/40
+          bg-[#07111D]/95
           backdrop-blur-3xl
+          safe-area-inset-bottom
         "
       >
-        <div className="mx-auto flex h-24 max-w-md items-center justify-around">
+        <div className="mx-auto grid h-20 max-w-md grid-cols-4">
       
-          <button className="flex flex-col items-center gap-1 text-cyan-300">
+          {/* Assistant */}
+          <button className="flex flex-col items-center justify-center gap-1 text-cyan-300">
             <Sparkles size={22} />
             <span className="text-[11px] font-medium">
-              MEXA
+              Assistant
             </span>
           </button>
       
-          <button className="flex flex-col items-center gap-1 text-white/50">
-            <ArrowUp size={22} />
+          {/* Career */}
+          <button className="flex flex-col items-center justify-center gap-1 text-white/60">
+            <Briefcase size={22} />
             <span className="text-[11px]">
-              History
+              Career
             </span>
           </button>
       
-          <button className="flex flex-col items-center gap-1 text-white/50">
-            <SlidersHorizontal size={22} />
+          {/* Study */}
+          <button className="flex flex-col items-center justify-center gap-1 text-white/60">
+            <GraduationCap size={22} />
             <span className="text-[11px]">
-              Settings
+              Study
+            </span>
+          </button>
+      
+          {/* Business */}
+          <button className="flex flex-col items-center justify-center gap-1 text-white/60">
+            <Building2 size={22} />
+            <span className="text-[11px]">
+              Business
             </span>
           </button>
       
