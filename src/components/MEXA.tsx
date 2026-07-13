@@ -43,7 +43,7 @@ export default function MEXA() {
         </button>
   
         <div className="text-center">
-          <h1 className="text-[42px] font-light tracking-[0.35em]">
+          <h1 className="text-[30px] font-light tracking-[0.35em]">
             MEXA
           </h1>
   
@@ -108,6 +108,11 @@ export default function MEXA() {
 
       {/* Settings */}
 
-    </div>
-  );
+      </div> {/* relative z-10 */}
+
+    </div> {/* absolute background */}
+
+  </div> {/* page */}
+
+);
 }
