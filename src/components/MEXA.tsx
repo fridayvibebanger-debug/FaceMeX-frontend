@@ -1,14 +1,19 @@
+import { useState } from "react";
+
 import {
+  Menu,
+  SlidersHorizontal,
+  ArrowUp,
+  Mic,
   Sparkles,
   Briefcase,
   GraduationCap,
   Building2,
-  Menu,
-  SlidersHorizontal,
-  ArrowUp,
 } from "lucide-react";
 
 export default function MEXA() {
+  const [showKeyboard, setShowKeyboard] = useState(false);
+  
   return (
     <main className="relative h-screen overflow-hidden bg-[#04060D] text-white">
 
