@@ -146,9 +146,19 @@ export default function MEXA() {
           
             {/* Orb */}
           
-            <div className="relative -mt-10 flex h-[185px] w-[185px] items-center justify-center">
+            <div className="relative -mt-[72px] flex h-[185px] w-[185px] items-center justify-center">
           
-              <div className="absolute h-[250px] w-[250px] rounded-full bg-cyan-300/15 blur-[110px]" />
+              {/* Premium Ambient Glow */}
+          
+              <div className="absolute h-[340px] w-[340px] rounded-full bg-cyan-400/12 blur-[120px]" />
+          
+              <div className="absolute h-[300px] w-[300px] rounded-full bg-sky-400/10 blur-[130px]" />
+          
+              <div className="absolute h-[270px] w-[270px] rounded-full bg-violet-500/10 blur-[140px]" />
+          
+              <div className="absolute h-[220px] w-[220px] rounded-full bg-cyan-300/8 blur-[90px]" />
+          
+              {/* Orbit Rings */}
           
               <div className="absolute h-[178px] w-[178px] rounded-full border border-cyan-300/10 animate-[spin_24s_linear_infinite]" />
           
@@ -156,7 +166,11 @@ export default function MEXA() {
           
               <div className="absolute h-[162px] w-[162px] rounded-full border border-cyan-300/5 animate-[spin_30s_linear_infinite]" />
           
-              <div className="relative flex h-[102px] w-[102px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_20px_50px_rgba(0,0,0,.18)]">
+              {/* Core */}
+          
+              <div className="relative flex h-[102px] w-[102px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_25px_60px_rgba(0,0,0,.22)]">
+          
+                <div className="absolute h-16 w-16 rounded-full bg-cyan-300/15 blur-2xl" />
           
                 <span className="text-[52px] text-cyan-300">
                   ✦
@@ -168,27 +182,25 @@ export default function MEXA() {
           
             {/* Premium Voice Indicator */}
           
-            <div className="mt-12 flex items-center gap-[6px]">
+            <div className="-mt-1 flex items-center gap-[6px]">
           
               {[18,26,34,42,50,42,34,26,18].map((h,i)=>(
-          
                 <span
                   key={i}
-                  className="rounded-full bg-gradient-to-t from-cyan-500 to-cyan-200 shadow-[0_0_10px_rgba(34,211,238,.35)]"
+                  className="rounded-full bg-gradient-to-t from-cyan-500 via-cyan-300 to-white shadow-[0_0_12px_rgba(34,211,238,.45)]"
                   style={{
                     width:"4px",
                     height:`${h}px`,
                     animation:`voiceWave 1.8s ease-in-out ${i*0.12}s infinite`
                   }}
                 />
-          
               ))}
           
             </div>
           
             {/* Status */}
           
-            <p className="mt-10 text-center text-[21px] font-semibold text-slate-700">
+            <p className="mt-7 text-center text-[21px] font-semibold text-slate-700">
               Ready whenever you are
             </p>
           
@@ -197,7 +209,7 @@ export default function MEXA() {
             <button
               onClick={() => setShowKeyboard(!showKeyboard)}
               className="
-                mt-8
+                mt-6
                 h-12
                 rounded-full
                 border
