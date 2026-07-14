@@ -15,77 +15,163 @@ export default function MEXA() {
   const [showKeyboard, setShowKeyboard] = useState(false);
   
   return (
-        <main className="relative h-screen overflow-hidden bg-[#F7F8FC] text-[#101828]">
+        <main className="relative h-screen overflow-hidden bg-[#FAFAFC] text-[#111827]">
       
-          {/* ================= Background ================= */}
+          {/* ================= Premium Background ================= */}
       
           <div className="absolute inset-0 overflow-hidden">
       
-            <div className="absolute inset-0 bg-[#F7F8FC]" />
+            {/* Base */}
+            <div className="absolute inset-0 bg-[#FAFAFC]" />
       
-            <div className="absolute top-[-180px] left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-cyan-300/20 blur-[170px]" />
+            {/* Top Ambient Light */}
+            <div className="absolute left-1/2 top-[-260px] h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-cyan-300/12 blur-[180px]" />
       
-            <div className="absolute bottom-[-220px] left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-blue-200/20 blur-[170px]" />
+            {/* Bottom Ambient Light */}
+            <div className="absolute left-1/2 bottom-[-300px] h-[650px] w-[650px] -translate-x-1/2 rounded-full bg-blue-200/10 blur-[220px]" />
       
-            <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-transparent to-white" />
+            {/* Soft White Center */}
+            <div className="absolute left-1/2 top-[35%] h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-white/70 blur-[120px]" />
+      
+            {/* Left Glow */}
+            <div className="absolute left-[-180px] top-[35%] h-[300px] w-[300px] rounded-full bg-cyan-200/8 blur-[140px]" />
+      
+            {/* Right Glow */}
+            <div className="absolute right-[-180px] top-[30%] h-[320px] w-[320px] rounded-full bg-sky-200/8 blur-[140px]" />
+      
+            {/* Premium Noise Effect */}
+            <div
+              className="absolute inset-0 opacity-[0.025]"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 1px 1px,#000 1px,transparent 0)",
+                backgroundSize: "26px 26px",
+              }}
+            />
+      
+            {/* Smooth Fade */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-transparent to-white/80" />
       
           </div>
       
+          {/* Rest of UI */}
+      
+        </main>
+      );
           {/* ================= HEADER ================= */}
-      
+
           <header className="absolute top-0 left-0 right-0 z-50">
-      
-            <div className="mx-auto flex h-[74px] max-w-md items-center justify-between px-5">
-      
-              <button className="flex h-11 w-11 items-center justify-center rounded-full border border-black/5 bg-white/70 shadow-sm backdrop-blur-xl">
-      
-                <Menu size={22} />
-      
+          
+            <div className="mx-auto flex h-[76px] max-w-md items-center justify-between px-5">
+          
+              {/* Menu */}
+          
+              <button
+                className="
+                  flex
+                  h-11
+                  w-11
+                  items-center
+                  justify-center
+                  rounded-full
+                  border
+                  border-slate-200
+                  bg-white/80
+                  shadow-[0_6px_18px_rgba(0,0,0,.06)]
+                  backdrop-blur-xl
+                  transition
+                  active:scale-95
+                "
+              >
+                <Menu size={21} className="text-slate-800" />
               </button>
-      
-              <div className="text-center">
-      
-                <h1 className="text-[28px] font-bold tracking-[0.28em]">
-      
-                  MEXA
-      
-                </h1>
-      
-                <p className="text-[11px] text-slate-500">
-      
+          
+              {/* Logo */}
+          
+              <div className="flex flex-col items-center">
+          
+                <div className="flex items-center gap-2">
+          
+                  <h1
+                    className="
+                      text-[32px]
+                      font-black
+                      tracking-[0.26em]
+                      text-slate-900
+                      leading-none
+                    "
+                  >
+                    MEXA
+                  </h1>
+          
+                  <span className="text-cyan-500 text-lg">
+                    ✦
+                  </span>
+          
+                </div>
+          
+                <p
+                  className="
+                    mt-1
+                    text-[11px]
+                    font-medium
+                    tracking-wide
+                    text-slate-500
+                  "
+                >
                   Your AI Life Operating System
-      
                 </p>
-      
+          
               </div>
-      
-              <button className="flex h-11 w-11 items-center justify-center rounded-full border border-black/5 bg-white/70 shadow-sm backdrop-blur-xl">
-      
-                <SlidersHorizontal size={20} />
-      
+          
+              {/* Settings */}
+          
+              <button
+                className="
+                  flex
+                  h-11
+                  w-11
+                  items-center
+                  justify-center
+                  rounded-full
+                  border
+                  border-slate-200
+                  bg-white/80
+                  shadow-[0_6px_18px_rgba(0,0,0,.06)]
+                  backdrop-blur-xl
+                  transition
+                  active:scale-95
+                "
+              >
+                <SlidersHorizontal
+                  size={20}
+                  className="text-slate-800"
+                />
               </button>
-      
+          
             </div>
-      
+          
           </header>
       
           {/* ================= CENTER ================= */}
 
-          <section className="absolute inset-x-0 top-[92px] bottom-[120px] flex flex-col items-center justify-center px-6">
+          <section className="absolute inset-x-0 top-[72px] bottom-[118px] flex flex-col items-center justify-center px-6">
           
-            {/* AI Orb */}
+            {/* Orb */}
           
-            <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+            <div className="relative -mt-10 flex h-[185px] w-[185px] items-center justify-center">
           
-              <div className="absolute h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-[90px]" />
+              <div className="absolute h-[250px] w-[250px] rounded-full bg-cyan-300/15 blur-[110px]" />
           
-              <div className="absolute h-[170px] w-[170px] rounded-full border border-cyan-300/15 animate-[spin_18s_linear_infinite]" />
+              <div className="absolute h-[178px] w-[178px] rounded-full border border-cyan-300/10 animate-[spin_24s_linear_infinite]" />
           
-              <div className="absolute h-[162px] w-[162px] rounded-full border border-cyan-300/10 animate-[spin_12s_linear_infinite_reverse]" />
+              <div className="absolute h-[170px] w-[170px] rounded-full border border-cyan-300/5 animate-[spin_18s_linear_infinite_reverse]" />
           
-              <div className="relative flex h-[98px] w-[98px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0D234A] to-[#071322] shadow-[0_15px_40px_rgba(0,0,0,.15)]">
+              <div className="absolute h-[162px] w-[162px] rounded-full border border-cyan-300/5 animate-[spin_30s_linear_infinite]" />
           
-                <span className="text-[48px] text-cyan-300">
+              <div className="relative flex h-[102px] w-[102px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_20px_50px_rgba(0,0,0,.18)]">
+          
+                <span className="text-[52px] text-cyan-300">
                   ✦
                 </span>
           
@@ -93,50 +179,53 @@ export default function MEXA() {
           
             </div>
           
-            {/* Premium Voice Wave */}
+            {/* Premium Voice Indicator */}
           
-            <div className="mt-12 flex h-9 items-end gap-[4px]">
+            <div className="mt-12 flex items-center gap-[6px]">
           
-              {[8,14,22,30,40,30,22,14,8].map((h,i)=>(
+              {[18,26,34,42,50,42,34,26,18].map((h,i)=>(
+          
                 <span
                   key={i}
-                  className="w-[5px] rounded-full bg-gradient-to-t from-cyan-500 to-cyan-300 animate-pulse"
+                  className="rounded-full bg-gradient-to-t from-cyan-500 to-cyan-200 shadow-[0_0_10px_rgba(34,211,238,.35)]"
                   style={{
+                    width:"4px",
                     height:`${h}px`,
-                    animationDelay:`${i*0.08}s`
+                    animation:`voiceWave 1.8s ease-in-out ${i*0.12}s infinite`
                   }}
                 />
+          
               ))}
           
             </div>
           
-            {/* No second MEXA title */}
+            {/* Status */}
           
-            <p className="mt-8 text-center text-[20px] font-medium text-slate-700">
-                Ready whenever you are
+            <p className="mt-10 text-center text-[21px] font-semibold text-slate-700">
+              Ready whenever you are
             </p>
           
             {/* Type Button */}
           
             <button
-                onClick={()=>setShowKeyboard(!showKeyboard)}
-                className="
+              onClick={() => setShowKeyboard(!showKeyboard)}
+              className="
                 mt-8
                 h-12
                 rounded-full
                 border
                 border-slate-200
-                bg-white
-                px-7
+                bg-white/95
+                px-8
                 text-[15px]
                 font-medium
                 text-slate-700
-                shadow-sm
-                transition
-                hover:shadow-md
-                "
+                shadow-[0_8px_24px_rgba(0,0,0,.08)]
+                transition-all
+                active:scale-95
+              "
             >
-                ⌨ Type instead
+              ⌨ Type instead
             </button>
           
           </section>
@@ -200,34 +289,43 @@ export default function MEXA() {
           )}
       
           {!showKeyboard && (
-
-          <div className="fixed bottom-[108px] left-1/2 z-40 -translate-x-1/2">
+            <div className="fixed bottom-[92px] left-1/2 z-40 -translate-x-1/2">
           
-          <button
-            className="
-                flex
-                h-[78px]
-                w-[78px]
-                items-center
-                justify-center
-                rounded-full
-                bg-gradient-to-br
-                from-cyan-400
-                to-blue-500
-                shadow-[0_15px_45px_rgba(0,180,255,.35)]
-                transition
-                duration-300
-                hover:scale-105
-                active:scale-95
+              {/* Soft outer glow */}
+              <div className="absolute inset-0 scale-[1.45] rounded-full bg-cyan-400/15 blur-2xl animate-pulse" />
+          
+              {/* Glass ring */}
+              <div className="absolute inset-[-8px] rounded-full border border-white/30 bg-white/10 backdrop-blur-xl" />
+          
+              <button
+                className="
+                  relative
+                  flex
+                  h-[76px]
+                  w-[76px]
+                  items-center
+                  justify-center
+                  rounded-full
+                  bg-gradient-to-br
+                  from-sky-400
+                  via-cyan-400
+                  to-blue-500
+                  shadow-[0_10px_35px_rgba(34,211,238,.25)]
+                  transition-all
+                  duration-300
+                  active:scale-95
+                  hover:scale-105
+                  animate-[pulse_3s_ease-in-out_infinite]
                 "
-          >
+              >
+                <Mic
+                  size={30}
+                  strokeWidth={2.3}
+                  className="text-white"
+                />
+              </button>
           
-          <Mic size={25} className="text-white"/>
-          
-            </button>
-          
-          </div>
-          
+            </div>
           )}
       
           {/* ================= BOTTOM NAVIGATION ================= */}
