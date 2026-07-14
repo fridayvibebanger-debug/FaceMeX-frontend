@@ -222,7 +222,7 @@ export default function MEXA() {
                 "
           >
           
-          <Mic size={34} className="text-white"/>
+          <Mic size={25} className="text-white"/>
           
             </button>
           
@@ -230,7 +230,7 @@ export default function MEXA() {
           
           )}
       
-              {/* ================= BOTTOM NAVIGATION ================= */}
+          {/* ================= BOTTOM NAVIGATION ================= */}
           
           <nav
             className="
