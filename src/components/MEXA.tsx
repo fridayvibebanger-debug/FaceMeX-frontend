@@ -17,81 +17,109 @@ export default function MEXA() {
   return (
         <main className="relative h-screen overflow-hidden bg-[#F7F8FC] text-[#101828]">
       
-          {/* ================= Background ================= */}
-      
-          <div className="absolute inset-0 overflow-hidden">
-      
-            <div className="absolute inset-0 bg-[#F7F8FC]" />
-      
-            <div className="absolute top-[-180px] left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-cyan-300/20 blur-[170px]" />
-      
-            <div className="absolute bottom-[-220px] left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-blue-200/20 blur-[170px]" />
-      
-            <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-transparent to-white" />
-      
-          </div>
-      
-          {/* ================= HEADER ================= */}
-      
-          <header className="absolute top-0 left-0 right-0 z-50">
-      
-            <div className="mx-auto flex h-[74px] max-w-md items-center justify-between px-5">
-      
-              <button className="flex h-11 w-11 items-center justify-center rounded-full border border-black/5 bg-white/70 shadow-sm backdrop-blur-xl">
-      
-                <Menu size={22} />
-      
-              </button>
-      
-              <div className="text-center">
-      
-                <h1 className="text-[28px] font-bold tracking-[0.28em]">
-      
-                  MEXA
-      
-                </h1>
-      
-                <p className="text-[11px] text-slate-500">
-      
-                  Your AI Life Operating System
-      
-                </p>
-      
-              </div>
-      
-              <button className="flex h-11 w-11 items-center justify-center rounded-full border border-black/5 bg-white/70 shadow-sm backdrop-blur-xl">
-      
-                <SlidersHorizontal size={20} />
-      
-              </button>
-      
-            </div>
-      
-          </header>
-      
-          {/* ================= CENTER ================= */}
+          {/* ================= PREMIUM BACKGROUND ================= */}
 
-          <section className="absolute inset-x-0 top-[92px] bottom-[120px] flex flex-col items-center justify-center px-6">
+          <div className="absolute inset-0 overflow-hidden">
           
-            {/* AI Orb */}
+            <div className="absolute inset-0 bg-[#F7F8FC]" />
           
-            <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+            {/* Top Blue Glow */}
           
-              <div className="absolute h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-[90px]" />
+            <div
+              className="
+              absolute
+              left-1/2
+              top-[18%]
+              h-[520px]
+              w-[520px]
+              -translate-x-1/2
+              rounded-full
+              bg-cyan-400/20
+              blur-[150px]
+              animate-pulse
+            "
+            />
           
-              <div className="absolute h-[170px] w-[170px] rounded-full border border-cyan-300/15 animate-[spin_18s_linear_infinite]" />
+            {/* Purple Glow */}
           
-              <div className="absolute h-[162px] w-[162px] rounded-full border border-cyan-300/10 animate-[spin_12s_linear_infinite_reverse]" />
+            <div
+              className="
+              absolute
+              left-1/2
+              top-[42%]
+              h-[480px]
+              w-[480px]
+              -translate-x-1/2
+              rounded-full
+              bg-violet-400/15
+              blur-[180px]
+              animate-pulse
+            "
+              style={{
+                animationDuration: "6s"
+              }}
+            />
           
-              <div className="relative flex h-[98px] w-[98px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0D234A] to-[#071322] shadow-[0_15px_40px_rgba(0,0,0,.15)]">
+            {/* Soft White */}
           
-                <span className="text-[48px] text-cyan-300">
-                  ✦
-                </span>
+            <div
+              className="
+              absolute
+              left-1/2
+              top-[30%]
+              h-[360px]
+              w-[360px]
+              -translate-x-1/2
+              rounded-full
+              bg-white/60
+              blur-[90px]
+            "
+            />
           
-              </div>
+          </div>
+          
+          {/* ================= AI ORB ================= */}
+          
+          <div className="relative flex h-[190px] w-[190px] items-center justify-center">
+          
+            {/* Glow */}
+          
+            <div className="absolute h-[210px] w-[210px] rounded-full bg-cyan-400/10 blur-[90px]" />
+          
+            {/* Rings */}
+          
+            <div className="absolute h-[180px] w-[180px] rounded-[42%] border border-cyan-300/20 animate-[spin_18s_linear_infinite]" />
+          
+            <div className="absolute h-[172px] w-[172px] rounded-[48%] border border-cyan-300/15 animate-[spin_13s_linear_infinite_reverse]" />
+          
+            <div className="absolute h-[164px] w-[164px] rounded-[45%] border border-violet-300/15 animate-[spin_9s_linear_infinite]" />
+          
+            {/* Core */}
+          
+            <div
+              className="
+              relative
+              flex
+              h-[104px]
+              w-[104px]
+              items-center
+              justify-center
+              rounded-full
+              bg-gradient-to-br
+              from-[#081B38]
+              via-[#11274D]
+              to-[#07101F]
+              shadow-[0_20px_50px_rgba(0,0,0,.18)]
+            "
+            >
+          
+              <span className="text-[50px] text-cyan-300">
+                ✦
+              </span>
           
             </div>
+          
+          </div>
           
             {/* Premium Voice Wave */}
           
@@ -116,121 +144,89 @@ export default function MEXA() {
                 Ready whenever you are
             </p>
           
-            {/* Type Button */}
-          
+            {/* TYPE BUTTON */}
+
             <button
-                onClick={()=>setShowKeyboard(!showKeyboard)}
-                className="
-                mt-8
-                h-12
+              onClick={() => setShowKeyboard(!showKeyboard)}
+              className="
+                mt-9
+                h-[50px]
                 rounded-full
                 border
                 border-slate-200
-                bg-white
-                px-7
+                bg-white/90
+                px-8
                 text-[15px]
                 font-medium
                 text-slate-700
-                shadow-sm
-                transition
-                hover:shadow-md
-                "
-            >
-                ⌨ Type instead
-            </button>
-          
-          </section>
-      
-          {/* ================= INPUT ================= */}
-
-          {showKeyboard && (
-          
-            <div className="fixed bottom-[90px] left-0 right-0 z-40 px-4">
-          
-              <div
-                className="
-                mx-auto
-                flex
-                max-w-md
-                items-center
-                rounded-full
-                border
-                border-black/5
-                bg-white/95
-                px-5
-                py-3
-                shadow-[0_10px_35px_rgba(15,23,42,.10)]
-                backdrop-blur-3xl
-              "
-              >
-          
-                <input
-                  placeholder="Message MEXA..."
-                  className="
-                  flex-1
-                  bg-transparent
-                  text-[15px]
-                  text-slate-800
-                  outline-none
-                  placeholder:text-slate-400
-                "
-                />
-          
-                <button
-                  className="
-                  ml-3
-                  flex
-                  h-10
-                  w-10
-                  items-center
-                  justify-center
-                  rounded-full
-                  bg-slate-900
-                  transition
-                  hover:scale-105
-                "
-                >
-                  <ArrowUp size={18} className="text-white"/>
-                </button>
-          
-              </div>
-          
-            </div>
-          
-          )}
-      
-          {!showKeyboard && (
-
-          <div className="fixed bottom-[108px] left-1/2 z-40 -translate-x-1/2">
-          
-          <button
-            className="
-                flex
-                h-[78px]
-                w-[78px]
-                items-center
-                justify-center
-                rounded-full
-                bg-gradient-to-br
-                from-cyan-400
-                to-blue-500
-                shadow-[0_15px_45px_rgba(0,180,255,.35)]
-                transition
-                duration-300
-                hover:scale-105
+                shadow-[0_8px_20px_rgba(15,23,42,.06)]
+                backdrop-blur-xl
+                transition-all
+                hover:scale-[1.02]
                 active:scale-95
-                "
-          >
-          
-          <Mic size={34} className="text-white"/>
-          
+              "
+            >
+              ⌨ Type instead
             </button>
-          
-          </div>
-          
-          )}
+            
+            {/* FLOATING MIC */}
+            
+            {!showKeyboard && (
+            
+            <div className="fixed bottom-[108px] left-1/2 z-40 -translate-x-1/2">
+            
+            <button
+            className="
+            relative
+            flex
+            h-[84px]
+            w-[84px]
+            items-center
+            justify-center
+            rounded-full
+            bg-gradient-to-br
+            from-cyan-400
+            via-sky-500
+            to-blue-600
+            shadow-[0_25px_60px_rgba(0,180,255,.38)]
+            transition-all
+            duration-300
+            hover:scale-105
+            active:scale-95
+            "
+            >
+            
+            {/* Outer Glow */}
+            
+            <div className="absolute inset-0 rounded-full bg-cyan-400/30 blur-2xl" />
+            
+            <div
+            className="
+            relative
+            flex
+            h-[84px]
+            w-[84px]
+            items-center
+            justify-center
+            rounded-full
+            "
+            >
+            
+            <Mic
+            size={34}
+            strokeWidth={2.4}
+            className="text-white"
+            />
+            
+            </div>
+            
+            </button>
+            
+            </div>
+            
+            )}
       
-              {/* ================= BOTTOM NAVIGATION ================= */}
+           {/* ================= BOTTOM NAVIGATION ================= */}
           
           <nav
             className="
