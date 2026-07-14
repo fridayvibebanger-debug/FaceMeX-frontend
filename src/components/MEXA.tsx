@@ -142,114 +142,120 @@ export default function MEXA() {
       
           {/* ================= CENTER ================= */}
 
-          <section className="absolute inset-x-0 top-[72px] bottom-[118px] flex flex-col items-center justify-center px-6">
+          <section
+            className="
+              absolute
+              inset-x-0
+              top-[72px]
+              bottom-[118px]
+              overflow-y-auto
+              overflow-x-hidden
+              px-6
+              scrollbar-hide
+            "
+          >
+            <div className="flex flex-col items-center pt-6 pb-40">
           
-            {/* AI Orb */}
+              {/* AI Orb */}
           
-            <div className="relative flex h-[190px] w-[190px] -translate-y-12 items-center justify-center">
+              <div className="relative mt-2 flex h-[190px] w-[190px] items-center justify-center">
           
-              {/* Premium Ambient Glow */}
+                {/* Premium Ambient Glow */}
           
-              <div
-                className="absolute h-[390px] w-[390px] rounded-full bg-cyan-400/8 blur-[145px]"
-                style={{ animation: "floatGlow 14s ease-in-out infinite" }}
-              />
+                <div
+                  className="absolute h-[390px] w-[390px] rounded-full bg-cyan-400/8 blur-[145px]"
+                  style={{ animation: "floatGlow 14s ease-in-out infinite" }}
+                />
           
-              <div
-                className="absolute h-[340px] w-[340px] rounded-full bg-sky-400/7 blur-[155px]"
-                style={{ animation: "floatGlow 18s ease-in-out infinite reverse" }}
-              />
+                <div
+                  className="absolute h-[340px] w-[340px] rounded-full bg-sky-400/7 blur-[155px]"
+                  style={{ animation: "floatGlow 18s ease-in-out infinite reverse" }}
+                />
           
-              <div
-                className="absolute h-[300px] w-[300px] rounded-full bg-violet-500/6 blur-[165px]"
-                style={{ animation: "floatGlow 20s ease-in-out infinite" }}
-              />
+                <div
+                  className="absolute h-[300px] w-[300px] rounded-full bg-violet-500/6 blur-[165px]"
+                  style={{ animation: "floatGlow 20s ease-in-out infinite" }}
+                />
           
-              <div
-                className="absolute h-[230px] w-[230px] rounded-full bg-cyan-300/8 blur-[100px]"
-                style={{ animation: "floatGlow 10s ease-in-out infinite" }}
-              />
+                <div
+                  className="absolute h-[230px] w-[230px] rounded-full bg-cyan-300/8 blur-[100px]"
+                  style={{ animation: "floatGlow 10s ease-in-out infinite" }}
+                />
           
-              {/* Floating Orb */}
+                {/* Floating Orb */}
           
-              <div
-                className="relative flex items-center justify-center"
-                style={{ animation: "floatGlow 8s ease-in-out infinite" }}
-              >
+                <div className="relative flex items-center justify-center">
           
-                {/* Orbit Rings */}
+                  {/* Orbit Rings */}
           
-                <div className="absolute h-[182px] w-[182px] rounded-[42%] border border-cyan-300/10 animate-[spin_28s_linear_infinite]" />
+                  <div className="absolute h-[182px] w-[182px] rounded-[42%] border border-cyan-300/10 animate-[spin_28s_linear_infinite]" />
           
-                <div className="absolute h-[172px] w-[172px] rounded-[48%] border border-cyan-300/6 animate-[spin_20s_linear_infinite_reverse]" />
+                  <div className="absolute h-[172px] w-[172px] rounded-[48%] border border-cyan-300/6 animate-[spin_20s_linear_infinite_reverse]" />
           
-                <div className="absolute h-[162px] w-[162px] rounded-[38%] border border-cyan-300/5 animate-[spin_36s_linear_infinite]" />
+                  <div className="absolute h-[162px] w-[162px] rounded-[38%] border border-cyan-300/5 animate-[spin_36s_linear_infinite]" />
           
-                {/* Core */}
+                  {/* Core */}
           
-                <div className="relative flex h-[104px] w-[104px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_30px_70px_rgba(0,0,0,.22)]">
+                  <div className="relative flex h-[104px] w-[104px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_30px_70px_rgba(0,0,0,.22)]">
           
-                  <div className="absolute h-20 w-20 rounded-full bg-cyan-300/15 blur-3xl" />
+                    <div className="absolute h-20 w-20 rounded-full bg-cyan-300/15 blur-3xl" />
           
-                  <span className="text-[54px] text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,.6)]">
-                    ✦
-                  </span>
+                    <span className="text-[54px] text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,.6)]">
+                      ✦
+                    </span>
+          
+                  </div>
           
                 </div>
           
               </div>
           
+              {/* Voice Indicator */}
+          
+              <div className="mt-10 flex items-center gap-[6px]">
+                {[18,26,34,42,50,42,34,26,18].map((h,i)=>(
+                  <span
+                    key={i}
+                    className="rounded-full bg-gradient-to-t from-cyan-500 via-cyan-300 to-white shadow-[0_0_12px_rgba(34,211,238,.45)]"
+                    style={{
+                      width:"4px",
+                      height:`${h}px`,
+                      animation:`voiceWave 1.8s ease-in-out ${i*0.12}s infinite`
+                    }}
+                  />
+                ))}
+              </div>
+          
+              {/* Status */}
+          
+              <p className="mt-8 text-center text-[21px] font-semibold text-slate-700">
+                Ready whenever you are
+              </p>
+          
+              {/* Type Button */}
+          
+              <button
+                onClick={() => setShowKeyboard(!showKeyboard)}
+                className="
+                  mt-7
+                  h-12
+                  rounded-full
+                  border
+                  border-slate-200
+                  bg-white/95
+                  px-8
+                  text-[15px]
+                  font-medium
+                  text-slate-700
+                  shadow-[0_8px_24px_rgba(0,0,0,.08)]
+                  transition-all
+                  active:scale-95
+                "
+              >
+                ⌨ Type instead
+              </button>
+          
             </div>
-          
-            {/* Premium Voice Indicator */}
-          
-            <div className="-mt-4 flex h-[46px] items-end gap-[5px]">
-          
-              {[18,26,34,42,50,42,34,26,18].map((h, i) => (
-                <span
-                  key={i}
-                  className="rounded-full bg-gradient-to-t from-cyan-500 via-cyan-300 to-white shadow-[0_0_14px_rgba(34,211,238,.4)]"
-                  style={{
-                    width: "4px",
-                    height: `${h}px`,
-                    animation: `voiceWave 1.8s ease-in-out ${i * 0.12}s infinite`,
-                  }}
-                />
-              ))}
-          
-            </div>
-          
-            {/* Status */}
-          
-            <p className="mt-6 text-center text-[21px] font-semibold tracking-tight text-slate-700">
-              Ready whenever you are
-            </p>
-          
-            {/* Type Button */}
-          
-            <button
-              onClick={() => setShowKeyboard(!showKeyboard)}
-              className="
-                mt-5
-                h-12
-                rounded-full
-                border
-                border-slate-200
-                bg-white/95
-                px-8
-                text-[15px]
-                font-medium
-                text-slate-700
-                shadow-[0_10px_28px_rgba(15,23,42,.08)]
-                backdrop-blur-xl
-                transition-all
-                hover:shadow-[0_14px_32px_rgba(15,23,42,.12)]
-                active:scale-95
-              "
-            >
-              ⌨ Type instead
-            </button>
-          
           </section>
       
           {/* ================= INPUT ================= */}
