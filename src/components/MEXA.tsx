@@ -15,49 +15,36 @@ export default function MEXA() {
   const [showKeyboard, setShowKeyboard] = useState(false);
   
   return (
-        <main className="relative h-screen overflow-hidden bg-[#FAFAFC] text-[#111827]">
-      
-          {/* ================= Premium Background ================= */}
-      
-          <div className="absolute inset-0 overflow-hidden">
-      
-            {/* Base */}
-            <div className="absolute inset-0 bg-[#FAFAFC]" />
-      
-            {/* Top Ambient Light */}
-            <div className="absolute left-1/2 top-[-260px] h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-cyan-300/12 blur-[180px]" />
-      
-            {/* Bottom Ambient Light */}
-            <div className="absolute left-1/2 bottom-[-300px] h-[650px] w-[650px] -translate-x-1/2 rounded-full bg-blue-200/10 blur-[220px]" />
-      
-            {/* Soft White Center */}
-            <div className="absolute left-1/2 top-[35%] h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-white/70 blur-[120px]" />
-      
-            {/* Left Glow */}
-            <div className="absolute left-[-180px] top-[35%] h-[300px] w-[300px] rounded-full bg-cyan-200/8 blur-[140px]" />
-      
-            {/* Right Glow */}
-            <div className="absolute right-[-180px] top-[30%] h-[320px] w-[320px] rounded-full bg-sky-200/8 blur-[140px]" />
-      
-            {/* Premium Noise Effect */}
-            <div
-              className="absolute inset-0 opacity-[0.025]"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at 1px 1px,#000 1px,transparent 0)",
-                backgroundSize: "26px 26px",
-              }}
-            />
-      
-            {/* Smooth Fade */}
-            <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-transparent to-white/80" />
-      
-          </div>
-      
-          {/* Rest of UI */}
-      
-        </main>
-      );
+      <main className="relative h-screen overflow-hidden bg-[#FAFAFC] text-[#111827]">
+
+      {/* ================= Premium Background ================= */}
+
+      <div className="absolute inset-0 overflow-hidden">
+
+        <div className="absolute inset-0 bg-[#FAFAFC]" />
+
+        <div className="absolute left-1/2 top-[-260px] h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-cyan-300/12 blur-[180px]" />
+
+        <div className="absolute left-1/2 bottom-[-300px] h-[650px] w-[650px] -translate-x-1/2 rounded-full bg-blue-200/10 blur-[220px]" />
+
+        <div className="absolute left-1/2 top-[35%] h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-white/70 blur-[120px]" />
+
+        <div className="absolute left-[-180px] top-[35%] h-[300px] w-[300px] rounded-full bg-cyan-200/8 blur-[140px]" />
+
+        <div className="absolute right-[-180px] top-[30%] h-[320px] w-[320px] rounded-full bg-sky-200/8 blur-[140px]" />
+
+        <div
+          className="absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px,#000 1px,transparent 0)",
+            backgroundSize: "26px 26px",
+          }}
+        />
+
+        <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-transparent to-white/80" />
+
+      </div>
           {/* ================= HEADER ================= */}
 
           <header className="absolute top-0 left-0 right-0 z-50">
