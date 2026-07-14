@@ -146,7 +146,7 @@ export default function MEXA() {
           
             {/* AI Orb */}
           
-            <div className="relative -mt-[92px] flex h-[190px] w-[190px] items-center justify-center">
+            <div className="relative -mt-[135px] flex h-[190px] w-[190px] items-center justify-center">
           
               {/* Premium Ambient Glow */}
           
