@@ -70,307 +70,264 @@ export default function MEXA() {
           </header>
       
           {/* ================= CENTER ================= */}
-      
-          <section className="absolute inset-x-0 top-[76px] bottom-[92px] flex items-center justify-center">
-      
-            <div className="flex flex-col items-center">
-      
-              {/* ORB */}
-      
-              <div className="relative flex h-[205px] w-[205px] items-center justify-center">
-      
-                <div className="absolute h-[205px] w-[205px] rounded-full bg-cyan-300/20 blur-[70px]" />
-      
-                <div className="absolute h-[178px] w-[178px] rounded-[42%] border border-cyan-400/30 animate-[spin_18s_linear_infinite]" />
-      
-                <div className="absolute h-[170px] w-[170px] rounded-[48%] border border-cyan-500/20 animate-[spin_13s_linear_infinite_reverse]" />
-      
-                <div className="absolute h-[160px] w-[160px] rounded-[40%] border border-sky-300/20 animate-[spin_8s_linear_infinite]" />
-      
-                <div className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full bg-gradient-to-br from-[#06142A] via-[#102445] to-[#0A1628] shadow-[0_15px_50px_rgba(0,180,255,.20)]">
-      
-                  <div className="absolute h-16 w-16 rounded-full bg-cyan-300/20 blur-3xl" />
-      
-                  <span className="text-[54px] text-cyan-300">
-      
-                    ✦
-      
-                  </span>
-      
-                </div>
-      
+
+          <section className="absolute inset-x-0 top-[92px] bottom-[120px] flex flex-col items-center justify-center px-6">
+          
+            {/* AI Orb */}
+          
+            <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+          
+              <div className="absolute h-[220px] w-[220px] rounded-full bg-cyan-400/10 blur-[90px]" />
+          
+              <div className="absolute h-[170px] w-[170px] rounded-full border border-cyan-300/15 animate-[spin_18s_linear_infinite]" />
+          
+              <div className="absolute h-[162px] w-[162px] rounded-full border border-cyan-300/10 animate-[spin_12s_linear_infinite_reverse]" />
+          
+              <div className="relative flex h-[98px] w-[98px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0D234A] to-[#071322] shadow-[0_15px_40px_rgba(0,0,0,.15)]">
+          
+                <span className="text-[48px] text-cyan-300">
+                  ✦
+                </span>
+          
               </div>
-      
-              {/* Voice Wave */}
-      
-              <div className="mt-8 flex items-end gap-[4px]">
-      
-                {[10,16,24,36,48,36,24,16,10].map((h,i)=>
-      
-                  <span
-      
-                    key={i}
-      
-                    style={{
-      
-                      height:h,
-      
-                      animationDelay:`${i*0.08}s`
-      
-                    }}
-      
-                    className="w-[4px] rounded-full bg-cyan-500 animate-pulse"
-      
-                  />
-      
-                )}
-      
-              </div>
-      
-              <h2 className="mt-8 text-[40px] font-bold tracking-tight">
-      
-                MEXA
-      
-              </h2>
-      
-              <p className="mt-2 text-center text-[15px] text-slate-500">
-      
-                Ready whenever you are
-      
-              </p>
-      
-              {/* Toggle Button */}
-      
-              <button
-      
-                onClick={()=>setShowKeyboard(!showKeyboard)}
-      
-                className="
-      
-                  mt-8
-      
-                  rounded-full
-      
-                  border
-      
-                  border-black/5
-      
-                  bg-white/70
-      
-                  px-7
-      
-                  py-3
-      
-                  text-sm
-      
-                  font-medium
-      
-                  shadow-sm
-      
-                  backdrop-blur-xl
-      
-                  transition-all
-      
-                  hover:scale-[1.02]
-      
-                "
-      
-              >
-      
-                {showKeyboard ? "Hide keyboard" : "⌨ Type instead"}
-      
-              </button>
-      
+          
             </div>
-      
+          
+            {/* Premium Voice Wave */}
+          
+            <div className="mt-12 flex h-9 items-end gap-[4px]">
+          
+              {[8,14,22,30,40,30,22,14,8].map((h,i)=>(
+                <span
+                  key={i}
+                  className="w-[5px] rounded-full bg-gradient-to-t from-cyan-500 to-cyan-300 animate-pulse"
+                  style={{
+                    height:`${h}px`,
+                    animationDelay:`${i*0.08}s`
+                  }}
+                />
+              ))}
+          
+            </div>
+          
+            {/* No second MEXA title */}
+          
+            <p className="mt-8 text-center text-[20px] font-medium text-slate-700">
+                Ready whenever you are
+            </p>
+          
+            {/* Type Button */}
+          
+            <button
+                onClick={()=>setShowKeyboard(!showKeyboard)}
+                className="
+                mt-8
+                h-12
+                rounded-full
+                border
+                border-slate-200
+                bg-white
+                px-7
+                text-[15px]
+                font-medium
+                text-slate-700
+                shadow-sm
+                transition
+                hover:shadow-md
+                "
+            >
+                ⌨ Type instead
+            </button>
+          
           </section>
       
           {/* ================= INPUT ================= */}
-      
+
           {showKeyboard && (
-      
-            <div className="absolute bottom-[92px] left-0 right-0 z-40 px-4">
-      
-              <div className="mx-auto flex max-w-md items-center rounded-full border border-black/5 bg-white/90 px-5 py-3 shadow-xl backdrop-blur-3xl">
-      
+          
+            <div className="fixed bottom-[90px] left-0 right-0 z-40 px-4">
+          
+              <div
+                className="
+                mx-auto
+                flex
+                max-w-md
+                items-center
+                rounded-full
+                border
+                border-black/5
+                bg-white/95
+                px-5
+                py-3
+                shadow-[0_10px_35px_rgba(15,23,42,.10)]
+                backdrop-blur-3xl
+              "
+              >
+          
                 <input
-      
-                  className="flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-400"
-      
                   placeholder="Message MEXA..."
-      
+                  className="
+                  flex-1
+                  bg-transparent
+                  text-[15px]
+                  text-slate-800
+                  outline-none
+                  placeholder:text-slate-400
+                "
                 />
-      
+          
                 <button
-      
-                  className="ml-3 flex h-11 w-11 items-center justify-center rounded-full bg-[#111827] text-white"
-      
+                  className="
+                  ml-3
+                  flex
+                  h-10
+                  w-10
+                  items-center
+                  justify-center
+                  rounded-full
+                  bg-slate-900
+                  transition
+                  hover:scale-105
+                "
                 >
-      
-                  <ArrowUp size={18}/>
-      
+                  <ArrowUp size={18} className="text-white"/>
                 </button>
-      
+          
               </div>
-      
+          
             </div>
-      
+          
           )}
       
           {!showKeyboard && (
-      
-            <button
-      
-              className="
-      
-                absolute
-      
-                bottom-[115px]
-      
-                left-1/2
-      
+
+          <div className="fixed bottom-[108px] left-1/2 z-40 -translate-x-1/2">
+          
+          <button
+            className="
                 flex
-      
-                h-[82px]
-      
-                w-[82px]
-      
-                -translate-x-1/2
-      
+                h-[78px]
+                w-[78px]
                 items-center
-      
                 justify-center
-      
                 rounded-full
-      
                 bg-gradient-to-br
-      
                 from-cyan-400
-      
                 to-blue-500
-      
-                shadow-[0_0_60px_rgba(0,190,255,.35)]
-      
-              "
-      
-            >
-      
-              <Mic size={34} className="text-white"/>
-      
+                shadow-[0_15px_45px_rgba(0,180,255,.35)]
+                transition
+                duration-300
+                hover:scale-105
+                active:scale-95
+                "
+          >
+          
+          <Mic size={34} className="text-white"/>
+          
             </button>
-      
+          
+          </div>
+          
           )}
       
               {/* ================= BOTTOM NAVIGATION ================= */}
-
-          <nav className="absolute bottom-0 left-0 right-0 z-50">
-      
-            <div className="mx-auto max-w-md px-3 pb-[max(env(safe-area-inset-bottom),10px)]">
-      
+          
+          <nav
+            className="
+              fixed
+              bottom-0
+              left-0
+              right-0
+              z-50
+              bg-transparent
+              pb-[env(safe-area-inset-bottom)]
+            "
+          >
+            <div className="mx-auto max-w-md px-3 pb-2">
+          
               <div
                 className="
-                  mb-2
                   flex
-                  h-[68px]
+                  h-16
                   items-center
                   justify-around
-                  rounded-3xl
+                  rounded-[22px]
                   border
-                  border-black/5
-                  bg-white/92
-                  shadow-[0_10px_35px_rgba(15,23,42,.10)]
+                  border-slate-200
+                  bg-white/95
                   backdrop-blur-3xl
+                  shadow-[0_8px_30px_rgba(15,23,42,.08)]
                 "
               >
-      
+          
                 {/* Assistant */}
-      
-                <button className="group flex flex-col items-center gap-1">
-      
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-500/10">
-      
+          
+                <button className="flex flex-col items-center gap-1">
+          
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500/10">
+          
                     <Sparkles
-                      size={18}
+                      size={17}
                       className="text-cyan-600"
                     />
-      
+          
                   </div>
-      
+          
                   <span className="text-[10px] font-semibold text-cyan-600">
-      
                     Assistant
-      
                   </span>
-      
+          
                 </button>
-      
+          
                 {/* Career */}
-      
-                <button className="group flex flex-col items-center gap-1">
-      
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full transition group-hover:bg-slate-100">
-      
-                    <Briefcase
-                      size={18}
-                      className="text-slate-500"
-                    />
-      
-                  </div>
-      
-                  <span className="text-[10px] font-medium text-slate-500">
-      
+          
+                <button className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100">
+          
+                  <Briefcase
+                    size={18}
+                    className="text-slate-500"
+                  />
+          
+                  <span className="text-[10px] text-slate-500">
                     Career
-      
                   </span>
-      
+          
                 </button>
-      
+          
                 {/* Study */}
-      
-                <button className="group flex flex-col items-center gap-1">
-      
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full transition group-hover:bg-slate-100">
-      
-                    <GraduationCap
-                      size={18}
-                      className="text-slate-500"
-                    />
-      
-                  </div>
-      
-                  <span className="text-[10px] font-medium text-slate-500">
-      
+          
+                <button className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100">
+          
+                  <GraduationCap
+                    size={18}
+                    className="text-slate-500"
+                  />
+          
+                  <span className="text-[10px] text-slate-500">
                     Study
-      
                   </span>
-      
+          
                 </button>
-      
+          
                 {/* Business */}
-      
-                <button className="group flex flex-col items-center gap-1">
-      
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full transition group-hover:bg-slate-100">
-      
-                    <Building2
-                      size={18}
-                      className="text-slate-500"
-                    />
-      
-                  </div>
-      
-                  <span className="text-[10px] font-medium text-slate-500">
-      
+          
+                <button className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100">
+          
+                  <Building2
+                    size={18}
+                    className="text-slate-500"
+                  />
+          
+                  <span className="text-[10px] text-slate-500">
                     Business
-      
                   </span>
-      
+          
                 </button>
-      
+          
               </div>
-      
+          
             </div>
-      
+          
           </nav>
       
         </main>
