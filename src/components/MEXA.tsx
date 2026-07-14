@@ -144,37 +144,58 @@ export default function MEXA() {
 
           <section className="absolute inset-x-0 top-[72px] bottom-[118px] flex flex-col items-center justify-center px-6">
           
-            {/* Orb */}
+            {/* AI Orb */}
           
-            <div className="relative -mt-[72px] flex h-[185px] w-[185px] items-center justify-center">
+            <div className="relative -mt-[92px] flex h-[190px] w-[190px] items-center justify-center">
           
               {/* Premium Ambient Glow */}
           
-              <div className="absolute h-[340px] w-[340px] rounded-full bg-cyan-400/12 blur-[120px]" />
+              <div
+                className="absolute h-[390px] w-[390px] rounded-full bg-cyan-400/8 blur-[145px]"
+                style={{ animation: "floatGlow 14s ease-in-out infinite" }}
+              />
           
-              <div className="absolute h-[300px] w-[300px] rounded-full bg-sky-400/10 blur-[130px]" />
+              <div
+                className="absolute h-[340px] w-[340px] rounded-full bg-sky-400/7 blur-[155px]"
+                style={{ animation: "floatGlow 18s ease-in-out infinite reverse" }}
+              />
           
-              <div className="absolute h-[270px] w-[270px] rounded-full bg-violet-500/10 blur-[140px]" />
+              <div
+                className="absolute h-[300px] w-[300px] rounded-full bg-violet-500/6 blur-[165px]"
+                style={{ animation: "floatGlow 20s ease-in-out infinite" }}
+              />
           
-              <div className="absolute h-[220px] w-[220px] rounded-full bg-cyan-300/8 blur-[90px]" />
+              <div
+                className="absolute h-[230px] w-[230px] rounded-full bg-cyan-300/8 blur-[100px]"
+                style={{ animation: "floatGlow 10s ease-in-out infinite" }}
+              />
           
-              {/* Orbit Rings */}
+              {/* Floating Orb */}
           
-              <div className="absolute h-[178px] w-[178px] rounded-full border border-cyan-300/10 animate-[spin_24s_linear_infinite]" />
+              <div
+                className="relative flex items-center justify-center"
+                style={{ animation: "floatGlow 8s ease-in-out infinite" }}
+              >
           
-              <div className="absolute h-[170px] w-[170px] rounded-full border border-cyan-300/5 animate-[spin_18s_linear_infinite_reverse]" />
+                {/* Orbit Rings */}
           
-              <div className="absolute h-[162px] w-[162px] rounded-full border border-cyan-300/5 animate-[spin_30s_linear_infinite]" />
+                <div className="absolute h-[182px] w-[182px] rounded-[42%] border border-cyan-300/10 animate-[spin_28s_linear_infinite]" />
           
-              {/* Core */}
+                <div className="absolute h-[172px] w-[172px] rounded-[48%] border border-cyan-300/6 animate-[spin_20s_linear_infinite_reverse]" />
           
-              <div className="relative flex h-[102px] w-[102px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_25px_60px_rgba(0,0,0,.22)]">
+                <div className="absolute h-[162px] w-[162px] rounded-[38%] border border-cyan-300/5 animate-[spin_36s_linear_infinite]" />
           
-                <div className="absolute h-16 w-16 rounded-full bg-cyan-300/15 blur-2xl" />
+                {/* Core */}
           
-                <span className="text-[52px] text-cyan-300">
-                  ✦
-                </span>
+                <div className="relative flex h-[104px] w-[104px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_30px_70px_rgba(0,0,0,.22)]">
+          
+                  <div className="absolute h-20 w-20 rounded-full bg-cyan-300/15 blur-3xl" />
+          
+                  <span className="text-[54px] text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,.6)]">
+                    ✦
+                  </span>
+          
+                </div>
           
               </div>
           
@@ -182,16 +203,16 @@ export default function MEXA() {
           
             {/* Premium Voice Indicator */}
           
-            <div className="-mt-1 flex items-center gap-[6px]">
+            <div className="-mt-4 flex h-[46px] items-end gap-[5px]">
           
-              {[18,26,34,42,50,42,34,26,18].map((h,i)=>(
+              {[18,26,34,42,50,42,34,26,18].map((h, i) => (
                 <span
                   key={i}
-                  className="rounded-full bg-gradient-to-t from-cyan-500 via-cyan-300 to-white shadow-[0_0_12px_rgba(34,211,238,.45)]"
+                  className="rounded-full bg-gradient-to-t from-cyan-500 via-cyan-300 to-white shadow-[0_0_14px_rgba(34,211,238,.4)]"
                   style={{
-                    width:"4px",
-                    height:`${h}px`,
-                    animation:`voiceWave 1.8s ease-in-out ${i*0.12}s infinite`
+                    width: "4px",
+                    height: `${h}px`,
+                    animation: `voiceWave 1.8s ease-in-out ${i * 0.12}s infinite`,
                   }}
                 />
               ))}
@@ -200,7 +221,7 @@ export default function MEXA() {
           
             {/* Status */}
           
-            <p className="mt-7 text-center text-[21px] font-semibold text-slate-700">
+            <p className="mt-6 text-center text-[21px] font-semibold tracking-tight text-slate-700">
               Ready whenever you are
             </p>
           
@@ -209,7 +230,7 @@ export default function MEXA() {
             <button
               onClick={() => setShowKeyboard(!showKeyboard)}
               className="
-                mt-6
+                mt-5
                 h-12
                 rounded-full
                 border
@@ -219,8 +240,10 @@ export default function MEXA() {
                 text-[15px]
                 font-medium
                 text-slate-700
-                shadow-[0_8px_24px_rgba(0,0,0,.08)]
+                shadow-[0_10px_28px_rgba(15,23,42,.08)]
+                backdrop-blur-xl
                 transition-all
+                hover:shadow-[0_14px_32px_rgba(15,23,42,.12)]
                 active:scale-95
               "
             >
