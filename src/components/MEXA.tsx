@@ -183,9 +183,7 @@ export default function MEXA() {
               </button>
             </div>
           </nav>
-          
-          </section>
-          
+        
           </main>
           );
           }
