@@ -17,6 +17,56 @@ export default function MEXA() {
   const [status, setStatus] = useState<
     "idle" | "listening" | "thinking" | "speaking"
   >("idle");
+
+  const [transcript, setTranscript] = useState("");
+  const [recognition, setRecognition] = useState<any>(null);
+
+  const startListening = () => {
+  const SpeechRecognition =
+    (window as any).SpeechRecognition ||
+    (window as any).webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    alert("Speech Recognition is not supported on this device.");
+    return;
+  }
+
+  const recog = new SpeechRecognition();
+
+  recog.lang = "en-US";
+  recog.continuous = false;
+  recog.interimResults = true;
+
+  recog.onstart = () => {
+    setStatus("listening");
+  };
+
+  recog.onresult = (event: any) => {
+    let text = "";
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      text += event.results[i][0].transcript;
+    }
+
+    setTranscript(text);
+  };
+
+  recog.onerror = () => {
+    setStatus("idle");
+  };
+
+  recog.onend = () => {
+    setStatus("thinking");
+  };
+
+  recog.start();
+  setRecognition(recog);
+};
+
+const stopListening = () => {
+  recognition?.stop();
+  setStatus("idle");
+};
   
   return (
       <main className="relative h-screen overflow-hidden bg-[#FAFAFC] text-[#111827]">
@@ -330,7 +380,13 @@ export default function MEXA() {
               <div className="absolute inset-[-8px] rounded-full border border-white/30 bg-white/10 backdrop-blur-xl" />
           
               <button
-                onClick={() => setStatus("listening")}
+                onClick={() => {
+                  if (status === "listening") {
+                    stopListening();
+                  } else {
+                    startListening();
+                  }
+                }}
                 className={`
                   relative
                   flex
