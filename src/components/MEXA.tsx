@@ -72,16 +72,47 @@ export default function MEXA() {
       }
   
       setStatus("thinking");
-  
-      // TODO: Replace this with your backend API
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-  
-      setStatus("speaking");
-  
-      // Demo voice response
-      const utterance = new SpeechSynthesisUtterance(
-        "Hello, I heard you say: " + finalTranscript
-      );
+
+      try {
+      
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/mexa/chat`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message: finalTranscript,
+            }),
+          }
+        );
+
+        const data = await response.json();
+      
+        const reply = data.reply;
+      
+        setStatus("speaking");
+      
+        const utterance = new SpeechSynthesisUtterance(reply);
+      
+        utterance.lang = "en-US";
+        utterance.rate = 1;
+        utterance.pitch = 1;
+      
+        utterance.onend = () => {
+          setStatus("idle");
+        };
+      
+        speechSynthesis.speak(utterance);
+      
+      } catch (error) {
+      
+        console.error(error);
+      
+        setStatus("idle");
+      
+      }
   
       utterance.lang = "en-US";
       utterance.rate = 1;
