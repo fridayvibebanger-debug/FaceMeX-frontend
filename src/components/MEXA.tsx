@@ -31,55 +31,69 @@ export default function MEXA() {
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
-
+  
     if (!SpeechRecognition) {
       alert("Speech Recognition is not supported.");
       return;
     }
-
+  
     const recog = new SpeechRecognition();
-
+  
+    let finalTranscript = "";
+  
     recog.lang = "en-US";
     recog.continuous = false;
     recog.interimResults = true;
-
+  
     recog.onstart = () => {
       setStatus("listening");
       setTranscript("");
     };
-
+  
     recog.onresult = (event: any) => {
-      let text = "";
-
+      finalTranscript = "";
+  
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        text += event.results[i][0].transcript;
+        finalTranscript += event.results[i][0].transcript;
       }
-
-      setTranscript(text);
+  
+      setTranscript(finalTranscript);
     };
-
-    recog.onerror = () => {
+  
+    recog.onerror = (event: any) => {
+      console.error(event);
       setStatus("idle");
     };
-
+  
     recog.onend = async () => {
-      if (!transcript.trim()) {
+      if (!finalTranscript.trim()) {
         setStatus("idle");
         return;
       }
-
+  
       setStatus("thinking");
-
-      // Replace later with your AI API
+  
+      // TODO: Replace this with your backend API
       await new Promise((resolve) => setTimeout(resolve, 1500));
-
+  
       setStatus("speaking");
-
-      setTimeout(() => {
+  
+      // Demo voice response
+      const utterance = new SpeechSynthesisUtterance(
+        "Hello, I heard you say: " + finalTranscript
+      );
+  
+      utterance.lang = "en-US";
+      utterance.rate = 1;
+      utterance.pitch = 1;
+  
+      utterance.onend = () => {
         setStatus("idle");
-      }, 2500);
+      };
+  
+      speechSynthesis.speak(utterance);
     };
-
+  
     setRecognition(recog);
     recog.start();
   };
