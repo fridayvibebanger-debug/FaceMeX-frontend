@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 
 export default function MEXA() {
+
+  // ================= STATES =================
+
   const [showKeyboard, setShowKeyboard] = useState(false);
 
   const [status, setStatus] = useState<
@@ -19,54 +22,72 @@ export default function MEXA() {
   >("idle");
 
   const [transcript, setTranscript] = useState("");
+
   const [recognition, setRecognition] = useState<any>(null);
 
+  // ================= FUNCTIONS =================
+
   const startListening = () => {
-  const SpeechRecognition =
-    (window as any).SpeechRecognition ||
-    (window as any).webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
 
-  if (!SpeechRecognition) {
-    alert("Speech Recognition is not supported on this device.");
-    return;
-  }
-
-  const recog = new SpeechRecognition();
-
-  recog.lang = "en-US";
-  recog.continuous = false;
-  recog.interimResults = true;
-
-  recog.onstart = () => {
-    setStatus("listening");
-  };
-
-  recog.onresult = (event: any) => {
-    let text = "";
-
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      text += event.results[i][0].transcript;
+    if (!SpeechRecognition) {
+      alert("Speech Recognition is not supported.");
+      return;
     }
 
-    setTranscript(text);
+    const recog = new SpeechRecognition();
+
+    recog.lang = "en-US";
+    recog.continuous = false;
+    recog.interimResults = true;
+
+    recog.onstart = () => {
+      setStatus("listening");
+      setTranscript("");
+    };
+
+    recog.onresult = (event: any) => {
+      let text = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+
+      setTranscript(text);
+    };
+
+    recog.onerror = () => {
+      setStatus("idle");
+    };
+
+    recog.onend = async () => {
+      if (!transcript.trim()) {
+        setStatus("idle");
+        return;
+      }
+
+      setStatus("thinking");
+
+      // Replace later with your AI API
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      setStatus("speaking");
+
+      setTimeout(() => {
+        setStatus("idle");
+      }, 2500);
+    };
+
+    setRecognition(recog);
+    recog.start();
   };
 
-  recog.onerror = () => {
+  const stopListening = () => {
+    recognition?.stop();
     setStatus("idle");
   };
-
-  recog.onend = () => {
-    setStatus("thinking");
-  };
-
-  recog.start();
-  setRecognition(recog);
-};
-
-const stopListening = () => {
-  recognition?.stop();
-  setStatus("idle");
-};
   
   return (
       <main className="relative h-screen overflow-hidden bg-[#FAFAFC] text-[#111827]">
