@@ -13,6 +13,10 @@ import {
 
 export default function MEXA() {
   const [showKeyboard, setShowKeyboard] = useState(false);
+
+  const [status, setStatus] = useState<
+    "idle" | "listening" | "thinking" | "speaking"
+  >("idle");
   
   return (
       <main className="relative h-screen overflow-hidden bg-[#FAFAFC] text-[#111827]">
@@ -326,7 +330,8 @@ export default function MEXA() {
               <div className="absolute inset-[-8px] rounded-full border border-white/30 bg-white/10 backdrop-blur-xl" />
           
               <button
-                className="
+                onClick={() => setStatus("listening")}
+                className={`
                   relative
                   flex
                   h-[76px]
@@ -334,22 +339,55 @@ export default function MEXA() {
                   items-center
                   justify-center
                   rounded-full
-                  bg-gradient-to-br
-                  from-sky-400
-                  via-cyan-400
-                  to-blue-500
-                  shadow-[0_10px_35px_rgba(34,211,238,.25)]
                   transition-all
-                  duration-300
+                  duration-500
                   active:scale-95
-                  hover:scale-105
-                  animate-[pulse_3s_ease-in-out_infinite]
-                "
+                  ${
+                    status === "idle"
+                      ? "bg-gradient-to-br from-sky-400 via-cyan-400 to-blue-500 shadow-[0_10px_35px_rgba(34,211,238,.25)]"
+                      : status === "listening"
+                      ? "bg-gradient-to-br from-cyan-300 via-cyan-400 to-blue-500 shadow-[0_0_60px_rgba(34,211,238,.65)] scale-110"
+                      : status === "thinking"
+                      ? "bg-gradient-to-br from-violet-500 via-indigo-500 to-cyan-500 shadow-[0_0_55px_rgba(139,92,246,.55)]"
+                      : "bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500 shadow-[0_0_60px_rgba(16,185,129,.55)]"
+                  }
+                `}
               >
+                {/* Outer glow */}
+                <div
+                  className={`
+                    absolute
+                    inset-0
+                    rounded-full
+                    transition-all
+                    duration-500
+                    ${
+                      status === "listening"
+                        ? "animate-ping bg-cyan-300/30"
+                        : status === "speaking"
+                        ? "animate-pulse bg-emerald-300/20"
+                        : ""
+                    }
+                  `}
+                />
+              
                 <Mic
                   size={30}
                   strokeWidth={2.3}
-                  className="text-white"
+                  className={`
+                    relative
+                    z-10
+                    text-white
+                    transition-all
+                    duration-300
+                    ${
+                      status === "listening"
+                        ? "animate-pulse"
+                        : status === "thinking"
+                        ? "animate-bounce"
+                        : ""
+                    }
+                  `}
                 />
               </button>
           
