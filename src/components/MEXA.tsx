@@ -28,16 +28,10 @@ export default function MEXA() {
   // ================= FUNCTIONS =================
 
   const startListening = () => {
-    console.log("startListening called");
-  
-    setStatus("listening");
-  
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
-  
-    console.log("SpeechRecognition:", SpeechRecognition);
-  
+
     if (!SpeechRecognition) {
       alert("Speech Recognition is not supported.");
       return;
@@ -408,9 +402,6 @@ export default function MEXA() {
           
               <button
                 onClick={() => {
-                  console.log("Button clicked");
-                  console.log("Current status:", status);
-              
                   if (status === "listening") {
                     stopListening();
                   } else {
@@ -432,21 +423,24 @@ export default function MEXA() {
                     status === "idle"
                       ? "bg-gradient-to-br from-sky-400 via-cyan-400 to-blue-500 shadow-[0_10px_35px_rgba(34,211,238,.25)]"
                       : status === "listening"
-                      ? "bg-red-500 shadow-[0_0_60px_rgba(239,68,68,.6)] scale-110"
+                      ? "bg-gradient-to-br from-cyan-300 via-cyan-400 to-blue-500 shadow-[0_0_60px_rgba(34,211,238,.65)] scale-110"
                       : status === "thinking"
                       ? "bg-gradient-to-br from-violet-500 via-indigo-500 to-cyan-500 shadow-[0_0_55px_rgba(139,92,246,.55)]"
                       : "bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500 shadow-[0_0_60px_rgba(16,185,129,.55)]"
                   }
                 `}
               >
+                {/* Outer glow */}
                 <div
                   className={`
                     absolute
                     inset-0
                     rounded-full
+                    transition-all
+                    duration-500
                     ${
                       status === "listening"
-                        ? "animate-ping bg-red-300/30"
+                        ? "animate-ping bg-cyan-300/30"
                         : status === "speaking"
                         ? "animate-pulse bg-emerald-300/20"
                         : ""
@@ -461,6 +455,8 @@ export default function MEXA() {
                     relative
                     z-10
                     text-white
+                    transition-all
+                    duration-300
                     ${
                       status === "listening"
                         ? "animate-pulse"
