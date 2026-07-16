@@ -359,9 +359,7 @@ export default function MEXA() {
               <p className="text-[20px] font-semibold text-slate-700">
                 {reply || "Ready whenever you are"}
               </p>
-          
-              {/* Type Button */}
-          
+            
               <button
                 onClick={() => setShowKeyboard(!showKeyboard)}
                 className="
@@ -382,12 +380,12 @@ export default function MEXA() {
               >
                 ⌨ Type instead
               </button>
-                
-              </div>
-              
-            </div>
             
-          </section>
+            </div>   {/* ← THIS IS MISSING */}
+            
+            </div>   {/* closes flex container */}
+            
+            </section>
       
           {/* ================= INPUT ================= */}
 
