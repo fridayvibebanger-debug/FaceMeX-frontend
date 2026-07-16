@@ -92,42 +92,39 @@ export default function MEXA() {
       
         const data = await response.json();
 
-      // Get AI reply
-      const aiReply = data.reply;
-      
-      // Show it on the screen
-      setReply(aiReply);
-      
-      // Change status
-      setStatus("speaking");
-      
-      // Speak it
-      const utterance = new SpeechSynthesisUtterance(aiReply);
-      
-        utterance.lang = "en-US";
-        utterance.rate = 1;
-        utterance.pitch = 1;
-      
-        utterance.onend = () => {
+        // Get AI reply
+        const aiReply = data.reply;
+        
+        // Show it on the screen
+        setReply(aiReply);
+        
+        // Change status
+        setStatus("speaking");
+        
+        // Speak it
+        const utterance = new SpeechSynthesisUtterance(aiReply);
+        
+          utterance.lang = "en-US";
+          utterance.rate = 1;
+          utterance.pitch = 1;
+        
+          utterance.onend = () => {
+            setStatus("idle");
+          };
+        
+          speechSynthesis.speak(utterance);
+        
+        } catch (error) {
+        
+          console.error(error);
+        
           setStatus("idle");
-        };
-      
-        speechSynthesis.speak(utterance);
-      
-      } catch (error) {
-      
-        console.error(error);
-      
-        setStatus("idle");
-      
-      }
-  
-      speechSynthesis.speak(utterance);
+        
+        }
+    
+      setRecognition(recog);
+      recog.start();
     };
-  
-    setRecognition(recog);
-    recog.start();
-  };
 
   const stopListening = () => {
     recognition?.stop();
