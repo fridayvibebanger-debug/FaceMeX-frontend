@@ -23,6 +23,8 @@ export default function MEXA() {
 
   const [transcript, setTranscript] = useState("");
 
+  const [reply, setReply] = useState("");
+
   const [recognition, setRecognition] = useState<any>(null);
 
   // ================= FUNCTIONS =================
@@ -71,7 +73,7 @@ export default function MEXA() {
         return;
       }
   
-      setStatus("thinking");
+     setStatus("thinking");
 
       try {
       
@@ -87,14 +89,20 @@ export default function MEXA() {
             }),
           }
         );
-
+      
         const data = await response.json();
+
+      // Get AI reply
+      const aiReply = data.reply;
       
-        const reply = data.reply;
+      // Show it on the screen
+      setReply(aiReply);
       
-        setStatus("speaking");
+      // Change status
+      setStatus("speaking");
       
-        const utterance = new SpeechSynthesisUtterance(reply);
+      // Speak it
+      const utterance = new SpeechSynthesisUtterance(aiReply);
       
         utterance.lang = "en-US";
         utterance.rate = 1;
@@ -113,14 +121,6 @@ export default function MEXA() {
         setStatus("idle");
       
       }
-  
-      utterance.lang = "en-US";
-      utterance.rate = 1;
-      utterance.pitch = 1;
-  
-      utterance.onend = () => {
-        setStatus("idle");
-      };
   
       speechSynthesis.speak(utterance);
     };
@@ -348,8 +348,16 @@ export default function MEXA() {
           
               {/* Status */}
           
-              <p className="mt-8 text-center text-[21px] font-semibold text-slate-700">
-                Ready whenever you are
+              <div className="mt-7 max-w-sm text-center">
+
+              {transcript && (
+                <p className="mb-3 text-sm text-slate-500">
+                  {transcript}
+                </p>
+              )}
+            
+              <p className="text-[20px] font-semibold text-slate-700">
+                {reply || "Ready whenever you are"}
               </p>
           
               {/* Type Button */}
