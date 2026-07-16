@@ -382,8 +382,11 @@ export default function MEXA() {
               >
                 ⌨ Type instead
               </button>
-          
+                
+              </div>
+              
             </div>
+            
           </section>
       
           {/* ================= INPUT ================= */}
