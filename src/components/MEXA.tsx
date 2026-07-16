@@ -67,65 +67,60 @@ export default function MEXA() {
       setStatus("idle");
     };
   
-    recog.onend = async () => {
-      if (!finalTranscript.trim()) {
-        setStatus("idle");
-        return;
-      }
+      recog.onend = async () => {
+    if (!finalTranscript.trim()) {
+      setStatus("idle");
+      return;
+    }
   
-     setStatus("thinking");
-
-      try {
-      
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/mexa/chat`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              message: finalTranscript,
-            }),
-          }
-        );
-      
-        const data = await response.json();
-
-        // Get AI reply
-        const aiReply = data.reply;
-        
-        // Show it on the screen
-        setReply(aiReply);
-        
-        // Change status
-        setStatus("speaking");
-        
-        // Speak it
-        const utterance = new SpeechSynthesisUtterance(aiReply);
-        
-          utterance.lang = "en-US";
-          utterance.rate = 1;
-          utterance.pitch = 1;
-        
-          utterance.onend = () => {
-            setStatus("idle");
-          };
-        
-          speechSynthesis.speak(utterance);
-        
-        } catch (error) {
-        
-          console.error(error);
-        
-          setStatus("idle");
-        
+    setStatus("thinking");
+  
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/mexa/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: finalTranscript,
+          }),
         }
-    
-      setRecognition(recog);
-      recog.start();
-    };
-
+      );
+  
+      const data = await response.json();
+  
+      const aiReply = data.reply;
+  
+      setReply(aiReply);
+  
+      setStatus("speaking");
+  
+      const utterance = new SpeechSynthesisUtterance(aiReply);
+  
+      utterance.lang = "en-US";
+      utterance.rate = 1;
+      utterance.pitch = 1;
+  
+      utterance.onend = () => {
+        setStatus("idle");
+      };
+  
+      speechSynthesis.speak(utterance);
+  
+    } catch (error) {
+      console.error(error);
+      setStatus("idle");
+    }
+  
+  }; // ✅ Close recog.onend HERE
+  
+  setRecognition(recog);
+  recog.start();
+  
+  }; // ✅ Close startListening HERE
+  
   const stopListening = () => {
     recognition?.stop();
     setStatus("idle");
