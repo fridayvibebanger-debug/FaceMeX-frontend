@@ -5,6 +5,32 @@ import { Plus, Sparkles } from 'lucide-react';
 export default function FacemexPlusPage() {
   const navigate = useNavigate();
 
+  const subscribe = async (plan: "plus" | "pro") => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/payments/create-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ plan }),
+        }
+      );
+  
+      const data = await response.json();
+  
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        alert("Unable to start checkout.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Payment failed. Please try again.");
+    }
+  };
+  
   return (
     <div className="min-h-screen bg-white text-slate-950 flex items-center justify-center px-4 py-10 lg:bg-[#050505] lg:text-white">
       <div className="w-full max-w-6xl">
@@ -32,7 +58,7 @@ export default function FacemexPlusPage() {
 
             <button
               type="button"
-              onClick={() => navigate('/checkout?plan=facemex_plus')}
+              onClick={() => subscribe("plus")}
               className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:bg-slate-800 lg:border-white/10 lg:bg-white/10 lg:text-white/85 lg:hover:bg-white/15"
             >
               <Plus className="h-4 w-4 text-white/85" />
@@ -86,7 +112,7 @@ export default function FacemexPlusPage() {
 
             <button
               type="button"
-              onClick={() => navigate('/checkout?plan=facemex_pro')}
+              onClick={() => subscribe("pro")}
               className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:bg-slate-800 lg:border-white/10 lg:bg-white/10 lg:text-white/85 lg:hover:bg-white/15"
             >
               <Sparkles className="h-4 w-4 text-white/85" />
