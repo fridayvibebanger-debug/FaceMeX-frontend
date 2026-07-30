@@ -5,7 +5,7 @@ import { Plus, Sparkles } from 'lucide-react';
 export default function FacemexPlusPage() {
   const navigate = useNavigate();
 
- const subscribe = async (plan: "pro" | "creator") => {
+ const subscribe = async (plan: "plus" | "pro") => {
     try {
       const token = localStorage.getItem("access_token");
   
