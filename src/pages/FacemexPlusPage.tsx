@@ -5,29 +5,34 @@ import { Plus, Sparkles } from 'lucide-react';
 export default function FacemexPlusPage() {
   const navigate = useNavigate();
 
-  const subscribe = async (plan: "plus" | "pro") => {
+ const subscribe = async (plan: "pro" | "creator") => {
     try {
+      const token = localStorage.getItem("access_token");
+  
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/payments/create-subscription`,
+        `${import.meta.env.VITE_API_URL}/api/payments/initiate`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ plan }),
+          body: JSON.stringify({
+            tier: plan,
+          }),
         }
       );
   
       const data = await response.json();
   
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
       } else {
-        alert("Unable to start checkout.");
+        alert(data.message || "Unable to start payment.");
       }
-    } catch (error) {
-      console.error(error);
-      alert("Payment failed. Please try again.");
+    } catch (err) {
+      console.error(err);
+      alert("Payment failed.");
     }
   };
   
