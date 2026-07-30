@@ -9,6 +9,7 @@ import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
 import EmotionAIPage from './pages/EmotionAIPage';
 import MEXA from "./components/MEXA";
 import MEXAUpgrade from "./pages/MEXAUpgrade";
+import FacemexPlusPage from './pages/FacemexPlusPage';
 import FeedPage from './pages/FeedPage';
 import WatchPage from './pages/WatchPage';
 import ProfilePage from './pages/ProfilePage';
@@ -60,13 +61,15 @@ import CareerAIPage from './pages/CareerAIPage';
 import NotificationsPage from './pages/NotificationsPage';
 import ConnectPage from './pages/ConnectPage';
 import CallPage from './pages/CallPage';
+import EnterpriseHomePage from './enterprise/pages/EnterpriseHomePage';
+import DepartmentDetailPage from './enterprise/pages/DepartmentDetailPage';
 
 const DEFAULT_AUTHENTICATED_ROUTE = '/ai/job-assistant';
 
 function PublicAuthRoute() {
   const { isAuthenticated, isInitialized } = useAuthStore();
 
-  if (!isInitialized) {
+  if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
   }
 
@@ -76,7 +79,7 @@ function PublicAuthRoute() {
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isInitialized } = useAuthStore();
 
-  if (!isInitialized) {
+  if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
   }
 
@@ -134,8 +137,46 @@ function App() {
         <Route path="/community-rules" element={<CommunityRules />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/mexa" element={<MEXA />} />
-        <Route path="/mexa-upgrade" element={<MEXAUpgrade />} />
+        <Route
+          path="/mexa"
+          element={
+            <ProtectedRoute>
+              <MEXA />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/mexa-upgrade"
+          element={
+            <ProtectedRoute>
+              <MEXAUpgrade />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/facemex-plus"
+          element={
+            <ProtectedRoute>
+              <FacemexPlusPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/enterprise"
+          element={
+            <ProtectedRoute>
+              <EnterpriseHomePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/enterprise/:departmentKey"
+          element={
+            <ProtectedRoute>
+              <DepartmentDetailPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/recruiter-portal"
