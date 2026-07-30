@@ -20,6 +20,7 @@ import {
   Globe2,
   ImagePlus,
   Loader2,
+  Plus,
   Sparkles,
   Mail,
   MapPin,
@@ -2483,9 +2484,11 @@ function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
 function WelcomeHero({
   firstName,
   onQuickAsk,
+  onOpenMEXA,
 }: {
   firstName: string;
   onQuickAsk: (text: string) => void;
+  onOpenMEXA: () => void;
 }) {
   const displayName = firstName && firstName !== 'there' ? firstName : 'there';
 
@@ -2557,7 +2560,7 @@ function WelcomeHero({
   }, [typedPrompt, isDeleting, promptIndex, rotatingPrompts]);
 
   return (
-    <div className="mx-auto flex min-h-[38vh] max-w-xl flex-col items-center justify-center text-center lg:min-h-[45vh]">
+    <div className="relative mx-auto flex min-h-[38vh] max-w-xl flex-col items-center justify-center text-center lg:min-h-[45vh]">
       <div className="fm-treasure-wrap">
         <span className="fm-treasure-ring" />
         <span className="fm-treasure-shadow" />
@@ -2567,31 +2570,19 @@ function WelcomeHero({
         </div>
       </div>
 
-      <div className="mt-7 flex min-h-[78px] items-center justify-center px-4">
-        <h2 className="fm-main-typing-text text-balance font-semibold leading-tight tracking-tight text-slate-950 dark:text-white lg:text-white">
+        <div className="mt-6 flex min-h-[68px] items-center justify-center px-4">
+        <h2 className="fm-main-typing-text text-[15px] lg:text-[17px] text-balance font-semibold leading-tight tracking-tight text-slate-950 dark:text-white lg:text-white">
           {typedPrompt || '\u00A0'}
           <span className="fm-type-caret" />
         </h2>
       </div>
 
-      <p className="mt-2 max-w-md px-3 text-sm leading-6 text-slate-500 dark:text-white/50 lg:text-white/50">
+      <p className="mt-2 max-w-md px-3 text-[12px] leading-5 text-slate-500 dark:text-white/50 lg:text-white/50">
         Ask one clear question. Upload a screenshot when checking a job post,
         CV, advert, or opportunity.
       </p>
 
-      <div className="mt-5 flex max-w-full flex-wrap justify-center gap-2 px-2">
-        {quickPrompts.map((item, index) => (
-          <button
-            key={item.label}
-            type="button"
-            onClick={() => onQuickAsk(item.prompt)}
-            className="fm-quick-pill rounded-full border border-black/5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition duration-300 hover:bg-slate-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70 dark:hover:bg-white/[0.1] lg:border-white/10 lg:bg-white/10 lg:text-white/80 lg:hover:bg-white/15"
-            style={{ animationDelay: `${index * 35}ms` }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      {/* Quick prompt pills removed from hero (kept in sidebar per request) */}
     </div>
   );
 }
@@ -2783,6 +2774,11 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [youtubeLessonsBusy, setYoutubeLessonsBusy] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchResults, setGlobalSearchResults] = useState({
+    chats: [] as ChatSession[],
+    topics: [] as YouTubeLessonCategory[],
+    features: [] as Array<{ label: string; action: () => void }> ,
+  });
   const [watchPanelOpen, setWatchPanelOpen] = useState(false);
   const [mexaMode, setMexaMode] = useState<
   "auto" | "study" | "career" | "business" | "research" | "creative" | "coding"
@@ -2996,6 +2992,29 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const recordAIUse = () => {
     if (deepSeekLimit === null) return;
     setDeepSeekUsage(increaseDeepSeekUsage(currentTier));
+  };
+
+  const runGlobalSearch = (value?: string) => {
+    const q = clean(value || globalSearchQuery).toLowerCase();
+    if (!q) {
+      setGlobalSearchResults({ chats: [], topics: [], features: [] });
+      return;
+    }
+
+    const matches = (text: string) => clean(text).toLowerCase().includes(q);
+
+    const chats = chatSessions.filter((s) => matches(s.title) || (s.messages || []).some((m) => matches(m.content))).slice(0, 8);
+    const topics = youtubeLessonCategories.filter((c) => matches(`${c.label} ${c.description} ${c.badge}`)).slice(0, 8);
+
+    const featuresList = [
+      { label: 'Scheduled', action: () => openSchedulePanel() },
+      { label: 'Job Tracker', action: () => setTrackerOpen(true) },
+      { label: 'Library', action: () => setLibraryOpen(true) },
+    ];
+
+    const features = featuresList.filter((f) => matches(f.label));
+
+    setGlobalSearchResults({ chats, topics, features });
   };
 
   const normalizeApiJobs = (jobs: any[], keyword = 'jobs', requestedArea = 'Tzaneen'): LocalVerifiedJob[] => {
@@ -4596,29 +4615,46 @@ Apply link: ${job.applyUrl}`;
 
     if (showResearchButtons) {
       return (
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/5 pt-3 dark:border-white/10 lg:border-white/10">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => saveMessageAs(message.id, 'research')}
-            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
-          >
-            <Save className="mr-2 h-3.5 w-3.5" />
-            Save Note
-          </Button>
+        <div className="mt-3 hidden rounded-2xl border border-[rgba(255,255,255,.08)] bg-[#111827] p-5 text-white shadow-xl lg:block">
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Research Actions</p>
+              <p className="mt-2 text-sm text-slate-300">Continue working with this research.</p>
+            </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setPrompt(`Turn this answer into a clear research note with headings, key points, and next steps. Keep it easy to revise and save it as a note:\n\n${message.content}`);
-              setFollowUpExpanded(true);
-            }}
-            className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10"
-          >
-            <FileText className="mr-2 h-3.5 w-3.5" />
-            Make a Note
-          </Button>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => saveMessageAs(message.id, 'research')}
+                className="flex h-[52px] w-full items-center gap-3 rounded-xl bg-gradient-to-r from-blue-500 via-sky-500 to-cyan-500 px-4 text-left text-white shadow-[0_16px_40px_rgba(15,23,42,0.25)] transition-transform duration-200 ease-out hover:-translate-y-0.5"
+              >
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                  <Save className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold">Save Note</p>
+                  <p className="mt-1 text-sm text-slate-200">Save this answer as a reusable research note.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPrompt(`Turn this answer into a clear research note with headings, key points, and next steps. Keep it easy to revise and save it as a note:\n\n${message.content}`);
+                  setFollowUpExpanded(true);
+                }}
+                className="flex h-[52px] w-full items-center gap-3 rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 px-4 text-left text-white shadow-[0_16px_40px_rgba(15,23,42,0.25)] transition-transform duration-200 ease-out hover:-translate-y-0.5"
+              >
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold">Create Research Note</p>
+                  <p className="mt-1 text-sm text-slate-200">Convert this answer into a structured research note.</p>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       );
     }
@@ -4626,62 +4662,249 @@ Apply link: ${job.applyUrl}`;
     return null;
   };
   const messageActions = (message: ChatMessage) => (
-    <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-black/5 pt-2 opacity-80 dark:border-white/10">
-      <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
-        <Copy className="h-3.5 w-3.5" />
-      </Button>
+    <>
+      <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-black/5 pt-2 opacity-80 dark:border-white/10 lg:hidden">
+        <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => shareMessageLink(message.content, 'FaceMeX AI answer')} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Share answer link">
-        <Share2 className="h-3.5 w-3.5" />
-      </Button>
+        <Button size="sm" variant="ghost" onClick={() => shareMessageLink(message.content, 'FaceMeX AI answer')} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Share answer link">
+          <Share2 className="h-3.5 w-3.5" />
+        </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => openSchedulePanel(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Schedule this chat">
-        <CalendarDays className="h-3.5 w-3.5" />
-      </Button>
+        <Button size="sm" variant="ghost" onClick={() => researchMessage(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Research this answer">
+          <Search className="h-3.5 w-3.5" />
+        </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
-        <Edit3 className="h-3.5 w-3.5" />
-      </Button>
+        <Button size="sm" variant="ghost" onClick={() => openSchedulePanel(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Schedule this chat">
+          <CalendarDays className="h-3.5 w-3.5" />
+        </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
-        {message.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-      </Button>
+        <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Edit this message">
+          <Edit3 className="h-3.5 w-3.5" />
+        </Button>
 
-      <Button size="sm" variant="ghost" onClick={() => researchMessage(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
-        <Search className="h-3.5 w-3.5" />
-      </Button>
+        <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label={message.pinned ? 'Unpin message' : 'Pin message'}>
+          {message.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+        </Button>
 
-      {message.role === 'assistant' && message.intent !== 'general-question' && message.intent !== 'general-help' && (
+        {message.role === 'assistant' && message.intent !== 'general-question' && message.intent !== 'general-help' && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => saveMessageAs(message.id, message.savedCategory || 'research')}
+            className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white"
+            aria-label="Save this message"
+          >
+            <Save className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => saveMessageAs(message.id, message.savedCategory || 'research')}
-          className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white"
+          onClick={clearCurrentChatOnly}
+          className="h-8 rounded-full px-2 text-red-500"
+          aria-label="Clear current chat"
         >
-          <Save className="h-3.5 w-3.5" />
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
-      )}
+      </div>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={clearCurrentChatOnly}
-        className="h-8 rounded-full px-2 text-red-500"
-        aria-label="Clear current chat"
-      >
-        Clear chat
-      </Button>
+      <div className="hidden lg:flex lg:absolute lg:bottom-3 lg:right-3 lg:items-center lg:gap-1 lg:rounded-full lg:bg-[rgba(24,24,24,.82)] lg:border lg:border-[rgba(255,255,255,.08)] lg:px-1.5 lg:h-[40px] lg:shadow-[0_20px_45px_rgba(0,0,0,0.15)] lg:opacity-0 lg:-translate-y-2 lg:pointer-events-none lg:transition-all lg:duration-200 lg:ease-in-out lg:group-hover:opacity-100 lg:group-hover:translate-y-0 lg:group-hover:pointer-events-auto">
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => copyText(message.content)}
+          title="Copy"
+          aria-label="Copy answer"
+          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => deleteMessage(message.id)}
-        className="ml-auto h-8 rounded-full px-2 text-red-500"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-    </div>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => shareMessageLink(message.content, 'FaceMeX AI answer')}
+          title="Share"
+          aria-label="Share answer"
+          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+        >
+          <Share2 className="h-4 w-4" />
+        </Button>
+
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => researchMessage(message)}
+          title="Research"
+          aria-label="Research this answer"
+          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+        >
+          <Search className="h-4 w-4" />
+        </Button>
+
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => openSchedulePanel(message.content)}
+          title="Schedule"
+          aria-label="Schedule this chat"
+          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+        >
+          <CalendarDays className="h-4 w-4" />
+        </Button>
+
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => startEdit(message)}
+          title="Edit"
+          aria-label="Edit this message"
+          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+        >
+          <Edit3 className="h-4 w-4" />
+        </Button>
+
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => togglePin(message.id)}
+          title={message.pinned ? 'Unpin' : 'Pin'}
+          aria-label={message.pinned ? 'Unpin message' : 'Pin message'}
+          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+        >
+          {message.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+        </Button>
+
+        {message.role === 'assistant' && message.intent !== 'general-question' && message.intent !== 'general-help' && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => saveMessageAs(message.id, message.savedCategory || 'research')}
+            title="Save"
+            aria-label="Save this message"
+            className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+        )}
+
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => deleteMessage(message.id)}
+          title="Delete"
+          aria-label="Delete this message"
+          className="h-9 w-9 rounded-full text-red-400 transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </>
   );
+
+  const SavedReaderModal = ({ message }: { message: any }) => {
+    const savedReaderIsApplication =
+      message.savedCategory === 'institution_applications' ||
+      message.intent === 'education_institution' ||
+      shouldShowApplicationActions(message, '');
+    const savedReaderIsEducation =
+      message.savedCategory === 'homework_help' ||
+      message.savedCategory === 'assignments' ||
+      message.savedCategory === 'youtube_lessons' ||
+      message.intent === 'education_homework' ||
+      message.intent === 'education_assignment' ||
+      message.intent === 'education_youtube';
+    const savedReaderIsResearch =
+      message.savedCategory === 'research' ||
+      message.intent === 'research' ||
+      message.intent === 'verify-opportunity' ||
+      message.intent === 'image_or_document_analysis' ||
+      shouldShowResearchActions(message, '');
+
+    return (
+      <div className="fixed inset-0 z-[97] flex items-end bg-black/35 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
+        <div
+          className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[30px] bg-white text-slate-950 shadow-2xl dark:bg-[#111] dark:text-white lg:max-h-[86dvh] lg:max-w-2xl lg:rounded-[30px] lg:bg-[#202020] lg:text-white"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
+
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-white/55">
+                {message.savedCategory ? savedCategoryLabels[message.savedCategory] : 'Saved item'}
+              </div>
+              <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-slate-950 dark:text-white lg:text-white">
+                Saved card
+              </h2>
+              <p className="mt-1 text-[13px] text-slate-500 dark:text-white/50">
+                Read it, copy it, or open it in a new chat to continue.
+              </p>
+            </div>
+
+            <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 text-[15px] leading-7 text-slate-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/78 lg:border-white/10 lg:bg-[#0c0c0c] lg:text-white">
+              <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
+            </div>
+
+            <div className="mt-4 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04] lg:border-white/10 lg:bg-[#111] lg:text-white">
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-slate-950 dark:text-white lg:text-white">
+                Ask more about this
+              </h3>
+              <p className="mt-1 text-[13px] leading-5 text-slate-500 dark:text-white/50">
+                Start a clean chat using this saved item as memory so the answer continues from the right topic.
+              </p>
+
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button onClick={() => startSavedItemNewChat(message, 'continue')} className="h-11 rounded-2xl bg-slate-950 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                  Continue in new chat
+                </Button>
+
+                {(savedReaderIsResearch || savedReaderIsEducation || !savedReaderIsApplication) && (
+                  <Button variant="outline" onClick={() => startSavedItemNewChat(message, 'deeper')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                    {savedReaderIsEducation ? 'Ask more about this' : 'Research deeper'}
+                  </Button>
+                )}
+
+                {savedReaderIsApplication && (
+                  <Button variant="outline" onClick={() => startSavedItemNewChat(message, 'apply')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                    Help me apply
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
+            <Button variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              Copy
+            </Button>
+
+            <Button variant="outline" onClick={() => shareMessageLink(message.content, 'FaceMeX saved card')} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+              <Share2 className="mr-2 h-3.5 w-3.5" />
+              Share
+            </Button>
+
+            {savedReaderIsApplication && (
+              <Button variant="outline" onClick={() => openSchedulePanel(message.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                <CalendarDays className="mr-2 h-3.5 w-3.5" />
+                Schedule
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-white text-slate-950 lg:bg-black lg:text-white">
@@ -4812,9 +5035,9 @@ Apply link: ${job.applyUrl}`;
         }
 
         .fm-main-typing-text {
-          max-width: 19ch;
+          max-width: 18ch;
           text-align: center;
-          font-size: 23px;
+          font-size: 16px;
           line-height: 1.2;
           letter-spacing: -0.03em;
         }
@@ -4865,8 +5088,8 @@ Apply link: ${job.applyUrl}`;
 
         @media (min-width: 640px) {
           .fm-main-typing-text {
-            max-width: 24ch;
-            font-size: 29px;
+            max-width: 22ch;
+            font-size: 22px;
           }
         }
 
@@ -5101,9 +5324,22 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-white/5 bg-[#050505] text-white lg:flex lg:flex-col">
+      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[248px] min-w-[248px] shrink-0 overflow-hidden border-r border-white/5 bg-[#050505] text-white lg:flex lg:flex-col lg:pl-2 lg:-translate-x-1">
         <div className="flex h-14 shrink-0 items-center justify-between bg-[#050505] px-4">
-          <div className="min-w-0 truncate text-sm font-semibold">FaceMeX</div>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 truncate text-sm font-semibold">FaceMeX</div>
+            {mexaPlan === 'pro' && (
+              <button
+                type="button"
+                onClick={() => navigate('/mexa')}
+                className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] font-semibold tracking-[0.14em] text-white/85 transition hover:bg-white/15 lg:inline-flex"
+                aria-label="Get MEXA"
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>GET MEXA</span>
+              </button>
+            )}
+          </div>
 
           <button
             type="button"
@@ -5127,11 +5363,11 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setJobsOpen(true)}
+            onClick={() => setGlobalSearchOpen(true)}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <Search className="h-4 w-4" />
-            Search jobs
+            Search
           </button>
 
           <button
@@ -5163,19 +5399,88 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => {
-              setWatchPanelOpen(true);
-              setWatchPlayingVideoId(null);
-          
-              // Optional: clear previous search each time
-              setWatchSearch('');
-              setWatchVideos([]);
-            }}
+            onClick={() => setWatchPanelOpen((value) => !value)}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
           >
             <Globe2 className="h-4 w-4" />
             Watch
           </button>
+
+          {watchPanelOpen && (
+            <div className="mb-4 rounded-2xl border border-white/10 bg-[#0b0b0b] p-3 text-white">
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[#111] px-3 py-2">
+                <Search className="h-4 w-4 text-white/70" />
+                <input
+                  value={watchSearch}
+                  onChange={(e) => setWatchSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') openWatchSearch();
+                  }}
+                  placeholder="Search useful videos..."
+                  className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => openWatchSearch()}
+                  className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-950 transition active:scale-[0.98]"
+                >
+                  Search
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                {watchBusy ? (
+                  <div className="flex items-center gap-2 rounded-2xl bg-white/5 p-3 text-[13px] text-white/70">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading useful videos...
+                  </div>
+                ) : watchVideos.length === 0 ? (
+                  <div className="rounded-2xl bg-white/5 p-3 text-[13px] leading-5 text-white/70">
+                    Search any lesson, funding topic, investor topic, or job guide and watch inside FaceMeX.
+                  </div>
+                ) : (
+                  watchVideos.slice(0, 3).map((video) => {
+                    const isPlaying = watchPlayingVideoId === video.videoId;
+
+                    return (
+                      <div key={video.videoId} className="overflow-hidden rounded-[22px] border border-white/10 bg-[#090909]">
+                        <div className="relative aspect-video bg-slate-950">
+                          {isPlaying ? (
+                            <iframe
+                              src={video.embedUrl}
+                              title={video.title}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              allowFullScreen
+                              className="h-full w-full"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setWatchPlayingVideoId(video.videoId)}
+                              className="group relative h-full w-full overflow-hidden bg-slate-950 text-left"
+                            >
+                              {video.thumbnail ? (
+                                <img src={video.thumbnail} alt={video.title} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                              ) : null}
+                              <span className="absolute inset-0 bg-black/20" />
+                              <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-950 shadow-lg">
+                                ▶
+                              </span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="p-3">
+                          <div className="mb-2 line-clamp-2 text-sm font-semibold text-white">{video.title}</div>
+                          <p className="text-[13px] text-white/70">{video.channelTitle || 'FaceMeX'}</p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="mt-6 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">
             Quick tools
@@ -5244,35 +5549,34 @@ Apply link: ${job.applyUrl}`;
         </div>
 
         <div className="shrink-0 border-t border-white/5 bg-[#050505] p-3">
-          <button
-            type="button"
-            onClick={() => navigate('/feed')}
-            className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to FaceMeX
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/feed')}
-            className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/10"
-          >
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-2 ring-emerald-400/20">
+          <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-2 ring-emerald-400/20">
               {firstName?.[0]?.toUpperCase() || 'F'}
             </div>
 
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-white">{firstName}</p>
-              <p className="text-xs text-white/40">Back to FaceMeX feed</p>
+              <p className="truncate text-sm font-medium text-white">{userDisplayName}</p>
+              <p className="text-[12px] text-white/40">Back to FaceMeX</p>
             </div>
-          </button>
+          </div>
         </div>
       </aside>
 
+      {!(globalSearchOpen || jobsOpen || watchPanelOpen || subscriptionOpen || scheduleOpen || applySheetOpen || clearWorkspaceOpen || trackerOpen || libraryOpen || Boolean(savedReaderMessage)) && (
+        <button
+          type="button"
+          onClick={() => navigate('/facemex-plus')}
+          title="Upgrade to FaceMeX Plus R99/month or Pro R250/month"
+          className="hidden h-8 items-center gap-1 rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] font-semibold tracking-[0.14em] text-white/85 transition hover:bg-white/15 lg:flex fixed right-4 top-4 z-[75]"
+        >
+          <Plus className="h-3 w-3 text-white/85" />
+          <span>GET PLUS</span>
+        </button>
+      )}
+
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
-      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between bg-white/55 px-4 pt-2 backdrop-blur-xl lg:hidden">
+      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between bg-white px-4 pt-2 shadow-sm shadow-slate-200/30 lg:hidden">
 
         {isDeveloper && developerMode && (
           <div className="mx-auto mb-6 max-w-xl rounded-2xl border border-red-200 bg-white p-4 shadow-lg">
@@ -5317,24 +5621,11 @@ Apply link: ${job.applyUrl}`;
         
           <button
             type="button"
-            onClick={() => {
-              if (mexaPlan === "free") {
-                navigate("/mexa-upgrade");
-              } else {
-                navigate("/mexa");
-              }
-            }}
-            className="flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-5 text-slate-900 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-[#1f1f1f] dark:text-white dark:hover:bg-[#2a2a2a]"
+            onClick={() => navigate('/facemex-plus')}
+            className="flex min-w-0 h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50"
           >
-            <Sparkles className="h-4 w-4 text-violet-500" />
-          
-            <span className="font-semibold">
-              {mexaPlan === "free"
-                ? "Get MEXA"
-                : mexaPlan === "plus"
-                ? "MEXA Plus"
-                : "MEXA Pro"}
-            </span>
+            <Plus className="h-3 w-3 text-slate-900" />
+            <span>GET PLUS</span>
           </button>
           
           {isDeveloper && (
@@ -5363,9 +5654,8 @@ Apply link: ${job.applyUrl}`;
       
           <button
             type="button"
-            onClick={() => navigate("/feed")}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
-            aria-label="Back to FaceMeX"
+            aria-label="Profile"
           >
             {firstName?.[0]?.toUpperCase() || "F"}
           </button>
@@ -5378,7 +5668,11 @@ Apply link: ${job.applyUrl}`;
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
               {chatMessages.length === 0 && !busy && (
-                <WelcomeHero firstName={firstName} onQuickAsk={quickAsk} />
+                <WelcomeHero
+                  firstName={firstName}
+                  onQuickAsk={quickAsk}
+                  onOpenMEXA={() => navigate('/mexa')}
+                />
               )}
 
               {chatMessages.map((message, index) => {
@@ -5406,7 +5700,7 @@ Apply link: ${job.applyUrl}`;
                           ? 'fm-user-prompt-bubble max-w-[84%] rounded-[18px] px-4 py-3 text-[15px] leading-6 sm:max-w-[78%] lg:max-w-[72%] lg:bg-[#2f2f2f] lg:px-4 lg:py-3 lg:text-white'
                           : isJobResultsMessage
                             ? 'w-full max-w-full bg-transparent px-0 py-0 shadow-none'
-                            : 'fm-assistant-message w-full max-w-full bg-transparent px-0 py-1 text-slate-950 shadow-none lg:text-white'
+                            : 'fm-assistant-message relative group w-full max-w-full bg-transparent px-0 py-1 text-slate-950 shadow-none lg:pb-10 lg:text-white'
                       }`}
                     >
                       {editingMessageId === message.id ? (
@@ -5491,19 +5785,19 @@ Apply link: ${job.applyUrl}`;
                   <button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
-                    className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-[0.98] hover:bg-slate-200 lg:bg-white/10 lg:text-white/80 lg:hover:bg-white/15"
-                    aria-label="Upload image"
+                    className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-[0.98] hover:bg-slate-200 lg:h-8 lg:w-8 lg:bg-white/10 lg:text-white/80 lg:hover:bg-white/15"
+                    aria-label="Upload image or document"
                   >
-                    <ImagePlus className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                   </button>
 
-                  <Textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    onFocus={() => setFollowUpExpanded(true)}
-                    placeholder={hasJobResultsOnScreen ? 'Ask a follow-up...' : 'Ask FaceMeX anything'}
-                    className={`min-h-[44px] flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-[16px] leading-6 text-slate-950 dark:text-white lg:text-white placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45 lg:placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
-                      inputHasContent ? 'max-h-28' : 'h-11 max-h-11 overflow-hidden'
+                    <Textarea
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      onFocus={() => setFollowUpExpanded(true)}
+                      placeholder={hasJobResultsOnScreen ? 'Ask a follow-up...' : 'Ask FaceMeX anything'}
+                      className={`min-h-[26px] flex-1 min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[12px] leading-5 text-slate-950 dark:text-white lg:max-w-[calc(100%-74px)] lg:text-[12px] lg:py-0.5 lg:leading-5 lg:text-white placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45 lg:placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                      inputHasContent ? 'max-h-24' : 'h-7 max-h-7 overflow-hidden'
                     }`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -5516,10 +5810,10 @@ Apply link: ${job.applyUrl}`;
                   <Button
                     onClick={() => sendPrompt()}
                     disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
-                    className="mb-1 h-10 w-10 shrink-0 rounded-full bg-slate-900 p-0 text-white shadow-none transition hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 lg:bg-black lg:text-white lg:hover:bg-white/5"
+                    className="mb-1 h-9 w-9 shrink-0 rounded-full bg-slate-900 p-0 text-white shadow-lg shadow-black/10 transition hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 lg:bg-black lg:text-white lg:hover:bg-white/5"
                     aria-label="Send"
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                   </Button>
                 </div>
 
@@ -5535,16 +5829,18 @@ Apply link: ${job.applyUrl}`;
                 <input
                   ref={imageInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.pdf,.doc,.docx,.txt,.xlsx"
                   multiple
                   className="hidden"
                   onChange={handlePickImages}
                 />
               </div>
 
-              {remainingAIUses !== null && (
+              {remainingAIUses !== null && mexaPlan !== 'free' && (
                 <div className="mt-2 text-center text-[11px] text-slate-400">
-                  AI uses left today: {remainingAIUses}
+                  {mexaPlan === 'plus'
+                    ? 'FaceMeX Plus: unlimited AI, unlimited images, 50 docs/month, no scheduling, no model changes, limited video, Adzuna jobs.'
+                    : 'FaceMeX Pro: all Plus features plus scheduling, Google jobs, unlimited uploads & documents, unlimited everything.'}
                 </div>
               )}
             </div>
@@ -5663,10 +5959,10 @@ Apply link: ${job.applyUrl}`;
                       const exactContext = buildJobApplyContext(applySheetJob, applySheetContext);
                       sendPrompt(`${tool.prompt}\n\nContext:\n${exactContext}`);
                     }}
-                    className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06]"
+                    className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
                   >
-                    <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70" />
-                    <p className="text-sm font-semibold text-slate-950 dark:text-white">{tool.label}</p>
+                    <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70 lg:text-white" />
+                    <p className="text-sm font-semibold text-slate-950 dark:text-white lg:text-white">{tool.label}</p>
                   </button>
                 );
               })}
@@ -5686,8 +5982,7 @@ Apply link: ${job.applyUrl}`;
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
-              <div>
-                <h2 className="text-base font-semibold">Job Tracker</h2>
+              <div className="text-[13px] leading-6">
                 <p className="text-[11px] text-slate-500 dark:text-white/45">
                   Saved jobs, education notes, applications
                 </p>
@@ -5772,7 +6067,7 @@ Apply link: ${job.applyUrl}`;
 
                     return (
                       <div key={job.id} className="flex items-center gap-3 py-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10 lg:text-white">
                           {job.verificationStatus === 'verified' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                           ) : (
@@ -5927,13 +6222,13 @@ Apply link: ${job.applyUrl}`;
       {libraryOpen && (
         <div className="fixed inset-0 z-[72] bg-black/20 backdrop-blur-[2px]" onClick={() => setLibraryOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white text-slate-950 shadow-2xl lg:max-w-lg"
+            className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white text-slate-950 shadow-2xl lg:max-w-lg lg:bg-[#050505] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+            <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:border-white/10 lg:bg-[#111]">
               <div className="min-w-0">
-                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950">Library</h2>
-                <p className="truncate text-xs text-slate-500">
+                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">Library</h2>
+                <p className="truncate text-xs text-slate-500 lg:text-slate-400">
                   Jobs, investors and students — clean and organised.
                 </p>
               </div>
@@ -5941,7 +6236,7 @@ Apply link: ${job.applyUrl}`;
               <button
                 type="button"
                 onClick={() => setLibraryOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-950 hover:bg-white/[0.14]"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-950 hover:bg-white/[0.14] lg:bg-white/5 lg:text-white lg:hover:bg-white/10"
                 aria-label="Close Library"
               >
                 <X className="h-5 w-5" />
@@ -5949,7 +6244,7 @@ Apply link: ${job.applyUrl}`;
             </div>
 
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
-              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-3 lg:border-white/10 lg:bg-[#111]">
                 <div className="grid grid-cols-3 gap-2">
                   {librarySections.map((section) => {
                     const Icon = section.icon;
@@ -5968,7 +6263,7 @@ Apply link: ${job.applyUrl}`;
                         className={`rounded-2xl px-2 py-3 text-center transition active:scale-[0.98] ${
                           active
                             ? 'bg-slate-950 text-white shadow-sm'
-                            : 'bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950'
+                            : 'bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950 lg:text-white lg:hover:bg-white/10 lg:hover:text-white'
                         }`}
                       >
                         <Icon className="mx-auto mb-1 h-5 w-5" />
@@ -5979,31 +6274,30 @@ Apply link: ${job.applyUrl}`;
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                <div className="flex items-start justify-between gap-3">
+              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111] lg:text-white">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 lg:text-slate-400">
                       {activeLibrary.title}
                     </p>
-                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950">
+                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">
                       Start the right workspace
                     </h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{activeLibrary.description}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600 lg:text-slate-300">{activeLibrary.description}</p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openLibrarySectionChat(activeLibrary)}
+                    className="mt-2 flex w-full items-center justify-between rounded-2xl bg-slate-950 px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.99] lg:mt-0 lg:w-auto"
+                  >
+                    <span>Open {activeLibrary.title} chat</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => openLibrarySectionChat(activeLibrary)}
-                  className="mt-4 flex w-full items-center justify-between rounded-2xl bg-slate-950 px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.99]"
-                >
-                  <span>Open {activeLibrary.title} chat</span>
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-
               {activeLibrarySection === 'students' && (
-                <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111]">
                   <div className="grid grid-cols-2 gap-2">
                     {educationTools.map((tool) => {
                       const Icon = tool.icon;
@@ -6013,7 +6307,7 @@ Apply link: ${job.applyUrl}`;
                           key={tool.label}
                           type="button"
                           onClick={() => openLibraryChat(tool)}
-                          className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:bg-slate-100 active:scale-[0.98]"
+                          className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:bg-slate-100 active:scale-[0.98] lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
                         >
                           <Icon className="mb-3 h-5 w-5 text-slate-700" />
                           <p className="text-sm font-semibold text-slate-950">{tool.label}</p>
@@ -6063,21 +6357,21 @@ Apply link: ${job.applyUrl}`;
                 {activeYoutubeLessonCategory && (
                   <div className="mt-5 space-y-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">
+                      <p className="text-sm font-semibold text-slate-950 lg:text-white">
                         {activeYoutubeLessonCategory.label} videos
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-slate-500 lg:text-slate-400">
                         Powered by your FaceMeX YouTube API. Tap Watch to play inside FaceMeX.
                       </p>
                     </div>
 
                     {youtubeLessonsBusy ? (
-                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600">
+                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600 lg:bg-[#111] lg:text-white">
                         <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                         Loading useful videos...
                       </div>
                     ) : youtubeLessonVideos.length === 0 ? (
-                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600">
+                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600 lg:bg-[#111] lg:text-white">
                         No useful videos loaded yet. Tap the category again or try another topic.
                       </div>
                     ) : (
@@ -6121,7 +6415,7 @@ Apply link: ${job.applyUrl}`;
                               <p className="line-clamp-2 text-base font-semibold leading-6 text-slate-950">{video.title}</p>
 
                               {video.channelTitle && (
-                                <p className="mt-1 text-xs text-slate-500">{video.channelTitle}</p>
+                                <p className="mt-1 text-xs text-slate-500 lg:text-slate-400">{video.channelTitle}</p>
                               )}
 
                               <div className="mt-4 grid grid-cols-2 gap-2">
@@ -6156,7 +6450,7 @@ Watch: ${video.watchUrl}`,
                                       description: `Saved under ${activeLibrary.title}.`,
                                     });
                                   }}
-                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100"
+                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
                                 >
                                   <Save className="mr-1.5 h-3.5 w-3.5" />
                                   Save
@@ -6177,7 +6471,7 @@ Link: ${video.watchUrl}
 Give me: main idea, key points, step-by-step explanation, action steps, and quick revision notes. Be honest that you cannot watch the full video unless transcript/details are provided.`
                                     );
                                   }}
-                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100"
+                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
                                 >
                                   Make notes
                                 </Button>
@@ -6189,7 +6483,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                     trackLinkClick(video.watchUrl, 'youtube_lesson_watch_on_youtube');
                                     window.open(video.watchUrl, '_blank', 'noopener,noreferrer');
                                   }}
-                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100"
+                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
                                 >
                                   <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                                   YouTube
@@ -6204,9 +6498,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 )}
               </div>
 
-              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                <h3 className="text-base font-semibold text-slate-950">Saved library notes</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
+              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111] lg:text-white">
+                <h3 className="text-base font-semibold text-slate-950 lg:text-white">Saved library notes</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500 lg:text-slate-400">
                   Saved answers stay separated by Jobs, Investors and Students so users can come back later.
                 </p>
 
@@ -6239,15 +6533,15 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                           key={item.id}
                           type="button"
                           onClick={() => setSavedReaderMessage(item)}
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:bg-slate-100"
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
                         >
                           <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 lg:bg-white/10 lg:text-white/70">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Library'}
                             </span>
                             {item.pinned && <Pin className="h-3.5 w-3.5 text-slate-500" />}
                           </div>
-                          <p className="line-clamp-2 text-xs leading-5 text-slate-700">{item.content}</p>
+                          <p className="line-clamp-2 text-xs leading-5 text-slate-700 lg:text-white/80">{item.content}</p>
                         </button>
                       ))
                   )}
@@ -6258,106 +6552,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
         </div>
       )}
 
-      {savedReaderMessage && (() => {
-        const savedReaderIsApplication =
-          savedReaderMessage.savedCategory === 'institution_applications' ||
-          savedReaderMessage.intent === 'education_institution' ||
-          shouldShowApplicationActions(savedReaderMessage, '');
-        const savedReaderIsEducation =
-          savedReaderMessage.savedCategory === 'homework_help' ||
-          savedReaderMessage.savedCategory === 'assignments' ||
-          savedReaderMessage.savedCategory === 'youtube_lessons' ||
-          savedReaderMessage.intent === 'education_homework' ||
-          savedReaderMessage.intent === 'education_assignment' ||
-          savedReaderMessage.intent === 'education_youtube';
-        const savedReaderIsResearch =
-          savedReaderMessage.savedCategory === 'research' ||
-          savedReaderMessage.intent === 'research' ||
-          savedReaderMessage.intent === 'verify-opportunity' ||
-          savedReaderMessage.intent === 'image_or_document_analysis' ||
-          shouldShowResearchActions(savedReaderMessage, '');
-
-        return (
-        <div className="fixed inset-0 z-[97] flex items-end bg-black/35 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
-          <div
-            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[30px] bg-white text-slate-950 shadow-2xl dark:bg-[#111] dark:text-white lg:max-h-[86dvh] lg:max-w-2xl lg:rounded-[30px] lg:bg-[#202020]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
-
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
-              <div className="min-w-0">
-                <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-white/55">
-                  {savedReaderMessage.savedCategory ? savedCategoryLabels[savedReaderMessage.savedCategory] : 'Saved item'}
-                </div>
-                <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-slate-950 dark:text-white lg:text-white">
-                  Saved card
-                </h2>
-                <p className="mt-1 text-[13px] text-slate-500 dark:text-white/50">
-                  Read it, copy it, or open it in a new chat to continue.
-                </p>
-              </div>
-
-              <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 text-[15px] leading-7 text-slate-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/78 lg:border-white/10 lg:bg-white/[0.06]">
-                <ChatGPTStyleText text={savedReaderMessage.content} onLinkClick={handleGeneratedLinkClick} />
-              </div>
-
-              <div className="mt-4 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04] lg:border-white/10">
-                <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-slate-950 dark:text-white lg:text-white">
-                  Ask more about this
-                </h3>
-                <p className="mt-1 text-[13px] leading-5 text-slate-500 dark:text-white/50">
-                  Start a clean chat using this saved item as memory so the answer continues from the right topic.
-                </p>
-
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Button onClick={() => startSavedItemNewChat(savedReaderMessage, 'continue')} className="h-11 rounded-2xl bg-slate-950 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950">
-                    Continue in new chat
-                  </Button>
-
-                  {(savedReaderIsResearch || savedReaderIsEducation || !savedReaderIsApplication) && (
-                    <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'deeper')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                      {savedReaderIsEducation ? 'Ask more about this' : 'Research deeper'}
-                    </Button>
-                  )}
-
-                  {savedReaderIsApplication && (
-                    <Button variant="outline" onClick={() => startSavedItemNewChat(savedReaderMessage, 'apply')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                      Help me apply
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
-              <Button variant="outline" onClick={() => copyText(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                <Copy className="mr-2 h-3.5 w-3.5" />
-                Copy
-              </Button>
-
-              <Button variant="outline" onClick={() => shareMessageLink(savedReaderMessage.content, 'FaceMeX saved card')} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                <Share2 className="mr-2 h-3.5 w-3.5" />
-                Share
-              </Button>
-
-              {savedReaderIsApplication && (
-                <Button variant="outline" onClick={() => openSchedulePanel(savedReaderMessage.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
-                  <CalendarDays className="mr-2 h-3.5 w-3.5" />
-                  Schedule
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {savedReaderMessage && <SavedReaderModal message={savedReaderMessage} />}
 
       {scheduleOpen && (
         <div className="fixed inset-0 z-[96] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setScheduleOpen(false)}>
@@ -6381,11 +6576,6 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
             </div>
 
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
-              {!creatorPlus && (
-                <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 lg:border-amber-500/20 lg:bg-amber-500/10 lg:text-amber-100">
-                  Free and Pro users can save schedules on this device. Creator, Business, and Exclusive users also get automatic email scheduling when the backend route is connected.
-                </div>
-              )}
               {scheduleStep === 'choose' ? (
                 <div className="space-y-3">
                 <div className="rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#2f2f2f]">
@@ -6415,7 +6605,14 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     <button
                       key={value}
                       type="button"
-                      onClick={() => createScheduledTask(value as ScheduledTask['frequency'])}
+                      onClick={() => {
+                        if (mexaPlan === 'free' || mexaPlan === 'plus') {
+                          setScheduleOpen(false);
+                          navigate('/facemex-plus');
+                        } else {
+                          createScheduledTask(value as ScheduledTask['frequency']);
+                        }
+                      }}
                       disabled={scheduleBusy}
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
                     >
@@ -6426,7 +6623,14 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
                   <button
                     type="button"
-                    onClick={() => setScheduleStep('custom')}
+                    onClick={() => {
+                      if (mexaPlan === 'free' || mexaPlan === 'plus') {
+                        setScheduleOpen(false);
+                        navigate('/facemex-plus');
+                      } else {
+                        setScheduleStep('custom');
+                      }
+                    }}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-white/70 hover:bg-white/10 hover:text-white"
                   >
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/20 text-xs">5</span>
@@ -6487,30 +6691,29 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
       )}
 
       {globalSearchOpen && (
-        <div className="fixed inset-0 z-[85] bg-white/60 px-4 pt-4 backdrop-blur-xl lg:hidden" onClick={() => setGlobalSearchOpen(false)}>
+        <div className="fixed inset-0 z-[85] flex items-start justify-center bg-white/60 px-4 pt-4 backdrop-blur-xl lg:items-center lg:bg-black/60 lg:px-6 lg:pt-0" onClick={() => setGlobalSearchOpen(false)}>
           <div
-            className="mx-auto mt-2 max-h-[82dvh] w-full max-w-[440px] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.18)]"
+            className="mx-auto mt-2 max-h-[82dvh] w-full max-w-[440px] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.18)] lg:border-white/10 lg:bg-[#0c0c0c] lg:shadow-[0_28px_90px_rgba(0,0,0,0.45)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 border-b border-slate-100 p-3">
-              <Search className="h-5 w-5 shrink-0 text-slate-500" />
+            <div className="flex items-center gap-3 border-b border-slate-100 p-3 lg:border-white/10">
+              <Search className="h-5 w-5 shrink-0 text-slate-500 lg:text-white/60" />
               <input
                 value={globalSearchQuery}
-                onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                onChange={(e) => { setGlobalSearchQuery(e.target.value); runGlobalSearch(e.target.value); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && clean(globalSearchQuery)) {
-                    setGlobalSearchOpen(false);
-                    openWatchSearch(globalSearchQuery);
+                    runGlobalSearch(globalSearchQuery);
                   }
                 }}
                 autoFocus
                 placeholder="Search FaceMeX, recents, topics, videos..."
-                className="min-w-0 flex-1 bg-transparent text-[15px] text-slate-950 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45"
+                className="min-w-0 flex-1 bg-transparent text-[15px] text-slate-950 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:text-white lg:placeholder:text-white/45"
               />
               <button
                 type="button"
                 onClick={() => setGlobalSearchOpen(false)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 lg:bg-white/5 lg:text-white"
                 aria-label="Close search"
               >
                 <X className="h-4 w-4" />
@@ -6519,49 +6722,50 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
             <div className="max-h-[70dvh] overflow-y-auto p-3">
               {(() => {
-                const q = clean(globalSearchQuery).toLowerCase();
-                const matches = (text: string) => !q || clean(text).toLowerCase().includes(q);
-                const recentResults = chatSessions.filter((session) => matches(session.title)).slice(0, 6);
-                const topicResults = youtubeLessonCategories.filter((category) => matches(`${category.label} ${category.description} ${category.badge}`)).slice(0, 8);
+                const { chats, topics, features } = globalSearchResults;
 
                 return (
                   <div className="space-y-5">
                     <section>
-                      <h3 className="px-2 text-[13px] font-semibold text-slate-500">Features</h3>
+                      <h3 className="px-2 text-[13px] font-semibold text-slate-500">Results</h3>
                       <div className="mt-2 space-y-1">
-                        {[
-                          { label: 'Job Library', icon: Briefcase, action: () => { setActiveLibrarySection('jobs'); setLibraryOpen(true); } },
-                          { label: 'Investors Library', icon: Building2, action: () => { setActiveLibrarySection('investors'); setLibraryOpen(true); } },
-                          { label: 'Students Library', icon: Users, action: () => { setActiveLibrarySection('students'); setLibraryOpen(true); } },
-                          { label: 'Scheduled', icon: CalendarDays, action: () => openSchedulePanel() },
-                          { label: 'Job Tracker', icon: Clock, action: () => setTrackerOpen(true) },
-                        ]
-                          .filter((item) => matches(item.label))
-                          .map((item) => {
-                            const Icon = item.icon;
-                            return (
-                              <button
-                                key={item.label}
-                                type="button"
-                                onClick={() => {
-                                  setGlobalSearchOpen(false);
-                                  item.action();
-                                }}
-                                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] font-medium text-slate-900 transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
-                              >
-                                <Icon className="h-5 w-5 text-slate-500" />
-                                {item.label}
-                              </button>
-                            );
-                          })}
+                        {features.map((item) => (
+                          <button
+                            key={item.label}
+                            type="button"
+                            onClick={() => {
+                              setGlobalSearchOpen(false);
+                              item.action();
+                            }}
+                            className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] font-medium text-slate-900 transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                          >
+                            <span className="h-5 w-5" />
+                            {item.label}
+                          </button>
+                        ))}
+
+                        {chats.map((session: ChatSession) => (
+                          <button
+                            key={session.id}
+                            type="button"
+                            onClick={() => {
+                              setGlobalSearchOpen(false);
+                              openChatSession(session);
+                            }}
+                            className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] font-medium text-slate-900 transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                          >
+                            <span className="h-5 w-5" />
+                            {session.title}
+                          </button>
+                        ))}
                       </div>
                     </section>
 
-                    {(q || topicResults.length > 0) && (
+                    {topics.length > 0 && (
                       <section>
-                        <h3 className="px-2 text-[13px] font-semibold text-slate-500">YouTube topics</h3>
+                        <h3 className="px-2 text-[13px] font-semibold text-slate-500 lg:text-slate-300">YouTube topics</h3>
                         <div className="mt-2 space-y-1">
-                          {topicResults.map((category) => (
+                          {topics.map((category) => (
                             <button
                               key={`${category.library}-${category.label}`}
                               type="button"
@@ -6570,38 +6774,24 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                 setLibraryOpen(true);
                                 openYoutubeLessonCategory(category);
                               }}
-                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50"
+                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
                             >
                               <span className="min-w-0">
-                                <span className="block text-[15px] font-semibold text-slate-950">{category.label}</span>
-                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-slate-500">{category.description}</span>
+                                <span className="block text-[15px] font-semibold text-slate-950 lg:text-white">{category.label}</span>
+                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-slate-500 lg:text-slate-400">{category.description}</span>
                               </span>
-                              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-500">{category.badge}</span>
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-500 lg:bg-white/5 lg:text-white/80">{category.badge}</span>
                             </button>
                           ))}
-
-                          {q && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setGlobalSearchOpen(false);
-                                openWatchSearch(globalSearchQuery);
-                              }}
-                              className="flex w-full items-center gap-3 rounded-2xl bg-slate-950 px-3 py-3 text-left text-[15px] font-semibold text-white transition active:scale-[0.99]"
-                            >
-                              <Globe2 className="h-5 w-5" />
-                              Search YouTube for “{globalSearchQuery}”
-                            </button>
-                          )}
                         </div>
                       </section>
                     )}
 
-                    {recentResults.length > 0 && (
+                    {chats.length > 0 && (
                       <section>
-                        <h3 className="px-2 text-[13px] font-semibold text-slate-500">Recents</h3>
+                        <h3 className="px-2 text-[13px] font-semibold text-slate-500 lg:text-slate-300">Recents</h3>
                         <div className="mt-2 space-y-1">
-                          {recentResults.map((session) => (
+                          {chats.map((session) => (
                             <button
                               key={session.id}
                               type="button"
@@ -6609,7 +6799,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                 setGlobalSearchOpen(false);
                                 openChatSession(session);
                               }}
-                              className="block w-full rounded-2xl px-3 py-3 text-left text-[15px] text-slate-800 transition hover:bg-slate-50"
+                              className="block w-full rounded-2xl px-3 py-3 text-left text-[15px] text-slate-800 transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
                             >
                               {session.title || 'New chat'}
                             </button>
@@ -6633,8 +6823,8 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
           >
             <div className="flex h-[92px] shrink-0 items-center justify-between px-5 pt-4">
               <div className="min-w-0">
-                <h2 className="truncate text-[28px] font-semibold tracking-[-0.045em] text-slate-950">FaceMeX</h2>
-                <p className="mt-1 truncate text-[13px] text-slate-500">Your AI workspace</p>
+                <h2 className="truncate text-2xl font-semibold tracking-[-0.045em] text-slate-950">FaceMeX</h2>
+                <p className="mt-1 truncate text-xs text-slate-500">Your AI workspace</p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -6672,7 +6862,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
                   <FileText className="h-5 w-5 text-slate-900" />
                   Library
@@ -6681,49 +6871,10 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveLibrarySection('jobs');
-                    setJobsOpen(false);
-                    setLibraryOpen(true);
-                  }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
-                >
-                  <Briefcase className="h-5 w-5 text-slate-900" />
-                  Job Library
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveLibrarySection('investors');
-                    setJobsOpen(false);
-                    setLibraryOpen(true);
-                  }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
-                >
-                  <Building2 className="h-5 w-5 text-slate-900" />
-                  Investors Library
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveLibrarySection('students');
-                    setJobsOpen(false);
-                    setLibraryOpen(true);
-                  }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
-                >
-                  <Users className="h-5 w-5 text-slate-900" />
-                  Students Library
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
                     setJobsOpen(false);
                     openSchedulePanel();
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
                   <CalendarDays className="h-5 w-5 text-slate-900" />
                   Scheduled
@@ -6735,7 +6886,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setTrackerOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
                   <Clock className="h-5 w-5 text-slate-900" />
                   Job Tracker
@@ -6744,7 +6895,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 <button
                   type="button"
                   onClick={() => setWatchPanelOpen((value) => !value)}
-                  className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 px-3 py-3 text-left text-[15px] font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
                 >
                   <span className="flex min-w-0 items-center gap-4">
                     <Globe2 className="h-5 w-5 text-slate-900" />
@@ -6909,6 +7060,3 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
-
-
-
