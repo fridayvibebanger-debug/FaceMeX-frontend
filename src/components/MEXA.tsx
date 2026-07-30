@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Menu, Search, SlidersHorizontal, ArrowUp, Mic, Cpu, Gem, Briefcase, GraduationCap, Building2, Sparkles } from "lucide-react";
+import { ArrowUp, Mic, Briefcase, GraduationCap, Building2, Sparkles } from "lucide-react";
 
 type AssistantStatus = "idle" | "listening" | "thinking" | "speaking";
 
@@ -30,6 +30,7 @@ export default function MEXA({ embedded = false }: MEXAProps) {
   const [recognition, setRecognition] = useState<any>(null);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [activeModule, setActiveModule] = useState<string | null>(null);
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
 
@@ -247,7 +248,7 @@ export default function MEXA({ embedded = false }: MEXAProps) {
 
   const rootClassName = isEmbedded
     ? "relative flex flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white/95 text-slate-900 shadow-2xl shadow-slate-900/10 lg:bg-slate-950 lg:text-white lg:border-white/10"
-    : "relative overflow-hidden bg-[#FAFAFC] text-[#111827]";
+    : "relative overflow-hidden bg-[linear-gradient(180deg,#f7f5ef_0%,#f0eee8_100%)] text-[#111827]";
 
   const shellStyle = isEmbedded
     ? { minHeight: "560px", height: "100%", paddingBottom: "calc(env(safe-area-inset-bottom) + 18px)" }
@@ -282,71 +283,101 @@ export default function MEXA({ embedded = false }: MEXAProps) {
       ? "Thinking…"
       : "Speaking…";
 
+  const moduleConfigs = [
+    {
+      label: "Assistant",
+      prompt: "How can I help today?",
+      suggestions: ["Plan my day", "Explain this document", "Help me make money", "Read my emails"],
+      buttonClassName: "border-white/10 bg-white/5",
+    },
+    {
+      label: "Career",
+      prompt: "What career goal would you like help with?",
+      suggestions: ["Find jobs", "Improve CV", "Prepare interview", "Write cover letter"],
+      buttonClassName: "border-white/10 bg-white/5",
+    },
+    {
+      label: "Study",
+      prompt: "What would you like to learn?",
+      suggestions: ["Teach Python", "Explain Calculus", "Quiz me", "Create study notes"],
+      buttonClassName: "border-white/10 bg-white/5",
+    },
+    {
+      label: "Business",
+      prompt: "What would you like your business to accomplish today?",
+      suggestions: ["Create invoices", "Reply to customers", "Schedule meetings", "Prepare payroll"],
+      buttonClassName: "border-white/10 bg-white/5",
+    },
+    {
+      label: "Workspace",
+      prompt: "What would you like to work on?",
+      suggestions: ["Write proposal", "Organize tasks", "Draft presentation", "Summarize meeting"],
+      buttonClassName: "border-white/10 bg-white/5",
+    },
+    {
+      label: "Video lessons",
+      prompt: "What would you like to learn from video?",
+      suggestions: ["Explain YouTube lesson", "Create notes", "Generate quiz", "Summarize video"],
+      buttonClassName: "border-white/10 bg-white/5",
+    },
+  ] as const;
+
+  const workspaceTools = [
+    "Draft message",
+    "Summarize file",
+    "Create checklist",
+    "Plan project",
+    "Write email",
+    "Prepare brief",
+  ];
+
+  const activeModuleConfig = moduleConfigs.find((item) => item.label === activeModule) ?? null;
+
+  const handleModuleClick = (label: string) => {
+    if (label === "Business") {
+      navigate("/enterprise");
+      return;
+    }
+
+    if (label === "Workspace") {
+      navigate("/ai/job-assistant");
+      return;
+    }
+
+    setActiveModule(label);
+  };
+
   const hasConversation = messages.length > 0;
 
   return (
       <>
         <div className="lg:hidden">
-          <main className="relative h-screen overflow-hidden bg-[#FAFAFC] text-[#111827]">
+          <main className="relative h-screen overflow-hidden bg-[linear-gradient(180deg,#f7f5ef_0%,#f0eee8_100%)] text-[#111827]">
 
           {/* ================= Premium Background ================= */}
 
           <div className="absolute inset-0 overflow-hidden">
 
-            <div className="absolute inset-0 bg-[#FAFAFC]" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(251,251,249,0.92)_0%,rgba(240,238,232,0.92)_100%)]" />
 
-            <div className="absolute left-1/2 top-[-260px] h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-cyan-300/12 blur-[180px]" />
+            <div className="absolute left-1/2 top-[-260px] h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-stone-300/25 blur-[180px]" />
 
-            <div className="absolute left-1/2 bottom-[-300px] h-[650px] w-[650px] -translate-x-1/2 rounded-full bg-blue-200/10 blur-[220px]" />
+            <div className="absolute left-1/2 bottom-[-300px] h-[650px] w-[650px] -translate-x-1/2 rounded-full bg-slate-300/20 blur-[220px]" />
 
-            <div className="absolute left-1/2 top-[35%] h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-white/70 blur-[120px]" />
+            <div className="absolute left-1/2 top-[35%] h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-white/60 blur-[120px]" />
 
-            <div className="absolute left-[-180px] top-[35%] h-[300px] w-[300px] rounded-full bg-cyan-200/8 blur-[140px]" />
+            <div className="absolute left-[-180px] top-[35%] h-[300px] w-[300px] rounded-full bg-stone-200/30 blur-[140px]" />
 
-            <div className="absolute right-[-180px] top-[30%] h-[320px] w-[320px] rounded-full bg-sky-200/8 blur-[140px]" />
+            <div className="absolute right-[-180px] top-[30%] h-[320px] w-[320px] rounded-full bg-slate-200/25 blur-[140px]" />
 
-            <div
-              className="absolute inset-0 opacity-[0.025]"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at 1px 1px,#000 1px,transparent 0)",
-                backgroundSize: "26px 26px",
-              }}
-            />
-
-            <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-transparent to-white/80" />
+            <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-transparent to-white/70" />
 
           </div>
               {/* ================= HEADER ================= */}
 
               <header className="absolute top-0 left-0 right-0 z-50">
               
-                <div className="mx-auto flex h-[76px] max-w-md items-center justify-between px-5">
-              
-                  {/* Menu */}
-              
-                  <button
-                    className="
-                      flex
-                      h-11
-                      w-11
-                      items-center
-                      justify-center
-                      rounded-full
-                      border
-                      border-slate-200
-                      bg-white/80
-                      shadow-[0_6px_18px_rgba(0,0,0,.06)]
-                      backdrop-blur-xl
-                      transition
-                      active:scale-95
-                    "
-                  >
-                    <Menu size={21} className="text-slate-800" />
-                  </button>
-              
-                  {/* Logo */}
-              
+                <div className="mx-auto flex h-[76px] max-w-md items-center justify-center px-5">
                   <div className="flex flex-col items-center">
               
                     <div className="flex items-center gap-2">
@@ -383,31 +414,6 @@ export default function MEXA({ embedded = false }: MEXAProps) {
               
                   </div>
               
-                  {/* Settings */}
-              
-                  <button
-                    className="
-                      flex
-                      h-11
-                      w-11
-                      items-center
-                      justify-center
-                      rounded-full
-                      border
-                      border-slate-200
-                      bg-white/80
-                      shadow-[0_6px_18px_rgba(0,0,0,.06)]
-                      backdrop-blur-xl
-                      transition
-                      active:scale-95
-                    "
-                  >
-                    <SlidersHorizontal
-                      size={20}
-                      className="text-slate-800"
-                    />
-                  </button>
-              
                 </div>
               
               </header>
@@ -435,22 +441,22 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                     {/* Premium Ambient Glow */}
             
                     <div
-                      className="absolute h-[390px] w-[390px] rounded-full bg-cyan-400/8 blur-[145px]"
+                      className="absolute h-[390px] w-[390px] rounded-full bg-cyan-400/6 blur-[150px]"
                       style={{ animation: "floatGlow 14s ease-in-out infinite" }}
                     />
             
                     <div
-                      className="absolute h-[340px] w-[340px] rounded-full bg-sky-400/7 blur-[155px]"
+                      className="absolute h-[340px] w-[340px] rounded-full bg-sky-400/5 blur-[160px]"
                       style={{ animation: "floatGlow 18s ease-in-out infinite reverse" }}
                     />
             
                     <div
-                      className="absolute h-[300px] w-[300px] rounded-full bg-violet-500/6 blur-[165px]"
+                      className="absolute h-[300px] w-[300px] rounded-full bg-violet-500/4 blur-[170px]"
                       style={{ animation: "floatGlow 20s ease-in-out infinite" }}
                     />
             
                     <div
-                      className="absolute h-[230px] w-[230px] rounded-full bg-cyan-300/8 blur-[100px]"
+                      className="absolute h-[230px] w-[230px] rounded-full bg-cyan-300/5 blur-[110px]"
                       style={{ animation: "floatGlow 10s ease-in-out infinite" }}
                     />
             
@@ -460,19 +466,19 @@ export default function MEXA({ embedded = false }: MEXAProps) {
             
                       {/* Orbit Rings */}
             
-                      <div className="absolute h-[182px] w-[182px] rounded-[42%] border border-cyan-300/10 animate-[spin_28s_linear_infinite]" />
+                      <div className="absolute h-[192px] w-[192px] rounded-[43%] border border-white/10 animate-[spin_34s_linear_infinite]" />
             
-                      <div className="absolute h-[172px] w-[172px] rounded-[48%] border border-cyan-300/6 animate-[spin_20s_linear_infinite_reverse]" />
+                      <div className="absolute h-[176px] w-[176px] rounded-[47%] border border-cyan-300/20 animate-[spin_22s_linear_infinite_reverse]" />
             
-                      <div className="absolute h-[162px] w-[162px] rounded-[38%] border border-cyan-300/5 animate-[spin_36s_linear_infinite]" />
+                      <div className="absolute h-[160px] w-[160px] rounded-[41%] border border-stone-300/20 animate-[spin_38s_linear_infinite]" />
             
                       {/* Core */}
             
-                      <div className="relative flex h-[104px] w-[104px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_30px_70px_rgba(0,0,0,.22)]">
+                      <div className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#0b1a33_0%,#0a223f_55%,#071322_100%)] shadow-[0_30px_70px_rgba(0,0,0,.22)] ring-1 ring-white/5">
             
-                        <div className="absolute h-20 w-20 rounded-full bg-cyan-300/15 blur-3xl" />
+                        <div className="absolute h-20 w-20 rounded-full bg-cyan-300/10 blur-3xl" />
             
-                        <span className="text-[54px] text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,.6)]">
+                        <span className="text-[54px] text-cyan-200/90 drop-shadow-[0_0_20px_rgba(34,211,238,.4)]">
                           ✦
                         </span>
             
@@ -563,6 +569,14 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                       >
                   
                         <input
+                          value={draft}
+                          onChange={(event) => setDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              handleSubmit();
+                            }
+                          }}
                           placeholder="Message MEXA..."
                           className="
                           flex-1
@@ -575,6 +589,7 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                         />
                   
                         <button
+                          onClick={handleSubmit}
                           className="
                           ml-3
                           flex
@@ -709,7 +724,11 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                   
                         {/* Assistant */}
                   
-                        <button className="flex flex-col items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleModuleClick("Assistant")}
+                          className="flex flex-col items-center gap-1"
+                        >
                   
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500/10">
                   
@@ -728,7 +747,11 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                   
                         {/* Career */}
                   
-                        <button className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => handleModuleClick("Career")}
+                          className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100"
+                        >
                   
                           <Briefcase
                             size={18}
@@ -743,7 +766,11 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                   
                         {/* Study */}
                   
-                        <button className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => handleModuleClick("Study")}
+                          className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100"
+                        >
                   
                           <GraduationCap
                             size={18}
@@ -758,7 +785,11 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                   
                         {/* Business */}
                   
-                        <button className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => handleModuleClick("Business")}
+                          className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100"
+                        >
                   
                           <Building2
                             size={18}
@@ -781,55 +812,124 @@ export default function MEXA({ embedded = false }: MEXAProps) {
               </div>
 
       {!isEmbedded && (
-        <div className="hidden min-h-screen w-full bg-black text-white lg:flex">
+        <div className="hidden min-h-screen w-full bg-[linear-gradient(180deg,#f7f4ee_0%,#f1eee7_48%,#ebe8df_100%)] text-stone-900 lg:flex">
           <main className="relative flex-1 overflow-hidden">
             <div className="absolute inset-0 overflow-hidden">
-              <div className="absolute left-1/2 top-[-220px] h-[700px] w-[700px] -translate-x-1/2 rounded-full bg-cyan-400/20 blur-[200px]" />
-              <div className="absolute right-[-180px] top-[100px] h-[340px] w-[340px] rounded-full bg-sky-500/15 blur-[160px]" />
-              <div className="absolute left-[-140px] bottom-[120px] h-[320px] w-[320px] rounded-full bg-blue-200/15 blur-[140px]" />
-              <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-white/10" />
+              <div className="absolute left-1/2 top-[-220px] h-[700px] w-[700px] -translate-x-1/2 rounded-full bg-stone-300/20 blur-[190px]" />
+              <div className="absolute right-[-180px] top-[100px] h-[340px] w-[340px] rounded-full bg-neutral-300/18 blur-[150px]" />
+              <div className="absolute left-[-140px] bottom-[120px] h-[320px] w-[320px] rounded-full bg-white/45 blur-[130px]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.72),transparent_58%)]" />
             </div>
 
             <div className="relative z-10 flex h-full flex-col">
               <div className="mx-auto flex w-full max-w-4xl flex-col items-center justify-center px-8 py-16">
                 <div className="relative flex h-[100px] w-[100px] items-center justify-center">
-                  <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_90deg,_rgba(15,23,42,0),_rgba(15,23,42,0.07),_rgba(148,163,184,0.2),_rgba(15,23,42,0.035),_rgba(15,23,42,0))] animate-[spin_24s_linear_infinite]" />
-                  <span className="absolute inset-[13px] rounded-full bg-slate-800/10 blur-[18px] animate-[pulse_7s_ease-in-out_infinite]" />
-                      <div className="relative z-10 flex h-[78px] w-[78px] items-center justify-center overflow-hidden rounded-[28px] bg-gradient-to-br from-white via-slate-200 to-slate-100 shadow-[0_20px_46px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.92),inset_0_-1px_0_rgba(15,23,42,0.06)]">
-                    <span className="text-[32px] text-sky-400">✦</span>
+                  <div className="absolute h-[108px] w-[108px] rounded-[43%] border border-white/10 animate-[spin_34s_linear_infinite]" />
+                  <div className="absolute h-[98px] w-[98px] rounded-[47%] border border-cyan-300/20 animate-[spin_22s_linear_infinite_reverse]" />
+                  <div className="absolute h-[88px] w-[88px] rounded-[41%] border border-stone-300/20 animate-[spin_38s_linear_infinite]" />
+                  <div className="relative flex h-[68px] w-[68px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#0b1a33_0%,#0a223f_55%,#071322_100%)] shadow-[0_30px_70px_rgba(0,0,0,.22)] ring-1 ring-white/5">
+                    <div className="absolute h-16 w-16 rounded-full bg-cyan-300/10 blur-3xl" />
+                    <span className="text-[28px] text-cyan-200/90 drop-shadow-[0_0_20px_rgba(34,211,238,.4)]">✦</span>
                   </div>
                 </div>
 
                 <div className="mt-8 text-center">
-                  <p className="text-[11px] uppercase tracking-[0.32em] text-slate-400">MEXA✦</p>
-                  <h1 className="mt-2 text-5xl font-semibold text-white">MEXA</h1>
+                  <p className="text-[11px] uppercase tracking-[0.32em] text-stone-500">MEXA✦</p>
+                  <h1 className="mt-2 text-5xl font-semibold text-stone-900">MEXA</h1>
                 </div>
 
-                <p className="mt-4 max-w-2xl text-center text-sm leading-6 text-slate-300">
+                <p className="mt-4 max-w-2xl text-center text-sm leading-6 text-stone-600">
                   Your AI Life Operating System
                 </p>
 
                 <div className="mt-8 grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {[
-                    'Assistant',
-                    'Career',
-                    'Study',
-                    'Business',
-                    'Workspace',
-                    'Video lessons',
-                  ].map((label, index) => (
+                  {moduleConfigs.map((module, index) => (
                     <button
-                      key={label}
+                      key={module.label}
                       type="button"
-                      className="rounded-full border border-white/10 bg-white/5 px-4 py-3 text-xs font-medium text-white transition hover:bg-white/10 active:scale-[0.98]"
+                      onClick={() => handleModuleClick(module.label)}
+                      className={`rounded-full border border-stone-300/75 bg-white/65 px-4 py-3 text-xs font-medium text-stone-800 shadow-[0_8px_24px_rgba(15,23,42,0.05)] backdrop-blur-md transition hover:bg-white active:scale-[0.98] ${module.buttonClassName}`}
                       style={{ animationDelay: `${index * 35}ms` }}
                     >
-                      {label}
+                      {module.label}
                     </button>
                   ))}
                 </div>
               </div>
             </div>
+
+            {activeModuleConfig && (
+              <motion.div
+                className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-[6px]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+              >
+                <motion.div
+                  className="w-full max-w-xl rounded-[28px] border border-white/10 bg-slate-950/88 px-5 py-6 text-center shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
+                  initial={{ opacity: 0, scale: 0.985, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.985, y: 8 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                >
+                  <div className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_14px_36px_rgba(0,0,0,0.3)]">
+                    <span className="text-[26px] text-cyan-300">✦</span>
+                  </div>
+
+                  <p className="mt-3 text-[10px] uppercase tracking-[0.3em] text-slate-400">MEXA✦</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">{activeModuleConfig.label}</h2>
+
+                  <div className="mt-4 rounded-[20px] border border-white/10 bg-white/5 px-4 py-4">
+                    <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Listening...</p>
+                    <p className="mt-2 text-base font-medium text-white">{activeModuleConfig.prompt}</p>
+                  </div>
+
+                  {activeModuleConfig.label === "Workspace" ? (
+                    <div className="mt-4 grid gap-2 text-left sm:grid-cols-2">
+                      {workspaceTools.map((tool) => (
+                        <button
+                          key={tool}
+                          type="button"
+                          onClick={() => setDraft(tool)}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-slate-200 transition hover:bg-white/10"
+                        >
+                          • {tool}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-2 text-left sm:grid-cols-2">
+                      {activeModuleConfig.suggestions.map((suggestion) => (
+                        <div
+                          key={suggestion}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-200"
+                        >
+                          • {suggestion}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex items-center justify-center">
+                    <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-cyan-500/15 ring-1 ring-cyan-300/40 shadow-[0_0_40px_rgba(34,211,238,0.24)]">
+                      <div className="absolute h-[82px] w-[82px] rounded-full border border-cyan-300/25 animate-pulse" />
+                      <Mic size={28} className="relative z-10 text-cyan-200" />
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-sm text-slate-300">Tap or say “Hey MEXA”</p>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveModule(null)}
+                    className="mt-5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-medium text-white transition hover:bg-white/10"
+                  >
+                    Close
+                  </button>
+                </motion.div>
+              </motion.div>
+            )}
           </main>
         </div>
       )}
