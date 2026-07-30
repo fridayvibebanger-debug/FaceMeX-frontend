@@ -6550,6 +6550,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
             </div>
           </div>
         </div>
+        </div>
       )}
 
       {savedReaderMessage && <SavedReaderModal message={savedReaderMessage} />}
