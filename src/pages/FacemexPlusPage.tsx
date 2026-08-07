@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Sparkles } from 'lucide-react';
 import { createYocoCheckoutSession } from '@/utils/billing';
 
 export default function FacemexPlusPage() {
+  const location = useLocation();
   const [processingPlan, setProcessingPlan] = useState<'plus' | 'pro' | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const redirectUrl = params.get('redirectUrl');
+    if (params.get('checkout') === 'redirect' && redirectUrl) {
+      window.location.replace(redirectUrl);
+    }
+  }, [location.search]);
 
   const startCheckout = async (plan: 'plus' | 'pro', amountZar: number) => {
     setProcessingPlan(plan);
