@@ -3731,6 +3731,15 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }
   };
 
+  const openWatchVideoInApp = (video: YouTubeLessonVideo) => {
+    setLibraryOpen(false);
+    setWatchPanelOpen(true);
+    setWatchSearch(video.title || 'Useful video');
+    setWatchVideos([video]);
+    setWatchPlayingVideoId(video.videoId);
+    setWatchBusy(false);
+  };
+
   const clearWorkspaceFromScratch = () => {
     setMessages([]);
     setChatSessions([]);
@@ -6516,13 +6525,13 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                   size="sm"
                                   variant="outline"
                                   onClick={() => {
-                                    trackLinkClick(video.watchUrl, 'youtube_lesson_watch_on_youtube');
-                                    window.open(video.watchUrl, '_blank', 'noopener,noreferrer');
+                                    trackLinkClick(video.watchUrl, 'youtube_lesson_watch_in_facemex');
+                                    openWatchVideoInApp(video);
                                   }}
                                   className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
                                 >
                                   <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                                  YouTube
+                                  Watch in FaceMeX
                                 </Button>
                               </div>
                             </div>
