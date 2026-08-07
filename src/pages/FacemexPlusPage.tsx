@@ -1,41 +1,29 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
 import { Plus, Sparkles } from 'lucide-react';
+import { createYocoCheckoutSession } from '@/utils/billing';
 
 export default function FacemexPlusPage() {
-  const navigate = useNavigate();
+  const [processingPlan, setProcessingPlan] = useState<'plus' | 'pro' | null>(null);
 
- const subscribe = async (plan: "plus" | "pro") => {
+  const startCheckout = async (plan: 'plus' | 'pro', amountZar: number) => {
+    setProcessingPlan(plan);
     try {
-      const token = localStorage.getItem("access_token");
-  
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/payments/initiate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            tier: plan,
-          }),
-        }
-      );
-  
-      const data = await response.json();
-  
-      if (data.redirectUrl) {
-        window.location.href = data.redirectUrl;
-      } else {
-        alert(data.message || "Unable to start payment.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Payment failed.");
+      const session = await createYocoCheckoutSession({
+        amountZar,
+        currency: 'ZAR',
+        successUrl: `${window.location.origin}/pricing?checkout=success`,
+        cancelUrl: `${window.location.origin}/pricing?checkout=cancel`,
+        metadata: { plan, source: 'facemex_plus_page' },
+        externalId: `${plan}-${Date.now()}`,
+      });
+      window.open(session.redirectUrl, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setProcessingPlan(null);
     }
   };
-  
+
   return (
     <div className="min-h-screen bg-white text-slate-950 flex items-center justify-center px-4 py-10 lg:bg-[#050505] lg:text-white">
       <div className="w-full max-w-6xl">
@@ -63,11 +51,12 @@ export default function FacemexPlusPage() {
 
             <button
               type="button"
-              onClick={() => subscribe("plus")}
-              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:bg-slate-800 lg:border-white/10 lg:bg-white/10 lg:text-white/85 lg:hover:bg-white/15"
+              onClick={() => startCheckout('plus', 99)}
+              disabled={processingPlan === 'plus'}
+              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:bg-slate-800 disabled:opacity-60 lg:border-white/10 lg:bg-white/10 lg:text-white/85 lg:hover:bg-white/15"
             >
               <Plus className="h-4 w-4 text-white/85" />
-              Get Plus
+              {processingPlan === 'plus' ? 'Opening checkout…' : 'Get Plus'}
             </button>
 
             <div className="mt-8 space-y-4 text-sm text-slate-700 lg:text-slate-300">
@@ -117,11 +106,12 @@ export default function FacemexPlusPage() {
 
             <button
               type="button"
-              onClick={() => subscribe("pro")}
-              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:bg-slate-800 lg:border-white/10 lg:bg-white/10 lg:text-white/85 lg:hover:bg-white/15"
+              onClick={() => startCheckout('pro', 250)}
+              disabled={processingPlan === 'pro'}
+              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-5 py-3 text-sm font-semibold tracking-[0.14em] text-white transition hover:bg-slate-800 disabled:opacity-60 lg:border-white/10 lg:bg-white/10 lg:text-white/85 lg:hover:bg-white/15"
             >
               <Sparkles className="h-4 w-4 text-white/85" />
-              Get Pro
+              {processingPlan === 'pro' ? 'Opening checkout…' : 'Get Pro'}
             </button>
 
             <div className="mt-8 space-y-4 text-sm text-slate-700 lg:text-slate-300">
