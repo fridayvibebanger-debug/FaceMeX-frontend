@@ -11,8 +11,8 @@ export default function FacemexPlusPage() {
       const session = await createYocoCheckoutSession({
         amountZar,
         currency: 'ZAR',
-        successUrl: `${window.location.origin}/pricing?checkout=success`,
-        cancelUrl: `${window.location.origin}/pricing?checkout=cancel`,
+        successUrl: `${window.location.origin}/facemex-plus?checkout=success`,
+        cancelUrl: `${window.location.origin}/facemex-plus?checkout=cancel`,
         metadata: { plan, source: 'facemex_plus_page' },
         externalId: `${plan}-${Date.now()}`,
       });
