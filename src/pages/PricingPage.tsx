@@ -22,7 +22,8 @@ export default function PricingPage() {
         metadata: { plan: tier, source: 'pricing_page' },
         externalId: `${tier}-${Date.now()}`,
       });
-      window.open(session.redirectUrl, '_blank', 'noopener,noreferrer');
+      const checkoutTarget = `/facemex-plus?checkout=redirect&redirectUrl=${encodeURIComponent(session.redirectUrl)}`;
+      window.location.assign(checkoutTarget);
     } catch (error) {
       console.error(error);
       try {
