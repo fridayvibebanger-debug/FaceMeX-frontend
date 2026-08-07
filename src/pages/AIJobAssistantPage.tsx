@@ -2774,10 +2774,13 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [youtubeLessonsBusy, setYoutubeLessonsBusy] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchBusy, setGlobalSearchBusy] = useState(false);
   const [globalSearchResults, setGlobalSearchResults] = useState({
     chats: [] as ChatSession[],
     topics: [] as YouTubeLessonCategory[],
-    features: [] as Array<{ label: string; action: () => void }> ,
+    features: [] as Array<{ label: string; action: () => void }>,
+    videos: [] as YouTubeLessonVideo[],
+    jobs: [] as LocalVerifiedJob[],
   });
   const [watchPanelOpen, setWatchPanelOpen] = useState(false);
   const [mexaMode, setMexaMode] = useState<
@@ -2994,14 +2997,15 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setDeepSeekUsage(increaseDeepSeekUsage(currentTier));
   };
 
-  const runGlobalSearch = (value?: string) => {
-    const q = clean(value || globalSearchQuery).toLowerCase();
+  const runGlobalSearch = async (value?: string) => {
+    const q = clean(value || globalSearchQuery).trim();
     if (!q) {
-      setGlobalSearchResults({ chats: [], topics: [], features: [] });
+      setGlobalSearchResults({ chats: [], topics: [], features: [], videos: [], jobs: [] });
       return;
     }
 
-    const matches = (text: string) => clean(text).toLowerCase().includes(q);
+    const normalizedQuery = q.toLowerCase();
+    const matches = (text: string) => clean(text).toLowerCase().includes(normalizedQuery);
 
     const chats = chatSessions.filter((s) => matches(s.title) || (s.messages || []).some((m) => matches(m.content))).slice(0, 8);
     const topics = youtubeLessonCategories.filter((c) => matches(`${c.label} ${c.description} ${c.badge}`)).slice(0, 8);
@@ -3014,7 +3018,34 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
     const features = featuresList.filter((f) => matches(f.label));
 
-    setGlobalSearchResults({ chats, topics, features });
+    setGlobalSearchBusy(true);
+
+    try {
+      const [youtubeResult, jobsResult] = await Promise.allSettled([
+        api.get(`/api/youtube/search?q=${encodeURIComponent(q)}&limit=5&duration=medium`),
+        api.get(
+          `/api/jobs/auto-search?query=${encodeURIComponent(q)}&area=${encodeURIComponent('Tzaneen')}&includeExternal=true&includeOfficialSources=true&limit=6&sort=date&fresh=true&days=30&cacheBust=${Date.now()}`
+        ),
+      ]);
+
+      const videos = youtubeResult.status === 'fulfilled'
+        ? normalizeYouTubeLessonVideos(unwrapApiResponse(youtubeResult.value)).slice(0, 5)
+        : [];
+
+      const jobs = jobsResult.status === 'fulfilled'
+        ? normalizeApiJobs(
+            Array.isArray(unwrapApiResponse(jobsResult.value)?.jobs) ? unwrapApiResponse(jobsResult.value)?.jobs : [],
+            q,
+            'Tzaneen'
+          ).slice(0, 6)
+        : [];
+
+      setGlobalSearchResults({ chats, topics, features, videos, jobs });
+    } catch {
+      setGlobalSearchResults({ chats, topics, features, videos: [], jobs: [] });
+    } finally {
+      setGlobalSearchBusy(false);
+    }
   };
 
   const normalizeApiJobs = (jobs: any[], keyword = 'jobs', requestedArea = 'Tzaneen'): LocalVerifiedJob[] => {
@@ -3669,7 +3700,9 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setWatchVideos([]);
     setWatchPlayingVideoId(null);
     setWatchPanelOpen(true);
-    setJobsOpen(true);
+    setJobsOpen(false);
+    setLibraryOpen(false);
+    setTrackerOpen(false);
 
     try {
       const res = await api.get(
@@ -3678,6 +3711,9 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       const data = unwrapApiResponse(res);
       const videos = normalizeYouTubeLessonVideos(data).slice(0, 5);
       setWatchVideos(videos);
+      if (videos.length > 0) {
+        setWatchPlayingVideoId(videos[0].videoId);
+      }
 
       if (videos.length === 0) {
         toast({ title: 'No useful videos found', description: 'Try a clearer topic, subject or channel name.' });
@@ -6723,10 +6759,15 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
             <div className="max-h-[70dvh] overflow-y-auto p-3">
               {(() => {
-                const { chats, topics, features } = globalSearchResults;
+                const { chats, topics, features, videos, jobs } = globalSearchResults;
 
                 return (
                   <div className="space-y-5">
+                    {globalSearchBusy && (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-600 lg:border-white/10 lg:bg-white/5 lg:text-white/70">
+                        Searching live results for you...
+                      </div>
+                    )}
                     <section>
                       <h3 className="px-2 text-[13px] font-semibold text-slate-500">Results</h3>
                       <div className="mt-2 space-y-1">
@@ -6761,6 +6802,60 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         ))}
                       </div>
                     </section>
+
+                    {jobs.length > 0 && (
+                      <section>
+                        <h3 className="px-2 text-[13px] font-semibold text-slate-500 lg:text-slate-300">Live jobs</h3>
+                        <div className="mt-2 space-y-1">
+                          {jobs.map((job) => (
+                            <button
+                              key={job.id}
+                              type="button"
+                              onClick={() => {
+                                setGlobalSearchOpen(false);
+                                if (job.applyUrl) {
+                                  window.open(job.applyUrl, '_blank', 'noopener,noreferrer');
+                                } else {
+                                  setJobsOpen(true);
+                                }
+                              }}
+                              className="flex w-full flex-col items-start rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                            >
+                              <span className="text-[15px] font-semibold text-slate-950 lg:text-white">{job.title}</span>
+                              <span className="mt-1 text-[12px] text-slate-500 lg:text-slate-400">{job.company} • {job.area}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {videos.length > 0 && (
+                      <section>
+                        <h3 className="px-2 text-[13px] font-semibold text-slate-500 lg:text-slate-300">Videos</h3>
+                        <div className="mt-2 space-y-1">
+                          {videos.map((video) => (
+                            <button
+                              key={video.videoId}
+                              type="button"
+                              onClick={() => {
+                                setGlobalSearchOpen(false);
+                                setWatchPanelOpen(true);
+                                setWatchSearch(globalSearchQuery || video.title);
+                                setWatchVideos(videos);
+                                setWatchPlayingVideoId(video.videoId);
+                              }}
+                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-[15px] font-semibold text-slate-950 lg:text-white">{video.title}</span>
+                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-slate-500 lg:text-slate-400">{video.channelTitle || 'YouTube'}</span>
+                              </span>
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-500 lg:bg-white/5 lg:text-white/80">Watch</span>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    )}
 
                     {topics.length > 0 && (
                       <section>
