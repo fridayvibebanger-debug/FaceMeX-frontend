@@ -1084,7 +1084,7 @@ function safeId() {
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function normalizeTier(tier?: string | null) {
@@ -1105,7 +1105,7 @@ function isCreatorPlusTier(tier: string, hasTier?: (tier: string) => boolean) {
 function getDeepSeekDailyLimit(tier: string, hasTier?: (tier: string) => boolean) {
   if (isCreatorPlusTier(tier, hasTier)) return null;
   if (tier === 'pro') return 20;
-  return 5;
+  return 7;
 }
 
 function getDeepSeekUsageKey(tier: string) {
@@ -2866,7 +2866,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const usageLabel = useMemo(() => {
     if (creatorPlus) return 'Unlimited';
     if (currentTier === 'pro') return `${deepSeekUsage}/20`;
-    return `${deepSeekUsage}/5`;
+    return `${deepSeekUsage}/7`;
   }, [creatorPlus, currentTier, deepSeekUsage]);
 
   const sortedLocalJobs = useMemo(() => {
@@ -3833,7 +3833,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     if (!canUseAI) {
       const answer =
         currentTier === 'free'
-          ? 'Your free AI limit is finished for today. Try again tomorrow or upgrade when you are ready.'
+          ? 'You have used all 7 free AI uses for today. Upgrade to keep going until the next day.'
           : 'Your AI limit is finished for today. Try again tomorrow or upgrade when you are ready.';
 
       setMessages((prev) => [
