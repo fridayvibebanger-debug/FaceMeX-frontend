@@ -23,6 +23,18 @@
   to = "/.netlify/functions/marketplace/:splat"
   status = 200
 
+[[redirects]]
+  from = "/api/youtube/summarize"
+  to = "/.netlify/functions/youtube-summarize"
+  status = 200
+  force = true
+
+# Single Page App redirects
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 # Single Page App redirects
 [[redirects]]
   from = "/*"
