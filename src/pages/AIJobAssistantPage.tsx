@@ -3744,7 +3744,10 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setLibraryOpen(false);
     setWatchPanelOpen(true);
     setWatchSearch(video.title || 'Useful video');
-    setWatchVideos([video]);
+    setWatchVideos((prev) => {
+      if (prev.some((item) => item.videoId === video.videoId)) return prev;
+      return [video, ...prev];
+    });
     setWatchPlayingVideoId(video.videoId);
     setWatchSummary(null);
     setWatchBusy(false);
@@ -7127,10 +7130,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                             <button
                               key={video.videoId}
                               type="button"
-                              onClick={() => {
-                                setWatchPlayingVideoId(video.videoId);
-                                setWatchSummary(null);
-                              }}
+                              onClick={() => openWatchVideoInApp(video)}
                               className="group overflow-hidden rounded-[22px] border border-slate-200 bg-white p-0 text-left shadow-sm transition hover:border-slate-300 lg:bg-[#111] lg:border-white/10 lg:text-white"
                             >
                               <div className="relative aspect-video overflow-hidden bg-slate-950">
