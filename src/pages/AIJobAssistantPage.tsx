@@ -2798,6 +2798,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
   const [watchBusy, setWatchBusy] = useState(false);
   const [watchPlayingVideoId, setWatchPlayingVideoId] = useState<string | null>(null);
+  const [watchSummary, setWatchSummary] = useState<string | null>(null);
+  const [watchSummaryLoading, setWatchSummaryLoading] = useState(false);
   const selectedWatchVideo = useMemo(
     () => watchVideos.find((video) => video.videoId === watchPlayingVideoId) || watchVideos[0] || null,
     [watchVideos, watchPlayingVideoId]
@@ -3708,6 +3710,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setWatchBusy(true);
     setWatchVideos([]);
     setWatchPlayingVideoId(null);
+    setWatchSummary(null);
     setWatchPanelOpen(true);
     setJobsOpen(false);
     setLibraryOpen(false);
@@ -3746,7 +3749,31 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setWatchSearch(video.title || 'Useful video');
     setWatchVideos([video]);
     setWatchPlayingVideoId(video.videoId);
+    setWatchSummary(null);
     setWatchBusy(false);
+  };
+
+  const summarizeSelectedWatchVideo = async () => {
+    if (!selectedWatchVideo) return;
+
+    const prompt = `Summarize this YouTube lesson video for me:
+Title: ${selectedWatchVideo.title}
+Channel: ${selectedWatchVideo.channelTitle || 'YouTube'}
+Link: ${selectedWatchVideo.watchUrl}
+
+Provide the main idea, key points, step-by-step explanation, action steps, and quick revision notes. If you do not have access to the transcript, be honest and summarize using the title, channel and link metadata.`;
+
+    setWatchSummaryLoading(true);
+    setWatchSummary(null);
+    setWatchPanelOpen(true);
+
+    const answer = await sendPrompt(prompt);
+
+    if (answer) {
+      setWatchSummary(answer);
+    }
+
+    setWatchSummaryLoading(false);
   };
 
   const clearWorkspaceFromScratch = () => {
@@ -3788,7 +3815,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     });
   };
 
-  const sendPrompt = async (overridePrompt?: string) => {
+  const sendPrompt = async (overridePrompt?: string): Promise<string | undefined> => {
     const cleanPrompt = clean(overridePrompt || prompt);
     const attachedImages = selectedImages;
     const hasImages = attachedImages.length > 0;
@@ -4035,6 +4062,8 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         source: data?.source || 'unknown',
         answer_length: answer.length,
       });
+
+      return answer;
     } catch (error: any) {
       const answer = createUnavailableAnswer(hasImages);
 
@@ -5521,17 +5550,21 @@ Apply link: ${job.applyUrl}`;
                         </div>
                         <button
                           type="button"
-                          onClick={() => {
-                            sendPrompt(
-                              `Summarize this YouTube lesson video for me:\nTitle: ${selectedWatchVideo.title}\nChannel: ${selectedWatchVideo.channelTitle || 'YouTube'}\nLink: ${selectedWatchVideo.watchUrl}\n\nProvide the main idea, key points, step-by-step explanation, action steps, and quick revision notes.`
-                            );
-                          }}
-                          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
+                          onClick={summarizeSelectedWatchVideo}
+                          disabled={watchSummaryLoading}
+                          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Summarize with YouTube AI
+                          {watchSummaryLoading ? 'Summarizing…' : 'Summarize with YouTube AI'}
                         </button>
                       </div>
                     </div>
+
+                    {watchSummary ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white">
+                        <p className="text-sm font-semibold text-white">YouTube AI summary</p>
+                        <p className="mt-2 text-sm leading-6 text-white/80 whitespace-pre-wrap">{watchSummary}</p>
+                      </div>
+                    ) : null}
 
                     {watchVideos.filter((video) => video.videoId !== selectedWatchVideo.videoId).length > 0 && (
                       <div className="grid gap-2">
@@ -7113,17 +7146,21 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                               </div>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  sendPrompt(
-                                    `Summarize this YouTube lesson video for me:\nTitle: ${selectedWatchVideo.title}\nChannel: ${selectedWatchVideo.channelTitle || 'YouTube'}\nLink: ${selectedWatchVideo.watchUrl}\n\nProvide the main idea, key points, step-by-step explanation, action steps, and quick revision notes.`
-                                  );
-                                }}
-                                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                                onClick={summarizeSelectedWatchVideo}
+                                disabled={watchSummaryLoading}
+                                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Summarize with YouTube AI
+                                {watchSummaryLoading ? 'Summarizing…' : 'Summarize with YouTube AI'}
                               </button>
                             </div>
                           </div>
+
+                          {watchSummary ? (
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-900">
+                              <p className="text-sm font-semibold">YouTube AI summary</p>
+                              <p className="mt-2 text-sm leading-6 text-slate-700 whitespace-pre-wrap">{watchSummary}</p>
+                            </div>
+                          ) : null}
 
                           {watchVideos.filter((video) => video.videoId !== selectedWatchVideo.videoId).length > 0 && (
                             <div className="grid gap-2">
