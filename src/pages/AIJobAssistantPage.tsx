@@ -5924,8 +5924,8 @@ Apply link: ${job.applyUrl}`;
                       onChange={(e) => setPrompt(e.target.value)}
                       onFocus={() => setFollowUpExpanded(true)}
                       placeholder={hasJobResultsOnScreen ? 'Ask a follow-up...' : 'Ask FaceMeX anything'}
-                      className={`min-h-[26px] flex-1 min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[12px] leading-5 text-slate-950 dark:text-white lg:max-w-[calc(100%-74px)] lg:text-[12px] lg:py-0.5 lg:leading-5 lg:text-white placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45 lg:placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
-                      inputHasContent ? 'max-h-24' : 'h-7 max-h-7 overflow-hidden'
+                      className={`min-h-[26px] flex-1 min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[14px] leading-5 text-slate-950 dark:text-white lg:max-w-[calc(100%-74px)] lg:text-[14px] lg:py-0.5 lg:leading-5 lg:text-white placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45 lg:placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                      inputHasContent ? 'max-h-24' : 'h-8 max-h-8 overflow-hidden'
                     }`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -6930,8 +6930,8 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                               key={video.videoId}
                               type="button"
                               onClick={() => {
-                                setGlobalSearchOpen(false);
                                 setWatchPanelOpen(true);
+                                setGlobalSearchOpen(false);
                                 setWatchSearch(globalSearchQuery || video.title);
                                 setWatchVideos(videos);
                                 setWatchPlayingVideoId(video.videoId);
