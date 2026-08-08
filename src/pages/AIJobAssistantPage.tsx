@@ -2798,6 +2798,10 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
   const [watchBusy, setWatchBusy] = useState(false);
   const [watchPlayingVideoId, setWatchPlayingVideoId] = useState<string | null>(null);
+  const selectedWatchVideo = useMemo(
+    () => watchVideos.find((video) => video.videoId === watchPlayingVideoId) || watchVideos[0] || null,
+    [watchVideos, watchPlayingVideoId]
+  );
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleStep, setScheduleStep] = useState<'choose' | 'custom'>('choose');
   const [schedulePrompt, setSchedulePrompt] = useState('');
@@ -5488,46 +5492,78 @@ Apply link: ${job.applyUrl}`;
                   <div className="rounded-2xl bg-white/5 p-3 text-[13px] leading-5 text-white/70">
                     Search any lesson, funding topic, investor topic, or job guide and watch inside FaceMeX.
                   </div>
-                ) : (
-                  watchVideos.slice(0, 3).map((video) => {
-                    const isPlaying = watchPlayingVideoId === video.videoId;
+                ) : selectedWatchVideo ? (
+                  <div className="space-y-4">
+                    <div className="overflow-hidden rounded-[22px] border border-white/10 bg-[#090909]">
+                      <div className="relative aspect-video bg-slate-950">
+                        <iframe
+                          src={selectedWatchVideo.embedUrl}
+                          title={selectedWatchVideo.title}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          className="h-full w-full"
+                        />
+                      </div>
 
-                    return (
-                      <div key={video.videoId} className="overflow-hidden rounded-[22px] border border-white/10 bg-[#090909]">
-                        <div className="relative aspect-video bg-slate-950">
-                          {isPlaying ? (
-                            <iframe
-                              src={video.embedUrl}
-                              title={video.title}
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                              allowFullScreen
-                              className="h-full w-full"
-                            />
-                          ) : (
+                      <div className="p-3">
+                        <div className="mb-2 line-clamp-2 text-sm font-semibold text-white">{selectedWatchVideo.title}</div>
+                        <p className="text-[13px] text-white/70">{selectedWatchVideo.channelTitle || 'FaceMeX'}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-white">Big watch window</p>
+                          <p className="mt-1 text-[13px] text-white/70">
+                            Watch the video in a larger in-app player and ask FaceMeX to summarize it below.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            sendPrompt(
+                              `Summarize this YouTube lesson video for me:\nTitle: ${selectedWatchVideo.title}\nChannel: ${selectedWatchVideo.channelTitle || 'YouTube'}\nLink: ${selectedWatchVideo.watchUrl}\n\nProvide the main idea, key points, step-by-step explanation, action steps, and quick revision notes.`
+                            );
+                          }}
+                          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
+                        >
+                          Summarize with YouTube AI
+                        </button>
+                      </div>
+                    </div>
+
+                    {watchVideos.filter((video) => video.videoId !== selectedWatchVideo.videoId).length > 0 && (
+                      <div className="grid gap-2">
+                        {watchVideos
+                          .filter((video) => video.videoId !== selectedWatchVideo.videoId)
+                          .slice(0, 2)
+                          .map((video) => (
                             <button
+                              key={video.videoId}
                               type="button"
                               onClick={() => setWatchPlayingVideoId(video.videoId)}
-                              className="group relative h-full w-full overflow-hidden bg-slate-950 text-left"
+                              className="group overflow-hidden rounded-[20px] border border-white/10 bg-[#111] text-left"
                             >
-                              {video.thumbnail ? (
-                                <img src={video.thumbnail} alt={video.title} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
-                              ) : null}
-                              <span className="absolute inset-0 bg-black/20" />
-                              <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-950 shadow-lg">
-                                ▶
-                              </span>
+                              <div className="relative aspect-video overflow-hidden bg-slate-950">
+                                {video.thumbnail ? (
+                                  <img src={video.thumbnail} alt={video.title} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                                ) : null}
+                                <span className="absolute inset-0 bg-black/20" />
+                                <span className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-950 shadow-lg">
+                                  ▶
+                                </span>
+                              </div>
+                              <div className="p-3">
+                                <div className="line-clamp-2 text-sm font-semibold text-white">{video.title}</div>
+                                <p className="mt-1 text-[12px] text-white/60">{video.channelTitle || 'FaceMeX'}</p>
+                              </div>
                             </button>
-                          )}
-                        </div>
-
-                        <div className="p-3">
-                          <div className="mb-2 line-clamp-2 text-sm font-semibold text-white">{video.title}</div>
-                          <p className="text-[13px] text-white/70">{video.channelTitle || 'FaceMeX'}</p>
-                        </div>
+                          ))}
                       </div>
-                    );
-                  })
-                )}
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
