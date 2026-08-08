@@ -5757,7 +5757,7 @@ Apply link: ${job.applyUrl}`;
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
-              {chatMessages.length === 0 && !busy && (
+              {chatMessages.length === 0 && !busy && !selectedWatchVideo && (
                 <WelcomeHero
                   firstName={firstName}
                   onQuickAsk={quickAsk}
