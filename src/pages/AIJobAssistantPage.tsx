@@ -1991,7 +1991,12 @@ function normalizeYouTubeLessonVideos(raw: any): YouTubeLessonVideo[] {
           clean(item?.snippet?.thumbnails?.medium?.url) ||
           clean(item?.snippet?.thumbnails?.default?.url) ||
           null,
-        embedUrl: clean(item?.embedUrl) || `https://www.youtube.com/embed/${videoId}`,
+        embedUrl: (() => {
+          const rawUrl = clean(item?.embedUrl) || `https://www.youtube.com/embed/${videoId}`;
+          return rawUrl.includes('?')
+            ? `${rawUrl}&autoplay=1&rel=0`
+            : `${rawUrl}?autoplay=1&rel=0`;
+        })(),
         watchUrl: clean(item?.watchUrl) || `https://www.youtube.com/watch?v=${videoId}`,
       } satisfies YouTubeLessonVideo;
     })
