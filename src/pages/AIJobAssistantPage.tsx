@@ -7082,48 +7082,80 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         <div className="rounded-2xl bg-slate-50 p-3 text-[13px] leading-5 text-slate-500">
                           Search any lesson, funding topic, investor topic, or job guide and watch inside FaceMeX.
                         </div>
-                      ) : (
-                        watchVideos.slice(0, 3).map((video) => {
-                          const isPlaying = watchPlayingVideoId === video.videoId;
+                      ) : selectedWatchVideo ? (
+                        <div className="space-y-4">
+                          <div className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm">
+                            <div className="relative aspect-video bg-slate-950">
+                              <iframe
+                                src={selectedWatchVideo.embedUrl}
+                                title={selectedWatchVideo.title}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                                className="h-full w-full"
+                              />
+                            </div>
 
-                          return (
-                            <div key={video.videoId} className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm">
-                              <div className="relative aspect-video bg-slate-950">
-                                {isPlaying ? (
-                                  <iframe
-                                    src={video.embedUrl}
-                                    title={video.title}
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                    allowFullScreen
-                                    className="h-full w-full"
-                                  />
-                                ) : (
+                            <div className="p-3">
+                              <p className="line-clamp-2 text-[14px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
+                                {selectedWatchVideo.title}
+                              </p>
+                              <p className="mt-1 line-clamp-1 text-[12px] text-slate-500">{selectedWatchVideo.channelTitle || 'YouTube'}</p>
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-950">Big watch window</p>
+                                <p className="mt-1 text-[13px] text-slate-500">
+                                  Watch the video in a larger in-app player and ask FaceMeX to summarize it below.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  sendPrompt(
+                                    `Summarize this YouTube lesson video for me:\nTitle: ${selectedWatchVideo.title}\nChannel: ${selectedWatchVideo.channelTitle || 'YouTube'}\nLink: ${selectedWatchVideo.watchUrl}\n\nProvide the main idea, key points, step-by-step explanation, action steps, and quick revision notes.`
+                                  );
+                                }}
+                                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                              >
+                                Summarize with YouTube AI
+                              </button>
+                            </div>
+                          </div>
+
+                          {watchVideos.filter((video) => video.videoId !== selectedWatchVideo.videoId).length > 0 && (
+                            <div className="grid gap-2">
+                              {watchVideos
+                                .filter((video) => video.videoId !== selectedWatchVideo.videoId)
+                                .slice(0, 2)
+                                .map((video) => (
                                   <button
+                                    key={video.videoId}
                                     type="button"
                                     onClick={() => setWatchPlayingVideoId(video.videoId)}
-                                    className="group relative h-full w-full overflow-hidden bg-slate-950 text-left"
+                                    className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white text-left"
                                   >
-                                    {video.thumbnail ? (
-                                      <img src={video.thumbnail} alt={video.title} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
-                                    ) : null}
-                                    <span className="absolute inset-0 bg-black/20" />
-                                    <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-950 shadow-lg">
-                                      ▶
-                                    </span>
+                                    <div className="relative aspect-video overflow-hidden bg-slate-950">
+                                      {video.thumbnail ? (
+                                        <img src={video.thumbnail} alt={video.title} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                                      ) : null}
+                                      <span className="absolute inset-0 bg-black/20" />
+                                      <span className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-950 shadow-lg">
+                                        ▶
+                                      </span>
+                                    </div>
+                                    <div className="p-3">
+                                      <div className="line-clamp-2 text-sm font-semibold text-slate-950">{video.title}</div>
+                                      <p className="mt-1 text-[12px] text-slate-500">{video.channelTitle || 'YouTube'}</p>
+                                    </div>
                                   </button>
-                                )}
-                              </div>
-
-                              <div className="p-3">
-                                <p className="line-clamp-2 text-[14px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
-                                  {video.title}
-                                </p>
-                                <p className="mt-1 line-clamp-1 text-[12px] text-slate-500">{video.channelTitle || 'YouTube'}</p>
-                              </div>
+                                ))}
                             </div>
-                          );
-                        })
-                      )}
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 )}
