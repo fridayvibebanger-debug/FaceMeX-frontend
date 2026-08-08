@@ -3750,27 +3750,49 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setWatchBusy(false);
   };
 
+  const fetchYouTubeSummary = async (video: YouTubeLessonVideo) => {
+    const res = await api.post('/api/youtube/summarize', {
+      videoId: video.videoId,
+      title: video.title,
+      channelTitle: video.channelTitle,
+      watchUrl: video.watchUrl,
+      description: video.description || '',
+    });
+
+    const data = unwrapApiResponse(res);
+    return String(data?.summary || data?.text || data?.reply || '').trim();
+  };
+
   const summarizeSelectedWatchVideo = async () => {
     if (!selectedWatchVideo) return;
-
-    const prompt = `Summarize this YouTube lesson video for me:
-Title: ${selectedWatchVideo.title}
-Channel: ${selectedWatchVideo.channelTitle || 'YouTube'}
-Link: ${selectedWatchVideo.watchUrl}
-
-Provide the main idea, key points, step-by-step explanation, action steps, and quick revision notes. If you do not have access to the transcript, be honest and summarize using the title, channel and link metadata.`;
 
     setWatchSummaryLoading(true);
     setWatchSummary(null);
     setWatchPanelOpen(true);
 
-    const answer = await sendPrompt(prompt);
-
-    if (answer) {
-      setWatchSummary(answer);
+    try {
+      const summary = await fetchYouTubeSummary(selectedWatchVideo);
+      if (summary) {
+        setWatchSummary(summary);
+      } else {
+        toast({
+          title: 'No summary available',
+          description: 'The YouTube summary service returned no content.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      trackError('workspace_youtube_summary_failed', error?.message || 'YouTube summary failed', {
+        videoId: selectedWatchVideo.videoId,
+      });
+      toast({
+        title: 'YouTube summary failed',
+        description: 'Unable to generate a YouTube AI summary right now.',
+        variant: 'destructive',
+      });
+    } finally {
+      setWatchSummaryLoading(false);
     }
-
-    setWatchSummaryLoading(false);
   };
 
   const clearWorkspaceFromScratch = () => {
