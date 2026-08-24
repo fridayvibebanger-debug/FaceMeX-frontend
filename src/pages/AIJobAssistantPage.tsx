@@ -634,7 +634,7 @@ const quickPrompts = [
   {
     label: 'Find jobs',
     prompt:
-      'I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.',
+      'I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.',
   },
   {
     label: 'Build My CV',
@@ -1298,13 +1298,7 @@ After answering the user's cover letter request, remind them:
 }
 
 function extractAreaFromPrompt(text: string) {
-  const t = clean(text).toLowerCase();
-
-  const found = PRIORITY_AREAS.find((area) => t.includes(area.toLowerCase()));
-
-  if (found) return found === 'Messina' ? 'Musina' : found;
-
-  return 'Tzaneen';
+  return extractSearchLocation(text);
 }
 
 function extractSearchLocation(text: string) {
@@ -1339,7 +1333,7 @@ function extractSearchLocation(text: string) {
     /\b(?:in|near|around|at|from)\s+([a-z][a-z .'-]{2,50}?)(?=\s+(?:for|with|and|that|where|jobs?|vacancies?|work|employment)\b|[,.!?]|$)/i
   );
 
-  return clean(locationMatch?.[1]) || 'Tzaneen';
+  return clean(locationMatch?.[1]) || 'South Africa';
 }
 
 function getJobsFromApiResponse(data: any) {
@@ -3006,7 +3000,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   useEffect(() => {
     loadAutomaticJobs({
       query: 'jobs',
-      area: 'Tzaneen',
+      area: 'South Africa',
       silent: true,
     });
   }, []);
@@ -3077,6 +3071,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     ];
 
     const features = featuresList.filter((f) => matches(f.label));
+    const searchLocation = extractSearchLocation(q);
 
     setGlobalSearchBusy(true);
 
@@ -3084,7 +3079,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       const [youtubeResult, jobsResult] = await Promise.allSettled([
         api.get(`/api/youtube/search?q=${encodeURIComponent(q)}&limit=5&duration=medium`),
         api.get(
-          `/api/jobs/auto-search?query=${encodeURIComponent(q)}&area=${encodeURIComponent('Tzaneen')}&includeExternal=true&includeOfficialSources=true&limit=6&sort=date&fresh=true&days=30&cacheBust=${Date.now()}`
+          `/api/jobs/auto-search?query=${encodeURIComponent(q)}&area=${encodeURIComponent(searchLocation)}&includeExternal=true&includeOfficialSources=true&limit=6&sort=date&fresh=true&days=30&cacheBust=${Date.now()}`
         ),
       ]);
 
@@ -3092,7 +3087,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
         ? normalizeYouTubeLessonVideos(unwrapApiResponse(youtubeResult.value)).slice(0, 5)
         : [];
 
-      const searchLocation = extractSearchLocation(q);
       const jobs = jobsResult.status === 'fulfilled'
         ? normalizeApiJobs(
             getJobsFromApiResponse(unwrapApiResponse(jobsResult.value)),
@@ -3109,7 +3103,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }
   };
 
-  const normalizeApiJobs = (jobs: any[], keyword = 'jobs', requestedArea = 'Tzaneen'): LocalVerifiedJob[] => {
+  const normalizeApiJobs = (jobs: any[], keyword = 'jobs', requestedArea = 'South Africa'): LocalVerifiedJob[] => {
     const normalized = jobs
       .map((job: any) => {
         const description = clean(job.description);
@@ -3222,7 +3216,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     const exactJobs = jobs.filter((job) => !job.isSourceCard);
     const sourceCards = jobs.filter((job) => job.isSourceCard);
     const count = exactJobs.length || sourceCards.length;
-    const areaLabel = isBroadSearchArea(areaText) ? areaText : `${areaText} • Limpopo`;
+    const areaLabel = areaText;
     const searchLabel = getSearchDisplayLabel(queryText);
 
     if (exactJobs.length) return `${count} ${searchLabel} found ${areaLabel} — newest first`;
@@ -3319,9 +3313,9 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   };
 
   const refreshJobsForMessage = async (message: ChatMessage) => {
-    const searchArea = message.jobSearchArea || 'Tzaneen';
+    const searchArea = message.jobSearchArea || 'South Africa';
     const searchQuery = message.jobSearchQuery || 'jobs';
-    const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
+    const areaLabel = searchArea;
 
     setBusy(true);
 
@@ -3370,8 +3364,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   };
 
   const filterNoExperienceJobsForMessage = async (message: ChatMessage) => {
-    const searchArea = message.jobSearchArea || 'Tzaneen';
-    const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
+    const searchArea = message.jobSearchArea || 'South Africa';
+    const areaLabel = searchArea;
 
     setBusy(true);
 
@@ -4430,9 +4424,9 @@ Apply link: ${job.applyUrl}`;
     const jobsToShow = message.jobs.slice(0, visibleLimit);
     const remainingJobs = Math.max(0, message.jobs.length - jobsToShow.length);
 
-    const searchArea = message.jobSearchArea || 'Tzaneen';
+    const searchArea = message.jobSearchArea || 'South Africa';
     const searchQuery = message.jobSearchQuery || 'jobs';
-    const areaLabel = isBroadSearchArea(searchArea) ? searchArea : `${searchArea} • Limpopo`;
+    const areaLabel = searchArea;
     const searchLabel = getSearchDisplayLabel(searchQuery);
     const totalLabel = `${message.jobs.length} ${searchLabel} found ${areaLabel}`;
 
@@ -5645,7 +5639,7 @@ Apply link: ${job.applyUrl}`;
             <button
               type="button"
               onClick={() =>
-                quickAsk('I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.')
+                quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.')
               }
               className="line-clamp-1 w-full rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
             >
@@ -7232,7 +7226,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 <h3 className="fm-drawer-heading">Pinned</h3>
                 <div className="mt-3 space-y-1">
                   {[
-                    { label: 'Find jobs', action: () => quickAsk('I am looking for a job in Tzaneen. Search automatically and show me current available jobs with apply links.') },
+                    { label: 'Find jobs', action: () => quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.') },
                     { label: 'Build My CV', action: openCvBuilder },
                     { label: 'Cover Letter AI', action: openCoverLetterBuilder },
                   ].map((item) => (
@@ -7305,3 +7299,4 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
+
