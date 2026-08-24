@@ -1307,6 +1307,55 @@ function extractAreaFromPrompt(text: string) {
   return 'Tzaneen';
 }
 
+function extractSearchLocation(text: string) {
+  const value = clean(text);
+  const lower = value.toLowerCase();
+  const knownLocations = [
+    ...PRIORITY_AREAS,
+    ...GREATER_TZANEEN_AREAS,
+    ...LIMPOPO_AREAS,
+    'south africa',
+    'botswana',
+    'eswatini',
+    'lesotho',
+    'namibia',
+    'zimbabwe',
+    'mozambique',
+    'zambia',
+    'malawi',
+    'ghana',
+    'kenya',
+    'nigeria',
+    'united kingdom',
+    'uk',
+    'usa',
+    'united states',
+  ];
+  const known = knownLocations.find((location) => lower.includes(location.toLowerCase()));
+
+  if (known) return known === 'Messina' ? 'Musina' : known;
+
+  const locationMatch = value.match(
+    /\b(?:in|near|around|at|from)\s+([a-z][a-z .'-]{2,50}?)(?=\s+(?:for|with|and|that|where|jobs?|vacancies?|work|employment)\b|[,.!?]|$)/i
+  );
+
+  return clean(locationMatch?.[1]) || 'Tzaneen';
+}
+
+function getJobsFromApiResponse(data: any) {
+  const arrays = [
+    data?.jobs,
+    data?.results,
+    data?.items,
+    data?.adzunaJobs,
+    data?.joobleJobs,
+    data?.providers?.adzuna,
+    data?.providers?.jooble,
+  ];
+
+  return arrays.flatMap((items) => (Array.isArray(items) ? items : []));
+}
+
 function stripAreasFromText(text: string) {
   let value = ` ${clean(text).toLowerCase()} `;
 
@@ -3043,11 +3092,12 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
         ? normalizeYouTubeLessonVideos(unwrapApiResponse(youtubeResult.value)).slice(0, 5)
         : [];
 
+      const searchLocation = extractSearchLocation(q);
       const jobs = jobsResult.status === 'fulfilled'
         ? normalizeApiJobs(
-            Array.isArray(unwrapApiResponse(jobsResult.value)?.jobs) ? unwrapApiResponse(jobsResult.value)?.jobs : [],
+            getJobsFromApiResponse(unwrapApiResponse(jobsResult.value)),
             q,
-            'Tzaneen'
+            searchLocation
           ).slice(0, 6)
         : [];
 
@@ -3065,7 +3115,15 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
         const description = clean(job.description);
         const title = clean(job.title || job.job_title || job.role);
         const company = clean(job.company || job.employer || job.source_name || job.company_name) || 'Company not stated';
-        const area = clean(job.area || job.location || job.town || job.city) || 'South Africa';
+        const area = clean(
+          job.area ||
+            job.location ||
+            job.town ||
+            job.city ||
+            job.province ||
+            job.region ||
+            job.country
+        ) || 'South Africa';
         const deadline =
           clean(job.deadline || job.closing_date || job.closingDate) ||
           extractClosingDateFromText(`${title} ${company} ${area} ${description}`);
@@ -3076,7 +3134,14 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
           company,
           area,
           deadline: deadline || null,
-          sourceLabel: clean(job.sourceLabel || job.source_label || job.source_type || job.sourceType) || 'External job source',
+          sourceLabel: clean(
+            job.sourceLabel ||
+              job.source_label ||
+              job.source_type ||
+              job.sourceType ||
+              job.provider ||
+              job.source
+          ) || 'External job source',
           verificationStatus: normalizeVerificationStatus(job.verificationStatus || job.verification_status || job.status),
           actionLabel: clean(job.actionLabel || job.action_label) || 'Open Apply Page',
           applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.redirect_url || job.sourceUrl || job.source_url),
@@ -3125,7 +3190,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
       const res = await api.get(url);
       const data = unwrapApiResponse(res);
-      const jobs = Array.isArray(data?.jobs) ? data.jobs : Array.isArray(data) ? data : [];
+      const jobs = getJobsFromApiResponse(data);
       const normalizedJobs = normalizeApiJobs(jobs, query, area);
       const shouldFallbackToOfficial = clean(query).toLowerCase() === 'jobs';
 
