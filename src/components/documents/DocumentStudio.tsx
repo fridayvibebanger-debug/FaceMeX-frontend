@@ -110,7 +110,7 @@ function makeDocxParagraphs(content: string, bold: boolean) {
 
 export default function DocumentStudio({ kind }: DocumentStudioProps) {
   const { tier, hasTier } = useUserStore();
-  const isPlus = hasTier('plus');
+  const isPlus = String(tier).toLowerCase() === 'plus' || hasTier('pro');
   const isPro = hasTier('pro');
   const [form, setForm] = useState<FormState>(emptyForm);
   const [template, setTemplate] = useState<TemplateKey>('modern');
@@ -218,3 +218,4 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
     </div>
   );
 }
+
