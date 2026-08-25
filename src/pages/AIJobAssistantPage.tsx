@@ -1150,6 +1150,12 @@ function hasJobSearchWords(text: string) {
   );
 }
 
+function isGlobalJobSearch(text: string) {
+  return /(every job|all jobs|any job|jobs everywhere|jobs worldwide|worldwide jobs|global jobs|international jobs|jobs globally|from every (town|township|city|province|country)|in every (town|township|city|province|country))/i.test(
+    clean(text)
+  );
+}
+
 function hasGeneralHelpWords(text: string) {
   return /(business|businesses|start|starting|side hustle|make money|improve my life|life advice|everyday life|strategy|business idea|ideas|how can i improve|what should i do|teach me|explain|learn|study|app|website|users|customers|marketing|transport|delivery|courier|logistics|budget|save money|plan my day|motivation|discipline|relationship advice|school|college|skills|productivity)/i.test(
     text
@@ -1345,6 +1351,10 @@ function getJobsFromApiResponse(data: any) {
     data?.joobleJobs,
     data?.providers?.adzuna,
     data?.providers?.jooble,
+    data?.providers?.adzuna?.jobs,
+    data?.providers?.jooble?.jobs,
+    data?.sources?.adzuna,
+    data?.sources?.jooble,
   ];
 
   return arrays.flatMap((items) => (Array.isArray(items) ? items : []));
@@ -1368,7 +1378,7 @@ function extractKeywordFromPrompt(text: string) {
     return NO_EXPERIENCE_SEARCH_KEYWORD;
   }
 
-  if (/(security|guard|armed response|protection)/i.test(t)) return 'security';
+  if (/(security|secrity|secur|guard|armed response|protection)/i.test(t)) return 'security';
   if (/(cashier|retail|store assistant|shop assistant|shoprite|checkers|usave|sales assistant|merchandiser|packer|clerk)/i.test(t)) return 'retail';
   if (/(farm|agriculture|packhouse|packing|fruit|westfalia|zz2|letaba|harvest)/i.test(t)) return 'farm';
   if (/(admin|administrator|administrative|office|receptionist|data capture)/i.test(t)) return 'admin';
@@ -1424,6 +1434,27 @@ function extractKeywordFromPrompt(text: string) {
   if (!simplified || simplified.length < 3) return 'jobs';
 
   return simplified;
+}
+
+function getNearbySearchAreas(area: string) {
+  const requested = clean(area).toLowerCase();
+  const locations = [...PRIORITY_AREAS, ...LIMPOPO_AREAS]
+    .filter((location, index, all) => all.indexOf(location) === index)
+    .filter((location) => location.toLowerCase() !== requested);
+
+  if (requested === 'hoedspruit') {
+    return ['Maruleng', 'Phalaborwa', 'Tzaneen', 'Limpopo'];
+  }
+
+  if (requested === 'tzaneen' || isGreaterTzaneenSearch(area)) {
+    return ['Greater Tzaneen', 'Polokwane', 'Phalaborwa', 'Hoedspruit', 'Limpopo'];
+  }
+
+  if (isLimpopoSearch(area)) {
+    return locations.filter((location) => isLimpopoSearch(location)).slice(0, 6);
+  }
+
+  return [];
 }
 
 function getSearchDisplayLabel(keyword: string) {
@@ -7299,4 +7330,3 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
-
