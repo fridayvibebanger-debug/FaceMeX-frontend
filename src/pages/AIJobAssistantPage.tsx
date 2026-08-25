@@ -5377,6 +5377,18 @@ Apply link: ${job.applyUrl}`;
           background: transparent;
         }
 
+        .fm-mobile-sidebar-scroll {
+          overscroll-behavior: contain;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .fm-mobile-sidebar-scroll::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+
         .fm-chat-scroll {
           overscroll-behavior: contain;
         }
@@ -7102,15 +7114,15 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
       )}
 
       {jobsOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-[3px] lg:hidden" onClick={() => setJobsOpen(false)}>
+        <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-[4px] lg:hidden" onClick={() => setJobsOpen(false)}>
           <div
-            className="fm-premium-drawer absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col overflow-hidden rounded-r-[28px] bg-white text-slate-950"
+            className="fm-premium-drawer absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col overflow-hidden rounded-r-[28px] bg-gradient-to-b from-white via-white to-slate-50 text-slate-950 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-[92px] shrink-0 items-center justify-between px-5 pt-4">
+            <div className="flex h-[92px] shrink-0 items-center justify-between border-b border-slate-100/60 bg-white/80 backdrop-blur-sm px-5 pt-4">
               <div className="min-w-0">
                 <h2 className="truncate text-2xl font-semibold tracking-[-0.045em] text-slate-950">FaceMeX</h2>
-                <p className="mt-1 truncate text-xs text-slate-500">Your AI workspace</p>
+                <p className="mt-1 truncate text-xs font-medium text-slate-400">Your AI workspace</p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -7120,7 +7132,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setGlobalSearchOpen(true);
                   }}
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-900 shadow-sm transition active:scale-[0.98] hover:bg-slate-200 lg:bg-black lg:text-white lg:border-white/10 lg:hover:bg-white/5"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100/60 text-slate-700 shadow-sm transition active:scale-[0.96] hover:bg-slate-200/80 hover:text-slate-900"
                   aria-label="Search FaceMeX"
                 >
                   <Search className="h-5 w-5" />
@@ -7132,7 +7144,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     navigate('/feed');
                   }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_8px_20px_rgba(16,185,129,0.24)] ring-4 ring-emerald-500/15 transition active:scale-[0.96] hover:bg-emerald-600 hover:shadow-[0_10px_25px_rgba(16,185,129,0.32)]"
                   aria-label="Back to FaceMeX feed"
                 >
                   {firstName?.[0]?.toUpperCase() || 'F'}
@@ -7140,7 +7152,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-24 pt-2">
+            <div className="fm-mobile-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-24 pt-3">
               <div className="space-y-1">
                 <button
                   type="button"
@@ -7148,9 +7160,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setLibraryOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
                 >
-                  <FileText className="h-5 w-5 text-slate-900" />
+                  <FileText className="h-5 w-5 shrink-0 text-slate-700" />
                   Library
                 </button>
 
@@ -7160,9 +7172,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     openSchedulePanel();
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
                 >
-                  <CalendarDays className="h-5 w-5 text-slate-900" />
+                  <CalendarDays className="h-5 w-5 shrink-0 text-slate-700" />
                   Scheduled
                 </button>
 
@@ -7172,19 +7184,19 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setTrackerOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
                 >
-                  <Clock className="h-5 w-5 text-slate-900" />
+                  <Clock className="h-5 w-5 shrink-0 text-slate-700" />
                   Job Tracker
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setWatchPanelOpen((value) => !value)}
-                  className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 px-3 py-3 text-left text-sm font-semibold tracking-[-0.02em] text-slate-950 transition hover:bg-slate-100"
+                  className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
                 >
                   <span className="flex min-w-0 items-center gap-4">
-                    <Globe2 className="h-5 w-5 text-slate-900" />
+                    <Globe2 className="h-5 w-5 shrink-0 text-slate-700" />
                     <span className="min-w-0 truncate">Watch</span>
                   </span>
                   <ChevronDown className={`h-4 w-4 text-slate-400 transition ${watchPanelOpen ? 'rotate-180' : ''}`} />
@@ -7261,9 +7273,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 )}
               </div>
 
-              <div className="mt-7">
-                <h3 className="fm-drawer-heading">Pinned</h3>
-                <div className="mt-3 space-y-1">
+              <div className="mt-8">
+                <h3 className="fm-drawer-heading px-1 text-xs font-semibold uppercase tracking-widest text-slate-400">Pinned</h3>
+                <div className="mt-3 space-y-2">
                   {[
                     { label: 'Find jobs', action: () => quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.') },
                     { label: 'Build My CV', action: openCvBuilder },
@@ -7276,10 +7288,10 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         setJobsOpen(false);
                         item.action();
                       }}
-                      className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left text-[15px] text-slate-800 transition hover:bg-slate-100"
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[15px] font-medium text-slate-700 transition hover:bg-slate-100/70 active:scale-[0.98]"
                     >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm">
-                        <MessageCircleIcon />
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50 text-slate-600 shadow-sm">
+                        <Send className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 truncate">{item.label}</span>
                     </button>
@@ -7288,8 +7300,8 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
               </div>
 
               {chatSessions.length > 0 && (
-                <div className="mt-7">
-                  <h3 className="fm-drawer-heading">Recents</h3>
+                <div className="mt-8">
+                  <h3 className="fm-drawer-heading px-1 text-xs font-semibold uppercase tracking-widest text-slate-400">Recent Chats</h3>
                   <div className="mt-3 space-y-1">
                     {chatSessions.slice(0, 10).map((session) => (
                       <button
@@ -7299,8 +7311,8 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                           setJobsOpen(false);
                           openChatSession(session);
                         }}
-                        className={`block w-full rounded-2xl px-3 py-3 text-left text-[15px] leading-snug transition hover:bg-slate-100 ${
-                          session.id === activeSessionId ? 'bg-slate-100 font-semibold text-slate-950' : 'text-slate-700'
+                        className={`block w-full rounded-xl px-3 py-2.5 text-left text-[14px] leading-snug font-medium transition active:scale-[0.98] ${
+                          session.id === activeSessionId ? 'bg-slate-200/60 font-semibold text-slate-950' : 'text-slate-600 hover:bg-slate-100/50 hover:text-slate-800'
                         }`}
                       >
                         <span className="line-clamp-2">{session.title || 'New chat'}</span>
@@ -7311,17 +7323,17 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
               )}
             </div>
 
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-end bg-gradient-to-t from-white via-white to-white/0 px-6 py-5">
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-end bg-gradient-to-t from-slate-50 via-slate-50/90 to-slate-50/0 px-6 py-5 pb-8">
               <button
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
                   openNewChatCard();
                 }}
-                className="fm-drawer-chat-button pointer-events-auto inline-flex h-14 items-center gap-2 rounded-full bg-blue-500 px-7 text-[17px] font-semibold text-white transition active:scale-[0.98] hover:bg-blue-600"
+                className="fm-drawer-chat-button pointer-events-auto inline-flex h-14 items-center gap-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 px-7 text-[17px] font-semibold text-white shadow-[0_8px_20px_rgba(59,130,246,0.28)] ring-4 ring-blue-500/15 transition active:scale-[0.96] hover:shadow-[0_12px_28px_rgba(59,130,246,0.36)] hover:from-blue-600 hover:to-blue-700"
               >
                 <Edit3 className="h-5 w-5" />
-                Chat
+                New Chat
               </button>
             </div>
           </div>
@@ -7338,4 +7350,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
+
+
+
 
