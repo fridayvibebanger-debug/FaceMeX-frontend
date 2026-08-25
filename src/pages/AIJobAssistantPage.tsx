@@ -1103,9 +1103,8 @@ function isCreatorPlusTier(tier: string, hasTier?: (tier: string) => boolean) {
 }
 
 function getDeepSeekDailyLimit(tier: string, hasTier?: (tier: string) => boolean) {
-  if (isCreatorPlusTier(tier, hasTier)) return null;
-  if (tier === 'pro') return 20;
-  return 7;
+  if (tier === 'plus' || tier === 'pro' || isCreatorPlusTier(tier, hasTier)) return null;
+  return 3;
 }
 
 function getDeepSeekUsageKey(tier: string) {
@@ -2823,17 +2822,17 @@ const [developerPlan, setDeveloperPlan] = useState<
   "free" | "plus" | "pro" | "business"
 >("free");
 
- const mexaPlan =
-  isDeveloper && developerMode
-    ? developerPlan
-    : userStore?.mexaPlan ?? "free";
-
-  const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
-  const firstName = useMemo(() => getFirstName(userDisplayName), [userDisplayName]);
-
   const currentTier = normalizeTier(tier);
   const creatorPlus = isCreatorPlusTier(currentTier, hasTier);
   const deepSeekLimit = getDeepSeekDailyLimit(currentTier, hasTier);
+
+  const mexaPlan =
+    isDeveloper && developerMode
+      ? developerPlan
+      : currentTier;
+
+  const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
+  const firstName = useMemo(() => getFirstName(userDisplayName), [userDisplayName]);
 
   const [deepSeekUsage, setDeepSeekUsage] = useState(0);
   const [prompt, setPrompt] = useState('');
@@ -2952,9 +2951,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   }, [savedFilter, savedMessages]);
 
   const usageLabel = useMemo(() => {
-    if (creatorPlus) return 'Unlimited';
-    if (currentTier === 'pro') return `${deepSeekUsage}/20`;
-    return `${deepSeekUsage}/7`;
+    if (creatorPlus || currentTier === 'plus' || currentTier === 'pro') return 'Unlimited';
+    return `${deepSeekUsage}/3`;
   }, [creatorPlus, currentTier, deepSeekUsage]);
 
   const sortedLocalJobs = useMemo(() => {
@@ -3476,6 +3474,16 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setScheduleOpen(false);
     setTrackerOpen(false);
     setClearWorkspaceOpen(false);
+    setWatchPanelOpen(false);
+    setWatchSearch('');
+    setWatchVideos([]);
+    setWatchPlayingVideoId(null);
+    setWatchSummary(null);
+    setWatchSummaryLoading(false);
+    setActiveYoutubeLessonCategory(null);
+    setYoutubeLessonVideos([]);
+    setActivePlayingVideoId(null);
+    setYoutubeLessonsBusy(false);
   };
 
   const openNewChatCard = () => {
@@ -4026,7 +4034,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     if (!canUseAI) {
       const answer =
         currentTier === 'free'
-          ? 'You have used all 7 free AI uses for today. Upgrade to keep going until the next day.'
+          ? 'You have used all 3 free AI uses for today. Upgrade to keep going until the next day.'
           : 'Your AI limit is finished for today. Try again tomorrow or upgrade when you are ready.';
 
       setMessages((prev) => [
@@ -7330,3 +7338,4 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
+
