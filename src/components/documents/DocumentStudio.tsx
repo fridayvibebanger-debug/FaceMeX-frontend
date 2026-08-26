@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
-import { AlignCenter, AlignLeft, AlignRight, Bold, Check, Clipboard, Download, FileText, Italic, List, Redo2, Sparkles, Underline, Undo2, Wand2, X } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, Bold, Check, Clipboard, Download, FileText, Italic, List, Minus, Plus, Redo2, Save, Sparkles, Underline, Undo2, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/use-toast';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/store/userStore';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
+type ZoomLevel = 75 | 90 | 100 | 125;
 
 type DocumentKind = 'cv' | 'cover-letter';
 type TemplateKey = 'classic' | 'modern' | 'minimal' | 'executive';
@@ -101,6 +102,10 @@ function documentHtml(kind: DocumentKind, form: FormState, content: string, temp
   </style></head><body><main class="page"><header class="header">${header}</header><section>${sections}</section></main></body></html>`;
 }
 
+function getDraftKey(kind: DocumentKind) {
+  return `facemex_document_draft_${kind}`;
+}
+
 function makeDocxParagraphs(content: string, bold: boolean) {
   return content.split(/\r?\n/).map((line) => {
     const isHeading = /^[A-Z][A-Z ]{3,}$/.test(line.trim());
@@ -126,6 +131,8 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const [zoom, setZoom] = useState<ZoomLevel>(100);
+  const [draftSaved, setDraftSaved] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
@@ -133,6 +140,32 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
   const localContent = useMemo(() => kind === 'cv' ? buildLocalCv(form) : buildLocalLetter(form), [form, kind]);
   const displayedContent = content || localContent;
   const update = (key: keyof FormState, value: string) => setForm((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    try {
+      const draft = JSON.parse(localStorage.getItem(getDraftKey(kind)) || 'null');
+      if (draft?.form) setForm({ ...emptyForm, ...draft.form });
+      if (typeof draft?.content === 'string') setContent(draft.content);
+      if (draft?.template) setTemplate(draft.template);
+      if (draft?.font) setFont(draft.font);
+      if (typeof draft?.bold === 'boolean') setBold(draft.bold);
+      if (draft?.alignment) setAlignment(draft.alignment);
+    } catch {
+      // Ignore an unavailable or invalid local draft.
+    }
+  }, [kind]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(getDraftKey(kind), JSON.stringify({ form, content, template, font, bold, alignment }));
+        setDraftSaved(true);
+      } catch {
+        setDraftSaved(false);
+      }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [alignment, bold, content, font, form, kind, template]);
 
   useEffect(() => {
     if (history.length === 0 && !content) {
@@ -180,6 +213,13 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
   const clearDocument = () => {
     updateContent('');
     setForm(emptyForm);
+  };
+
+  const selectAll = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    editor.select();
   };
 
   const copyDocument = async () => {
@@ -299,17 +339,26 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
               <Button type="button" variant="outline" size="icon" onClick={undo} disabled={historyIndex <= 0} className="h-9 w-9 rounded-lg" aria-label="Undo"><Undo2 className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={redo} disabled={historyIndex >= history.length - 1} className="h-9 w-9 rounded-lg" aria-label="Redo"><Redo2 className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={addBullet} className="h-9 w-9 rounded-lg" aria-label="Add bullet list"><List className="h-4 w-4" /></Button>
+              <Button type="button" variant="outline" size="icon" onClick={selectAll} className="h-9 w-9 rounded-lg" aria-label="Select all text"><Check className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={copyDocument} className="h-9 w-9 rounded-lg" aria-label="Copy document"><Clipboard className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={clearDocument} className="h-9 w-9 rounded-lg text-slate-500 hover:text-red-600" aria-label="Clear document"><X className="h-4 w-4" /></Button>
-              {isPro && <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600"><Sparkles className="h-3.5 w-3.5" />Pro tools</span>}
+              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <Button type="button" variant="outline" size="icon" onClick={() => setZoom((value) => Math.max(75, value - 15) as ZoomLevel)} disabled={zoom === 75} className="h-9 w-9 rounded-lg" aria-label="Zoom out"><Minus className="h-4 w-4" /></Button>
+              <span className="min-w-12 text-center text-xs font-semibold text-slate-600">{zoom}%</span>
+              <Button type="button" variant="outline" size="icon" onClick={() => setZoom((value) => Math.min(125, value + 15) as ZoomLevel)} disabled={zoom === 125} className="h-9 w-9 rounded-lg" aria-label="Zoom in"><Plus className="h-4 w-4" /></Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setZoom(100)} disabled={zoom === 100} className="h-9 rounded-lg px-2 text-xs" aria-label="Reset zoom">Reset</Button>
+              {draftSaved && <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><Save className="h-3.5 w-3.5" />Saved</span>}
+            </div>
+            <div className="mb-4 overflow-auto rounded-xl bg-slate-100 p-2 sm:p-6">
+              <div className="mx-auto overflow-hidden" style={{ width: '100%', height: `${Math.round(1120 * zoom / 100)}px`, maxWidth: `${Math.round(794 * zoom / 100)}px` }}>
+                <iframe title="A4 document preview" srcDoc={documentHtml(kind, form, displayedContent, template, font, bold, alignment)} className="block border-0 bg-white shadow-xl" style={{ width: `${Math.round(10000 / zoom)}%`, height: '1120px', maxWidth: 'none', zoom: zoom / 100 }} />
+              </div>
             </div>
             <label className="mb-4 block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Edit document text</span><textarea ref={editorRef} value={displayedContent} onChange={(event) => updateContent(event.target.value)} className="min-h-28 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm leading-6 outline-none ring-blue-500 focus:ring-2" /></label>
-                  <div className="overflow-hidden rounded-xl bg-slate-100 p-2 sm:p-6"><iframe title="A4 document preview" srcDoc={documentHtml(kind, form, displayedContent, template, font, bold, alignment)} className="mx-auto block h-[112vw] min-h-[500px] max-h-[1120px] w-full max-w-[794px] border-0 bg-white shadow-xl sm:h-[1120px]" /></div>
+            <div className="overflow-hidden rounded-xl bg-slate-100 p-2 sm:p-6"><iframe title="A4 document preview" srcDoc={documentHtml(kind, form, displayedContent, template, font, bold, alignment)} className="mx-auto block h-[112vw] min-h-[500px] max-h-[1120px] w-full max-w-[794px] border-0 bg-white shadow-xl sm:h-[1120px]" /></div>
           </section>
         </div>
       </SensitiveContentShield>
     </div>
   );
 }
-
-
