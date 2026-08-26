@@ -98,7 +98,7 @@ function documentHtml(kind: DocumentKind, form: FormState, content: string, temp
     : `<div class="name">${escapeHtml(form.fullName || 'Your Name')}</div><div class="meta">${[form.email, form.phone, form.location].filter(Boolean).map(escapeHtml).join('  |  ')}</div><div class="date">${new Date().toLocaleDateString('en-ZA')}</div>`;
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>FaceMeX ${kind === 'cv' ? 'CV' : 'Cover Letter'}</title><style>
-    @page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:${fontFamily(font)};color:#172033}.page{width:210mm;min-height:297mm;margin:16px auto;padding:20mm;background:#fff;box-shadow:0 16px 45px rgba(15,23,42,.14);font-size:11pt;line-height:1.45;font-weight:${bold ? 600 : 400};text-align:${alignment}}.header{border-top:5px solid ${accent};padding:13px 0 12px;border-bottom:1px solid #dbe2ea;margin-bottom:22px}.name{font-size:25px;font-weight:800;letter-spacing:.02em;color:#101827}.meta,.date{margin-top:6px;font-size:9.5pt;color:#526174}.date{margin-top:16px}h2{font-size:11pt;letter-spacing:.12em;color:${accent};margin:18px 0 7px;border-bottom:1px solid #dbe2ea;padding-bottom:4px}p{margin:0 0 7px;white-space:pre-wrap}.bullet{padding-left:12px}.space{height:5px}@media print{body{background:#fff}.page{margin:0;box-shadow:none}}
+    @page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:${fontFamily(font)};color:#172033}.page{width:210mm;min-height:297mm;margin:16px auto;padding:20mm;background:#fff;box-shadow:0 16px 45px rgba(15,23,42,.14);font-size:11pt;line-height:1.45;font-weight:${bold ? 600 : 400};text-align:${alignment}}.header{border-top:5px solid ${accent};padding:13px 0 12px;border-bottom:1px solid #dbe2ea;margin-bottom:22px}.name{font-size:25px;font-weight:800;letter-spacing:.02em;color:#101827}.meta,.date{margin-top:6px;font-size:9.5pt;color:#526174}.date{margin-top:16px}h2{font-size:11pt;letter-spacing:.12em;color:${accent};margin:18px 0 7px;border-bottom:1px solid #dbe2ea;padding-bottom:4px}p{margin:0 0 7px;white-space:pre-wrap}.bullet{padding-left:12px}.space{height:5px}@media screen and (max-width:600px){body{background:#f8fafc}.page{width:100%;min-height:100vh;margin:0;padding:24px 20px;box-shadow:none;font-size:10pt}.name{font-size:22px}.header{margin-bottom:16px}}@media print{body{background:#fff}.page{margin:0;box-shadow:none;width:210mm;min-height:297mm;padding:20mm}}
   </style></head><body><main class="page"><header class="header">${header}</header><section>${sections}</section></main></body></html>`;
 }
 
@@ -304,15 +304,15 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
   const GenerateIcon = isPlus ? Sparkles : Wand2;
 
   return (
-    <div className="min-h-screen bg-[#eef2f7] text-slate-950">
-      <SensitiveContentShield context={kind === 'cv' ? 'cv' : 'cover-letter'} className="mx-auto max-w-7xl px-3 pb-12 pt-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-xs font-semibold uppercase tracking-[.2em] text-blue-600">FaceMeX Documents</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Build a polished A4 document, choose a layout, then download it as PDF or DOCX.</p></div>
-          <div className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">{tier} plan</div>
+    <div className="min-h-screen bg-white text-slate-950 lg:bg-[#101318] lg:text-slate-100">
+      <SensitiveContentShield context={kind === 'cv' ? 'cv' : 'cover-letter'} className="mx-auto max-w-[1440px] px-3 pb-8 pt-4 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3 lg:mb-8">
+          <div><p className="text-[11px] font-semibold uppercase tracking-[.22em] text-blue-500">FaceMeX Documents</p><h1 className="mt-1 text-2xl font-semibold tracking-tight lg:text-3xl">{title}</h1><p className="mt-1 max-w-2xl text-xs text-slate-500 lg:text-sm lg:text-slate-400">Create, edit, and export a polished document anywhere.</p></div>
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 lg:border-slate-700 lg:bg-[#181d24] lg:text-slate-300">{tier} plan</div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(320px,420px)_1fr]">
-          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_16px_45px_rgba(15,23,42,.08)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(300px,380px)_1fr]">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:border-slate-700 lg:bg-[#181d24] lg:p-5 lg:shadow-[0_20px_60px_rgba(0,0,0,.2)]">
             <div className="mb-5 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><FileText className="h-5 w-5" /></div><div><h2 className="font-semibold">Your details</h2><p className="text-xs text-slate-500">Free users get a modern local template.</p></div></div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               {fields.map(([key, label]) => key === 'summary' || key === 'experience' || key === 'skills' || key === 'education' || key === 'extras'
@@ -323,39 +323,38 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
             <p className="mt-3 text-center text-[11px] leading-5 text-slate-400">Plus adds AI generation. Pro adds the full professional toolkit.</p>
           </section>
 
-          <section className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_16px_45px_rgba(15,23,42,.08)] sm:p-6">
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 lg:border-slate-700 lg:bg-[#181d24] lg:p-6 lg:shadow-[0_20px_60px_rgba(0,0,0,.2)]">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Document design</h2><p className="text-xs text-slate-500">A4 preview with print-to-PDF and DOCX export.</p></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={downloadPdf} className="rounded-xl"><Download className="mr-1.5 h-3.5 w-3.5" />PDF</Button><Button variant="outline" size="sm" onClick={downloadDocx} className="rounded-xl"><Download className="mr-1.5 h-3.5 w-3.5" />DOCX</Button></div></div>
             <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{templates.map((item) => <button key={item.key} type="button" onClick={() => setTemplate(item.key)} className={`rounded-xl border p-3 text-left transition ${template === item.key ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}><span className="block text-sm font-semibold">{item.label}</span><span className="mt-1 block text-[11px] leading-4 text-slate-500">{item.description}</span></button>)}</div>
-            <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <div className="mb-4 flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2 lg:border-slate-700 lg:bg-[#11151b]">
               <select value={font} onChange={(event) => setFont(event.target.value as FontKey)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium" aria-label="Document font"><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select>
               <Button type="button" variant={bold ? 'default' : 'outline'} size="icon" onClick={() => { setBold((value) => !value); formatSelection('**'); }} className="h-9 w-9 rounded-lg" aria-label="Bold"><Bold className="h-4 w-4" /></Button>
               <Button type="button" variant={italic ? 'default' : 'outline'} size="icon" onClick={() => { setItalic((value) => !value); formatSelection('__'); }} className="h-9 w-9 rounded-lg" aria-label="Italic"><Italic className="h-4 w-4" /></Button>
               <Button type="button" variant={underline ? 'default' : 'outline'} size="icon" onClick={() => { setUnderline((value) => !value); formatSelection('~~'); }} className="h-9 w-9 rounded-lg" aria-label="Underline"><Underline className="h-4 w-4" /></Button>
-              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <span className="mx-1 h-6 w-px shrink-0 bg-slate-200 lg:bg-slate-700" />
               <Button type="button" variant={alignment === 'left' ? 'default' : 'outline'} size="icon" onClick={() => setAlignment('left')} className="h-9 w-9 rounded-lg" aria-label="Align left"><AlignLeft className="h-4 w-4" /></Button>
               <Button type="button" variant={alignment === 'center' ? 'default' : 'outline'} size="icon" onClick={() => setAlignment('center')} className="h-9 w-9 rounded-lg" aria-label="Align center"><AlignCenter className="h-4 w-4" /></Button>
               <Button type="button" variant={alignment === 'right' ? 'default' : 'outline'} size="icon" onClick={() => setAlignment('right')} className="h-9 w-9 rounded-lg" aria-label="Align right"><AlignRight className="h-4 w-4" /></Button>
-              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <span className="mx-1 h-6 w-px shrink-0 bg-slate-200 lg:bg-slate-700" />
               <Button type="button" variant="outline" size="icon" onClick={undo} disabled={historyIndex <= 0} className="h-9 w-9 rounded-lg" aria-label="Undo"><Undo2 className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={redo} disabled={historyIndex >= history.length - 1} className="h-9 w-9 rounded-lg" aria-label="Redo"><Redo2 className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={addBullet} className="h-9 w-9 rounded-lg" aria-label="Add bullet list"><List className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={selectAll} className="h-9 w-9 rounded-lg" aria-label="Select all text"><Check className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={copyDocument} className="h-9 w-9 rounded-lg" aria-label="Copy document"><Clipboard className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={clearDocument} className="h-9 w-9 rounded-lg text-slate-500 hover:text-red-600" aria-label="Clear document"><X className="h-4 w-4" /></Button>
-              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <span className="mx-1 h-6 w-px shrink-0 bg-slate-200 lg:bg-slate-700" />
               <Button type="button" variant="outline" size="icon" onClick={() => setZoom((value) => Math.max(75, value - 15) as ZoomLevel)} disabled={zoom === 75} className="h-9 w-9 rounded-lg" aria-label="Zoom out"><Minus className="h-4 w-4" /></Button>
               <span className="min-w-12 text-center text-xs font-semibold text-slate-600">{zoom}%</span>
               <Button type="button" variant="outline" size="icon" onClick={() => setZoom((value) => Math.min(125, value + 15) as ZoomLevel)} disabled={zoom === 125} className="h-9 w-9 rounded-lg" aria-label="Zoom in"><Plus className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="sm" onClick={() => setZoom(100)} disabled={zoom === 100} className="h-9 rounded-lg px-2 text-xs" aria-label="Reset zoom">Reset</Button>
               {draftSaved && <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><Save className="h-3.5 w-3.5" />Saved</span>}
             </div>
-            <div className="mb-4 overflow-auto rounded-xl bg-slate-100 p-2 sm:p-6">
-              <div className="mx-auto overflow-hidden" style={{ width: '100%', height: `${Math.round(1120 * zoom / 100)}px`, maxWidth: `${Math.round(794 * zoom / 100)}px` }}>
-                <iframe title="A4 document preview" srcDoc={documentHtml(kind, form, displayedContent, template, font, bold, alignment)} className="block border-0 bg-white shadow-xl" style={{ width: `${Math.round(10000 / zoom)}%`, height: '1120px', maxWidth: 'none', zoom: zoom / 100 }} />
+            <div className="mb-4 overflow-auto rounded-xl bg-slate-100 p-2 sm:p-6 lg:bg-[#0e1116]">
+              <div className="mx-auto max-w-[794px] overflow-hidden" style={{ minHeight: `${Math.round(1120 * zoom / 100)}px` }}>
+                <iframe title="A4 document preview" srcDoc={documentHtml(kind, form, displayedContent, template, font, bold, alignment)} className="block h-[1120px] w-full border-0 bg-white shadow-xl" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', width: `${10000 / zoom}%` }} />
               </div>
             </div>
             <label className="mb-4 block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Edit document text</span><textarea ref={editorRef} value={displayedContent} onChange={(event) => updateContent(event.target.value)} className="min-h-28 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm leading-6 outline-none ring-blue-500 focus:ring-2" /></label>
-            <div className="overflow-hidden rounded-xl bg-slate-100 p-2 sm:p-6"><iframe title="A4 document preview" srcDoc={documentHtml(kind, form, displayedContent, template, font, bold, alignment)} className="mx-auto block h-[112vw] min-h-[500px] max-h-[1120px] w-full max-w-[794px] border-0 bg-white shadow-xl sm:h-[1120px]" /></div>
           </section>
         </div>
       </SensitiveContentShield>
