@@ -138,7 +138,7 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [templatesOpen, setTemplatesOpen] = useState(true);
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const title = kind === 'cv' ? 'AI CV Studio' : 'AI Cover Letter Studio';
   const localContent = useMemo(() => kind === 'cv' ? buildLocalCv(form) : buildLocalLetter(form), [form, kind]);
@@ -326,8 +326,8 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
           <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 lg:border-slate-700 lg:bg-[#181d24] lg:text-slate-300">{tier} plan</div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(300px,380px)_1fr]">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:border-slate-700 lg:bg-[#181d24] lg:p-5 lg:shadow-[0_20px_60px_rgba(0,0,0,.2)]">
+        <div className="grid gap-5">
+          {detailsOpen && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:absolute lg:left-8 lg:top-24 lg:z-30 lg:w-[380px] lg:border-slate-700 lg:bg-[#181d24] lg:p-5 lg:shadow-[0_20px_60px_rgba(0,0,0,.35)]">
             <button type="button" onClick={() => setDetailsOpen((value) => !value)} className="flex min-h-12 w-full items-center gap-3 rounded-xl text-left outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 lg:hover:bg-white/5" aria-expanded={detailsOpen} aria-controls="document-details-panel">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><FileText className="h-5 w-5" /></div>
               <div className="min-w-0 flex-1"><h2 className="font-semibold">Your details</h2><p className="text-xs text-slate-500">Free users get a modern local template.</p></div>
@@ -342,15 +342,15 @@ export default function DocumentStudio({ kind }: DocumentStudioProps) {
               <Button onClick={generate} disabled={busy} className="mt-5 h-11 w-full rounded-xl bg-slate-950 text-sm hover:bg-slate-800"><GenerateIcon className="mr-2 h-4 w-4" />{busy ? 'Generating...' : isPlus ? 'Generate with AI' : `Generate ${kind === 'cv' ? 'CV' : 'letter'}`}</Button>
               <p className="mt-3 text-center text-[11px] leading-5 text-slate-400">Plus adds AI generation. Pro adds the full professional toolkit.</p>
             </div>}
-          </section>
+          </section>}
 
-          <section className="relative min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 lg:border-slate-700 lg:bg-[#181d24] lg:p-6 lg:shadow-[0_20px_60px_rgba(0,0,0,.2)]">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Document design</h2><p className="text-xs text-slate-500">A4 preview with print-to-PDF and DOCX export.</p></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={downloadPdf} className="rounded-xl"><Download className="mr-1.5 h-3.5 w-3.5" />PDF</Button><Button variant="outline" size="sm" onClick={downloadDocx} className="rounded-xl"><Download className="mr-1.5 h-3.5 w-3.5" />DOCX</Button></div></div>
+          <section className="relative min-h-0 min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 lg:min-h-[calc(100vh-9rem)] lg:border-slate-700 lg:bg-[#181d24] lg:p-6 lg:shadow-[0_20px_60px_rgba(0,0,0,.2)]">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Document design</h2><p className="text-xs text-slate-500">A4 preview with print-to-PDF and DOCX export.</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => setDetailsOpen((value) => !value)} className="rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 lg:border-slate-600 lg:bg-[#080a0d] lg:text-slate-200 lg:hover:bg-[#181d24]"><Menu className="mr-1.5 h-3.5 w-3.5" />{detailsOpen ? 'Hide details' : 'Details'}</Button><Button type="button" variant="outline" size="sm" onClick={downloadPdf} className="rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 lg:border-slate-600 lg:bg-[#080a0d] lg:text-slate-200 lg:hover:bg-[#181d24]"><Download className="mr-1.5 h-3.5 w-3.5" />PDF</Button><Button type="button" variant="outline" size="sm" onClick={downloadDocx} className="rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 lg:border-slate-600 lg:bg-[#080a0d] lg:text-slate-200 lg:hover:bg-[#181d24]"><Download className="mr-1.5 h-3.5 w-3.5" />DOCX</Button></div></div>
             <div className="mb-4 flex items-center justify-between rounded-t-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-sm lg:border-slate-700 lg:bg-[#080a0d] lg:text-white lg:shadow-lg">
               <div className="flex items-center gap-2"><span className="text-xs font-bold tracking-wide">Home</span><span className="text-[11px] text-slate-500 lg:text-slate-400">Document editor</span></div>
               <Button type="button" variant="ghost" size="sm" onClick={() => setTemplatesOpen((value) => !value)} className="h-9 shrink-0 gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-100 hover:text-slate-950 sm:h-8 lg:border-white/10 lg:bg-transparent lg:text-slate-200 lg:hover:bg-white/10 lg:hover:text-white"><Menu className="h-4 w-4" />{templatesOpen ? <><span className="hidden sm:inline">Hide templates</span><span className="sm:hidden">Hide</span></> : <><span className="hidden sm:inline">Show templates</span><span className="sm:hidden">Templates</span></>}</Button>
             </div>
-            <div className="mb-4 flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto rounded-b-xl border border-t-0 border-slate-200 bg-slate-50 p-2 shadow-sm lg:border-slate-700 lg:bg-[#11151b] lg:shadow-lg">
+            <div className="mb-4 flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto rounded-b-xl border border-t-0 border-slate-200 bg-slate-50 p-2 shadow-sm lg:flex-wrap lg:overflow-x-visible lg:border-slate-700 lg:bg-[#11151b] lg:shadow-lg">
               <span className="shrink-0 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Clipboard</span>
               <Button type="button" variant="outline" size="icon" onClick={copyDocument} className="h-10 w-10 shrink-0 rounded-md border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 lg:h-9 lg:w-9 lg:border-slate-600 lg:bg-[#181d24] lg:text-slate-200 lg:hover:bg-[#252c36] lg:hover:text-white" aria-label="Copy document"><Clipboard className="h-4 w-4" /></Button>
               <Button type="button" variant="outline" size="icon" onClick={selectAll} className="h-10 w-10 shrink-0 rounded-md border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 lg:h-9 lg:w-9 lg:border-slate-600 lg:bg-[#181d24] lg:text-slate-200 lg:hover:bg-[#252c36] lg:hover:text-white" aria-label="Select all text"><Check className="h-4 w-4" /></Button>
