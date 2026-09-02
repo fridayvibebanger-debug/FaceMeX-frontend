@@ -1,6 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
-import { ChevronDown, ChevronUp, Download, FileText, Menu, Printer, Save, Sparkles, Wand2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Download,
+  FileText,
+  Menu,
+  Printer,
+  Save,
+  Sparkles,
+  Wand2,
+} from 'lucide-react';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
+import Highlight from '@tiptap/extension-highlight';
+import { TextStyle } from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
+import Link from '@tiptap/extension-link';
+import { Table } from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +37,7 @@ type DocumentKind = 'cv' | 'cover-letter';
 type TemplateKey = 'classic' | 'modern' | 'minimal' | 'executive';
 type FontKey = 'sans' | 'serif' | 'mono';
 type ZoomLevel = 75 | 90 | 100 | 125;
+
 type FormState = {
   fullName: string;
   email: string;
@@ -39,9 +63,18 @@ const templates: Array<{ key: TemplateKey; label: string; description: string }>
 ];
 
 const emptyForm: FormState = {
-  fullName: '', email: '', phone: '', location: '', idNumber: '',
-  jobTitle: '', company: '', summary: '', experience: '', skills: '',
-  education: '', extras: ''
+  fullName: '',
+  email: '',
+  phone: '',
+  location: '',
+  idNumber: '',
+  jobTitle: '',
+  company: '',
+  summary: '',
+  experience: '',
+  skills: '',
+  education: '',
+  extras: '',
 };
 
 function escapeHtml(value: string) {
@@ -50,19 +83,6 @@ function escapeHtml(value: string) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function formatInlineHtml(value: string) {
-  return escapeHtml(value)
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/__([^_]+)__/g, '<em>$1</em>')
-    .replace(/~~([^~]+)~~/g, '<u>$1</u>')
-    .replace(/--([^-]+)--/g, '<s>$1</s>')
-    .replace(/==([^=]+)==/g, '<mark>$1</mark>');
-}
-
-function getDraftKey(kind: DocumentKind) {
-  return `facemex_document_draft_${kind}`;
 }
 
 function buildLocalCv(form: FormState) {
@@ -80,7 +100,7 @@ function buildLocalCv(form: FormState) {
     form.education || 'Add education, certificates, or training.',
     '',
     'ADDITIONAL INFORMATION',
-    form.extras || 'Add languages, links, achievements, or references.'
+    form.extras || 'Add languages, links, achievements, or references.',
   ].join('\n');
 }
 
@@ -97,8 +117,27 @@ function buildLocalLetter(form: FormState) {
     'Thank you for considering my application.',
     '',
     'Sincerely,',
-    form.fullName || '[Your Name]'
+    form.fullName || '[Your Name]',
   ].join('\n');
+}
+
+function createEditorHtml(text: string) {
+  const lines = text.split(/\r?\n/);
+  const html = lines
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return '<p></p>';
+      if (/^[A-Z][A-Z ]{3,}$/.test(trimmed)) return `<h2>${escapeHtml(trimmed)}</h2>`;
+      if (/^[-*]\s+/.test(trimmed)) return `<ul><li>${escapeHtml(trimmed.replace(/^[-*]\s+/, ''))}</li></ul>`;
+      return `<p>${escapeHtml(trimmed)}</p>`;
+    })
+    .join('');
+
+  return html || '<p></p>';
+}
+
+function getDraftKey(kind: DocumentKind) {
+  return `facemex_document_draft_${kind}`;
 }
 
 function fontFamily(font: FontKey) {
@@ -115,20 +154,9 @@ function documentHtml(
   content: string,
   template: TemplateKey,
   font: FontKey,
-  bold: boolean,
   alignment: 'left' | 'center' | 'right' | 'justify',
-  highlightColor: string
+  highlightColor: string,
 ) {
-  const sections = content
-    .split(/\r?\n/)
-    .map((line) => {
-      const safe = formatInlineHtml(line);
-      if (/^[A-Z][A-Z ]{3,}$/.test(line.trim())) return `<h2>${safe}</h2>`;
-      if (/^[-*]\s+/.test(line.trim())) return `<p class="bullet">&#8226; ${formatInlineHtml(line.trim().replace(/^[-*]\s+/, ''))}</p>`;
-      return line.trim() ? `<p>${safe}</p>` : '<div class="space"></div>';
-    })
-    .join('');
-
   const accent = template === 'minimal'
     ? '#172033'
     : template === 'executive'
@@ -139,18 +167,21 @@ function documentHtml(
     ? `<div class="name">${escapeHtml(form.fullName || 'Your Name')}</div><div class="meta">${[form.email, form.phone, form.location, form.idNumber].filter(Boolean).map(escapeHtml).join('  |  ')}</div>`
     : `<div class="name">${escapeHtml(form.fullName || 'Your Name')}</div><div class="meta">${[form.email, form.phone, form.location].filter(Boolean).map(escapeHtml).join('  |  ')}</div><div class="date">${new Date().toLocaleDateString('en-ZA')}</div>`;
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>FaceMeX ${kind === 'cv' ? 'CV' : 'Cover Letter'}</title><style>@page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:${fontFamily(font)};color:#172033}.page{width:210mm;min-height:297mm;margin:16px auto;padding:20mm;background:#fff;box-shadow:0 16px 45px rgba(15,23,42,.14);font-size:11pt;line-height:1.45;font-weight:${bold ? 600 : 400};text-align:${alignment}}.header{border-top:5px solid ${accent};padding:13px 0 12px;border-bottom:1px solid #dbe2ea;margin-bottom:22px}.name{font-size:25px;font-weight:800;letter-spacing:.02em;color:#101827}.meta,.date{margin-top:6px;font-size:9.5pt;color:#526174}.date{margin-top:16px}h2{font-size:11pt;letter-spacing:.12em;color:${accent};margin:18px 0 7px;border-bottom:1px solid #dbe2ea;padding-bottom:4px}p{margin:0 0 7px;white-space:pre-wrap}.bullet{padding-left:12px}mark{background:${highlightColor};padding:0 .12em}.space{height:5px}@media screen and (max-width:600px){body{background:#f8fafc}.page{width:100%;min-height:100vh;margin:0;padding:24px 20px;box-shadow:none;font-size:10pt}.name{font-size:22px}.header{margin-bottom:16px}}@media print{body{background:#fff}.page{margin:0;box-shadow:none;width:210mm;min-height:297mm;padding:20mm}}</style></head><body><main class="page"><header class="header">${header}</header><section>${sections}</section></main></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>FaceMeX ${kind === 'cv' ? 'CV' : 'Cover Letter'}</title><style>@page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:${fontFamily(font)};color:#172033}.page{width:210mm;min-height:297mm;margin:16px auto;padding:20mm;background:#fff;box-shadow:0 16px 45px rgba(15,23,42,.14);font-size:11pt;line-height:1.45;text-align:${alignment}}.header{border-top:5px solid ${accent};padding:13px 0 12px;border-bottom:1px solid #dbe2ea;margin-bottom:22px}.name{font-size:25px;font-weight:800;letter-spacing:.02em;color:#101827}.meta,.date{margin-top:6px;font-size:9.5pt;color:#526174}.date{margin-top:16px}h2{font-size:11pt;letter-spacing:.12em;color:${accent};margin:18px 0 7px;border-bottom:1px solid #dbe2ea;padding-bottom:4px}p{margin:0 0 7px;white-space:pre-wrap}ul,ol{padding-left:20px;margin:0 0 10px}li{margin:0 0 4px}mark{background:${highlightColor};padding:0 .12em}.space{height:5px}@media screen and (max-width:600px){body{background:#f8fafc}.page{width:100%;min-height:100vh;margin:0;padding:24px 20px;box-shadow:none;font-size:10pt}.name{font-size:22px}.header{margin-bottom:16px}}@media print{body{background:#fff}.page{margin:0;box-shadow:none;width:210mm;min-height:297mm;padding:20mm}}</style></head><body><main class="page"><header class="header">${header}</header><section>${content}</section></main></body></html>`;
 }
 
-function makeDocxParagraphs(content: string, bold: boolean) {
-  return content.split(/\r?\n/).map((line) => {
-    const heading = /^[A-Z][A-Z ]{3,}$/.test(line.trim());
-    return new Paragraph({
-      heading: heading ? HeadingLevel.HEADING_2 : undefined,
-      spacing: { after: 100 },
-      children: [new TextRun({ text: line, bold: bold || heading })],
+function makeDocxParagraphs(content: string) {
+  return content
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      const heading = /^[A-Z][A-Z ]{3,}$/.test(line.trim());
+      return new Paragraph({
+        heading: heading ? HeadingLevel.HEADING_2 : undefined,
+        spacing: { after: 100 },
+        children: [new TextRun({ text: line, bold: heading })],
+      });
     });
-  });
 }
 
 export default function DocumentStudio({ kind }: Props) {
@@ -159,12 +190,8 @@ export default function DocumentStudio({ kind }: Props) {
   const isPro = hasTier('pro');
 
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [content, setContent] = useState('');
   const [template, setTemplate] = useState<TemplateKey>('modern');
   const [font, setFont] = useState<FontKey>('sans');
-  const [bold, setBold] = useState(false);
-  const [italic, setItalic] = useState(false);
-  const [underline, setUnderline] = useState(false);
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
   const [highlightColor, setHighlightColor] = useState('#fef08a');
   const [zoom, setZoom] = useState<ZoomLevel>(100);
@@ -172,251 +199,73 @@ export default function DocumentStudio({ kind }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [formattingState, setFormattingState] = useState({
-    bold: false,
-    italic: false,
-    underline: false,
-    strike: false,
-    highlight: false,
-  });
-  const editorRef = useRef<HTMLTextAreaElement | null>(null);
 
   const title = kind === 'cv' ? 'AI CV Studio' : 'AI Cover Letter Studio';
-  const localContent = useMemo(() => kind === 'cv' ? buildLocalCv(form) : buildLocalLetter(form), [form, kind]);
-  const displayedContent = content || localContent;
+  const localContent = useMemo(() => (kind === 'cv' ? buildLocalCv(form) : buildLocalLetter(form)), [form, kind]);
 
-  const updateFormattingState = () => {
-    const editor = editorRef.current;
-    if (!editor) {
-      setFormattingState({ bold: false, italic: false, underline: false, strike: false, highlight: false });
-      return;
-    }
+  const [content, setContent] = useState(() => createEditorHtml(localContent));
 
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-    const value = displayedContent;
-    const before = value.slice(0, start);
-    const after = value.slice(end);
-    const selected = value.slice(start, end);
-
-    const isWrapped = (marker: string) => {
-      if (selected.length > 0) {
-        return selected.startsWith(marker) && selected.endsWith(marker) && selected.length > marker.length * 2;
-      }
-
-      const prev = before.slice(-marker.length);
-      const next = after.slice(0, marker.length);
-      return prev === marker && next === marker;
-    };
-
-    const isSignalPresent = (marker: string) => {
-      const lastWord = before.lastIndexOf(marker);
-      const nextWord = after.indexOf(marker);
-      return lastWord >= 0 && nextWord >= 0 && lastWord > before.lastIndexOf('\n') && nextWord < after.length;
-    };
-
-    setFormattingState({
-      bold: isWrapped('**') || isSignalPresent('**'),
-      italic: isWrapped('__') || isSignalPresent('__'),
-      underline: isWrapped('~~') || isSignalPresent('~~'),
-      strike: isWrapped('--') || isSignalPresent('--'),
-      highlight: isWrapped('==') || isSignalPresent('=='),
-    });
-  };
-
-  const update = (key: keyof FormState, value: string) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const updateContent = (next: string) => {
-    setContent(next);
-    setHistory((current) => [...current.slice(0, historyIndex + 1), next].slice(-50));
-    setHistoryIndex((current) => Math.min(current + 1, 49));
-  };
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] } }),
+      Underline,
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Link.configure({ openOnClick: false, autolink: true }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      HorizontalRule,
+    ],
+    content,
+    editorProps: {
+      attributes: {
+        class: 'prose prose-slate max-w-none focus:outline-none min-h-[420px] text-[16px] leading-7 text-slate-900',
+      },
+    },
+    onUpdate: ({ editor }) => {
+      setContent(editor.getHTML());
+    },
+  });
 
   useEffect(() => {
     try {
       const draft = JSON.parse(localStorage.getItem(getDraftKey(kind)) || 'null');
       if (draft?.form) setForm({ ...emptyForm, ...draft.form });
-      if (typeof draft?.content === 'string') setContent(draft.content);
+      if (typeof draft?.content === 'string' && draft.content.trim()) setContent(draft.content);
       if (draft?.template) setTemplate(draft.template);
       if (draft?.font) setFont(draft.font);
-      if (typeof draft?.bold === 'boolean') setBold(draft.bold);
       if (draft?.alignment) setAlignment(draft.alignment);
     } catch {
-      // ignore draft errors
+      // ignore invalid drafts
     }
   }, [kind]);
 
   useEffect(() => {
+    if (!editor) return;
+    if (editor.getHTML() !== content) {
+      editor.commands.setContent(content, { emitUpdate: false });
+    }
+  }, [content, editor]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(getDraftKey(kind), JSON.stringify({ form, content, template, font, bold, alignment }));
+        localStorage.setItem(getDraftKey(kind), JSON.stringify({ form, content, template, font, alignment }));
         setDraftSaved(true);
       } catch {
         setDraftSaved(false);
       }
-    }, 500);
+    }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [alignment, bold, content, font, form, kind, template]);
+  }, [alignment, content, font, form, kind, template]);
 
-  useEffect(() => {
-    if (history.length === 0 && !content) {
-      setHistory([localContent]);
-      setHistoryIndex(0);
-    }
-  }, [content, history.length, localContent]);
-
-  useEffect(() => {
-    updateFormattingState();
-  }, [displayedContent]);
-
-  const formatSelection = (marker: '**' | '__' | '~~' | '--' | '==') => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-    if (start === end) return;
-
-    const selected = displayedContent.slice(start, end);
-    updateContent(`${displayedContent.slice(0, start)}${marker}${selected}${marker}${displayedContent.slice(end)}`);
-    requestAnimationFrame(() => {
-      editor.focus();
-      editor.setSelectionRange(start + marker.length, end + marker.length);
-    });
-  };
-
-  const selectAll = () => {
-    editorRef.current?.focus();
-    editorRef.current?.select();
-  };
-
-  const copyDocument = async () => {
-    try {
-      await navigator.clipboard.writeText(displayedContent);
-      toast({ title: 'Copied', description: 'Document text copied.' });
-    } catch {
-      toast({ title: 'Copy failed', description: 'Select and copy the text manually.', variant: 'destructive' });
-    }
-  };
-
-  const pasteDocument = async () => {
-    try {
-      const pasted = await navigator.clipboard.readText();
-      if (!pasted) return;
-      const editor = editorRef.current;
-      const start = editor?.selectionStart ?? displayedContent.length;
-      const end = editor?.selectionEnd ?? start;
-      updateContent(`${displayedContent.slice(0, start)}${pasted}${displayedContent.slice(end)}`);
-    } catch {
-      toast({ title: 'Paste unavailable', description: 'Use your device paste command.', variant: 'destructive' });
-    }
-  };
-
-  const addBullet = () => {
-    const editor = editorRef.current;
-    const start = editor?.selectionStart ?? displayedContent.length;
-    const lineStart = displayedContent.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-    updateContent(`${displayedContent.slice(0, lineStart)}- ${displayedContent.slice(lineStart)}`);
-  };
-
-  const insertLink = () => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-    const selected = displayedContent.slice(start, end) || 'link text';
-    const url = window.prompt('Add a URL', 'https://');
-    if (!url) return;
-
-    updateContent(`${displayedContent.slice(0, start)}${selected} (${url})${displayedContent.slice(end)}`);
-  };
-
-  const generate = async () => {
-    if (kind === 'cv' && (!form.fullName.trim() || !form.email.trim())) {
-      toast({ title: 'Add your details', description: 'Enter your name and email first.' });
-      return;
-    }
-
-    if (kind === 'cover-letter' && (!form.jobTitle.trim() && !form.company.trim() && !form.summary.trim())) {
-      toast({ title: 'Add job details', description: 'Enter a job title, company, or summary first.' });
-      return;
-    }
-
-    setBusy(true);
-    try {
-      if (isPlus) {
-        const endpoint = kind === 'cv' ? '/api/ai/pro/resume-builder' : '/api/ai/pro/cover-letter';
-        const payload = kind === 'cv'
-          ? { ...form, tier: isPro ? 'pro' : 'plus', template }
-          : { jobTitle: form.jobTitle, company: form.company, resumeSummary: form.summary, extras: form.extras, candidateName: form.fullName, tier: isPro ? 'pro' : 'plus', template };
-
-        const response = await api.post(endpoint, payload);
-        updateContent(String(kind === 'cv' ? response.resumeText || localContent : response.letter || localContent));
-      } else {
-        updateContent(localContent);
-      }
-
-      toast({ title: 'Document ready', description: isPlus ? 'AI generation complete.' : 'Free template generated.' });
-    } catch {
-      updateContent(localContent);
-      toast({ title: 'Using local template', description: 'You can still edit and download your document.' });
-    } finally {
-      setBusy(false);
-      setFormattingState({ bold: false, italic: false, underline: false, strike: false, highlight: false });
-    }
-  };
-
-  const printDocument = () => {
-    const win = window.open('', '_blank');
-    if (!win) return;
-
-    win.document.write(documentHtml(kind, form, displayedContent, template, font, bold, alignment, highlightColor));
-    win.document.close();
-    win.focus();
-    win.print();
-  };
-
-  const downloadDocx = async () => {
-    const doc = new Document({
-      sections: [{
-        properties: {
-          page: {
-            size: { width: 11906, height: 16838 },
-            margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 },
-          },
-        },
-        children: [
-          new Paragraph({ children: [new TextRun({ text: form.fullName || 'Your Name', bold: true, size: 34 })] }),
-          ...makeDocxParagraphs(displayedContent, bold),
-        ],
-      }],
-    });
-
-    const blob = await Packer.toBlob(doc);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `facemex-${kind}.docx`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const clearDocument = () => {
-    setForm(emptyForm);
-    setContent('');
-    setBold(false);
-    setItalic(false);
-    setUnderline(false);
-    setFormattingState({ bold: false, italic: false, underline: false, strike: false, highlight: false });
-    setAlignment('left');
-    setHighlightColor('#fef08a');
-    setFont('sans');
+  const update = (key: keyof FormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
   };
 
   const fields = kind === 'cv'
@@ -445,9 +294,84 @@ export default function DocumentStudio({ kind }: Props) {
 
   const Icon = isPlus ? Sparkles : Wand2;
 
+  const generate = async () => {
+    if (kind === 'cv' && (!form.fullName.trim() || !form.email.trim())) {
+      toast({ title: 'Add your details', description: 'Enter your name and email first.' });
+      return;
+    }
+
+    if (kind === 'cover-letter' && (!form.jobTitle.trim() && !form.company.trim() && !form.summary.trim())) {
+      toast({ title: 'Add job details', description: 'Enter a job title, company, or summary first.' });
+      return;
+    }
+
+    setBusy(true);
+    try {
+      let nextContent = createEditorHtml(localContent);
+      if (isPlus) {
+        const endpoint = kind === 'cv' ? '/api/ai/pro/resume-builder' : '/api/ai/pro/cover-letter';
+        const payload = kind === 'cv'
+          ? { ...form, tier: isPro ? 'pro' : 'plus', template }
+          : { jobTitle: form.jobTitle, company: form.company, resumeSummary: form.summary, extras: form.extras, candidateName: form.fullName, tier: isPro ? 'pro' : 'plus', template };
+
+        const response = await api.post(endpoint, payload);
+        const generated = String(kind === 'cv' ? response.resumeText || localContent : response.letter || localContent);
+        nextContent = createEditorHtml(generated);
+      }
+
+      setContent(nextContent);
+      toast({ title: 'Document ready', description: isPlus ? 'AI generation complete.' : 'Free template generated.' });
+    } catch {
+      setContent(createEditorHtml(localContent));
+      toast({ title: 'Using local template', description: 'You can still edit and download your document.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const printDocument = () => {
+    const win = window.open('', '_blank');
+    if (!win) return;
+
+    win.document.write(documentHtml(kind, form, content, template, font, alignment, highlightColor));
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const downloadDocx = async () => {
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 11906, height: 16838 },
+            margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 },
+          },
+        },
+        children: [
+          new Paragraph({ children: [new TextRun({ text: form.fullName || 'Your Name', bold: true, size: 34 })] }),
+          ...makeDocxParagraphs(content.replace(/<[^>]+>/g, '\n').replace(/\n+/g, '\n')),
+        ],
+      }],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `facemex-${kind}.docx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const clearDocument = () => {
+    setForm(emptyForm);
+    setContent('<p></p>');
+  };
+
   const handleSave = () => {
     try {
-      localStorage.setItem(getDraftKey(kind), JSON.stringify({ form, content, template, font, bold, alignment }));
+      localStorage.setItem(getDraftKey(kind), JSON.stringify({ form, content, template, font, alignment }));
       setDraftSaved(true);
       toast({ title: 'Saved', description: 'Your draft has been saved.' });
     } catch {
@@ -466,9 +390,12 @@ export default function DocumentStudio({ kind }: Props) {
             <p className="text-[11px] font-semibold uppercase tracking-[.22em] text-blue-500">FaceMeX Documents</p>
             <h1 className="mt-1 text-2xl font-semibold lg:text-3xl">{title}</h1>
           </div>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase lg:border-slate-700 lg:bg-[#181d24] lg:text-slate-300">
-            {tier} plan
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase lg:border-slate-700 lg:bg-[#181d24] lg:text-slate-300">
+              {tier} plan
+            </span>
+            <span className="text-xs text-slate-500 lg:text-slate-400">{draftSaved ? 'Saved ✓' : 'Unsaved changes'}</span>
+          </div>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
@@ -508,7 +435,7 @@ export default function DocumentStudio({ kind }: Props) {
                             onChange={(event) => update(key as keyof FormState, event.target.value)}
                           />
                         </label>
-                      )
+                      ),
                 )}
 
                 <Button onClick={generate} disabled={busy} className="h-11 w-full rounded-xl bg-slate-950 text-white">
@@ -548,91 +475,10 @@ export default function DocumentStudio({ kind }: Props) {
 
             <div className="rounded-b-xl border border-t-0 border-slate-200 bg-slate-50 p-2 lg:border-slate-700 lg:bg-[#11151b]">
               <EditorToolbar
-                onBold={() => {
-                  setBold((value) => !value);
-                  formatSelection('**');
-                }}
-                onItalic={() => {
-                  setItalic((value) => !value);
-                  formatSelection('__');
-                }}
-                onUnderline={() => {
-                  setUnderline((value) => !value);
-                  formatSelection('~~');
-                }}
-                onStrike={() => formatSelection('--')}
-                onAlignLeft={() => setAlignment('left')}
-                onAlignCenter={() => setAlignment('center')}
-                onAlignRight={() => setAlignment('right')}
-                onAlignJustify={() => setAlignment('justify')}
-                onBulletList={addBullet}
-                onNumberedList={() => {
-                  const editor = editorRef.current;
-                  if (!editor) return;
-                  const start = editor.selectionStart;
-                  const end = editor.selectionEnd;
-                  const selected = displayedContent.slice(start, end);
-                  updateContent(`${displayedContent.slice(0, start)}1. ${selected}${displayedContent.slice(end)}`);
-                }}
-                onUndo={() => {
-                  if (historyIndex > 0) {
-                    const index = historyIndex - 1;
-                    setHistoryIndex(index);
-                    setContent(history[index]);
-                  }
-                }}
-                onRedo={() => {
-                  if (historyIndex < history.length - 1) {
-                    const index = historyIndex + 1;
-                    setHistoryIndex(index);
-                    setContent(history[index]);
-                  }
-                }}
-                onLink={insertLink}
-                onClear={clearDocument}
-                onHighlight={() => formatSelection('==')}
-                onHeading={(level) => {
-                  const editor = editorRef.current;
-                  if (!editor) return;
-                  const start = editor.selectionStart;
-                  const end = editor.selectionEnd;
-                  const selected = displayedContent.slice(start, end) || 'Heading';
-                  const marker = '#'.repeat(level);
-                  updateContent(`${displayedContent.slice(0, start)}${marker} ${selected}${displayedContent.slice(end)}`);
-                }}
-                onIndent={() => {
-                  const editor = editorRef.current;
-                  if (!editor) return;
-                  const start = editor.selectionStart;
-                  const end = editor.selectionEnd;
-                  const selected = displayedContent.slice(start, end);
-                  updateContent(`${displayedContent.slice(0, start)}  ${selected}${displayedContent.slice(end)}`);
-                }}
-                onOutdent={() => {
-                  const editor = editorRef.current;
-                  if (!editor) return;
-                  const start = editor.selectionStart;
-                  const end = editor.selectionEnd;
-                  const selected = displayedContent.slice(start, end).replace(/^  /, '');
-                  updateContent(`${displayedContent.slice(0, start)}${selected}${displayedContent.slice(end)}`);
-                }}
-                onCopy={copyDocument}
-                onPaste={pasteDocument}
-                onSelectAll={selectAll}
-                fontValue={font}
-                sizeValue={String(16)}
-                alignValue={alignment}
-                highlightColor={highlightColor}
-                onFontChange={(value) => setFont(value as FontKey)}
-                onSizeChange={() => undefined}
-                onHighlightColorChange={setHighlightColor}
-                canUndo={historyIndex > 0}
-                canRedo={historyIndex < history.length - 1}
-                isBold={formattingState.bold}
-                isItalic={formattingState.italic}
-                isUnderline={formattingState.underline}
-                isStrike={formattingState.strike}
+                editor={editor}
                 onSave={handleSave}
+                onPrint={printDocument}
+                onDownload={downloadDocx}
               />
             </div>
 
@@ -657,35 +503,17 @@ export default function DocumentStudio({ kind }: Props) {
 
             <div className="mt-3 overflow-auto rounded-xl bg-slate-100 p-2 sm:p-5 lg:bg-[#0e1116]">
               <div className="mx-auto overflow-hidden" style={{ width: '100%', maxWidth: 794, minHeight: `${Math.round(1120 * zoom / 100)}px` }}>
-                <iframe
-                  title="A4 document preview"
-                  srcDoc={documentHtml(kind, form, displayedContent, template, font, bold, alignment, highlightColor)}
-                  className="block border-0 bg-white shadow-xl"
-                  style={{ width: `${10000 / zoom}%`, height: '1120px', transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}
-                />
+                <div className="block border-0 bg-white shadow-xl" style={{ width: '100%', minHeight: '1120px' }}>
+                  <div className="w-full bg-white p-4" style={{ minHeight: '1120px' }}>
+                    <EditorContent editor={editor} className="prose" />
+                  </div>
+                </div>
               </div>
             </div>
-
-            <label className="mt-4 block">
-              <span className="mb-1 block text-xs font-semibold text-slate-600 lg:text-slate-300">Edit document text</span>
-              <textarea
-                ref={editorRef}
-                value={displayedContent}
-                onChange={(event) => {
-                  updateContent(event.target.value);
-                  requestAnimationFrame(updateFormattingState);
-                }}
-                onClick={updateFormattingState}
-                onSelect={updateFormattingState}
-                onKeyUp={updateFormattingState}
-                onMouseUp={updateFormattingState}
-                onFocus={updateFormattingState}
-                className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </label>
           </main>
         </div>
       </SensitiveContentShield>
     </div>
   );
 }
+
