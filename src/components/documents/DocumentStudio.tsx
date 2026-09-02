@@ -174,11 +174,57 @@ export default function DocumentStudio({ kind }: Props) {
   const [draftSaved, setDraftSaved] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [formattingState, setFormattingState] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    highlight: false,
+  });
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
 
   const title = kind === 'cv' ? 'AI CV Studio' : 'AI Cover Letter Studio';
   const localContent = useMemo(() => kind === 'cv' ? buildLocalCv(form) : buildLocalLetter(form), [form, kind]);
   const displayedContent = content || localContent;
+
+  const updateFormattingState = () => {
+    const editor = editorRef.current;
+    if (!editor) {
+      setFormattingState({ bold: false, italic: false, underline: false, strike: false, highlight: false });
+      return;
+    }
+
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const value = displayedContent;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    const selected = value.slice(start, end);
+
+    const isWrapped = (marker: string) => {
+      if (selected.length > 0) {
+        return selected.startsWith(marker) && selected.endsWith(marker) && selected.length > marker.length * 2;
+      }
+
+      const prev = before.slice(-marker.length);
+      const next = after.slice(0, marker.length);
+      return prev === marker && next === marker;
+    };
+
+    const isSignalPresent = (marker: string) => {
+      const lastWord = before.lastIndexOf(marker);
+      const nextWord = after.indexOf(marker);
+      return lastWord >= 0 && nextWord >= 0 && lastWord > before.lastIndexOf('\n') && nextWord < after.length;
+    };
+
+    setFormattingState({
+      bold: isWrapped('**') || isSignalPresent('**'),
+      italic: isWrapped('__') || isSignalPresent('__'),
+      underline: isWrapped('~~') || isSignalPresent('~~'),
+      strike: isWrapped('--') || isSignalPresent('--'),
+      highlight: isWrapped('==') || isSignalPresent('=='),
+    });
+  };
 
   const update = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -223,6 +269,10 @@ export default function DocumentStudio({ kind }: Props) {
       setHistoryIndex(0);
     }
   }, [content, history.length, localContent]);
+
+  useEffect(() => {
+    updateFormattingState();
+  }, [displayedContent]);
 
   const formatSelection = (marker: '**' | '__' | '~~' | '--' | '==') => {
     const editor = editorRef.current;
@@ -318,6 +368,7 @@ export default function DocumentStudio({ kind }: Props) {
       toast({ title: 'Using local template', description: 'You can still edit and download your document.' });
     } finally {
       setBusy(false);
+      setFormattingState({ bold: false, italic: false, underline: false, strike: false, highlight: false });
     }
   };
 
@@ -362,6 +413,7 @@ export default function DocumentStudio({ kind }: Props) {
     setBold(false);
     setItalic(false);
     setUnderline(false);
+    setFormattingState({ bold: false, italic: false, underline: false, strike: false, highlight: false });
     setAlignment('left');
     setHighlightColor('#fef08a');
     setFont('sans');
@@ -576,10 +628,10 @@ export default function DocumentStudio({ kind }: Props) {
                 onHighlightColorChange={setHighlightColor}
                 canUndo={historyIndex > 0}
                 canRedo={historyIndex < history.length - 1}
-                isBold={bold}
-                isItalic={italic}
-                isUnderline={underline}
-                isStrike={false}
+                isBold={formattingState.bold}
+                isItalic={formattingState.italic}
+                isUnderline={formattingState.underline}
+                isStrike={formattingState.strike}
                 onSave={handleSave}
               />
             </div>
@@ -619,7 +671,15 @@ export default function DocumentStudio({ kind }: Props) {
               <textarea
                 ref={editorRef}
                 value={displayedContent}
-                onChange={(event) => updateContent(event.target.value)}
+                onChange={(event) => {
+                  updateContent(event.target.value);
+                  requestAnimationFrame(updateFormattingState);
+                }}
+                onClick={updateFormattingState}
+                onSelect={updateFormattingState}
+                onKeyUp={updateFormattingState}
+                onMouseUp={updateFormattingState}
+                onFocus={updateFormattingState}
                 className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-blue-500"
               />
             </label>
