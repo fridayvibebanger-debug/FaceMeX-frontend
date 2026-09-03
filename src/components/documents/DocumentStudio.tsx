@@ -35,10 +35,10 @@ import { useUserStore } from '@/store/userStore';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import EditorToolbar from './EditorToolbar';
 
-type DocumentKind = 'cv' | 'cover-letter';
+type DocumentKind = 'cv' | 'cover-letter' | 'portfolio' | 'bio' | 'linkedin-profile' | 'portfolio-website';
 type TemplateKey = 'classic' | 'modern' | 'minimal' | 'executive';
 type FontKey = 'sans' | 'serif' | 'mono';
-type ZoomLevel = 75 | 90 | 100 | 125;
+type ZoomLevel = number;
 
 type FormState = {
   fullName: string;
@@ -53,9 +53,13 @@ type FormState = {
   skills: string;
   education: string;
   extras: string;
+  portfolio?: string;
+  bio?: string;
+  linkedinHeadline?: string;
+  linkedinSummary?: string;
 };
 
-type Props = { kind: DocumentKind };
+type Props = { kind: DocumentKind; documentId?: string; documentName?: string };
 
 const templates: Array<{ key: TemplateKey; label: string; description: string }> = [
   { key: 'modern', label: 'Modern', description: 'Clean accent bar and clear hierarchy.' },
@@ -123,6 +127,86 @@ function buildLocalLetter(form: FormState) {
   ].join('\n');
 }
 
+function buildLocalPortfolio(form: FormState) {
+  return [
+    'PORTFOLIO',
+    form.fullName || 'Portfolio Title',
+    '',
+    'ABOUT',
+    form.summary || 'Brief description of your work and expertise.',
+    '',
+    'FEATURED PROJECTS',
+    form.experience || 'Add your featured projects, case studies, and notable work.',
+    '',
+    'SKILLS & EXPERTISE',
+    form.skills || 'List your key skills and technical expertise.',
+    '',
+    'LINKS & CONTACT',
+    form.extras || 'Add portfolio links, social media, and contact information.',
+  ].join('\n');
+}
+
+function buildLocalBio(form: FormState) {
+  return [
+    'PROFESSIONAL BIOGRAPHY',
+    form.fullName || 'Your Name',
+    form.jobTitle || 'Professional Title',
+    '',
+    'ABOUT',
+    form.summary || 'Write a compelling professional biography highlighting your expertise, achievements, and career highlights.',
+    '',
+    'BACKGROUND',
+    form.education || 'Describe your educational background and professional journey.',
+    '',
+    'EXPERTISE',
+    form.skills || 'Highlight your core competencies and areas of expertise.',
+    '',
+    'CONTACT',
+    form.extras || 'Add contact information and social media links.',
+  ].join('\n');
+}
+
+function buildLocalLinkedInProfile(form: FormState) {
+  return [
+    form.fullName || 'Your Name',
+    form.jobTitle || 'Professional Headline',
+    '',
+    'ABOUT',
+    form.summary || 'A compelling summary of your professional background, skills, and career goals. Share your unique value proposition.',
+    '',
+    'EXPERIENCE',
+    form.experience || 'Add your work experience with key achievements and responsibilities.',
+    '',
+    'SKILLS',
+    form.skills || 'List your top professional skills.',
+    '',
+    'EDUCATION',
+    form.education || 'Add your educational background.',
+  ].join('\n');
+}
+
+function buildLocalPortfolioWebsite(form: FormState) {
+  return [
+    'PORTFOLIO WEBSITE',
+    form.fullName || 'Your Name',
+    '',
+    'HERO SECTION',
+    form.jobTitle || 'Add your professional tagline or headline',
+    '',
+    'ABOUT ME',
+    form.summary || 'Tell your story. Share your background, passion, and what drives you professionally.',
+    '',
+    'SERVICES / EXPERTISE',
+    form.skills || 'Describe the services or expertise you offer.',
+    '',
+    'PORTFOLIO / WORK',
+    form.experience || 'Showcase your best work with descriptions and results.',
+    '',
+    'CONTACT',
+    form.extras || 'Add contact information and call-to-action.',
+  ].join('\n');
+}
+
 function createEditorHtml(text: string) {
   const lines = text.split(/\r?\n/);
   const html = lines
@@ -138,8 +222,8 @@ function createEditorHtml(text: string) {
   return html || '<p></p>';
 }
 
-function getDraftKey(kind: DocumentKind) {
-  return `facemex_document_draft_${kind}`;
+function getDraftKey(kind: DocumentKind, documentId?: string) {
+  return documentId ? `facemex_document_draft_${documentId}` : `facemex_document_draft_${kind}`;
 }
 
 const FontSize = Extension.create({
@@ -156,6 +240,34 @@ const FontSize = Extension.create({
               if (!attributes.fontSize) return {};
               return { style: `font-size: ${attributes.fontSize}` };
             },
+          },
+        },
+      },
+    ];
+  },
+});
+
+const ParagraphLayout = Extension.create({
+  name: 'paragraphLayout',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['paragraph', 'heading'],
+        attributes: {
+          lineHeight: {
+            default: null,
+            parseHTML: (element: HTMLElement) => element.style.lineHeight || null,
+            renderHTML: (attributes: { lineHeight?: string | null }) => attributes.lineHeight ? { style: `line-height: ${attributes.lineHeight}` } : {},
+          },
+          spaceBefore: {
+            default: null,
+            parseHTML: (element: HTMLElement) => element.style.marginTop || null,
+            renderHTML: (attributes: { spaceBefore?: string | null }) => attributes.spaceBefore ? { style: `margin-top: ${attributes.spaceBefore}` } : {},
+          },
+          spaceAfter: {
+            default: null,
+            parseHTML: (element: HTMLElement) => element.style.marginBottom || null,
+            renderHTML: (attributes: { spaceAfter?: string | null }) => attributes.spaceAfter ? { style: `margin-bottom: ${attributes.spaceAfter}` } : {},
           },
         },
       },
@@ -207,7 +319,7 @@ function makeDocxParagraphs(content: string) {
     });
 }
 
-export default function DocumentStudio({ kind }: Props) {
+export default function DocumentStudio({ kind, documentId, documentName }: Props) {
   const { tier, hasTier } = useUserStore();
   const isPlus = String(tier).toLowerCase() === 'plus' || hasTier('pro');
   const isPro = hasTier('pro');
@@ -222,9 +334,39 @@ export default function DocumentStudio({ kind }: Props) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const title = kind === 'cv' ? 'AI CV Studio' : 'AI Cover Letter Studio';
-  const localContent = useMemo(() => (kind === 'cv' ? buildLocalCv(form) : buildLocalLetter(form)), [form, kind]);
+  const documentTitles: Record<DocumentKind, string> = {
+    cv: 'AI CV Studio',
+    'cover-letter': 'AI Cover Letter Studio',
+    portfolio: 'Portfolio Builder',
+    bio: 'Bio Builder',
+    'linkedin-profile': 'LinkedIn Profile',
+    'portfolio-website': 'Portfolio Website',
+  };
+
+  const title = documentName || documentTitles[kind];
+
+  const buildLocalContent = (docKind: DocumentKind, docForm: FormState): string => {
+    switch (docKind) {
+      case 'cv':
+        return buildLocalCv(docForm);
+      case 'cover-letter':
+        return buildLocalLetter(docForm);
+      case 'portfolio':
+        return buildLocalPortfolio(docForm);
+      case 'bio':
+        return buildLocalBio(docForm);
+      case 'linkedin-profile':
+        return buildLocalLinkedInProfile(docForm);
+      case 'portfolio-website':
+        return buildLocalPortfolioWebsite(docForm);
+      default:
+        return buildLocalCv(docForm);
+    }
+  };
+
+  const localContent = useMemo(() => buildLocalContent(kind, form), [form, kind]);
 
   const [content, setContent] = useState(() => createEditorHtml(localContent));
 
@@ -235,6 +377,7 @@ export default function DocumentStudio({ kind }: Props) {
       TextStyle,
       FontFamily.configure({ types: ['textStyle'] }),
       FontSize,
+      ParagraphLayout,
       Color,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -258,7 +401,7 @@ export default function DocumentStudio({ kind }: Props) {
 
   useEffect(() => {
     try {
-      const draft = JSON.parse(localStorage.getItem(getDraftKey(kind)) || 'null');
+      const draft = JSON.parse(localStorage.getItem(getDraftKey(kind, documentId)) || 'null');
       if (draft?.form) setForm({ ...emptyForm, ...draft.form });
       if (typeof draft?.content === 'string' && draft.content.trim()) setContent(draft.content);
       if (draft?.template) setTemplate(draft.template);
@@ -267,7 +410,7 @@ export default function DocumentStudio({ kind }: Props) {
     } catch {
       // ignore invalid drafts
     }
-  }, [kind]);
+  }, [kind, documentId]);
 
   useEffect(() => {
     if (!editor) return;
@@ -279,7 +422,7 @@ export default function DocumentStudio({ kind }: Props) {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(getDraftKey(kind), JSON.stringify({ form, content, template, font, alignment }));
+        localStorage.setItem(getDraftKey(kind, documentId), JSON.stringify({ form, content, template, font, alignment }));
         setDraftSaved(true);
       } catch {
         setDraftSaved(false);
@@ -287,35 +430,87 @@ export default function DocumentStudio({ kind }: Props) {
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [alignment, content, font, form, kind, template]);
+  }, [alignment, content, font, form, kind, template, documentId]);
 
   const update = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const fields = kind === 'cv'
-    ? [
-        ['fullName', 'Full name'],
-        ['email', 'Email'],
-        ['phone', 'Phone'],
-        ['location', 'Location'],
-        ['idNumber', 'ID / Profile ID'],
-        ['summary', 'Professional summary'],
-        ['experience', 'Experience / projects'],
-        ['skills', 'Skills'],
-        ['education', 'Education'],
-        ['extras', 'Additional information'],
-      ]
-    : [
-        ['fullName', 'Your name'],
-        ['email', 'Email'],
-        ['phone', 'Phone'],
-        ['location', 'Location'],
-        ['jobTitle', 'Job title'],
-        ['company', 'Company'],
-        ['summary', 'Your experience / summary'],
-        ['extras', 'Why this role and other details'],
-      ];
+  const getFields = (docKind: DocumentKind): Array<[string, string]> => {
+    switch (docKind) {
+      case 'cv':
+        return [
+          ['fullName', 'Full name'],
+          ['email', 'Email'],
+          ['phone', 'Phone'],
+          ['location', 'Location'],
+          ['idNumber', 'ID / Profile ID'],
+          ['summary', 'Professional summary'],
+          ['experience', 'Experience / projects'],
+          ['skills', 'Skills'],
+          ['education', 'Education'],
+          ['extras', 'Additional information'],
+        ];
+      case 'cover-letter':
+        return [
+          ['fullName', 'Your name'],
+          ['email', 'Email'],
+          ['phone', 'Phone'],
+          ['location', 'Location'],
+          ['jobTitle', 'Job title'],
+          ['company', 'Company'],
+          ['summary', 'Your experience / summary'],
+          ['extras', 'Why this role and other details'],
+        ];
+      case 'portfolio':
+        return [
+          ['fullName', 'Portfolio title'],
+          ['email', 'Email'],
+          ['phone', 'Phone'],
+          ['summary', 'About your work'],
+          ['experience', 'Featured projects'],
+          ['skills', 'Skills & expertise'],
+          ['extras', 'Links & contact'],
+        ];
+      case 'bio':
+        return [
+          ['fullName', 'Your name'],
+          ['jobTitle', 'Professional title'],
+          ['email', 'Email'],
+          ['phone', 'Phone'],
+          ['summary', 'About you'],
+          ['education', 'Background'],
+          ['skills', 'Expertise'],
+          ['extras', 'Contact information'],
+        ];
+      case 'linkedin-profile':
+        return [
+          ['fullName', 'Full name'],
+          ['jobTitle', 'Professional headline'],
+          ['email', 'Email'],
+          ['location', 'Location'],
+          ['summary', 'About'],
+          ['experience', 'Experience'],
+          ['skills', 'Skills'],
+          ['education', 'Education'],
+        ];
+      case 'portfolio-website':
+        return [
+          ['fullName', 'Your name'],
+          ['jobTitle', 'Tagline'],
+          ['email', 'Email'],
+          ['phone', 'Phone'],
+          ['summary', 'About me'],
+          ['skills', 'Services / Expertise'],
+          ['experience', 'Portfolio / Work'],
+          ['extras', 'Contact & CTA'],
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const fields = getFields(kind);
 
   const Icon = isPlus ? Sparkles : Wand2;
 
@@ -384,7 +579,7 @@ export default function DocumentStudio({ kind }: Props) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `facemex-${kind}.docx`;
+    link.download = `${documentName || kind}.docx`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -396,7 +591,7 @@ export default function DocumentStudio({ kind }: Props) {
 
   const handleSave = () => {
     try {
-      localStorage.setItem(getDraftKey(kind), JSON.stringify({ form, content, template, font, alignment }));
+      localStorage.setItem(getDraftKey(kind, documentId), JSON.stringify({ form, content, template, font, alignment }));
       setDraftSaved(true);
       toast({ title: 'Saved', description: 'Your draft has been saved.' });
     } catch {
@@ -405,7 +600,7 @@ export default function DocumentStudio({ kind }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-950 lg:bg-[#101318] lg:text-slate-100">
+    <div className="min-h-screen bg-white text-slate-950 lg:bg-black lg:text-white">
       <SensitiveContentShield
         context={kind === 'cv' ? 'cv' : 'cover-letter'}
         className="mx-auto max-w-[1500px] px-3 pb-8 pt-4 sm:px-6 lg:px-8 lg:pt-7"
@@ -416,15 +611,26 @@ export default function DocumentStudio({ kind }: Props) {
             <h1 className="mt-1 text-2xl font-semibold lg:text-3xl">{title}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase lg:border-slate-700 lg:bg-[#181d24] lg:text-slate-300">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase lg:border-white/10 lg:bg-white/[0.06] lg:text-white/70">
               {tier} plan
             </span>
-            <span className="text-xs text-slate-500 lg:text-slate-400">{draftSaved ? 'Saved ✓' : 'Unsaved changes'}</span>
+            <span className="text-xs text-slate-500 lg:text-white/50">{draftSaved ? 'Saved ✓' : 'Unsaved changes'}</span>
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:border-slate-700 lg:bg-[#181d24]">
+        <div className="flex gap-5">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="hidden h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 lg:flex lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/10 xl:hidden"
+            aria-label="Toggle details sidebar"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+
+          <aside className={`w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:border-white/10 lg:bg-white/[0.04] xl:w-[280px] ${
+            sidebarOpen ? 'block' : 'hidden xl:block'
+          }`}>
             <button
               type="button"
               onClick={() => setDetailsOpen((value) => !value)}
@@ -432,8 +638,8 @@ export default function DocumentStudio({ kind }: Props) {
             >
               <FileText className="h-5 w-5 text-blue-500" />
               <span className="min-w-0 flex-1">
-                <strong className="block text-sm">Your details</strong>
-                <small className="block text-xs text-slate-500">Tap to {detailsOpen ? 'hide' : 'show'}</small>
+                <strong className="block text-sm lg:text-white">Your details</strong>
+                <small className="block text-xs text-slate-500 lg:text-white/50">Tap to {detailsOpen ? 'hide' : 'show'}</small>
               </span>
               {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
@@ -444,26 +650,28 @@ export default function DocumentStudio({ kind }: Props) {
                   key === 'summary' || key === 'experience' || key === 'skills' || key === 'education' || key === 'extras'
                     ? (
                         <label key={key} className="block space-y-1">
-                          <span className="text-xs font-semibold text-slate-600 lg:text-slate-300">{label}</span>
+                          <span className="text-xs font-semibold text-slate-600 lg:text-white/70">{label}</span>
                           <Textarea
                             rows={key === 'experience' ? 4 : 3}
                             value={form[key as keyof FormState]}
                             onChange={(event) => update(key as keyof FormState, event.target.value)}
+                            className="lg:border-white/10 lg:bg-white/[0.04] lg:text-white"
                           />
                         </label>
                       )
                     : (
                         <label key={key} className="block space-y-1">
-                          <span className="text-xs font-semibold text-slate-600 lg:text-slate-300">{label}</span>
+                          <span className="text-xs font-semibold text-slate-600 lg:text-white/70">{label}</span>
                           <Input
                             value={form[key as keyof FormState]}
                             onChange={(event) => update(key as keyof FormState, event.target.value)}
+                            className="lg:border-white/10 lg:bg-white/[0.04] lg:text-white"
                           />
                         </label>
                       ),
                 )}
 
-                <Button onClick={generate} disabled={busy} className="h-11 w-full rounded-xl bg-slate-950 text-white">
+                <Button onClick={generate} disabled={busy} className="h-11 w-full rounded-xl bg-blue-600 text-white hover:bg-blue-700 lg:bg-blue-600 lg:hover:bg-blue-700">
                   <Icon className="mr-2 h-4 w-4" />
                   {busy ? 'Generating...' : isPlus ? 'Generate with AI' : 'Generate document'}
                 </Button>
@@ -471,44 +679,47 @@ export default function DocumentStudio({ kind }: Props) {
             )}
           </aside>
 
-          <main className="min-h-[calc(100vh-9rem)] min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:border-slate-700 lg:bg-[#181d24] lg:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 lg:border-slate-700">
+          <main className="min-h-[calc(100vh-9rem)] min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:border-white/10 lg:bg-white/[0.04] lg:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 lg:border-white/10">
               <div>
-                <h2 className="font-semibold">Document editor</h2>
-                <p className="text-xs text-slate-500 lg:text-slate-400">A4 workspace</p>
+                <h2 className="font-semibold lg:text-white">Document editor</h2>
+                <p className="text-xs text-slate-500 lg:text-white/50">A4 workspace</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={printDocument} className="rounded-xl">
+                <Button variant="outline" size="sm" onClick={printDocument} className="rounded-xl h-9 lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/10">
                   <Printer className="mr-1.5 h-3.5 w-3.5" />
                   PDF
                 </Button>
-                <Button variant="outline" size="sm" onClick={downloadDocx} className="rounded-xl">
+                <Button variant="outline" size="sm" onClick={downloadDocx} className="rounded-xl h-9 lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/10">
                   <Download className="mr-1.5 h-3.5 w-3.5" />
                   DOCX
                 </Button>
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between rounded-t-xl border border-slate-200 bg-slate-50 px-3 py-2 lg:border-slate-700 lg:bg-[#080a0d]">
-              <span className="text-xs font-bold">Home</span>
-              <Button variant="ghost" size="sm" onClick={() => setTemplatesOpen((value) => !value)} className="rounded-md">
+            <div className="mt-3 flex items-center justify-between rounded-t-xl border border-slate-200 bg-slate-50 px-3 py-2 lg:border-white/10 lg:bg-white/[0.03]">
+              <span className="text-xs font-bold lg:text-white">Home</span>
+              <Button variant="ghost" size="sm" onClick={() => setTemplatesOpen((value) => !value)} className="rounded-md lg:text-white lg:hover:bg-white/10">
                 <Menu className="mr-1.5 h-4 w-4" />
                 {templatesOpen ? 'Hide templates' : 'Templates'}
               </Button>
             </div>
 
-            <div className="rounded-b-xl border border-t-0 border-slate-200 bg-slate-50 p-2 lg:border-slate-700 lg:bg-[#11151b]">
+            <div className="rounded-b-xl border border-t-0 border-slate-200 bg-slate-50 p-2 lg:border-white/10 lg:bg-white/[0.02]">
               <EditorToolbar
                 editor={editor}
                 onSave={handleSave}
                 onPrint={printDocument}
                 onDownload={downloadDocx}
+                onDetails={() => setDetailsOpen(true)}
+                zoom={zoom}
+                onZoomChange={(value) => setZoom(value)}
               />
             </div>
 
             {templatesOpen && (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:w-60 lg:grid-cols-1 lg:rounded-r-xl lg:border lg:border-slate-700 lg:bg-[#11151b] lg:p-3">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:w-60 lg:grid-cols-1 lg:rounded-r-xl lg:border lg:border-white/10 lg:bg-white/[0.03] lg:p-3">
                 {templates.map((item) => (
                   <button
                     key={item.key}
@@ -517,18 +728,22 @@ export default function DocumentStudio({ kind }: Props) {
                       setTemplate(item.key);
                       setTemplatesOpen(false);
                     }}
-                    className={`rounded-xl border p-3 text-left ${template === item.key ? 'border-blue-500 bg-blue-50 lg:bg-blue-500/15' : 'border-slate-200 bg-slate-50 lg:border-slate-700 lg:bg-[#181d24]'}`}
+                    className={`rounded-xl border p-3 text-left ${
+                      template === item.key
+                        ? 'border-blue-500 bg-blue-50 lg:border-blue-500 lg:bg-blue-500/20'
+                        : 'border-slate-200 bg-slate-50 lg:border-white/10 lg:bg-white/[0.05]'
+                    }`}
                   >
-                    <span className="block text-sm font-semibold">{item.label}</span>
-                    <span className="mt-1 block text-xs text-slate-500">{item.description}</span>
+                    <span className="block text-sm font-semibold lg:text-white">{item.label}</span>
+                    <span className="mt-1 block text-xs text-slate-500 lg:text-white/50">{item.description}</span>
                   </button>
                 ))}
               </div>
             )}
 
-            <div className="mt-3 overflow-auto rounded-xl bg-slate-100 p-2 sm:p-5 lg:bg-[#0e1116]">
+            <div className="mt-3 overflow-auto rounded-xl bg-slate-100 p-2 sm:p-5 lg:bg-[#1a1a1a]">
               <div className="mx-auto overflow-hidden" style={{ width: '100%', maxWidth: 794, minHeight: `${Math.round(1120 * zoom / 100)}px` }}>
-                <div className="block border-0 bg-white shadow-xl" style={{ width: '100%', minHeight: '1120px' }}>
+                <div className="block border-0 bg-white shadow-xl" style={{ width: '100%', minHeight: '1120px', transform: `scale(${zoom / 100})`, transformOrigin: 'top center', marginBottom: `${Math.round(1120 * (zoom / 100 - 1))}px` }}>
                   <div className="w-full bg-white p-4" style={{ minHeight: '1120px' }}>
                     <EditorContent editor={editor} className="document-editor" />
                   </div>
