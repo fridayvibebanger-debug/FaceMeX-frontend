@@ -39,6 +39,13 @@ const fontOptions = [
 ];
 
 const sizeOptions = ['8', '9', '10', '11', '12', '14', '16', '18', '20', '24', '28', '32', '36', '48'];
+const textStyleOptions = [
+  { value: 'paragraph', label: 'Normal' },
+  { value: 'heading-1', label: 'Title' },
+  { value: 'heading-2', label: 'Heading 1' },
+  { value: 'heading-3', label: 'Heading 2' },
+  { value: 'heading-4', label: 'Heading 3' },
+];
 const highlightOptions = [
   { value: '#fef08a', label: 'Yellow' },
   { value: '#bbf7d0', label: 'Green' },
@@ -47,10 +54,29 @@ const highlightOptions = [
   { value: '#fed7aa', label: 'Orange' },
   { value: 'transparent', label: 'None' },
 ];
+const textColorOptions = [
+  { value: '#172033', label: 'Black' },
+  { value: '#2563eb', label: 'Blue' },
+  { value: '#0f766e', label: 'Teal' },
+  { value: '#b91c1c', label: 'Red' },
+  { value: '#7c3aed', label: 'Violet' },
+  { value: '#64748b', label: 'Gray' },
+];
 
 export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: EditorToolbarProps) {
   const fontValue = editor?.getAttributes('textStyle').fontFamily ?? 'Arial, Helvetica, sans-serif';
   const sizeValue = editor?.getAttributes('textStyle').fontSize ?? '16px';
+  const textColor = editor?.getAttributes('textStyle').color ?? '#172033';
+  const highlightColor = editor?.getAttributes('highlight').color ?? 'transparent';
+  const textStyle = editor?.isActive('heading', { level: 1 })
+    ? 'heading-1'
+    : editor?.isActive('heading', { level: 2 })
+      ? 'heading-2'
+      : editor?.isActive('heading', { level: 3 })
+        ? 'heading-3'
+        : editor?.isActive('heading', { level: 4 })
+          ? 'heading-4'
+          : 'paragraph';
   const alignment = editor?.isActive({ textAlign: 'left' })
     ? 'left'
     : editor?.isActive({ textAlign: 'center' })
@@ -66,6 +92,15 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
     editor.chain().focus().setMark('textStyle', { [key]: value }).run();
   };
 
+  const setBlockStyle = (value: string) => {
+    if (!editor) return;
+    if (value === 'paragraph') {
+      editor.chain().focus().setParagraph().run();
+      return;
+    }
+    editor.chain().focus().toggleHeading({ level: Number(value.split('-')[1]) as 1 | 2 | 3 | 4 }).run();
+  };
+
   const applyHighlight = (color: string) => {
     if (!editor) return;
     if (color === 'transparent') {
@@ -73,6 +108,11 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
       return;
     }
     editor.chain().focus().toggleHighlight({ color }).run();
+  };
+
+  const applyTextColor = (color: string) => {
+    if (!editor) return;
+    editor.chain().focus().setColor(color).run();
   };
 
   const handleLink = () => {
@@ -167,6 +207,17 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
 
         <div className="flex shrink-0 gap-1 border-r border-slate-300 pr-2 lg:border-slate-600">
           <select
+            value={textStyle}
+            onChange={(event) => setBlockStyle(event.target.value)}
+            className="h-10 min-w-[112px] rounded-md border border-slate-300 bg-white px-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900 lg:text-slate-100"
+            aria-label="Text style"
+          >
+            {textStyleOptions.map((style) => (
+              <option key={style.value} value={style.value}>{style.label}</option>
+            ))}
+          </select>
+
+          <select
             value={fontValue}
             onChange={(event) => setTextStyle('fontFamily', event.target.value)}
             className="h-10 min-w-[110px] rounded-md border border-slate-300 bg-white px-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900 lg:text-slate-100"
@@ -178,7 +229,7 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
           </select>
 
           <select
-            value={sizeValue}
+            value={sizeValue.replace(/px$/, '')}
             onChange={(event) => setTextStyle('fontSize', `${event.target.value}px`)}
             className="h-10 min-w-[72px] rounded-md border border-slate-300 bg-white px-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900 lg:text-slate-100"
             aria-label="Font size"
@@ -402,12 +453,23 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
           </Tooltip>
 
           <select
-            value={editor?.isActive('highlight') ? '#fef08a' : '#fef08a'}
+            value={highlightColor}
             onChange={(event) => applyHighlight(event.target.value)}
             className="h-10 min-w-[96px] rounded-md border border-slate-300 bg-white px-2 text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900"
             aria-label="Highlight color"
           >
             {highlightOptions.map((color) => (
+              <option key={color.value} value={color.value}>{color.label}</option>
+            ))}
+          </select>
+
+          <select
+            value={textColor}
+            onChange={(event) => applyTextColor(event.target.value)}
+            className="h-10 min-w-[86px] rounded-md border border-slate-300 bg-white px-2 text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900"
+            aria-label="Text color"
+          >
+            {textColorOptions.map((color) => (
               <option key={color.value} value={color.value}>{color.label}</option>
             ))}
           </select>
