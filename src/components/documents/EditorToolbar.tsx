@@ -14,11 +14,15 @@ import {
   ListOrdered,
   Outdent,
   Redo2,
+  Search,
   Save,
   Strikethrough,
   Underline,
   Undo2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -27,6 +31,9 @@ type EditorToolbarProps = {
   onSave: () => void;
   onPrint: () => void;
   onDownload: () => void;
+  onDetails?: () => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
 };
 
 const fontOptions = [
@@ -62,12 +69,29 @@ const textColorOptions = [
   { value: '#7c3aed', label: 'Violet' },
   { value: '#64748b', label: 'Gray' },
 ];
+const zoomOptions = [50, 75, 90, 100, 110, 125, 150, 200];
+const lineSpacingOptions = [
+  { value: '1', label: '1.0' },
+  { value: '1.15', label: '1.15' },
+  { value: '1.5', label: '1.5' },
+  { value: '2', label: '2.0' },
+  { value: '2.5', label: '2.5' },
+  { value: '3', label: '3.0' },
+];
 
-export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: EditorToolbarProps) {
+export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onDetails, zoom = 100, onZoomChange }: EditorToolbarProps) {
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [replaceQuery, setReplaceQuery] = useState('');
+  const [tableOpen, setTableOpen] = useState(false);
+  const [tableRows, setTableRows] = useState(2);
+  const [tableCols, setTableCols] = useState(2);
   const fontValue = editor?.getAttributes('textStyle').fontFamily ?? 'Arial, Helvetica, sans-serif';
   const sizeValue = editor?.getAttributes('textStyle').fontSize ?? '16px';
   const textColor = editor?.getAttributes('textStyle').color ?? '#172033';
   const highlightColor = editor?.getAttributes('highlight').color ?? 'transparent';
+  const paragraphAttributes = editor?.getAttributes(editor?.isActive('heading') ? 'heading' : 'paragraph') ?? {};
+  const lineHeight = paragraphAttributes.lineHeight ?? '1.5';
   const textStyle = editor?.isActive('heading', { level: 1 })
     ? 'heading-1'
     : editor?.isActive('heading', { level: 2 })
@@ -99,6 +123,52 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
       return;
     }
     editor.chain().focus().toggleHeading({ level: Number(value.split('-')[1]) as 1 | 2 | 3 | 4 }).run();
+  };
+
+  const updateParagraph = (attributes: Record<string, string | null>) => {
+    if (!editor) return;
+    const type = editor.isActive('heading') ? 'heading' : 'paragraph';
+    editor.chain().focus().updateAttributes(type, attributes).run();
+  };
+
+  const findMatches = () => {
+    if (!editor || !findQuery.trim()) return [];
+    const query = findQuery.toLocaleLowerCase();
+    const matches: Array<{ from: number; to: number }> = [];
+
+    editor.state.doc.descendants((node, pos) => {
+      if (!node.isText || !node.text) return;
+      let start = 0;
+      const text = node.text.toLocaleLowerCase();
+      let index = text.indexOf(query, start);
+
+      while (index >= 0) {
+        matches.push({ from: pos + index, to: pos + index + findQuery.length });
+        start = index + Math.max(1, query.length);
+        index = text.indexOf(query, start);
+      }
+    });
+
+    return matches;
+  };
+
+  const selectFirstMatch = () => {
+    const match = findMatches()[0];
+    if (match) editor?.chain().focus().setTextSelection(match).run();
+  };
+
+  const replaceCurrent = () => {
+    if (!editor) return;
+    const match = findMatches()[0];
+    if (match) editor.chain().focus().insertContentAt(match, replaceQuery).run();
+  };
+
+  const replaceAll = () => {
+    if (!editor || !findQuery.trim()) return;
+    const matches = findMatches();
+    for (const match of [...matches].reverse()) {
+      editor.commands.insertContentAt(match, replaceQuery);
+    }
   };
 
   const applyHighlight = (color: string) => {
@@ -151,19 +221,18 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
     }
   };
 
-  const insertTable = () => {
+  const insertTableWithPicker = () => {
+    if (!editor || tableRows < 1 || tableCols < 1) return;
+    editor.chain().focus().insertTable({ rows: tableRows, cols: tableCols, withHeaderRow: true }).run();
+    setTableOpen(false);
+    setTableRows(2);
+    setTableCols(2);
+  };
+
+  const quickInsertTable = (rows: number, cols: number) => {
     if (!editor) return;
-    const size = window.prompt('Table size (rows x cols)', '2x2');
-    if (!size) return;
-    const match = size.trim().match(/^(\d+)\s*[xX]\s*(\d+)$/);
-    if (!match) {
-      window.alert('Use format like 2x2 or 3x3.');
-      return;
-    }
-    const rows = Number(match[1]);
-    const cols = Number(match[2]);
-    if (rows < 1 || cols < 1) return;
     editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+    setTableOpen(false);
   };
 
   return (
@@ -203,6 +272,21 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
             </TooltipTrigger>
             <TooltipContent>Redo</TooltipContent>
           </Tooltip>
+        </div>
+
+        <div className="flex shrink-0 gap-1 border-r border-slate-300 pr-2 lg:border-slate-600">
+          <select
+            value={lineHeight}
+            onChange={(event) => updateParagraph({ lineHeight: event.target.value })}
+            className="h-10 min-w-[76px] rounded-md border border-slate-300 bg-white px-2 text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900 lg:text-slate-100"
+            aria-label="Line spacing"
+          >
+            {lineSpacingOptions.map((spacing) => <option key={spacing.value} value={spacing.value}>{spacing.label}</option>)}
+          </select>
+          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceBefore: '12px' })} aria-label="Add space before paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Before +</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceBefore: '0px' })} aria-label="Remove space before paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Before -</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceAfter: '12px' })} aria-label="Add space after paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">After +</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceAfter: '0px' })} aria-label="Remove space after paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">After -</Button>
         </div>
 
         <div className="flex shrink-0 gap-1 border-r border-slate-300 pr-2 lg:border-slate-600">
@@ -259,6 +343,15 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
 
           <Tooltip>
             <TooltipTrigger asChild>
+              <Button type="button" variant="outline" size="icon" onClick={() => setFindOpen((value) => !value)} aria-label="Find and replace" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                <Search className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Find and replace</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button
                 type="button"
                 variant={editor?.isActive('italic') ? 'default' : 'outline'}
@@ -271,6 +364,33 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
               </Button>
             </TooltipTrigger>
             <TooltipContent>Italic</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().addRowAfter().run()} disabled={!editor?.isActive('table')} aria-label="Add table row" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">R+</Button>
+            </TooltipTrigger>
+            <TooltipContent>Add table row</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().addColumnAfter().run()} disabled={!editor?.isActive('table')} aria-label="Add table column" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">C+</Button>
+            </TooltipTrigger>
+            <TooltipContent>Add table column</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().deleteRow().run()} disabled={!editor?.isActive('table')} aria-label="Delete table row" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">R-</Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete table row</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().deleteColumn().run()} disabled={!editor?.isActive('table')} aria-label="Delete table column" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">C-</Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete table column</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -473,9 +593,15 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
               <option key={color.value} value={color.value}>{color.label}</option>
             ))}
           </select>
+
+          <label className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 lg:border-slate-600 lg:bg-slate-900" aria-label="Custom text color">
+            <span className="sr-only">Custom text color</span>
+            <input type="color" value={textColor} onChange={(event) => applyTextColor(event.target.value)} className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0" aria-label="Choose custom text color" />
+          </label>
         </div>
 
         <div className="flex shrink-0 gap-1 border-r border-slate-300 pr-2 lg:border-slate-600">
+          {onDetails && <Button type="button" variant="outline" onClick={onDetails} aria-label="Your details" className="h-10 shrink-0 rounded-md px-3 text-xs focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Your Details</Button>}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button type="button" variant="outline" size="icon" onClick={onPrint} aria-label="Print PDF" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
@@ -514,7 +640,7 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button type="button" variant="outline" size="icon" onClick={insertTable} aria-label="Insert custom table" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+              <Button type="button" variant="outline" size="icon" onClick={() => setTableOpen((value) => !value)} aria-label="Insert custom table" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                 <span className="text-[10px] font-black">+</span>
               </Button>
             </TooltipTrigger>
@@ -552,12 +678,44 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload }: E
         </div>
 
         <div className="flex shrink-0 gap-1">
+          {onZoomChange && <>
+            <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(Math.max(50, zoom - 10))} aria-label="Zoom out" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomOut className="h-4 w-4" /></Button>
+            <select value={zoom} onChange={(event) => onZoomChange(Number(event.target.value))} aria-label="Document zoom" className="h-10 min-w-[68px] rounded-md border border-slate-300 bg-white px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900 lg:text-slate-100">
+              {zoomOptions.map((option) => <option key={option} value={option}>{option}%</option>)}
+            </select>
+            <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(Math.min(200, zoom + 10))} aria-label="Zoom in" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomIn className="h-4 w-4" /></Button>
+          </>}
           <Button type="button" onClick={onSave} className="h-10 rounded-md bg-blue-600 px-3 text-xs text-white hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" aria-label="Save document">
             <Save className="mr-1 h-3.5 w-3.5" />
             Save
           </Button>
         </div>
       </div>
+      {findOpen && (
+        <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 lg:border-slate-700 lg:bg-[#181d24]">
+          <input value={findQuery} onChange={(event) => setFindQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') selectFirstMatch(); }} placeholder="Find" aria-label="Find text" className="h-9 min-w-[120px] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:border-slate-600 lg:bg-slate-900 lg:text-white" />
+          <input value={replaceQuery} onChange={(event) => setReplaceQuery(event.target.value)} placeholder="Replace" aria-label="Replace text" className="h-9 min-w-[120px] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:border-slate-600 lg:bg-slate-900 lg:text-white" />
+          <Button type="button" variant="outline" size="sm" onClick={selectFirstMatch} aria-label="Find next match" className="h-9 shrink-0 text-xs">Find next</Button>
+          <Button type="button" variant="outline" size="sm" onClick={replaceCurrent} aria-label="Replace current match" className="h-9 shrink-0 text-xs">Replace</Button>
+          <Button type="button" variant="outline" size="sm" onClick={replaceAll} aria-label="Replace all matches" className="h-9 shrink-0 text-xs">Replace all</Button>
+        </div>
+      )}
+      {tableOpen && (
+        <div className="mt-2 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:border-slate-700 lg:bg-[#181d24]">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-slate-900 lg:text-white">Rows:</label>
+            <input type="number" min="1" max="20" value={tableRows} onChange={(event) => setTableRows(Math.max(1, Number(event.target.value) || 2))} className="h-8 w-16 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:border-slate-600 lg:bg-slate-900 lg:text-white" />
+            <label className="text-xs font-semibold text-slate-900 lg:text-white">Cols:</label>
+            <input type="number" min="1" max="20" value={tableCols} onChange={(event) => setTableCols(Math.max(1, Number(event.target.value) || 2))} className="h-8 w-16 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:border-slate-600 lg:bg-slate-900 lg:text-white" />
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => quickInsertTable(2, 2)} className="h-8 text-xs lg:border-slate-600 lg:bg-slate-900 lg:text-white lg:hover:bg-slate-800">2×2</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => quickInsertTable(3, 3)} className="h-8 text-xs lg:border-slate-600 lg:bg-slate-900 lg:text-white lg:hover:bg-slate-800">3×3</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => quickInsertTable(4, 4)} className="h-8 text-xs lg:border-slate-600 lg:bg-slate-900 lg:text-white lg:hover:bg-slate-800">4×4</Button>
+            <Button type="button" onClick={insertTableWithPicker} className="h-8 flex-1 text-xs" aria-label="Insert table">Insert</Button>
+          </div>
+        </div>
+      )}
     </TooltipProvider>
   );
 }
