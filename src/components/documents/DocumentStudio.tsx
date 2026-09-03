@@ -12,11 +12,13 @@ import {
   Wand2,
 } from 'lucide-react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import Highlight from '@tiptap/extension-highlight';
 import { TextStyle } from '@tiptap/extension-text-style';
+import FontFamily from '@tiptap/extension-font-family';
 import Color from '@tiptap/extension-color';
 import Link from '@tiptap/extension-link';
 import { Table } from '@tiptap/extension-table';
@@ -140,6 +142,27 @@ function getDraftKey(kind: DocumentKind) {
   return `facemex_document_draft_${kind}`;
 }
 
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['textStyle'],
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: (element: HTMLElement) => element.style.fontSize || null,
+            renderHTML: (attributes: { fontSize?: string | null }) => {
+              if (!attributes.fontSize) return {};
+              return { style: `font-size: ${attributes.fontSize}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
 function fontFamily(font: FontKey) {
   return font === 'serif'
     ? 'Georgia, "Times New Roman", serif'
@@ -210,6 +233,8 @@ export default function DocumentStudio({ kind }: Props) {
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4] } }),
       Underline,
       TextStyle,
+      FontFamily.configure({ types: ['textStyle'] }),
+      FontSize,
       Color,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -505,7 +530,7 @@ export default function DocumentStudio({ kind }: Props) {
               <div className="mx-auto overflow-hidden" style={{ width: '100%', maxWidth: 794, minHeight: `${Math.round(1120 * zoom / 100)}px` }}>
                 <div className="block border-0 bg-white shadow-xl" style={{ width: '100%', minHeight: '1120px' }}>
                   <div className="w-full bg-white p-4" style={{ minHeight: '1120px' }}>
-                    <EditorContent editor={editor} className="prose" />
+                    <EditorContent editor={editor} className="document-editor" />
                   </div>
                 </div>
               </div>
@@ -516,4 +541,3 @@ export default function DocumentStudio({ kind }: Props) {
     </div>
   );
 }
-
