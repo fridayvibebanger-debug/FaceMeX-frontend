@@ -171,7 +171,6 @@ type YouTubeLessonVideo = {
 };
 
 const AI_CV_BUILDER_PATH = '/ai/resume';
-const AI_COVER_LETTER_PATH = '/ai/cover-letter';
 const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
 
 const JOBS_BATCH_SIZE = 10;
@@ -181,7 +180,6 @@ const WORKSPACE_ACTIVE_SESSION_STORAGE_KEY = 'facemex_opportunities_workspace_ac
 const WORKSPACE_SCHEDULES_STORAGE_KEY = 'facemex_opportunities_workspace_schedules';
 
 const BUILD_CV_QUICK_ACTION = '__OPEN_FACEMEX_AI_CV_BUILDER__';
-const COVER_LETTER_QUICK_ACTION = '__OPEN_FACEMEX_COVER_LETTER_AI__';
 const TRACK_APPLICATIONS_QUICK_ACTION = '__OPEN_FACEMEX_JOB_TRACKER__';
 
 const NO_EXPERIENCE_SEARCH_KEYWORD =
@@ -565,9 +563,6 @@ CV and Cover Letter rule:
 - If the user asks about a CV, answer according to the user's exact intent first: create CV, improve CV, review CV, write profile summary, list skills, tailor CV, or fix wording.
 - After helping, instruct them clearly:
   "To create your CV inside FaceMeX, tap the hamburger menu (☰), scroll down, and open AI CV Builder."
-- If the user asks about a cover letter, answer according to the user's exact intent first: create cover letter, improve cover letter, tailor cover letter, or write an application letter.
-- After helping, instruct them clearly:
-  "To create your cover letter inside FaceMeX, tap the hamburger menu (☰), scroll down, and open Cover Letter AI."
 - Keep the instruction short and practical.
 - Do not force job cards for CV or cover letter requests unless the user also asks for jobs.
 
@@ -641,10 +636,6 @@ const quickPrompts = [
     prompt: BUILD_CV_QUICK_ACTION,
   },
   {
-    label: 'Cover letter',
-    prompt: COVER_LETTER_QUICK_ACTION,
-  },
-  {
     label: 'Check fake job',
     prompt: 'Help me check if this job or opportunity looks fake or risky.',
   },
@@ -662,7 +653,7 @@ type ApplySheetTool = {
   label: string;
   icon: any;
   prompt: string;
-  action?: 'open_cv_builder' | 'open_cover_letter_builder';
+  action?: 'open_cv_builder';
 };
 
 type EducationTool = ApplySheetTool;
@@ -680,13 +671,6 @@ const applySheetTools: ApplySheetTool[] = [
     action: 'open_cv_builder',
     prompt:
       'Open AI CV Builder so the user can create or improve their CV inside FaceMeX.',
-  },
-  {
-    label: 'Cover Letter',
-    icon: FileText,
-    action: 'open_cover_letter_builder',
-    prompt:
-      'Open Cover Letter AI so the user can create a professional cover letter inside FaceMeX.',
   },
   {
     label: 'Write Email',
@@ -1289,14 +1273,6 @@ Save this response under Applications.`;
 FaceMeX instruction:
 After answering the user's CV request, remind them:
 "To create your CV inside FaceMeX, tap the hamburger menu (☰), scroll down, and open AI CV Builder."`;
-  }
-
-  if (intent === 'cover-letter') {
-    return `${promptText}
-
-FaceMeX instruction:
-After answering the user's cover letter request, remind them:
-"To create your cover letter inside FaceMeX, tap the hamburger menu (☰), scroll down, and open Cover Letter AI."`;
   }
 
   return promptText;
@@ -2871,8 +2847,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
   const [watchBusy, setWatchBusy] = useState(false);
   const [watchPlayingVideoId, setWatchPlayingVideoId] = useState<string | null>(null);
-  const [watchSummary, setWatchSummary] = useState<string | null>(null);
-  const [watchSummaryLoading, setWatchSummaryLoading] = useState(false);
   const selectedWatchVideo = useMemo(
     () => watchVideos.find((video) => video.videoId === watchPlayingVideoId) || null,
     [watchVideos, watchPlayingVideoId]
@@ -3478,8 +3452,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setWatchSearch('');
     setWatchVideos([]);
     setWatchPlayingVideoId(null);
-    setWatchSummary(null);
-    setWatchSummaryLoading(false);
     setActiveYoutubeLessonCategory(null);
     setYoutubeLessonVideos([]);
     setActivePlayingVideoId(null);
@@ -3808,7 +3780,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setWatchBusy(true);
     setWatchVideos([]);
     setWatchPlayingVideoId(null);
-    setWatchSummary(null);
     setWatchPanelOpen(true);
     setJobsOpen(false);
     setLibraryOpen(false);
@@ -3847,53 +3818,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       return [video, ...prev];
     });
     setWatchPlayingVideoId(video.videoId);
-    setWatchSummary(null);
     setWatchBusy(false);
-  };
-
-  const fetchYouTubeSummary = async (video: YouTubeLessonVideo) => {
-    const res = await api.post('/api/youtube/summarize', {
-      videoId: video.videoId,
-      title: video.title,
-      channelTitle: video.channelTitle,
-      watchUrl: video.watchUrl,
-      description: video.description || '',
-    });
-
-    const data = unwrapApiResponse(res);
-    return String(data?.summary || data?.text || data?.reply || '').trim();
-  };
-
-  const summarizeSelectedWatchVideo = async () => {
-    if (!selectedWatchVideo) return;
-
-    setWatchSummaryLoading(true);
-    setWatchSummary(null);
-    setWatchPanelOpen(true);
-
-    try {
-      const summary = await fetchYouTubeSummary(selectedWatchVideo);
-      if (summary) {
-        setWatchSummary(summary);
-      } else {
-        toast({
-          title: 'No summary available',
-          description: 'The YouTube summary service returned no content.',
-          variant: 'destructive',
-        });
-      }
-    } catch (error: any) {
-      trackError('workspace_youtube_summary_failed', error?.message || 'YouTube summary failed', {
-        videoId: selectedWatchVideo.videoId,
-      });
-      toast({
-        title: 'YouTube summary failed',
-        description: 'Unable to generate a YouTube AI summary right now.',
-        variant: 'destructive',
-      });
-    } finally {
-      setWatchSummaryLoading(false);
-    }
   };
 
   const clearWorkspaceFromScratch = () => {
@@ -4224,20 +4149,6 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       return;
     }
 
-    if (text === COVER_LETTER_QUICK_ACTION) {
-      trackButtonClick('workspace_quick_open_cover_letter_ai', undefined, {
-        feature: 'FaceMeX Career Workspace',
-      });
-
-      toast({
-        title: 'Opening Cover Letter AI',
-        description: 'Create a professional cover letter inside FaceMeX.',
-      });
-
-      navigate(AI_COVER_LETTER_PATH);
-      return;
-    }
-
     if (text === TRACK_APPLICATIONS_QUICK_ACTION) {
       trackButtonClick('workspace_quick_open_job_tracker', undefined, {
         feature: 'FaceMeX Career Workspace',
@@ -4426,14 +4337,6 @@ Apply link: ${job.applyUrl}`;
     navigate(AI_CV_BUILDER_PATH);
   };
 
-  const openCoverLetterBuilder = () => {
-    trackButtonClick('workspace_open_cover_letter_builder', undefined, {
-      feature: 'FaceMeX Career Workspace',
-    });
-
-    navigate(AI_COVER_LETTER_PATH);
-  };
-
   const renderMessageImages = (images?: WorkspaceImage[]) => {
     if (!images?.length) return null;
 
@@ -4563,14 +4466,6 @@ Apply link: ${job.applyUrl}`;
             className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70 lg:bg-white/10 lg:text-white/80"
           >
             Build CV
-          </button>
-
-          <button
-            type="button"
-            onClick={openCoverLetterBuilder}
-            className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:bg-white/[0.08] dark:text-white/70 lg:bg-white/10 lg:text-white/80"
-          >
-            Cover letter
           </button>
 
           <button
@@ -4707,11 +4602,6 @@ Apply link: ${job.applyUrl}`;
           <Button size="sm" variant="outline" onClick={openCvBuilder} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
             <FileText className="mr-2 h-3.5 w-3.5" />
             AI CV Builder
-          </Button>
-
-          <Button size="sm" variant="outline" onClick={openCoverLetterBuilder} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
-            <Mail className="mr-2 h-3.5 w-3.5" />
-            Cover Letter AI
           </Button>
 
           <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl text-xs lg:border-white/10 lg:bg-[#171717] lg:text-white lg:hover:bg-white/10">
@@ -5539,10 +5429,11 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[248px] min-w-[248px] shrink-0 overflow-hidden border-r border-white/5 bg-[#050505] text-white lg:flex lg:flex-col lg:pl-2 lg:-translate-x-1">
-        <div className="flex h-14 shrink-0 items-center justify-between bg-[#050505] px-4">
+      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-white/10 bg-[#171717] text-white lg:flex lg:flex-col">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#171717] px-4">
           <div className="flex items-center gap-2">
-            <div className="min-w-0 truncate text-sm font-semibold">FaceMeX</div>
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-xs font-black text-black">F</div>
+            <div className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em]">FaceMeX</div>
             {mexaPlan === 'pro' && (
               <button
                 type="button"
@@ -5559,27 +5450,29 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={openNewChatCard}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/70 transition hover:bg-white/10 hover:text-white"
             aria-label="New chat"
           >
             <Edit3 className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="fm-desktop-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2 pl-3 pr-2">
+        <div className="fm-desktop-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
           <button
             type="button"
             onClick={openNewChatCard}
-            className="mb-2 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-white hover:bg-white/10"
+            className="mb-3 flex w-full min-w-0 items-center gap-3 rounded-lg border border-white/10 bg-[#212121] px-3 py-2.5 text-left text-sm font-medium text-white transition hover:bg-[#2a2a2a]"
           >
             <Edit3 className="h-4 w-4 shrink-0" />
             <span className="min-w-0 truncate">New chat</span>
           </button>
 
+          <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Workspace</div>
+
           <button
             type="button"
             onClick={() => setGlobalSearchOpen(true)}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <Search className="h-4 w-4" />
             Search
@@ -5588,7 +5481,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setTrackerOpen(true)}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <Clock className="h-4 w-4" />
             Job Tracker
@@ -5597,7 +5490,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => openSchedulePanel()}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <CalendarDays className="h-4 w-4" />
             Scheduled
@@ -5606,7 +5499,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setLibraryOpen(true)}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <FileText className="h-4 w-4" />
             Library
@@ -5615,7 +5508,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setWatchPanelOpen((value) => !value)}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <Globe2 className="h-4 w-4" />
             Watch
@@ -5657,7 +5550,6 @@ Apply link: ${job.applyUrl}`;
                         type="button"
                         onClick={() => {
                           setWatchPlayingVideoId(video.videoId);
-                          setWatchSummary(null);
                         }}
                         className="group overflow-hidden rounded-[22px] border border-white/10 bg-[#111] p-0 text-left shadow-sm transition hover:border-white/20"
                       >
@@ -5682,8 +5574,8 @@ Apply link: ${job.applyUrl}`;
             </div>
           )}
 
-          <div className="mt-6 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">
-            Quick tools
+          <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">
+            Tools
           </div>
 
           <div className="mt-2 space-y-1">
@@ -5692,7 +5584,7 @@ Apply link: ${job.applyUrl}`;
               onClick={() =>
                 quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.')
               }
-              className="line-clamp-1 w-full rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
+              className="line-clamp-1 w-full rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
             >
               Find jobs
             </button>
@@ -5700,23 +5592,15 @@ Apply link: ${job.applyUrl}`;
             <button
               type="button"
               onClick={openCvBuilder}
-              className="line-clamp-1 w-full rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
+              className="line-clamp-1 w-full rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
             >
               Build My CV
             </button>
 
             <button
               type="button"
-              onClick={openCoverLetterBuilder}
-              className="line-clamp-1 w-full rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
-            >
-              Cover Letter AI
-            </button>
-
-            <button
-              type="button"
               onClick={() => quickAsk('Help me prepare for an interview. Give me questions and strong answers.')}
-              className="line-clamp-1 w-full rounded-lg px-3 py-2 text-left text-sm text-white/75 hover:bg-white/10 hover:text-white"
+              className="line-clamp-1 w-full rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
             >
               Interview Prep
             </button>
@@ -5724,7 +5608,7 @@ Apply link: ${job.applyUrl}`;
 
           {chatSessions.length > 0 && (
             <>
-              <div className="mt-6 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">
+              <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">
                 Recent
               </div>
 
@@ -5734,7 +5618,7 @@ Apply link: ${job.applyUrl}`;
                     key={session.id}
                     type="button"
                     onClick={() => openChatSession(session)}
-                    className={`fm-sidebar-recent-button w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                    className={`fm-sidebar-recent-button w-full rounded-lg px-3 py-2.5 text-left text-sm transition ${
                       session.id === activeSessionId
                         ? 'bg-white/10 text-white'
                         : 'text-white/65 hover:bg-white/10 hover:text-white'
@@ -5748,7 +5632,7 @@ Apply link: ${job.applyUrl}`;
           )}
         </div>
 
-        <div className="shrink-0 border-t border-white/5 bg-[#050505] p-3">
+        <div className="shrink-0 border-t border-white/10 bg-[#171717] p-3">
           <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-2 ring-emerald-400/20">
               {firstName?.[0]?.toUpperCase() || 'F'}
@@ -5893,22 +5777,6 @@ Apply link: ${job.applyUrl}`;
                       <h2 className="mt-2 text-lg font-semibold text-slate-950 lg:text-white">{selectedWatchVideo.title}</h2>
                       <p className="mt-1 text-sm text-slate-500 lg:text-slate-400">{selectedWatchVideo.channelTitle || 'YouTube'}</p>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={summarizeSelectedWatchVideo}
-                      disabled={watchSummaryLoading}
-                      className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {watchSummaryLoading ? 'Summarizing…' : 'Summarize with YouTube AI'}
-                    </button>
-
-                    {watchSummary ? (
-                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-slate-900 lg:bg-[#111] lg:text-white lg:border-white/10">
-                        <p className="text-sm font-semibold">YouTube AI summary</p>
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 lg:text-slate-200">{watchSummary}</p>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -6181,16 +6049,6 @@ Apply link: ${job.applyUrl}`;
                         });
 
                         openCvBuilder();
-                        return;
-                      }
-
-                      if (tool.action === 'open_cover_letter_builder') {
-                        toast({
-                          title: 'Opening Cover Letter AI',
-                          description: 'Create a professional cover letter inside FaceMeX.',
-                        });
-
-                        openCoverLetterBuilder();
                         return;
                       }
 
@@ -7279,7 +7137,6 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                   {[
                     { label: 'Find jobs', action: () => quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.') },
                     { label: 'Build My CV', action: openCvBuilder },
-                    { label: 'Cover Letter AI', action: openCoverLetterBuilder },
                   ].map((item) => (
                     <button
                       key={item.label}
@@ -7350,7 +7207,3 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
     </div>
   );
 }
-
-
-
-
