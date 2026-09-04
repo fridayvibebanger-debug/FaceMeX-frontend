@@ -35,7 +35,6 @@ import ProfessionalGroupsPage from './pages/ProfessionalGroupsPage';
 import ProGroupDetailPage from './pages/ProGroupDetailPage';
 import SavedPostsPage from './pages/SavedPostsPage';
 import AIResumePage from './pages/AIResumePage';
-import AICoverLetterPage from './pages/AICoverLetterPage';
 import AIJobAssistantPage from './pages/AIJobAssistantPage';
 import PricingPage from './pages/PricingPage';
 import TierGate from './components/auth/TierGate';
@@ -473,15 +472,6 @@ function App() {
           element={
             <ProtectedRoute>
               <AIResumePage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/ai/cover-letter"
-          element={
-            <ProtectedRoute>
-              <AICoverLetterPage />
             </ProtectedRoute>
           }
         />
