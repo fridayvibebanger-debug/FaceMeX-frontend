@@ -1,5 +1,5 @@
-import DocumentStudio from '@/components/documents/DocumentStudio';
+import DocumentsBuilderPage from './DocumentsBuilderPage';
 
 export default function AIResumePage() {
-  return <DocumentStudio kind="cv" />;
+  return <DocumentsBuilderPage />;
 }
