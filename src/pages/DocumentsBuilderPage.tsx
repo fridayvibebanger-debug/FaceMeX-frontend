@@ -134,12 +134,11 @@ export default function DocumentsBuilderPage() {
               <button
                 key={doc.id}
                 onClick={() => setSelectedDocId(doc.id)}
-                className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${{
-                  'bg-blue-50 text-blue-600 lg:bg-blue-500/20 lg:text-blue-400 border border-blue-200 lg:border-blue-500/30':
-                    selectedDocId === doc.id,
-                  'bg-slate-50 text-slate-600 hover:bg-slate-100 lg:bg-white/5 lg:text-white/70 lg:hover:bg-white/10':
-                    selectedDocId !== doc.id,
-                }}`}
+                className={
+                  selectedDocId === doc.id
+                    ? 'shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition bg-blue-50 text-blue-600 lg:bg-blue-500/20 lg:text-blue-400 border border-blue-200 lg:border-blue-500/30'
+                    : 'shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition bg-slate-50 text-slate-600 hover:bg-slate-100 lg:bg-white/5 lg:text-white/70 lg:hover:bg-white/10'
+                }
               >
                 <FileText className="h-4 w-4" />
                 <span className="max-w-[150px] truncate">{doc.name}</span>
