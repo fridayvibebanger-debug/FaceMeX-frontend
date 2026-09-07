@@ -57,6 +57,7 @@ import LiveNotificationListener from '@/components/LiveNotificationListener';
 import GlobalCallListener from '@/components/calls/GlobalCallListener';
 import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
+import PracticalLabLibrary from './pages/PracticalLabLibrary';
 import NotificationsPage from './pages/NotificationsPage';
 import ConnectPage from './pages/ConnectPage';
 import CallPage from './pages/CallPage';
@@ -561,7 +562,7 @@ function App() {
           path="/library"
           element={
             <ProtectedRoute>
-              <CareerAIPage />
+              <PracticalLabLibrary />
             </ProtectedRoute>
           }
         />
