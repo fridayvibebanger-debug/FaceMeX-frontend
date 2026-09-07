@@ -5502,7 +5502,7 @@ Apply link: ${job.applyUrl}`;
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <FileText className="h-4 w-4" />
-            Library
+            PracticalLabLibrary
           </button>
 
           <button
@@ -6323,9 +6323,9 @@ Apply link: ${job.applyUrl}`;
           >
             <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:border-white/10 lg:bg-[#111]">
               <div className="min-w-0">
-                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">Library</h2>
+                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">Pratical Lab</h2>
                 <p className="truncate text-xs text-slate-500 lg:text-slate-400">
-                  Jobs, investors and students — clean and organised.
+                  STEM simulations, labs and practical learning.
                 </p>
               </div>
 
