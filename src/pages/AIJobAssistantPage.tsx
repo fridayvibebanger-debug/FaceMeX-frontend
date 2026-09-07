@@ -710,33 +710,151 @@ const educationTools: ApplySheetTool[] = [
 const librarySections: LibrarySection[] = [
   {
     key: 'jobs',
-    title: 'Job Library',
-    shortTitle: 'Jobs',
-    icon: Briefcase,
+    title: 'Practical Lab',
+    shortTitle: 'Practical',
+    icon: Sparkles,
     description:
-      'Clean job-search lessons, South African job platforms, abroad applications, CV sending, interviews and safe online applications.',
+      'Hands-on STEM simulations for biology, science, mathematics and environmental learning that help students learn by doing instead of memorising theory.',
     prompt:
-      'FaceMeX Job Library. Help me with job searching, safe applications, CV sending, interviews, local South African jobs, jobs abroad, and avoiding scams. Ask what job, country, area, experience level, and documents I have before giving a plan.',
+      'FaceMeX Practical Lab. Help me learn by doing through practical simulations in biology, science, mathematics, and environmental studies. Ask what subject, concept, level, and goal I am working on, then give a step-by-step practical experiment or model I can use to understand it in real life.',
   },
   {
     key: 'investors',
-    title: 'Investors Library',
-    shortTitle: 'Investors',
-    icon: Building2,
+    title: 'Biology Lab',
+    shortTitle: 'Biology',
+    icon: Sparkles,
     description:
-      'Funding, grants, investor readiness, pitch decks, traction, revenue, business proof and application steps.',
+      'Cell systems, genetics, ecosystem behaviour and life processes using practical experiments and scenario-based learning.',
     prompt:
-      'FaceMeX Investors Library. Help me understand grants, funding, investors, pitch decks, business models, traction, revenue proof, due diligence and application steps. Ask what business, stage, location, amount needed and documents I have.',
+      'FaceMeX Biology Lab. Teach me biology practically through experiments, diagrams and real-world cases. Focus on cells, genetics, ecosystems, anatomy and lab-based learning for university students. Ask my topic, level and what I want to observe before guiding the practical activity.',
   },
   {
     key: 'students',
-    title: 'Students Library',
-    shortTitle: 'Students',
-    icon: Users,
+    title: 'Science Lab',
+    shortTitle: 'Science',
+    icon: Sparkles,
     description:
-      'School subjects, homework, assignments, lesson videos, university applications, NSFAS, bursaries and study notes.',
+      'Physics, chemistry and applied science experiments that connect theory to measurable outcomes in the real world.',
     prompt:
-      'FaceMeX Students Library. Help me with school subjects, homework, assignments, YouTube lesson notes, university or TVET applications, NSFAS, bursaries and study plans. Ask my grade or level, subject, topic and goal first.',
+      'FaceMeX Science Lab. Help me learn science by practical experimenting. Guide me through chemistry, physics, lab safety, measurements, observations and real-world scientific reasoning for college and university study.',
+  },
+];
+
+const practicalLabSections = [
+  {
+    subject: 'Biology',
+    cards: [
+      {
+        title: 'DNA Replication Lab',
+        summary: 'A working DNA library for students to learn base pairing, replication steps and genetic accuracy.',
+        prompt:
+          'Act as a practical biology tutor for university students. Create a DNA replication lab with a clear objective, step-by-step practical procedure, diagram-like explanation, base-pairing rules, and outcome analysis. Teach the process of unwinding, copying, proofreading, and why DNA replication is semi-conservative. Ask me what I want to focus on, but give me a complete ready-to-use lab for students.',
+      },
+      {
+        title: 'Cell Structure Lab',
+        summary: 'Explore organelles, membranes, and cell function in a lab-based learning flow.',
+        prompt:
+          'Create a practical cell biology lab for college students. Explain the structure of plant and animal cells, show how organelles work together, and give a simple hands-on activity that helps learners observe and compare cell functions.',
+      },
+      {
+        title: 'Genetics & Inheritance',
+        summary: 'Model inheritance patterns and gene expression using real scenarios.',
+        prompt:
+          'Design a genetics practical simulation for university students. Explain Mendelian inheritance, dominant and recessive traits, Punnett squares, and how genotype influences phenotype using a clear real-world case study.',
+      },
+    ],
+  },
+  {
+    subject: 'Science',
+    cards: [
+      {
+        title: 'Physics Motion Lab',
+        summary: 'Observe force, acceleration and motion with measurable outcomes.',
+        prompt:
+          'Create a practical physics lab for college students. Use motion, force, and acceleration to explain how velocity changes under different conditions and give a step-by-step experiment with measurement, data table, and conclusion.',
+      },
+      {
+        title: 'Chemistry Reaction Lab',
+        summary: 'Test variables that affect reaction rate and chemical change.',
+        prompt:
+          'Design a practical chemistry lab for university students. Explain how temperature, concentration, and catalysts affect reaction rate, and guide learners through a real experiment with observations and interpretation.',
+      },
+      {
+        title: 'Scientific Method Lab',
+        summary: 'Teach observation, hypothesis, measurement and evidence-based reasoning.',
+        prompt:
+          'Create a science lab focused on the scientific method. Teach students how to form hypotheses, record observations, analyse results, and explain findings using evidence rather than theory alone.',
+      },
+    ],
+  },
+  {
+    subject: 'Mathematics',
+    cards: [
+      {
+        title: 'Calculus Lab',
+        summary: 'Use slopes, rates of change and gradients to understand derivatives.',
+        prompt:
+          'Create a practical mathematics lab for university students. Teach derivatives using graphs, changing slopes, and real examples. Include how to interpret rate of change and solve a worked example step by step.',
+      },
+      {
+        title: 'Statistics Lab',
+        summary: 'Analyze data, spread and trends using applied examples.',
+        prompt:
+          'Design a statistics practical exercise for college students. Use real data, calculate mean, median, variance, and interpret trends clearly in a lab format that teaches analysis and reasoning.',
+      },
+      {
+        title: 'Geometry & Modelling',
+        summary: 'Explore shapes, volume and space using real-world models.',
+        prompt:
+          'Create a practical geometry lab for students. Use shapes, 2D and 3D models, formulas for area and volume, and real world objects to explain geometry in a hands-on, visual way.',
+      },
+    ],
+  },
+  {
+    subject: 'Environmental Science',
+    cards: [
+      {
+        title: 'Ecosystem Balance Lab',
+        summary: 'Model food webs, biodiversity and ecosystem stability in practice.',
+        prompt:
+          'Create an environmental science lab for university students. Explain how ecosystems maintain balance, show how species loss affects food webs, and guide a practical activity on biodiversity and resilience.',
+      },
+      {
+        title: 'Climate & Carbon Lab',
+        summary: 'Study carbon flow, climate impact and environmental feedback.',
+        prompt:
+          'Design a practical environmental science simulation on carbon cycles and climate change. Show how emissions, photosynthesis, and ecosystems interact and guide students through hypothesis, data interpretation, and conclusion.',
+      },
+      {
+        title: 'Sustainability Challenge',
+        summary: 'Use planning and evidence to solve environmental problems.',
+        prompt:
+          'Create a sustainability challenge lab for college students. Give them a real scenario involving water, energy, waste, or land use and ask them to propose a practical solution with reasoning based on evidence.',
+      },
+    ],
+  },
+  {
+    subject: 'Research & Lab Skills',
+    cards: [
+      {
+        title: 'Scientific Method Lab',
+        summary: 'Practice observation, experimentation and evidence-based conclusions.',
+        prompt:
+          'Create a hands-on research lab for university students. Teach how to formulate a question, form a hypothesis, design a method, collect observations, and write a scientific conclusion based on evidence.',
+      },
+      {
+        title: 'Data Analysis Lab',
+        summary: 'Convert raw data into meaning through analysis and interpretation.',
+        prompt:
+          'Design a practical data analysis lab for students. Show how to organize raw results, calculate trends, interpret graphs, and draw conclusions from scientific data.',
+      },
+      {
+        title: 'Lab Report Writing',
+        summary: 'Turn observations into a clean academic lab report.',
+        prompt:
+          'Create a practical lab report writing exercise for college students. Teach them how to write aim, method, results, discussion and conclusion in a clear academic format.',
+      },
+    ],
   },
 ];
 
@@ -3719,6 +3837,27 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }, 120);
   };
 
+  const openPracticalSimulation = (lab: { title: string; prompt: string }) => {
+    const nextId = safeId();
+
+    setActiveSessionId(nextId);
+    setMessages([]);
+    resetWorkspaceUiForNewChat();
+    setLibraryOpen(false);
+    setJobsOpen(false);
+
+    try {
+      localStorage.setItem(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY, nextId);
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+
+    window.setTimeout(() => {
+      sendPrompt(`FaceMeX Practical Lab: ${lab.title}. ${lab.prompt}`);
+    }, 120);
+  };
+
   const openYoutubeLessonCategory = async (category: YouTubeLessonCategory) => {
     setActiveLibrarySection(category.library);
     setActiveYoutubeLessonCategory(category);
@@ -5502,7 +5641,7 @@ Apply link: ${job.applyUrl}`;
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <FileText className="h-4 w-4" />
-            PracticalLabLibrary
+            Practical Lab
           </button>
 
           <button
@@ -6323,9 +6462,9 @@ Apply link: ${job.applyUrl}`;
           >
             <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:border-white/10 lg:bg-[#111]">
               <div className="min-w-0">
-                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">Pratical Lab</h2>
+                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">Practical Lab</h2>
                 <p className="truncate text-xs text-slate-500 lg:text-slate-400">
-                  STEM simulations, labs and practical learning.
+                  Biology, science, mathematics and environmental learning by doing.
                 </p>
               </div>
 
@@ -6340,79 +6479,55 @@ Apply link: ${job.applyUrl}`;
             </div>
 
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
-              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-3 lg:border-white/10 lg:bg-[#111]">
-                <div className="grid grid-cols-3 gap-2">
-                  {librarySections.map((section) => {
-                    const Icon = section.icon;
-                    const active = activeLibrarySection === section.key;
+              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111] lg:text-white">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 lg:text-slate-400">
+                  Hands-on learning
+                </p>
+                <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">
+                  Learn by doing, not by memorising theory
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600 lg:text-slate-300">
+                  Practical simulations for biology, science, mathematics, environmental studies and research skills designed for students in college and universities.
+                </p>
 
-                    return (
-                      <button
-                        key={section.key}
-                        type="button"
-                        onClick={() => {
-                          setActiveLibrarySection(section.key);
-                          setActiveYoutubeLessonCategory(null);
-                          setYoutubeLessonVideos([]);
-                          setActivePlayingVideoId(null);
-                        }}
-                        className={`rounded-2xl px-2 py-3 text-center transition active:scale-[0.98] ${
-                          active
-                            ? 'bg-slate-950 text-white shadow-sm'
-                            : 'bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950 lg:text-white lg:hover:bg-white/10 lg:hover:text-white'
-                        }`}
-                      >
-                        <Icon className="mx-auto mb-1 h-5 w-5" />
-                        <span className="block text-[11px] font-semibold leading-tight">{section.shortTitle}</span>
-                      </button>
-                    );
-                  })}
+                <div className="mt-5 space-y-6">
+                  {practicalLabSections.map((section) => (
+                    <div key={section.subject}>
+                      <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 lg:text-slate-400">
+                        {section.subject}
+                      </h4>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {section.cards.map((lab) => (
+                          <button
+                            key={lab.title}
+                            type="button"
+                            onClick={() => openPracticalSimulation(lab)}
+                            className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:bg-slate-100 active:scale-[0.98] lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
+                          >
+                            <div className="mb-3 inline-flex rounded-xl bg-slate-100 p-2 text-slate-900 lg:bg-white/10 lg:text-white">
+                              <Sparkles className="h-4 w-4" />
+                            </div>
+                            <p className="text-base font-semibold text-slate-950 lg:text-white">{lab.title}</p>
+                            <p className="mt-2 text-sm leading-6 text-slate-600 lg:text-slate-300">{lab.summary}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111] lg:text-white">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 lg:text-slate-400">
-                      {activeLibrary.title}
-                    </p>
-                    <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">
-                      Start the right workspace
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600 lg:text-slate-300">{activeLibrary.description}</p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => openLibrarySectionChat(activeLibrary)}
-                    className="mt-2 flex w-full items-center justify-between rounded-2xl bg-slate-950 px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.99] lg:mt-0 lg:w-auto"
-                  >
-                    <span>Open {activeLibrary.title} chat</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-
-              {activeLibrarySection === 'students' && (
-                <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111]">
-                  <div className="grid grid-cols-2 gap-2">
-                    {educationTools.map((tool) => {
-                      const Icon = tool.icon;
-
-                      return (
-                        <button
-                          key={tool.label}
-                          type="button"
-                          onClick={() => openLibraryChat(tool)}
-                          className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:bg-slate-100 active:scale-[0.98] lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
-                        >
-                          <Icon className="mb-3 h-5 w-5 text-slate-700" />
-                          <p className="text-sm font-semibold text-slate-950">{tool.label}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 lg:text-slate-400">
+                  Practical learning goals
+                </h4>
+                <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-600 lg:text-slate-300">
+                  <li>• Explore biology, mathematics, science and environmental systems through real experiments and guided cases.</li>
+                  <li>• Connect theory to examples, observations, outcomes and evidence-based conclusions.</li>
+                  <li>• Build problem-solving and lab skills needed for university and college learning.</li>
+                </ul>
+              </div>
 
               <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                 <div className="flex items-start justify-between gap-3">
