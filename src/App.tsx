@@ -559,7 +559,7 @@ function App() {
         />
 
         <Route
-          path="/library"
+          path="/practical-lab"
           element={
             <ProtectedRoute>
               <PracticalLabLibrary />
