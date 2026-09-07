@@ -557,6 +557,15 @@ function App() {
           }
         />
 
+        <Route
+          path="/library"
+          element={
+            <ProtectedRoute>
+              <CareerAIPage />
+            </ProtectedRoute>
+          }
+        />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
