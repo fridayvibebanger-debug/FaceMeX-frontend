@@ -9,7 +9,7 @@ const menuItems = [
   { icon: MessageCircle, label: 'Messages', path: '/messages' },
   { icon: Briefcase, label: 'Jobs', path: '/jobs' },
   // Professional AI tools
-  { icon: BookOpen, label: 'Practical Library', path: '/library' },
+  { icon: BookOpen, label: 'PracticalLabLibrary', path: '/practical-lab' },
   { icon: Briefcase, label: 'AI CV Builder', path: '/ai/resume' },
   { icon: Briefcase, label: 'AI Cover Letter', path: '/ai/cover-letter' },
   { icon: Briefcase, label: 'AI Job Assistant', path: '/ai/job-assistant' },
