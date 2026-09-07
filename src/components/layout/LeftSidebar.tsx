@@ -1,4 +1,4 @@
-import { Home, User, MessageCircle, Settings, Users, Briefcase } from 'lucide-react';
+import { Home, User, MessageCircle, Settings, Users, Briefcase, BookOpen } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
