@@ -44,6 +44,7 @@ import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { useUserStore } from '@/store/userStore';
+import PracticalLabLibrary from './PracticalLabLibrary';
 
 import {
   trackButtonClick,
@@ -2939,6 +2940,7 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [practicalLabOpen, setPracticalLabOpen] = useState(false);
   const [activeLibrarySection, setActiveLibrarySection] = useState<LibrarySectionKey>('students');
   const [activeYoutubeLessonCategory, setActiveYoutubeLessonCategory] = useState<YouTubeLessonCategory | null>(null);
   const [youtubeLessonVideos, setYoutubeLessonVideos] = useState<YouTubeLessonVideo[]>([]);
@@ -5637,7 +5639,7 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setLibraryOpen(true)}
+            onClick={() => setPracticalLabOpen(true)}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <FileText className="h-4 w-4" />
@@ -7130,12 +7132,12 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                   type="button"
                   onClick={() => {
                     setJobsOpen(false);
-                    setLibraryOpen(true);
+                    setPracticalLabOpen(true);
                   }}
                   className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
                 >
                   <FileText className="h-5 w-5 shrink-0 text-slate-700" />
-                  Library
+                  Practical Lab
                 </button>
 
                 <button
@@ -7316,6 +7318,26 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
           currentTier={currentTier}
           onClose={() => setSubscriptionOpen(false)}
         />
+      )}
+
+      {practicalLabOpen && (
+        <div className="fixed inset-0 z-[110] overflow-y-auto bg-slate-100 dark:bg-slate-950">
+          <div className="sticky top-0 z-[111] flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">FaceMeX AI</p>
+              <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">Practical Lab Library</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPracticalLabOpen(false)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+              aria-label="Close Practical Lab Library"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <PracticalLabLibrary />
+        </div>
       )}
       
     </div>
