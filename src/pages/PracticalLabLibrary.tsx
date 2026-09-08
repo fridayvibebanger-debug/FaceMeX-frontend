@@ -506,6 +506,54 @@ function InteractiveExperimentLab({
 
   const score = hasRun ? Math.min(100, 55 + lab.variables.length * 10 + (step === 3 ? 15 : 0)) : 0;
   const stages = ['Set a question', 'Adjust variables', 'Observe the model', 'Explain the evidence'];
+  const primaryValue = lab.variables[0] ? getValue(lab.variables[0].key, lab.variables[0].value) : 0;
+  const secondaryValue = lab.variables[1] ? getValue(lab.variables[1].key, lab.variables[1].value) : 0;
+  const tertiaryValue = lab.variables[2] ? getValue(lab.variables[2].key, lab.variables[2].value) : 0;
+
+  const simulationVisual = lab.subject === 'biology' ? (
+    <div className="relative flex min-h-44 items-center justify-center overflow-hidden rounded-2xl bg-[#080b12] p-5">
+      <div className="absolute inset-x-8 top-1/2 h-px bg-emerald-400/30" />
+      <div className="grid grid-cols-2 gap-x-10 gap-y-2">
+        {['A', 'T', 'G', 'C', 'C', 'A', 'T', 'G'].map((base, index) => (
+          <div key={`${base}-${index}`} className="relative flex items-center gap-3">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue-300/40 bg-blue-500/20 text-xs font-bold text-blue-100">{base}</span>
+            <span className="h-1 w-7 rounded-full bg-emerald-400/60" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-300/40 bg-emerald-500/20 text-xs font-bold text-emerald-100">{dnaPairs[base]}</span>
+          </div>
+        ))}
+      </div>
+      <span className="absolute bottom-3 left-4 text-[10px] uppercase tracking-[0.2em] text-slate-500">Base-pair structure</span>
+    </div>
+  ) : lab.subject === 'physics' ? (
+    <div className="relative min-h-44 overflow-hidden rounded-2xl bg-[#080b12] p-5">
+      <div className="absolute bottom-8 left-5 right-5 h-px bg-slate-600" />
+      <div className="absolute bottom-9 left-8 h-28 w-1 origin-bottom rotate-[-${Math.round(primaryValue)}deg] bg-violet-400" style={{ transform: `rotate(${-Math.min(65, Math.max(15, primaryValue))}deg)` }} />
+      <div className="absolute bottom-9 left-8 h-3 w-3 rounded-full bg-violet-300 shadow-[0_0_22px_rgba(167,139,250,.8)]" />
+      <div className="absolute bottom-9 left-[45%] h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_22px_rgba(103,232,249,.8)]" />
+      <p className="absolute left-4 top-4 text-xs font-semibold text-slate-300">Motion model</p>
+      <p className="absolute bottom-3 right-4 text-[10px] uppercase tracking-[0.2em] text-slate-500">Adjust angle and velocity</p>
+    </div>
+  ) : lab.subject === 'mathematics' ? (
+    <div className="relative min-h-44 overflow-hidden rounded-2xl bg-[#080b12] p-5">
+      <div className="absolute inset-5 bg-[linear-gradient(rgba(148,163,184,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,.12)_1px,transparent_1px)] bg-[length:24px_24px]" />
+      <svg viewBox="0 0 300 150" className="relative z-10 h-full min-h-36 w-full" role="img" aria-label="Live mathematics graph">
+        <path d="M10 125 C60 115 70 30 145 62 S220 120 290 25" fill="none" stroke="#fbbf24" strokeWidth="4" />
+        <line x1="145" y1="62" x2="210" y2="22" stroke="#38bdf8" strokeWidth="3" />
+        <circle cx="145" cy="62" r="6" fill="#fff" />
+      </svg>
+      <p className="absolute left-4 top-4 text-xs font-semibold text-slate-300">f(x) and tangent slope</p>
+      <p className="absolute bottom-3 right-4 text-[10px] uppercase tracking-[0.2em] text-slate-500">Live graph</p>
+    </div>
+  ) : (
+    <div className="relative min-h-44 overflow-hidden rounded-2xl bg-[#080b12] p-5">
+      <div className="absolute inset-x-8 bottom-8 h-24 rounded-t-full border-t-2 border-cyan-400/70" />
+      <div className="absolute bottom-8 left-[28%] h-20 w-1 bg-emerald-400/70" />
+      <div className="absolute bottom-8 left-[50%] h-28 w-1 bg-emerald-400/70" />
+      <div className="absolute bottom-8 left-[72%] h-16 w-1 bg-emerald-400/70" />
+      <div className="absolute left-4 top-4 text-xs font-semibold text-slate-300">System response</div>
+      <div className="absolute bottom-3 right-4 text-[10px] uppercase tracking-[0.2em] text-slate-500">Variable comparison</div>
+    </div>
+  );
 
   return (
     <div className="mt-5 space-y-5">
@@ -554,6 +602,8 @@ function InteractiveExperimentLab({
           })}
         </div>
       </div>
+
+      {simulationVisual}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white dark:border-slate-700">
@@ -655,8 +705,8 @@ export default function PracticalLabLibrary() {
   const progress = Math.round((totalCompleted / totalLabs) * 100);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="sticky top-16 z-20 border-b border-slate-200 bg-white/80 backdrop-blur-lg dark:border-slate-800 dark:bg-slate-950/80">
+    <div className="min-h-screen bg-white text-slate-950 lg:bg-[#050505] lg:text-white">
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-lg lg:border-white/10 lg:bg-[#111]/95">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -668,16 +718,16 @@ export default function PracticalLabLibrary() {
                 <Microscope className="h-8 w-8 text-blue-600" />
                 STEM Simulation Library
               </h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400 sm:text-base">
+                <p className="mt-2 max-w-3xl text-sm text-slate-600 lg:text-slate-400 sm:text-base">
                 Learn theory by experimenting with real scientific and mathematical systems. Each lab connects concept, practice, and measurable outcomes for college and university students.
               </p>
             </div>
-            <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 lg:border-white/10 lg:bg-white/[0.05]">
               <div>
                 <div className="text-3xl font-bold text-blue-600">{progress}%</div>
                 <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Completed</div>
               </div>
-              <div className="h-12 w-px bg-slate-200 dark:bg-slate-700" />
+              <div className="h-12 w-px bg-slate-200 lg:bg-white/10" />
               <div>
                 <div className="text-lg font-semibold">{totalCompleted}/{totalLabs}</div>
                 <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Labs</div>
@@ -692,13 +742,13 @@ export default function PracticalLabLibrary() {
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search biology, chemistry, maths, physics..."
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 lg:border-white/10 lg:bg-[#1a1a1a] lg:text-white"
               />
             </div>
             <select
               value={filterDifficulty}
               onChange={(event) => setFilterDifficulty(event.target.value as 'all' | Difficulty)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 lg:border-white/10 lg:bg-[#1a1a1a] lg:text-white"
             >
               <option value="all">All levels</option>
               <option value="beginner">Beginner</option>
@@ -731,7 +781,7 @@ export default function PracticalLabLibrary() {
                       setSelectedSubject(subject.id);
                       setSelectedLabId(subject.labs[0]?.id ?? null);
                     }}
-                    className="group overflow-hidden rounded-3xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900"
+                    className="group overflow-hidden rounded-3xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl lg:border-white/10 lg:bg-[#111]"
                   >
                     <div className={`bg-gradient-to-br ${subject.accent} p-5`}>
                       <div className="flex items-center justify-between">
@@ -774,14 +824,14 @@ export default function PracticalLabLibrary() {
                 ← Back to disciplines
               </button>
 
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 lg:border-white/10 lg:bg-[#111] lg:text-slate-300">
                 <BookOpen className="h-3.5 w-3.5" />
                 {selectedSubjectData?.name}
               </div>
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-              <aside className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <aside className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:border-white/10 lg:bg-[#111]">
                 {visibleLabs.map((lab) => (
                   <button
                     key={lab.id}
@@ -813,7 +863,7 @@ export default function PracticalLabLibrary() {
               </aside>
 
               {activeLab ? (
-                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:border-white/10 lg:bg-[#111]">
                   <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
                     <div>
                       <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
