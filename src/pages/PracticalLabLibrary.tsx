@@ -36,6 +36,7 @@ type LabVariable = {
 
 type Lab = {
   id: string;
+  topic?: string;
   name: string;
   description: string;
   subject: Subject;
@@ -57,6 +58,20 @@ type SubjectCard = {
   accent: string;
   labs: Lab[];
 };
+
+type LearningProgress = {
+  completedLabs: string[];
+  scores: Record<string, number>;
+  lastLabId?: string;
+};
+
+type LearningLayer = 'subject' | 'topic' | 'lesson' | 'simulation' | 'assessment';
+
+const LEARNING_PROGRESS_KEY = 'facemex_learning_progress_v1';
+
+const learningLayers: LearningLayer[] = ['subject', 'topic', 'lesson', 'simulation', 'assessment'];
+
+type TeachingMode = 'learner' | 'facilitator';
 
 const subjectCards: SubjectCard[] = [
   {
@@ -348,7 +363,7 @@ const subjectCards: SubjectCard[] = [
 const dnaTemplate = ['A', 'T', 'G', 'C', 'C', 'A', 'T', 'G'];
 const dnaPairs: Record<string, string> = { A: 'T', T: 'A', C: 'G', G: 'C' };
 
-function DnaReplicationLab() {
+function DnaReplicationLab({ onComplete }: { onComplete?: (score: number) => void }) {
   const [answers, setAnswers] = useState<Array<string | null>>(() => dnaTemplate.map(() => null));
   const [step, setStep] = useState(0);
   const [score, setScore] = useState(0);
@@ -358,6 +373,10 @@ function DnaReplicationLab() {
   const answeredCount = answers.filter(Boolean).length;
   const correctCount = answers.filter((answer, index) => answer === dnaPairs[dnaTemplate[index]]).length;
   const complete = answeredCount === dnaTemplate.length;
+
+  useEffect(() => {
+    if (complete && correctCount === dnaTemplate.length) onComplete?.(100);
+  }, [complete, correctCount, onComplete]);
 
   useEffect(() => {
     if (!playing) return;
@@ -458,14 +477,48 @@ function DnaReplicationLab() {
   );
 }
 
+function ThreeDModelVisual({ lab, subject }: { lab: Lab; subject: Subject }) {
+  const subjectLabels: Record<Subject, string> = {
+    biology: 'Molecular structure',
+    chemistry: 'Molecule + reaction vessel',
+    physics: 'Force and motion model',
+    mathematics: 'Spatial function model',
+    environment: 'Ecosystem system model',
+    engineering: 'Applied system model',
+  };
+
+  return (
+    <div className="relative min-h-48 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-inner lg:border-white/10">
+      <div className="absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(148,163,184,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,.12)_1px,transparent_1px)] [background-size:28px_28px]" />
+      <div className="relative z-10 flex min-h-40 items-center justify-center [perspective:900px]">
+        <div className="relative h-32 w-52 [transform:rotateX(58deg)_rotateZ(-12deg)] [transform-style:preserve-3d] transition-transform duration-700 hover:[transform:rotateX(48deg)_rotateZ(-4deg)_scale(1.05)]">
+          <div className="absolute inset-0 rounded-[28px] border border-cyan-300/50 bg-gradient-to-br from-cyan-400/25 via-blue-500/15 to-violet-500/25 shadow-[0_0_50px_rgba(56,189,248,.2)] [transform:translateZ(22px)]" />
+          <div className="absolute inset-3 rounded-[20px] border border-white/20 bg-white/5 [transform:translateZ(44px)]" />
+          <div className="absolute -inset-3 rounded-[34px] border border-emerald-300/20 [transform:translateZ(-16px)]" />
+          <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-emerald-300/60 to-blue-500/20 blur-[1px] [transform:translateZ(58px)]" />
+          <div className="absolute left-1/2 top-1/2 h-2 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-200/80 [transform:translateZ(70px)_rotateZ(22deg)]" />
+        </div>
+      </div>
+      <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+        <span>{subjectLabels[subject]}</span>
+        <span className="truncate text-right normal-case tracking-normal text-slate-500">{lab.name}</span>
+      </div>
+    </div>
+  );
+}
+
 function InteractiveExperimentLab({
   lab,
   getValue,
   updateValue,
+  teachingMode,
+  onComplete,
 }: {
   lab: Lab;
   getValue: (key: string, fallback: number) => number;
   updateValue: (key: string, value: number) => void;
+  teachingMode: TeachingMode;
+  onComplete?: (score: number) => void;
 }) {
   const [step, setStep] = useState(0);
   const [running, setRunning] = useState(false);
@@ -481,6 +534,7 @@ function InteractiveExperimentLab({
           setRunning(false);
           setHasRun(true);
           setFeedback('Experiment complete. Explain which variable changed the outcome most and why.');
+          onComplete?.(Math.min(100, 55 + lab.variables.length * 10 + 15));
           return 3;
         }
         return current + 1;
@@ -507,10 +561,8 @@ function InteractiveExperimentLab({
   const score = hasRun ? Math.min(100, 55 + lab.variables.length * 10 + (step === 3 ? 15 : 0)) : 0;
   const stages = ['Set a question', 'Adjust variables', 'Observe the model', 'Explain the evidence'];
   const primaryValue = lab.variables[0] ? getValue(lab.variables[0].key, lab.variables[0].value) : 0;
-  const secondaryValue = lab.variables[1] ? getValue(lab.variables[1].key, lab.variables[1].value) : 0;
-  const tertiaryValue = lab.variables[2] ? getValue(lab.variables[2].key, lab.variables[2].value) : 0;
 
-  const simulationVisual = lab.subject === 'biology' ? (
+  const simulationVisual = lab.id === 'dna-replication' ? (
     <div className="relative flex min-h-44 items-center justify-center overflow-hidden rounded-2xl bg-[#080b12] p-5">
       <div className="absolute inset-x-8 top-1/2 h-px bg-emerald-400/30" />
       <div className="grid grid-cols-2 gap-x-10 gap-y-2">
@@ -527,7 +579,7 @@ function InteractiveExperimentLab({
   ) : lab.subject === 'physics' ? (
     <div className="relative min-h-44 overflow-hidden rounded-2xl bg-[#080b12] p-5">
       <div className="absolute bottom-8 left-5 right-5 h-px bg-slate-600" />
-      <div className="absolute bottom-9 left-8 h-28 w-1 origin-bottom rotate-[-${Math.round(primaryValue)}deg] bg-violet-400" style={{ transform: `rotate(${-Math.min(65, Math.max(15, primaryValue))}deg)` }} />
+      <div className="absolute bottom-9 left-8 h-28 w-1 origin-bottom bg-violet-400" style={{ transform: `rotate(${-Math.min(65, Math.max(15, primaryValue))}deg)` }} />
       <div className="absolute bottom-9 left-8 h-3 w-3 rounded-full bg-violet-300 shadow-[0_0_22px_rgba(167,139,250,.8)]" />
       <div className="absolute bottom-9 left-[45%] h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_22px_rgba(103,232,249,.8)]" />
       <p className="absolute left-4 top-4 text-xs font-semibold text-slate-300">Motion model</p>
@@ -544,16 +596,7 @@ function InteractiveExperimentLab({
       <p className="absolute left-4 top-4 text-xs font-semibold text-slate-300">f(x) and tangent slope</p>
       <p className="absolute bottom-3 right-4 text-[10px] uppercase tracking-[0.2em] text-slate-500">Live graph</p>
     </div>
-  ) : (
-    <div className="relative min-h-44 overflow-hidden rounded-2xl bg-[#080b12] p-5">
-      <div className="absolute inset-x-8 bottom-8 h-24 rounded-t-full border-t-2 border-cyan-400/70" />
-      <div className="absolute bottom-8 left-[28%] h-20 w-1 bg-emerald-400/70" />
-      <div className="absolute bottom-8 left-[50%] h-28 w-1 bg-emerald-400/70" />
-      <div className="absolute bottom-8 left-[72%] h-16 w-1 bg-emerald-400/70" />
-      <div className="absolute left-4 top-4 text-xs font-semibold text-slate-300">System response</div>
-      <div className="absolute bottom-3 right-4 text-[10px] uppercase tracking-[0.2em] text-slate-500">Variable comparison</div>
-    </div>
-  );
+  ) : <ThreeDModelVisual lab={lab} subject={lab.subject} />;
 
   return (
     <div className="mt-5 space-y-5">
@@ -576,7 +619,7 @@ function InteractiveExperimentLab({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:border-white/10 lg:bg-[#171717]">
         <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Experiment controls</h4>
         <div className="mt-4 space-y-4">
           {lab.variables.map((variable) => {
@@ -604,6 +647,13 @@ function InteractiveExperimentLab({
       </div>
 
       {simulationVisual}
+
+      {teachingMode === 'facilitator' && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 lg:border-amber-400/20 lg:bg-amber-400/10 lg:text-amber-100">
+          <p className="font-semibold">Facilitator prompt</p>
+          <p className="mt-1">Pause after each stage and ask students to predict the next change before moving the controls.</p>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white dark:border-slate-700">
@@ -647,6 +697,34 @@ export default function PracticalLabLibrary() {
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState<'all' | Difficulty>('all');
+  const [teachingMode, setTeachingMode] = useState<TeachingMode>('learner');
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [learningProgress, setLearningProgress] = useState<LearningProgress>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_KEY) || 'null');
+      return {
+        completedLabs: Array.isArray(stored?.completedLabs) ? stored.completedLabs : [],
+        scores: stored?.scores && typeof stored.scores === 'object' ? stored.scores : {},
+        lastLabId: stored?.lastLabId,
+      };
+    } catch {
+      return { completedLabs: [], scores: {} };
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(LEARNING_PROGRESS_KEY, JSON.stringify(learningProgress));
+  }, [learningProgress]);
+
+  const isLabCompleted = (lab: Lab) => lab.completed || learningProgress.completedLabs.includes(lab.id);
+
+  const recordLabResult = (labId: string, score: number) => {
+    setLearningProgress((current) => ({
+      completedLabs: current.completedLabs.includes(labId) ? current.completedLabs : [...current.completedLabs, labId],
+      scores: { ...current.scores, [labId]: Math.max(current.scores[labId] || 0, score) },
+      lastLabId: labId,
+    }));
+  };
 
   const visibleSubjects = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -700,7 +778,7 @@ export default function PracticalLabLibrary() {
     return labValues[labId]?.[key] ?? fallback;
   };
 
-  const totalCompleted = subjectCards.reduce((sum, subject) => sum + subject.labs.filter((lab) => lab.completed).length, 0);
+  const totalCompleted = subjectCards.reduce((sum, subject) => sum + subject.labs.filter(isLabCompleted).length, 0);
   const totalLabs = subjectCards.reduce((sum, subject) => sum + subject.labs.length, 0);
   const progress = Math.round((totalCompleted / totalLabs) * 100);
 
@@ -772,7 +850,7 @@ export default function PracticalLabLibrary() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {visibleSubjects.map((subject) => {
                 const Icon = subject.icon;
-                const completed = subject.labs.filter((lab) => lab.completed).length;
+                const completed = subject.labs.filter(isLabCompleted).length;
 
                 return (
                   <button
@@ -824,10 +902,32 @@ export default function PracticalLabLibrary() {
                 ← Back to disciplines
               </button>
 
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 lg:border-white/10 lg:bg-[#111] lg:text-slate-300">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 lg:border-white/10 lg:bg-[#111] lg:text-slate-300">
                 <BookOpen className="h-3.5 w-3.5" />
                 {selectedSubjectData?.name}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTeachingMode((mode) => mode === 'learner' ? 'facilitator' : 'learner')}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${teachingMode === 'facilitator' ? 'border-amber-400 bg-amber-50 text-amber-800 lg:border-amber-400/40 lg:bg-amber-400/10 lg:text-amber-100' : 'border-slate-200 bg-white text-slate-600 lg:border-white/10 lg:bg-[#111] lg:text-slate-300'}`}
+                >
+                  {teachingMode === 'facilitator' ? 'Facilitator mode' : 'Learner mode'}
+                </button>
               </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {Array.from(new Set(selectedSubjectData?.labs.map((lab) => lab.topic || lab.badge) || [])).map((topic) => (
+                <button
+                  key={topic}
+                  type="button"
+                  onClick={() => setSearchTerm(topic)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-blue-400 hover:text-blue-600 lg:border-white/10 lg:bg-[#111] lg:text-slate-300"
+                >
+                  {topic}
+                </button>
+              ))}
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -847,7 +947,7 @@ export default function PracticalLabLibrary() {
                         <p className="text-base font-semibold">{lab.name}</p>
                         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{lab.badge}</p>
                       </div>
-                      {lab.completed && <CheckCircle className="h-5 w-5 text-emerald-500" />}
+                      {isLabCompleted(lab) && <CheckCircle className="h-5 w-5 text-emerald-500" />}
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                       <span className={`rounded-full px-2 py-1 font-medium ${difficultyColors[lab.difficulty]}`}>
@@ -863,7 +963,7 @@ export default function PracticalLabLibrary() {
               </aside>
 
               {activeLab ? (
-                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:border-white/10 lg:bg-[#111]">
+                <div className={`rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:border-white/10 lg:bg-[#111] ${presentationMode ? 'fixed inset-4 z-40 overflow-y-auto lg:inset-10' : ''}`}>
                   <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
                     <div>
                       <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
@@ -872,14 +972,14 @@ export default function PracticalLabLibrary() {
                       </div>
                       <h3 className="text-2xl font-bold">{activeLab.name}</h3>
                     </div>
-                    <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500">
+                    <button onClick={() => setPresentationMode((value) => !value)} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500">
                       <Play className="h-4 w-4" />
-                      Launch experiment
+                      {presentationMode ? 'Exit presentation' : teachingMode === 'facilitator' ? 'Present to class' : 'Launch experiment'}
                     </button>
                   </div>
 
                   {activeLab.id === 'dna-replication' ? (
-                    <DnaReplicationLab />
+                    <DnaReplicationLab onComplete={(score) => recordLabResult(activeLab.id, score)} />
                   ) : (
                   <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
                     <div className="space-y-5">
@@ -897,6 +997,8 @@ export default function PracticalLabLibrary() {
                         lab={activeLab}
                         getValue={(key, fallback) => getLabValue(activeLab.id, key, fallback)}
                         updateValue={(key, value) => updateVariable(activeLab.id, key, value)}
+                        teachingMode={teachingMode}
+                        onComplete={(score) => recordLabResult(activeLab.id, score)}
                       />
                     </div>
 
