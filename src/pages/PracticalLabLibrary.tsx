@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Atom,
   Award,
@@ -66,6 +66,20 @@ const subjectCards: SubjectCard[] = [
     description: 'Cells, genetics, ecosystems, and living systems',
     accent: 'from-emerald-500/30 via-emerald-500/10 to-transparent',
     labs: [
+      {
+        id: 'dna-replication',
+        name: 'DNA Replication Lab',
+        description: 'Match complementary bases and build a new DNA strand step by step.',
+        subject: 'biology',
+        difficulty: 'beginner',
+        duration: 20,
+        completed: false,
+        badge: 'Genetics',
+        theory: 'DNA replication is semi-conservative: each original strand guides the construction of a new complementary strand.',
+        objective: 'Correctly pair every base, then explain how the copied strand preserves genetic information.',
+        prediction: 'A pairs with T, while C pairs with G. Accurate pairing produces a stable daughter molecule.',
+        variables: [],
+      },
       {
         id: 'gene-expression',
         name: 'Gene Expression Lab',
@@ -331,6 +345,242 @@ const subjectCards: SubjectCard[] = [
   },
 ];
 
+const dnaTemplate = ['A', 'T', 'G', 'C', 'C', 'A', 'T', 'G'];
+const dnaPairs: Record<string, string> = { A: 'T', T: 'A', C: 'G', G: 'C' };
+
+function DnaReplicationLab() {
+  const [answers, setAnswers] = useState<Array<string | null>>(() => dnaTemplate.map(() => null));
+  const [step, setStep] = useState(0);
+  const [score, setScore] = useState(0);
+  const [feedback, setFeedback] = useState('Choose a base for each open position on the daughter strand.');
+  const [playing, setPlaying] = useState(false);
+
+  const answeredCount = answers.filter(Boolean).length;
+  const correctCount = answers.filter((answer, index) => answer === dnaPairs[dnaTemplate[index]]).length;
+  const complete = answeredCount === dnaTemplate.length;
+
+  useEffect(() => {
+    if (!playing) return;
+
+    const timer = window.setInterval(() => {
+      setStep((current) => {
+        if (current >= 3) {
+          setPlaying(false);
+          return 3;
+        }
+        return current + 1;
+      });
+    }, 900);
+
+    return () => window.clearInterval(timer);
+  }, [playing]);
+
+  const chooseBase = (index: number, base: string) => {
+    if (step < 2) {
+      setFeedback('Run the replication steps first: unzip the helix, expose the template, then add bases.');
+      return;
+    }
+
+    const next = [...answers];
+    next[index] = base;
+    setAnswers(next);
+    setFeedback(base === dnaPairs[dnaTemplate[index]] ? 'Correct base pair.' : 'Not quite. Check the base-pairing rule and try again.');
+    setScore(next.filter((answer, pairIndex) => answer === dnaPairs[dnaTemplate[pairIndex]]).length);
+  };
+
+  const reset = () => {
+    setAnswers(dnaTemplate.map(() => null));
+    setStep(0);
+    setScore(0);
+    setPlaying(false);
+    setFeedback('Choose a base for each open position on the daughter strand.');
+  };
+
+  return (
+    <div className="mt-5 space-y-5">
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">DNA replication sequence</p>
+            <p className="mt-1 text-sm text-emerald-900 dark:text-emerald-100">Step {step + 1} of 4: {['Prepare', 'Unzip', 'Add complementary bases', 'Proofread'][step]}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setPlaying((value) => !value)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500">
+              {playing ? 'Pause animation' : 'Play animation'}
+            </button>
+            <button type="button" onClick={reset} className="rounded-xl border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-800 dark:text-emerald-200">
+              Reset
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-emerald-200 dark:bg-emerald-900/60">
+          <div className="h-full rounded-full bg-emerald-600 transition-all duration-700" style={{ width: `${((step + 1) / 4) * 100}%` }} />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white dark:border-slate-700">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Interactive DNA ladder</p>
+            <p className="mt-1 text-sm text-slate-300">Select the complementary base in every open circle.</p>
+          </div>
+          <div className="text-right text-sm"><span className="font-semibold text-emerald-300">{score}/{dnaTemplate.length}</span><span className="block text-xs text-slate-400">correct</span></div>
+        </div>
+
+        <div className="overflow-x-auto pb-2">
+          <div className="mx-auto min-w-[520px] max-w-2xl space-y-2">
+            {dnaTemplate.map((base, index) => (
+              <div key={`${base}-${index}`} className="flex items-center justify-center gap-2 sm:gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-400/40 bg-blue-500/20 font-bold text-blue-100">{base}</span>
+                <span className={`h-1 w-10 transition-all duration-500 ${step >= 1 ? 'bg-slate-400' : 'bg-slate-700'}`} />
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl border font-bold transition-all duration-500 ${step >= 2 ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-100' : 'border-slate-600 bg-slate-800 text-slate-500'}`}>
+                  {answers[index] || '?'}
+                </span>
+                <div className="flex gap-1">
+                  {['A', 'T', 'C', 'G'].map((option) => (
+                    <button key={option} type="button" onClick={() => chooseBase(index, option)} disabled={step < 2} className="h-8 w-8 rounded-lg border border-slate-600 bg-slate-800 text-xs font-semibold text-slate-200 transition hover:border-emerald-400 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40">
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={`rounded-2xl border p-4 text-sm ${complete && correctCount === dnaTemplate.length ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100' : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'}`}>
+        <p className="font-semibold">Student feedback</p>
+        <p className="mt-1">{complete && correctCount === dnaTemplate.length ? 'Excellent. You built a correct complementary DNA strand and completed the replication check.' : feedback}</p>
+        <p className="mt-3 text-xs font-medium opacity-80">Rule: A ↔ T and C ↔ G. Proofreading begins after all positions are filled.</p>
+      </div>
+    </div>
+  );
+}
+
+function InteractiveExperimentLab({
+  lab,
+  getValue,
+  updateValue,
+}: {
+  lab: Lab;
+  getValue: (key: string, fallback: number) => number;
+  updateValue: (key: string, value: number) => void;
+}) {
+  const [step, setStep] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
+  const [feedback, setFeedback] = useState('Set the controls, run the experiment, and compare the result with the prediction.');
+
+  useEffect(() => {
+    if (!running) return;
+
+    const timer = window.setInterval(() => {
+      setStep((current) => {
+        if (current >= 3) {
+          setRunning(false);
+          setHasRun(true);
+          setFeedback('Experiment complete. Explain which variable changed the outcome most and why.');
+          return 3;
+        }
+        return current + 1;
+      });
+    }, 850);
+
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  const runExperiment = () => {
+    setStep(0);
+    setHasRun(false);
+    setFeedback('Experiment started. Observe each stage before changing another variable.');
+    setRunning(true);
+  };
+
+  const reset = () => {
+    setStep(0);
+    setRunning(false);
+    setHasRun(false);
+    setFeedback('Set the controls, run the experiment, and compare the result with the prediction.');
+  };
+
+  const score = hasRun ? Math.min(100, 55 + lab.variables.length * 10 + (step === 3 ? 15 : 0)) : 0;
+  const stages = ['Set a question', 'Adjust variables', 'Observe the model', 'Explain the evidence'];
+
+  return (
+    <div className="mt-5 space-y-5">
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-300">Interactive experiment</p>
+            <p className="mt-1 text-sm text-blue-900 dark:text-blue-100">Step {step + 1} of 4: {stages[step]}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={runExperiment} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500">
+              <Play className="h-3.5 w-3.5" />
+              {running ? 'Running...' : 'Run experiment'}
+            </button>
+            <button type="button" onClick={reset} className="rounded-xl border border-blue-300 px-3 py-2 text-xs font-semibold text-blue-800 dark:border-blue-800 dark:text-blue-200">Reset</button>
+          </div>
+        </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900/60">
+          <div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${((step + 1) / 4) * 100}%` }} />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+        <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Experiment controls</h4>
+        <div className="mt-4 space-y-4">
+          {lab.variables.map((variable) => {
+            const value = getValue(variable.key, variable.value);
+
+            return (
+              <div key={variable.key}>
+                <div className="mb-2 flex items-center justify-between text-sm text-slate-700 dark:text-slate-300">
+                  <span>{variable.label}</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{value.toFixed(variable.step < 1 ? 2 : 0)} {variable.unit}</span>
+                </div>
+                <input
+                  type="range"
+                  min={variable.min}
+                  max={variable.max}
+                  step={variable.step}
+                  value={value}
+                  onChange={(event) => updateValue(variable.key, Number(event.target.value))}
+                  className="h-2 w-full cursor-pointer accent-blue-600"
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white dark:border-slate-700">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Model output</p>
+          <div className="mt-4 flex h-28 items-end gap-2">
+            {lab.variables.map((variable) => {
+              const value = getValue(variable.key, variable.value);
+              const height = `${Math.max(12, ((value - variable.min) / Math.max(1, variable.max - variable.min)) * 88)}%`;
+              return <div key={variable.key} title={`${variable.label}: ${value} ${variable.unit}`} className="flex-1 rounded-t-lg bg-gradient-to-t from-blue-600 to-cyan-300 transition-all duration-500" style={{ height }} />;
+            })}
+          </div>
+          <p className="mt-3 text-xs text-slate-400">Change one control at a time and observe how the model responds.</p>
+        </div>
+
+        <div className={`rounded-2xl border p-4 ${hasRun ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}`}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Student score</p>
+            <span className="text-2xl font-bold text-emerald-600">{score}%</span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-300">{feedback}</p>
+          <p className="mt-3 text-xs font-medium text-slate-500">Feedback target: connect the measured pattern to the theory and explain your evidence.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const difficultyColors: Record<Difficulty, string> = {
   beginner: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
   intermediate: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
@@ -578,6 +828,9 @@ export default function PracticalLabLibrary() {
                     </button>
                   </div>
 
+                  {activeLab.id === 'dna-replication' ? (
+                    <DnaReplicationLab />
+                  ) : (
                   <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
                     <div className="space-y-5">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
@@ -590,34 +843,11 @@ export default function PracticalLabLibrary() {
                         <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-300">{activeLab.objective}</p>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-                        <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Experiment controls</h4>
-                        <div className="mt-4 space-y-4">
-                          {activeLab.variables.map((variable) => {
-                            const currentValue = getLabValue(activeLab.id, variable.key, variable.value);
-
-                            return (
-                              <div key={variable.key}>
-                                <div className="mb-2 flex items-center justify-between text-sm text-slate-700 dark:text-slate-300">
-                                  <span>{variable.label}</span>
-                                  <span className="font-semibold text-slate-900 dark:text-white">
-                                    {currentValue.toFixed(variable.step < 1 ? 2 : 0)} {variable.unit}
-                                  </span>
-                                </div>
-                                <input
-                                  type="range"
-                                  min={variable.min}
-                                  max={variable.max}
-                                  step={variable.step}
-                                  value={currentValue}
-                                  onChange={(event) => updateVariable(activeLab.id, variable.key, Number(event.target.value))}
-                                  className="h-2 w-full cursor-pointer accent-blue-600"
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      <InteractiveExperimentLab
+                        lab={activeLab}
+                        getValue={(key, fallback) => getLabValue(activeLab.id, key, fallback)}
+                        updateValue={(key, value) => updateVariable(activeLab.id, key, value)}
+                      />
                     </div>
 
                     <div className="space-y-5">
@@ -647,6 +877,7 @@ export default function PracticalLabLibrary() {
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               ) : null}
             </div>
