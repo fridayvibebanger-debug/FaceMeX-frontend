@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import SubscriptionModal from "../components/SubscriptionModal";
 import type { ChangeEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   Briefcase,
   Building2,
   CalendarDays,
@@ -44,7 +45,8 @@ import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { useUserStore } from '@/store/userStore';
-import PracticalLabLibrary from './PracticalLabLibrary';
+
+const PracticalLabLibrary = lazy(() => import('./PracticalLabLibrary'));
 
 import {
   trackButtonClick,
@@ -1443,12 +1445,20 @@ function getJobsFromApiResponse(data: any) {
     data?.items,
     data?.adzunaJobs,
     data?.joobleJobs,
+    data?.joogleJobs,
+    data?.googleSearchJobs,
     data?.providers?.adzuna,
     data?.providers?.jooble,
+    data?.providers?.joogle,
+    data?.providers?.google_search,
     data?.providers?.adzuna?.jobs,
     data?.providers?.jooble?.jobs,
+    data?.providers?.joogle?.jobs,
+    data?.providers?.google_search?.jobs,
     data?.sources?.adzuna,
     data?.sources?.jooble,
+    data?.sources?.joogle,
+    data?.sources?.google_search,
   ];
 
   return arrays.flatMap((items) => (Array.isArray(items) ? items : []));
@@ -1576,6 +1586,24 @@ function normalizeVerificationStatus(value: any): LocalVerifiedJob['verification
   return 'needs_verification';
 }
 
+function normalizeSourceLabel(value: any): string {
+  const source = clean(value).toLowerCase();
+
+  if (!source) return 'External job source';
+  if (source.includes('google_search') || source.includes('google search')) return 'Google Search';
+  if (source.includes('adzuna')) return 'Adzuna';
+  if (source.includes('jooble') || source.includes('joogle')) return 'Jooble';
+  if (source.includes('official')) return 'Official Company Source';
+  if (source.includes('government') || source.includes('municipality') || source.includes('public')) {
+    return 'Government / Public Institution';
+  }
+
+  return source
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function normalizeSourceType(value: any): SourceCategoryKey {
   const source = clean(value).toLowerCase();
 
@@ -1586,7 +1614,15 @@ function normalizeSourceType(value: any): SourceCategoryKey {
   if (source.includes('community') || source.includes('screenshot')) {
     return 'community_advert_needs_verification';
   }
-  if (source.includes('api') || source.includes('adzuna') || source.includes('external') || source.includes('jooble')) {
+  if (
+    source.includes('api') ||
+    source.includes('adzuna') ||
+    source.includes('external') ||
+    source.includes('jooble') ||
+    source.includes('joogle') ||
+    source.includes('google_search') ||
+    source.includes('google search')
+  ) {
     return 'external_job_api';
   }
   if (source.includes('risk') || source.includes('avoid')) return 'high_risk_avoid';
@@ -2939,6 +2975,7 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [busy, setBusy] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [practicalLabOpen, setPracticalLabOpen] = useState(false);
   const [activeLibrarySection, setActiveLibrarySection] = useState<LibrarySectionKey>('students');
@@ -3022,6 +3059,16 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
   const inputHasContent = prompt.trim().length > 0 || selectedImages.length > 0;
 
+  const composerPlaceholder = practicalLabOpen
+    ? 'Ask FaceMeX about this simulation...'
+    : watchPanelOpen
+      ? 'Ask FaceMeX about this lesson...'
+      : jobsOpen || trackerOpen
+        ? 'Ask FaceMeX about this work...'
+        : hasJobResultsOnScreen
+          ? 'Ask a follow-up...'
+          : 'Ask FaceMeX anything...';
+
   const savedMessages = useMemo(() => {
     return messages.filter((message) => message.saved && message.savedCategory);
   }, [messages]);
@@ -3079,6 +3126,18 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleWorkspaceShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setGlobalSearchOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleWorkspaceShortcut);
+    return () => window.removeEventListener('keydown', handleWorkspaceShortcut);
   }, []);
 
   useEffect(() => {
@@ -3190,7 +3249,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     const featuresList = [
       { label: 'Scheduled', action: () => openSchedulePanel() },
       { label: 'Job Tracker', action: () => setTrackerOpen(true) },
-      { label: 'Library', action: () => setLibraryOpen(true) },
+      { label: 'Practical Lab', action: () => setPracticalLabOpen(true) },
     ];
 
     const features = featuresList.filter((f) => matches(f.label));
@@ -3251,14 +3310,15 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
           company,
           area,
           deadline: deadline || null,
-          sourceLabel: clean(
-            job.sourceLabel ||
-              job.source_label ||
-              job.source_type ||
-              job.sourceType ||
-              job.provider ||
-              job.source
-          ) || 'External job source',
+          sourceLabel:
+            normalizeSourceLabel(
+              job.sourceLabel ||
+                job.source_label ||
+                job.source_type ||
+                job.sourceType ||
+                job.provider ||
+                job.source
+            ) || 'External job source',
           verificationStatus: normalizeVerificationStatus(job.verificationStatus || job.verification_status || job.status),
           actionLabel: clean(job.actionLabel || job.action_label) || 'Open Apply Page',
           applyUrl: clean(job.applyUrl || job.apply_url || job.application_link || job.redirect_url || job.sourceUrl || job.source_url),
@@ -3564,6 +3624,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setApplySheetJob(null);
     setLastSelectedJob(null);
     setJobsOpen(false);
+    setFocusMode(false);
     setLibraryOpen(false);
     setScheduleOpen(false);
     setTrackerOpen(false);
@@ -5061,55 +5122,55 @@ Apply link: ${job.applyUrl}`;
     return (
       <div className="fixed inset-0 z-[97] flex items-end bg-black/35 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setSavedReaderMessage(null)}>
         <div
-          className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[30px] bg-white text-slate-950 shadow-2xl dark:bg-[#111] dark:text-white lg:max-h-[86dvh] lg:max-w-2xl lg:rounded-[30px] lg:bg-[#202020] lg:text-white"
+          className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[30px] bg-[#111] text-white shadow-2xl lg:max-h-[86dvh] lg:max-w-2xl lg:rounded-[30px] lg:bg-[#202020] lg:text-white"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
+          <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-white/20 lg:hidden" />
 
-          <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
+          <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4 lg:border-white/10">
             <div className="min-w-0">
-              <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-white/10 dark:text-white/55">
+              <div className="mb-2 inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/70">
                 {message.savedCategory ? savedCategoryLabels[message.savedCategory] : 'Saved item'}
               </div>
-              <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-slate-950 dark:text-white lg:text-white">
+              <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-white">
                 Saved card
               </h2>
-              <p className="mt-1 text-[13px] text-slate-500 dark:text-white/50">
+              <p className="mt-1 text-[13px] text-white/60">
                 Read it, copy it, or open it in a new chat to continue.
               </p>
             </div>
 
-            <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full lg:text-white lg:hover:bg-white/10">
+            <Button size="icon" variant="ghost" onClick={() => setSavedReaderMessage(null)} className="h-10 w-10 rounded-full text-white hover:bg-white/10 lg:text-white lg:hover:bg-white/10">
               <X className="h-5 w-5" />
             </Button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 text-[15px] leading-7 text-slate-800 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/78 lg:border-white/10 lg:bg-[#0c0c0c] lg:text-white">
+            <div className="rounded-[24px] border border-white/10 bg-[#0c0c0c] p-4 text-[15px] leading-7 text-white/80 lg:border-white/10 lg:bg-[#0c0c0c] lg:text-white">
               <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
             </div>
 
-            <div className="mt-4 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04] lg:border-white/10 lg:bg-[#111] lg:text-white">
-              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-slate-950 dark:text-white lg:text-white">
+            <div className="mt-4 rounded-[24px] border border-white/10 bg-[#171717] p-4 shadow-sm lg:border-white/10 lg:bg-[#111] lg:text-white">
+              <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-white">
                 Ask more about this
               </h3>
-              <p className="mt-1 text-[13px] leading-5 text-slate-500 dark:text-white/50">
+              <p className="mt-1 text-[13px] leading-5 text-white/60">
                 Start a clean chat using this saved item as memory so the answer continues from the right topic.
               </p>
 
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Button onClick={() => startSavedItemNewChat(message, 'continue')} className="h-11 rounded-2xl bg-slate-950 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                <Button onClick={() => startSavedItemNewChat(message, 'continue')} className="h-11 rounded-2xl bg-white text-xs font-semibold text-slate-950 hover:bg-slate-200">
                   Continue in new chat
                 </Button>
 
                 {(savedReaderIsResearch || savedReaderIsEducation || !savedReaderIsApplication) && (
-                  <Button variant="outline" onClick={() => startSavedItemNewChat(message, 'deeper')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                  <Button variant="outline" onClick={() => startSavedItemNewChat(message, 'deeper')} className="h-11 rounded-2xl border border-white/10 bg-transparent text-xs font-semibold text-white hover:bg-white/10">
                     {savedReaderIsEducation ? 'Ask more about this' : 'Research deeper'}
                   </Button>
                 )}
 
                 {savedReaderIsApplication && (
-                  <Button variant="outline" onClick={() => startSavedItemNewChat(message, 'apply')} className="h-11 rounded-2xl text-xs font-semibold lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+                  <Button variant="outline" onClick={() => startSavedItemNewChat(message, 'apply')} className="h-11 rounded-2xl border border-white/10 bg-transparent text-xs font-semibold text-white hover:bg-white/10">
                     Help me apply
                   </Button>
                 )}
@@ -5117,19 +5178,19 @@ Apply link: ${job.applyUrl}`;
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-100 px-5 py-4 dark:border-white/10 lg:border-white/10">
-            <Button variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+          <div className="flex shrink-0 flex-wrap gap-2 border-t border-white/10 px-5 py-4 lg:border-white/10">
+            <Button variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-2xl border border-white/10 bg-transparent text-xs text-white hover:bg-white/10">
               <Copy className="mr-2 h-3.5 w-3.5" />
               Copy
             </Button>
 
-            <Button variant="outline" onClick={() => shareMessageLink(message.content, 'FaceMeX saved card')} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+            <Button variant="outline" onClick={() => shareMessageLink(message.content, 'FaceMeX saved card')} className="h-10 rounded-2xl border border-white/10 bg-transparent text-xs text-white hover:bg-white/10">
               <Share2 className="mr-2 h-3.5 w-3.5" />
               Share
             </Button>
 
             {savedReaderIsApplication && (
-              <Button variant="outline" onClick={() => openSchedulePanel(message.content)} className="h-10 rounded-2xl text-xs lg:border-white/10 lg:bg-transparent lg:text-white lg:hover:bg-white/10">
+              <Button variant="outline" onClick={() => openSchedulePanel(message.content)} className="h-10 rounded-2xl border border-white/10 bg-transparent text-xs text-white hover:bg-white/10">
                 <CalendarDays className="mr-2 h-3.5 w-3.5" />
                 Schedule
               </Button>
@@ -5141,7 +5202,7 @@ Apply link: ${job.applyUrl}`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-white text-slate-950 lg:bg-black lg:text-white">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-[#0d0d0d] text-white lg:bg-black lg:text-white">
       <style>{`
         @keyframes fmSoftFloatIn {
           from {
@@ -5570,7 +5631,7 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-white/10 bg-[#171717] text-white lg:flex lg:flex-col">
+      <aside className={`${focusMode ? 'hidden' : 'flex'} h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-white/10 bg-[#171717] text-white lg:flex lg:flex-col`}>
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#171717] px-4">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-xs font-black text-black">F</div>
@@ -5608,7 +5669,7 @@ Apply link: ${job.applyUrl}`;
             <span className="min-w-0 truncate">New chat</span>
           </button>
 
-          <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Workspace</div>
+          <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Work</div>
 
           <button
             type="button"
@@ -5616,7 +5677,8 @@ Apply link: ${job.applyUrl}`;
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <Search className="h-4 w-4" />
-            Search
+            <span className="min-w-0 flex-1">Search</span>
+            <kbd className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] font-medium text-white/40">Ctrl K</kbd>
           </button>
 
           <button
@@ -5639,20 +5701,11 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setPracticalLabOpen(true)}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
-          >
-            <FileText className="h-4 w-4" />
-            Practical Lab
-          </button>
-
-          <button
-            type="button"
             onClick={() => setWatchPanelOpen((value) => !value)}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
           >
             <Globe2 className="h-4 w-4" />
-            Watch
+            Watch lessons
           </button>
 
           {watchPanelOpen && (
@@ -5715,37 +5768,45 @@ Apply link: ${job.applyUrl}`;
             </div>
           )}
 
-          <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">
-            Tools
-          </div>
+          <button
+            type="button"
+            onClick={() => quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.')}
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+          >
+            <Briefcase className="h-4 w-4" />
+            Find jobs
+          </button>
 
-          <div className="mt-2 space-y-1">
-            <button
-              type="button"
-              onClick={() =>
-                quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.')
-              }
-              className="line-clamp-1 w-full rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
-            >
-              Find jobs
-            </button>
+          <button
+            type="button"
+            onClick={() => quickAsk('Help me prepare for an interview. Give me questions and strong answers.')}
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+          >
+            <Users className="h-4 w-4" />
+            Interview Prep
+          </button>
 
-            <button
-              type="button"
-              onClick={openCvBuilder}
-              className="line-clamp-1 w-full rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
-            >
-              Build My CV
-            </button>
+          <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Create</div>
 
-            <button
-              type="button"
-              onClick={() => quickAsk('Help me prepare for an interview. Give me questions and strong answers.')}
-              className="line-clamp-1 w-full rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
-            >
-              Interview Prep
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={openCvBuilder}
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+          >
+            <FileText className="h-4 w-4" />
+            CV & documents
+          </button>
+
+          <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Do</div>
+
+          <button
+            type="button"
+            onClick={() => setPracticalLabOpen(true)}
+            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+          >
+            <BookOpen className="h-4 w-4" />
+            Practical Lab
+          </button>
 
           {chatSessions.length > 0 && (
             <>
@@ -5792,7 +5853,7 @@ Apply link: ${job.applyUrl}`;
           type="button"
           onClick={() => navigate('/facemex-plus')}
           title="Upgrade to FaceMeX Plus R99/month or Pro R250/month"
-          className="hidden h-8 items-center gap-1 rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] font-semibold tracking-[0.14em] text-white/85 transition hover:bg-white/15 lg:flex fixed right-4 top-4 z-[75]"
+          className="fixed right-4 top-4 z-[75] hidden h-8 items-center gap-1 whitespace-nowrap rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] font-semibold tracking-[0.14em] text-white/85 transition hover:bg-white/15 lg:flex"
         >
           <Plus className="h-3 w-3 text-white/85" />
           <span>GET PLUS</span>
@@ -5801,7 +5862,17 @@ Apply link: ${job.applyUrl}`;
 
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 
-      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between bg-white px-4 pt-2 shadow-sm shadow-slate-200/30 lg:hidden">
+      <button
+        type="button"
+        onClick={() => setFocusMode((value) => !value)}
+        className="fixed right-[7.5rem] top-4 z-[74] hidden h-9 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-[#171717] px-3 text-xs font-semibold text-white/75 shadow-lg transition hover:bg-[#242424] hover:text-white lg:flex"
+        aria-pressed={focusMode}
+        aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
+      >
+        {focusMode ? 'Exit focus' : 'Focus'}
+      </button>
+
+      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between border-b border-white/10 bg-[#0d0d0d] px-4 pt-2 shadow-sm shadow-black/20 lg:hidden">
 
         {isDeveloper && developerMode && (
           <div className="mx-auto mb-6 max-w-xl rounded-2xl border border-red-200 bg-white p-4 shadow-lg">
@@ -5838,7 +5909,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-white/10"
             aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
@@ -5847,9 +5918,9 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => navigate('/facemex-plus')}
-            className="flex min-w-0 h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50"
+            className="flex min-w-0 h-7 items-center gap-1 rounded-full border border-white/10 bg-white/10 px-2.5 text-[10px] font-semibold tracking-[0.14em] text-white/85 shadow-sm transition hover:bg-white/15"
           >
-            <Plus className="h-3 w-3 text-slate-900" />
+            <Plus className="h-3 w-3 text-white/85" />
             <span>GET PLUS</span>
           </button>
           
@@ -5871,7 +5942,7 @@ Apply link: ${job.applyUrl}`;
           <button
             type="button"
             onClick={() => setGlobalSearchOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-900 shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-slate-50"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-white/10"
             aria-label="Search FaceMeX"
           >
             <Search className="h-5 w-5" />
@@ -5888,8 +5959,8 @@ Apply link: ${job.applyUrl}`;
         </div>
       
       </header>
-      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-white px-0 pb-0 pt-[66px] sm:px-4 sm:pb-4 lg:bg-black lg:text-white lg:px-0 lg:py-0 lg:pt-0">
-        <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white lg:max-w-none lg:bg-black">
+      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[66px] text-white sm:px-4 sm:pb-4 lg:bg-black lg:text-white lg:px-0 lg:py-0 lg:pt-0">
+        <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-[#0d0d0d] text-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
               {chatMessages.length === 0 && !busy && !selectedWatchVideo && (
@@ -6006,7 +6077,7 @@ Apply link: ${job.applyUrl}`;
             </div>
           </div>
 
-          <footer className="shrink-0 border-t border-black/5 bg-white/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:p-4 lg:border-0 lg:bg-black lg:px-6 lg:pb-6">
+          <footer className="shrink-0 border-t border-white/10 bg-[#0d0d0d]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:p-4 lg:border-0 lg:bg-black lg:px-6 lg:pb-6">
             <div className="mx-auto w-full max-w-3xl lg:max-w-[760px]">
               {selectedImages.length > 0 && (
                 <div className="mb-2 grid grid-cols-4 gap-2">
@@ -6027,12 +6098,12 @@ Apply link: ${job.applyUrl}`;
                 </div>
               )}
 
-              <div className="fm-composer-card rounded-[30px] bg-white dark:bg-[#2b2b2b] lg:bg-[#2b2b2b] px-3 py-2 sm:px-4">
+              <div className="fm-composer-card rounded-[30px] bg-[#2b2b2b] px-3 py-2 sm:px-4 lg:bg-[#2b2b2b]">
                 <div className="flex items-end gap-2">
                   <button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
-                    className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-[0.98] hover:bg-slate-200 lg:h-8 lg:w-8 lg:bg-white/10 lg:text-white/80 lg:hover:bg-white/15"
+                    className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 transition active:scale-[0.98] hover:bg-white/15 lg:h-8 lg:w-8 lg:bg-white/10 lg:text-white/80 lg:hover:bg-white/15"
                     aria-label="Upload image or document"
                   >
                     <Plus className="h-4 w-4" />
@@ -6042,8 +6113,8 @@ Apply link: ${job.applyUrl}`;
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       onFocus={() => setFollowUpExpanded(true)}
-                      placeholder={hasJobResultsOnScreen ? 'Ask a follow-up...' : 'Ask FaceMeX anything'}
-                      className={`min-h-[26px] flex-1 min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[14px] leading-5 text-slate-950 dark:text-white lg:max-w-[calc(100%-74px)] lg:text-[14px] lg:py-0.5 lg:leading-5 lg:text-white placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45 lg:placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                      placeholder={composerPlaceholder}
+                      className={`min-h-[26px] flex-1 min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[14px] leading-5 text-white placeholder:text-white/45 dark:text-white lg:max-w-[calc(100%-74px)] lg:text-[14px] lg:py-0.5 lg:leading-5 lg:text-white placeholder:text-slate-500 dark:placeholder:text-white/45 lg:placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
                       inputHasContent ? 'max-h-24' : 'h-8 max-h-8 overflow-hidden'
                     }`}
                     onKeyDown={(e) => {
@@ -6102,22 +6173,22 @@ Apply link: ${job.applyUrl}`;
           onClick={() => setClearWorkspaceOpen(false)}
         >
           <div
-            className="w-full rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-w-md lg:rounded-[28px] lg:bg-[#171717] lg:text-white"
+            className="w-full rounded-t-[28px] bg-[#111] p-4 text-white shadow-2xl lg:max-w-md lg:rounded-[28px] lg:bg-[#171717] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20" />
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
 
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-300">
                 <Trash2 className="h-5 w-5" />
               </div>
 
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-semibold text-slate-950 dark:text-white">
+                <h2 className="text-base font-semibold text-white">
                   Delete and start from scratch?
                 </h2>
 
-                <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-white/55">
+                <p className="mt-1 text-sm leading-6 text-white/55">
                   This will clear the chat, saved tracker items, selected images, and local chat history on this device.
                 </p>
               </div>
@@ -6128,7 +6199,7 @@ Apply link: ${job.applyUrl}`;
                 type="button"
                 variant="outline"
                 onClick={() => setClearWorkspaceOpen(false)}
-                className="h-11 rounded-2xl"
+                className="h-11 rounded-2xl border border-white/10 bg-transparent text-white hover:bg-white/10"
               >
                 Cancel
               </Button>
@@ -6148,15 +6219,15 @@ Apply link: ${job.applyUrl}`;
       {applySheetOpen && (
         <div className="fixed inset-0 z-[90] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setApplySheetOpen(false)}>
           <div
-            className="w-full rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-w-md lg:rounded-[28px] lg:bg-[#171717] lg:text-white"
+            className="w-full rounded-t-[28px] border border-white/10 bg-[#101010] p-4 text-white shadow-2xl lg:max-w-md lg:rounded-[28px] lg:bg-[#171717] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20" />
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
 
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-semibold text-slate-950 dark:text-white">Help me apply</h2>
-                <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
+                <h2 className="text-base font-semibold text-white">Help me apply</h2>
+                <p className="truncate text-xs text-white/55 lg:text-white/55">
                   {applySheetJob ? applySheetJob.title : 'Choose what you need now.'}
                 </p>
               </div>
@@ -6196,16 +6267,16 @@ Apply link: ${job.applyUrl}`;
                       const exactContext = buildJobApplyContext(applySheetJob, applySheetContext);
                       sendPrompt(`${tool.prompt}\n\nContext:\n${exactContext}`);
                     }}
-                    className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left transition active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
+                    className="rounded-2xl border border-white/10 bg-[#1b1b1b] p-3 text-left text-white transition active:scale-[0.98] hover:bg-white/10 lg:border-white/10 lg:bg-[#111] lg:text-white"
                   >
-                    <Icon className="mb-2 h-5 w-5 text-slate-700 dark:text-white/70 lg:text-white" />
-                    <p className="text-sm font-semibold text-slate-950 dark:text-white lg:text-white">{tool.label}</p>
+                    <Icon className="mb-2 h-5 w-5 text-white/80" />
+                    <p className="text-sm font-semibold text-white">{tool.label}</p>
                   </button>
                 );
               })}
             </div>
 
-            <p className="mt-3 rounded-2xl bg-amber-50 p-3 text-[12px] font-medium leading-5 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+            <p className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] font-medium leading-5 text-amber-200">
               Safety rule: never pay money to get a job. Verify the company, email domain, official advert, source, and closing date before sending documents.
             </p>
           </div>
@@ -6215,12 +6286,12 @@ Apply link: ${job.applyUrl}`;
       {trackerOpen && (
         <div className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm" onClick={() => setTrackerOpen(false)}>
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col bg-[#f7f7f5] shadow-2xl dark:bg-[#0b0b0c] lg:border-l lg:border-white/10 lg:bg-[#111] lg:text-white"
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-sm flex-col border-l border-white/10 bg-[#0b0b0c] text-white shadow-2xl lg:bg-[#111]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/90 lg:border-white/10 lg:bg-[#111]">
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#111]/90 px-4 backdrop-blur-xl lg:border-white/10 lg:bg-[#111]">
               <div className="text-[13px] leading-6">
-                <p className="text-[11px] text-slate-500 dark:text-white/45">
+                <p className="text-[11px] text-white/45">
                   Saved jobs, education notes, applications
                 </p>
               </div>
@@ -6232,23 +6303,23 @@ Apply link: ${job.applyUrl}`;
 
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white">
                   <Save className="h-5 w-5 text-blue-500" />
-                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Saved</p>
+                  <p className="mt-2 text-[11px] text-white/55">Saved</p>
                   <p className="text-xl font-semibold">{savedMessages.length}</p>
                 </div>
 
-                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Verified</p>
+                  <p className="mt-2 text-[11px] text-white/55">Verified</p>
                   <p className="text-xl font-semibold">
                     {sortedLocalJobs.filter((job) => job.verificationStatus === 'verified').length}
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white">
                   <FileText className="h-5 w-5 text-purple-500" />
-                  <p className="mt-2 text-[11px] text-slate-500 lg:text-white/55">Education</p>
+                  <p className="mt-2 text-[11px] text-white/55">Education</p>
                   <p className="text-xl font-semibold">
                     {savedStats.homework_help + savedStats.assignments + savedStats.youtube_lessons + savedStats.institution_applications}
                   </p>
@@ -6265,9 +6336,9 @@ Apply link: ${job.applyUrl}`;
                 ].map(([label, count]) => (
                   <div
                     key={String(label)}
-                    className="rounded-2xl border border-black/5 bg-white p-3 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white"
+                    className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white"
                   >
-                    <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{label}</p>
+                    <p className="text-xs text-white/55">{label}</p>
                     <p className="mt-1 text-lg font-semibold">{count}</p>
                   </div>
                 ))}
@@ -6295,16 +6366,16 @@ Apply link: ${job.applyUrl}`;
                 </div>
               )}
 
-              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
-                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Your pipeline</h3>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white">
+                <h3 className="text-base font-semibold text-white">Your pipeline</h3>
 
-                <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
+                <div className="mt-3 divide-y divide-white/10">
                   {sortedLocalJobs.slice(0, 5).map((job) => {
                     const deadlineInfo = getDeadlineInfo(job.deadline);
 
                     return (
                       <div key={job.id} className="flex items-center gap-3 py-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10 lg:text-white">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white">
                           {job.verificationStatus === 'verified' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                           ) : (
@@ -6313,12 +6384,12 @@ Apply link: ${job.applyUrl}`;
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold">{job.title}</p>
-                          <p className="truncate text-xs text-slate-500 dark:text-white/50 lg:text-white/55">{job.company}</p>
+                          <p className="truncate text-sm font-semibold text-white">{job.title}</p>
+                          <p className="truncate text-xs text-white/55">{job.company}</p>
                         </div>
 
                         <div className="text-right">
-                          <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/55">
+                          <p className="text-xs text-white/55">
                             {job.deadline || 'Check source'}
                           </p>
                           <span
@@ -6337,10 +6408,10 @@ Apply link: ${job.applyUrl}`;
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4 text-slate-950 dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
-                <h3 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Daily tasks</h3>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white">
+                <h3 className="text-base font-semibold text-white">Daily tasks</h3>
 
-                <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
+                <div className="mt-3 divide-y divide-white/10">
                   {[
                     ['Search today’s new jobs', Search],
                     ['Send follow-up email', Mail],
@@ -6356,11 +6427,11 @@ Apply link: ${job.applyUrl}`;
                         setTrackerOpen(false);
                         sendPrompt(String(label));
                       }}
-                      className="flex w-full items-center gap-3 rounded-xl py-3 text-left text-slate-900 dark:text-white lg:px-2 lg:text-white lg:hover:bg-white/10"
+                      className="flex w-full items-center gap-3 rounded-xl py-3 text-left text-white hover:bg-white/10 lg:px-2"
                     >
                       <Icon className="h-4 w-4 text-blue-500" />
                       <span className="flex-1 text-sm">{label}</span>
-                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                      <ChevronRight className="h-4 w-4 text-white/50" />
                     </button>
                   ))}
                 </div>
@@ -6399,26 +6470,26 @@ Apply link: ${job.applyUrl}`;
 
                 <div className="mt-3 space-y-3">
                   {visibleSavedMessages.length === 0 ? (
-                    <div className="rounded-2xl border border-black/5 bg-white p-4 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white/60">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/60">
                       No saved items yet.
                     </div>
                   ) : (
                     visibleSavedMessages.map((item) => (
                       <div
                         key={item.id}
-                        className="rounded-2xl border border-black/5 bg-white p-3 text-left text-slate-950 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white lg:border-white/10 lg:bg-white/[0.06] lg:text-white"
+                        className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left text-white shadow-sm"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/[0.08] lg:bg-white/10">
-                            <FileText className="h-4 w-4 text-slate-500" />
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
+                            <FileText className="h-4 w-4 text-white/70" />
                           </div>
 
                           <button type="button" onClick={() => setSavedReaderMessage(item)} className="min-w-0 flex-1 text-left">
-                            <div className="line-clamp-1 text-sm font-semibold">
+                            <div className="line-clamp-1 text-sm font-semibold text-white">
                               {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Saved item'}
                             </div>
 
-                            <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-white/50 lg:text-white/55">
+                            <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/60">
                               {normalizeUssdCodes(item.content)}
                             </div>
                           </button>
@@ -6441,7 +6512,7 @@ Apply link: ${job.applyUrl}`;
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-black/5 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.03] lg:border-white/10 lg:bg-[#111]">
+            <div className="shrink-0 border-t border-white/10 bg-[#111111] p-4">
               <Button
                 variant="ghost"
                 onClick={clearSavedItems}
@@ -6456,329 +6527,20 @@ Apply link: ${job.applyUrl}`;
       )}
 
 
-      {libraryOpen && (
-        <div className="fixed inset-0 z-[72] bg-black/20 backdrop-blur-[2px]" onClick={() => setLibraryOpen(false)}>
-          <div
-            className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white text-slate-950 shadow-2xl lg:max-w-lg lg:bg-[#050505] lg:text-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:border-white/10 lg:bg-[#111]">
-              <div className="min-w-0">
-                <h2 className="truncate text-[22px] font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">Practical Lab</h2>
-                <p className="truncate text-xs text-slate-500 lg:text-slate-400">
-                  Biology, science, mathematics and environmental learning by doing.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setLibraryOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-950 hover:bg-white/[0.14] lg:bg-white/5 lg:text-white lg:hover:bg-white/10"
-                aria-label="Close Library"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
-              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111] lg:text-white">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 lg:text-slate-400">
-                  Hands-on learning
-                </p>
-                <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950 lg:text-white">
-                  Learn by doing, not by memorising theory
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600 lg:text-slate-300">
-                  Practical simulations for biology, science, mathematics, environmental studies and research skills designed for students in college and universities.
-                </p>
-
-                <div className="mt-5 space-y-6">
-                  {practicalLabSections.map((section) => (
-                    <div key={section.subject}>
-                      <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 lg:text-slate-400">
-                        {section.subject}
-                      </h4>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {section.cards.map((lab) => (
-                          <button
-                            key={lab.title}
-                            type="button"
-                            onClick={() => openPracticalSimulation(lab)}
-                            className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:bg-slate-100 active:scale-[0.98] lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
-                          >
-                            <div className="mb-3 inline-flex rounded-xl bg-slate-100 p-2 text-slate-900 lg:bg-white/10 lg:text-white">
-                              <Sparkles className="h-4 w-4" />
-                            </div>
-                            <p className="text-base font-semibold text-slate-950 lg:text-white">{lab.title}</p>
-                            <p className="mt-2 text-sm leading-6 text-slate-600 lg:text-slate-300">{lab.summary}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111] lg:text-white">
-                <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 lg:text-slate-400">
-                  Practical learning goals
-                </h4>
-                <ul className="mt-3 space-y-3 text-sm leading-6 text-slate-600 lg:text-slate-300">
-                  <li>• Explore biology, mathematics, science and environmental systems through real experiments and guided cases.</li>
-                  <li>• Connect theory to examples, observations, outcomes and evidence-based conclusions.</li>
-                  <li>• Build problem-solving and lab skills needed for university and college learning.</li>
-                </ul>
-              </div>
-
-              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-base font-semibold tracking-[-0.02em] text-slate-950">
-                      YouTube lessons inside {activeLibrary.shortTitle}
-                    </h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Useful full videos only. No reels, no funny clips, no mixed categories.
-                    </p>
-                  </div>
-                  {youtubeLessonsBusy && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {activeLibraryYoutubeCategories.map((category) => (
-                    <button
-                      key={category.label}
-                      type="button"
-                      onClick={() => openYoutubeLessonCategory(category)}
-                      className={`rounded-2xl border p-3 text-left transition active:scale-[0.98] ${
-                        activeYoutubeLessonCategory?.label === category.label
-                          ? 'border-white bg-slate-950 text-white'
-                          : 'border-slate-200 bg-white text-slate-950 hover:bg-slate-100'
-                      }`}
-                    >
-                      <span className="mb-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                        {category.badge}
-                      </span>
-                      <span className="block text-sm font-semibold">{category.label}</span>
-                      <span className="mt-1 line-clamp-3 block text-[11px] leading-4 opacity-65">
-                        {category.description}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {activeYoutubeLessonCategory && (
-                  <div className="mt-5 space-y-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950 lg:text-white">
-                        {activeYoutubeLessonCategory.label} videos
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500 lg:text-slate-400">
-                        Powered by your FaceMeX YouTube API. Tap Watch to play inside FaceMeX.
-                      </p>
-                    </div>
-
-                    {youtubeLessonsBusy ? (
-                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600 lg:bg-[#111] lg:text-white">
-                        <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                        Loading useful videos...
-                      </div>
-                    ) : youtubeLessonVideos.length === 0 ? (
-                      <div className="rounded-3xl bg-white p-5 text-sm text-slate-600 lg:bg-[#111] lg:text-white">
-                        No useful videos loaded yet. Tap the category again or try another topic.
-                      </div>
-                    ) : (
-                      youtubeLessonVideos.map((video) => {
-                        const isPlaying = activePlayingVideoId === video.videoId;
-
-                        return (
-                          <article
-                            key={video.videoId}
-                            className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_48px_rgba(0,0,0,0.25)]"
-                          >
-                            <div className="aspect-video w-full overflow-hidden bg-black">
-                              {isPlaying ? (
-                                <iframe
-                                  src={video.embedUrl}
-                                  title={video.title}
-                                  className="h-full w-full"
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                  allowFullScreen
-                                />
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setActivePlayingVideoId(video.videoId)}
-                                  className="relative h-full w-full bg-slate-100 text-left"
-                                >
-                                  {video.thumbnail ? (
-                                    <img src={video.thumbnail} alt="" className="h-full w-full object-cover opacity-90" />
-                                  ) : (
-                                    <div className="h-full w-full bg-slate-100" />
-                                  )}
-                                  <span className="absolute inset-0 bg-black/20" />
-                                  <span className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950 text-white shadow-xl">
-                                    ▶
-                                  </span>
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="p-4">
-                              <p className="line-clamp-2 text-base font-semibold leading-6 text-slate-950">{video.title}</p>
-
-                              {video.channelTitle && (
-                                <p className="mt-1 text-xs text-slate-500 lg:text-slate-400">{video.channelTitle}</p>
-                              )}
-
-                              <div className="mt-4 grid grid-cols-2 gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => setActivePlayingVideoId(video.videoId)}
-                                  className="h-10 rounded-2xl bg-slate-950 text-xs font-semibold text-white hover:bg-slate-800"
-                                >
-                                  Watch in FaceMeX
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const savedVideoMessage: ChatMessage = {
-                                      id: safeId(),
-                                      role: 'assistant',
-                                      content: `Saved YouTube lesson: ${video.title}
-Channel: ${video.channelTitle || 'YouTube'}
-Watch: ${video.watchUrl}`,
-                                      createdAt: new Date().toISOString(),
-                                      saved: true,
-                                      savedCategory: 'youtube_lessons',
-                                      intent: 'education_youtube',
-                                    };
-
-                                    setMessages((prev) => [...prev, savedVideoMessage]);
-
-                                    toast({
-                                      title: 'YouTube lesson saved',
-                                      description: `Saved under ${activeLibrary.title}.`,
-                                    });
-                                  }}
-                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
-                                >
-                                  <Save className="mr-1.5 h-3.5 w-3.5" />
-                                  Save
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setLibraryOpen(false);
-                                    sendPrompt(
-                                      `Create useful notes from this YouTube lesson for ${activeLibrary.title}.
-
-Video title: ${video.title}
-Channel: ${video.channelTitle || 'YouTube'}
-Link: ${video.watchUrl}
-
-Give me: main idea, key points, step-by-step explanation, action steps, and quick revision notes. Be honest that you cannot watch the full video unless transcript/details are provided.`
-                                    );
-                                  }}
-                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
-                                >
-                                  Make notes
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    trackLinkClick(video.watchUrl, 'youtube_lesson_watch_in_facemex');
-                                    openWatchVideoInApp(video);
-                                  }}
-                                  className="h-10 rounded-2xl border-slate-200 bg-slate-50 text-xs font-semibold text-slate-950 hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
-                                >
-                                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                                  Watch in FaceMeX
-                                </Button>
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111] lg:text-white">
-                <h3 className="text-base font-semibold text-slate-950 lg:text-white">Saved library notes</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500 lg:text-slate-400">
-                  Saved answers stay separated by Jobs, Investors and Students so users can come back later.
-                </p>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(['all', 'career_plan', 'research', 'homework_help', 'assignments', 'youtube_lessons', 'institution_applications'] as const).map((filter) => (
-                    <button
-                      key={filter}
-                      type="button"
-                      onClick={() => setSavedFilter(filter as any)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                        savedFilter === filter ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-100 hover:text-slate-950'
-                      }`}
-                    >
-                      {filter === 'all' ? 'All' : savedCategoryLabels[filter as SavedCategory]}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-4 space-y-2">
-                  {savedMessages.length === 0 ? (
-                    <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-                      No saved notes yet. Save useful answers and videos to build your library.
-                    </p>
-                  ) : (
-                    savedMessages
-                      .filter((item) => savedFilter === 'all' || item.savedCategory === savedFilter)
-                      .slice(0, 18)
-                      .map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setSavedReaderMessage(item)}
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:bg-slate-100 lg:border-white/10 lg:bg-[#111] lg:text-white lg:hover:bg-white/10"
-                        >
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 lg:bg-white/10 lg:text-white/70">
-                              {item.savedCategory ? savedCategoryLabels[item.savedCategory] : 'Library'}
-                            </span>
-                            {item.pinned && <Pin className="h-3.5 w-3.5 text-slate-500" />}
-                          </div>
-                          <p className="line-clamp-2 text-xs leading-5 text-slate-700 lg:text-white/80">{item.content}</p>
-                        </button>
-                      ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {savedReaderMessage && <SavedReaderModal message={savedReaderMessage} />}
 
       {scheduleOpen && (
         <div className="fixed inset-0 z-[96] flex items-end bg-black/40 backdrop-blur-sm lg:items-center lg:justify-center" onClick={() => setScheduleOpen(false)}>
           <div
-            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white p-4 shadow-2xl dark:bg-[#111] lg:max-h-[86dvh] lg:max-w-xl lg:rounded-[28px] lg:bg-[#202020] lg:text-white"
+            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-[#101010] p-4 text-white shadow-2xl lg:max-h-[86dvh] lg:max-w-xl lg:rounded-[28px] lg:bg-[#202020] lg:text-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-white/20 lg:hidden" />
 
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-semibold text-slate-950 dark:text-white lg:text-white">Create schedule</h2>
-                <p className="text-xs text-slate-500 dark:text-white/50 lg:text-white/50">
+                <h2 className="text-base font-semibold text-white">Create schedule</h2>
+                <p className="text-xs text-white/50">
                   FaceMeX will run this task and email the update.
                 </p>
               </div>
@@ -6791,18 +6553,18 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
             <div className="fm-panel-scroll min-h-0 flex-1 overflow-y-auto pr-1">
               {scheduleStep === 'choose' ? (
                 <div className="space-y-3">
-                <div className="rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#2f2f2f]">
-                  <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Task</p>
+                <div className="rounded-2xl border border-white/10 bg-[#1f1f1f] p-3">
+                  <p className="mb-2 text-xs font-semibold text-white/50">Task</p>
                   <Textarea
                     value={schedulePrompt}
                     onChange={(e) => setSchedulePrompt(e.target.value)}
-                    className="min-h-[80px] resize-none rounded-2xl border-black/10 bg-white text-sm text-slate-950 dark:border-white/10 dark:bg-black/20 dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+                    className="min-h-[80px] resize-none rounded-2xl border-white/10 bg-[#171717] text-sm text-white placeholder:text-white/45"
                     placeholder="What should FaceMeX check for you?"
                   />
                   <input
                     value={scheduleEmail}
                     onChange={(e) => setScheduleEmail(e.target.value)}
-                    className="mt-2 h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm text-slate-950 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white lg:border-white/10 lg:bg-[#171717] lg:text-white"
+                    className="mt-2 h-11 w-full rounded-2xl border border-white/10 bg-[#171717] px-3 text-sm text-white outline-none placeholder:text-white/45"
                     placeholder="Email address for updates"
                   />
                 </div>
@@ -6853,14 +6615,14 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
               </div>
               ) : (
                 <div className="space-y-3">
-                <p className="text-sm text-slate-600 dark:text-white/60 lg:text-white/60">Choose a schedule type.</p>
+                <p className="text-sm text-white/60">Choose a schedule type.</p>
                 <div className="grid grid-cols-2 gap-2">
                   {(['every_morning', 'every_afternoon', 'twice_day', 'hourly'] as ScheduledTask['frequency'][]).map((frequency) => (
                     <button
                       key={frequency}
                       type="button"
                       onClick={() => createScheduledTask(frequency)}
-                      className="rounded-2xl border border-black/5 bg-slate-50 p-3 text-left text-sm font-semibold text-slate-950 dark:border-white/10 dark:bg-white/[0.06] dark:text-white lg:border-white/10 lg:bg-white/5 lg:text-white"
+                      className="rounded-2xl border border-white/10 bg-[#1f1f1f] p-3 text-left text-sm font-semibold text-white"
                     >
                       {scheduleFrequencyLabel(frequency)}
                     </button>
@@ -6873,16 +6635,16 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
             )}
 
               {scheduledTasks.length > 0 && (
-                <div className="mt-4 rounded-2xl border border-black/5 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.06] lg:border-white/10 lg:bg-[#171717]">
-                <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-white/50 lg:text-white/50">Active schedules</p>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-[#1a1a1a] p-3">
+                <p className="mb-2 text-xs font-semibold text-white/50">Active schedules</p>
                 <div className="space-y-2">
                   {scheduledTasks.map((task) => (
-                    <div key={task.id} className="rounded-xl bg-white p-3 text-xs text-slate-600 dark:bg-white/[0.06] dark:text-white/60 lg:bg-white/5 lg:text-white/60">
+                    <div key={task.id} className="rounded-xl bg-white/[0.03] p-3 text-xs text-white/60">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="font-semibold text-slate-950 dark:text-white lg:text-white">{scheduleFrequencyLabel(task.frequency)}</div>
-                          <div className="mt-1 whitespace-pre-wrap break-words">{task.prompt}</div>
-                          <div className="mt-1 text-slate-400">Email: {task.email}</div>
+                          <div className="font-semibold text-white">{scheduleFrequencyLabel(task.frequency)}</div>
+                          <div className="mt-1 whitespace-pre-wrap break-words text-white/70">{task.prompt}</div>
+                          <div className="mt-1 text-white/40">Email: {task.email}</div>
                         </div>
                         <button
                           type="button"
@@ -6904,13 +6666,13 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
       )}
 
       {globalSearchOpen && (
-        <div className="fixed inset-0 z-[85] flex items-start justify-center bg-white/60 px-4 pt-4 backdrop-blur-xl lg:items-center lg:bg-black/60 lg:px-6 lg:pt-0" onClick={() => setGlobalSearchOpen(false)}>
+        <div className="fixed inset-0 z-[85] flex items-start justify-center bg-black/60 px-4 pt-4 backdrop-blur-xl lg:items-center lg:bg-black/60 lg:px-6 lg:pt-0" onClick={() => setGlobalSearchOpen(false)}>
           <div
-            className="mx-auto mt-2 max-h-[82dvh] w-full max-w-[440px] overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.18)] lg:border-white/10 lg:bg-[#0c0c0c] lg:shadow-[0_28px_90px_rgba(0,0,0,0.45)]"
+            className="mx-auto mt-2 max-h-[82dvh] w-full max-w-[440px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0c0c0c] shadow-[0_28px_90px_rgba(0,0,0,0.45)] lg:border-white/10 lg:bg-[#0c0c0c] lg:shadow-[0_28px_90px_rgba(0,0,0,0.45)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 border-b border-slate-100 p-3 lg:border-white/10">
-              <Search className="h-5 w-5 shrink-0 text-slate-500 lg:text-white/60" />
+            <div className="flex items-center gap-3 border-b border-white/10 bg-[#111111] p-3">
+              <Search className="h-5 w-5 shrink-0 text-white/60" />
               <input
                 value={globalSearchQuery}
                 onChange={(e) => { setGlobalSearchQuery(e.target.value); runGlobalSearch(e.target.value); }}
@@ -6921,12 +6683,12 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 }}
                 autoFocus
                 placeholder="Search FaceMeX, recents, topics, videos..."
-                className="min-w-0 flex-1 bg-transparent text-[15px] text-slate-950 outline-none placeholder:text-slate-500 dark:placeholder:text-white/45 lg:text-white lg:placeholder:text-white/45"
+                className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-white/45"
               />
               <button
                 type="button"
                 onClick={() => setGlobalSearchOpen(false)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 lg:bg-white/5 lg:text-white"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-white"
                 aria-label="Close search"
               >
                 <X className="h-4 w-4" />
@@ -6940,12 +6702,12 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                 return (
                   <div className="space-y-5">
                     {globalSearchBusy && (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-600 lg:border-white/10 lg:bg-white/5 lg:text-white/70">
+                      <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-[13px] text-white/70">
                         Searching live results for you...
                       </div>
                     )}
                     <section>
-                      <h3 className="px-2 text-[13px] font-semibold text-slate-500">Results</h3>
+                      <h3 className="px-2 text-[13px] font-semibold text-white/60">Results</h3>
                       <div className="mt-2 space-y-1">
                         {features.map((item) => (
                           <button
@@ -6995,10 +6757,10 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                   setJobsOpen(true);
                                 }
                               }}
-                              className="flex w-full flex-col items-start rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                              className="flex w-full flex-col items-start rounded-2xl px-3 py-3 text-left transition hover:bg-white/10"
                             >
-                              <span className="text-[15px] font-semibold text-slate-950 lg:text-white">{job.title}</span>
-                              <span className="mt-1 text-[12px] text-slate-500 lg:text-slate-400">{job.company} • {job.area}</span>
+                              <span className="text-[15px] font-semibold text-white">{job.title}</span>
+                              <span className="mt-1 text-[12px] text-white/55">{job.company} • {job.area}</span>
                             </button>
                           ))}
                         </div>
@@ -7020,11 +6782,11 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                 setWatchVideos(videos);
                                 setWatchPlayingVideoId(video.videoId);
                               }}
-                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-white/10"
                             >
                               <span className="min-w-0">
-                                <span className="block text-[15px] font-semibold text-slate-950 lg:text-white">{video.title}</span>
-                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-slate-500 lg:text-slate-400">{video.channelTitle || 'YouTube'}</span>
+                                <span className="block text-[15px] font-semibold text-white">{video.title}</span>
+                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-white/55">{video.channelTitle || 'YouTube'}</span>
                               </span>
                               <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-500 lg:bg-white/5 lg:text-white/80">Watch</span>
                             </button>
@@ -7043,14 +6805,14 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                               type="button"
                               onClick={() => {
                                 setGlobalSearchOpen(false);
-                                setLibraryOpen(true);
+                                setPracticalLabOpen(true);
                                 openYoutubeLessonCategory(category);
                               }}
-                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                              className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-white/10"
                             >
                               <span className="min-w-0">
-                                <span className="block text-[15px] font-semibold text-slate-950 lg:text-white">{category.label}</span>
-                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-slate-500 lg:text-slate-400">{category.description}</span>
+                                <span className="block text-[15px] font-semibold text-white">{category.label}</span>
+                                <span className="mt-0.5 line-clamp-1 block text-[12px] text-white/55">{category.description}</span>
                               </span>
                               <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-500 lg:bg-white/5 lg:text-white/80">{category.badge}</span>
                             </button>
@@ -7071,7 +6833,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                                 setGlobalSearchOpen(false);
                                 openChatSession(session);
                               }}
-                              className="block w-full rounded-2xl px-3 py-3 text-left text-[15px] text-slate-800 transition hover:bg-slate-50 lg:text-white lg:hover:bg-white/10"
+                              className="block w-full rounded-2xl px-3 py-3 text-left text-[15px] text-white transition hover:bg-white/10"
                             >
                               {session.title || 'New chat'}
                             </button>
@@ -7088,15 +6850,15 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
       )}
 
       {jobsOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-[4px] lg:hidden" onClick={() => setJobsOpen(false)}>
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-[4px] lg:hidden" onClick={() => setJobsOpen(false)}>
           <div
-            className="fm-premium-drawer absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col overflow-hidden rounded-r-[28px] bg-gradient-to-b from-white via-white to-slate-50 text-slate-950 shadow-2xl"
+            className="fm-premium-drawer absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col overflow-hidden border-r border-white/10 bg-[#0b0b0b] text-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-[92px] shrink-0 items-center justify-between border-b border-slate-100/60 bg-white/80 backdrop-blur-sm px-5 pt-4">
+            <div className="flex h-[92px] shrink-0 items-center justify-between border-b border-white/10 bg-[#111111] px-5 pt-4 backdrop-blur-sm">
               <div className="min-w-0">
-                <h2 className="truncate text-2xl font-semibold tracking-[-0.045em] text-slate-950">FaceMeX</h2>
-                <p className="mt-1 truncate text-xs font-medium text-slate-400">Your AI workspace</p>
+                <h2 className="truncate text-2xl font-semibold tracking-[-0.045em] text-white">FaceMeX</h2>
+                <p className="mt-1 truncate text-xs font-medium text-white/50">Your AI workspace</p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -7106,7 +6868,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setGlobalSearchOpen(true);
                   }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100/60 text-slate-700 shadow-sm transition active:scale-[0.96] hover:bg-slate-200/80 hover:text-slate-900"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-sm transition active:scale-[0.96] hover:bg-white/10"
                   aria-label="Search FaceMeX"
                 >
                   <Search className="h-5 w-5" />
@@ -7127,6 +6889,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
             </div>
 
             <div className="fm-mobile-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-24 pt-3">
+              <h3 className="fm-drawer-heading px-1 text-xs font-semibold uppercase tracking-widest text-white/45">Workspace</h3>
               <div className="space-y-1">
                 <button
                   type="button"
@@ -7134,10 +6897,10 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setPracticalLabOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
+                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-white/80 transition hover:bg-white/10 active:scale-[0.98]"
                 >
-                  <FileText className="h-5 w-5 shrink-0 text-slate-700" />
-                  Practical Lab
+                  <FileText className="h-5 w-5 shrink-0 text-white/75" />
+                  Learn by doing
                 </button>
 
                 <button
@@ -7146,9 +6909,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     openSchedulePanel();
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
+                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-white/80 transition hover:bg-white/10 active:scale-[0.98]"
                 >
-                  <CalendarDays className="h-5 w-5 shrink-0 text-slate-700" />
+                  <CalendarDays className="h-5 w-5 shrink-0 text-white/75" />
                   Scheduled
                 </button>
 
@@ -7158,22 +6921,22 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                     setJobsOpen(false);
                     setTrackerOpen(true);
                   }}
-                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
+                  className="fm-drawer-row flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-white/80 transition hover:bg-white/10 active:scale-[0.98]"
                 >
-                  <Clock className="h-5 w-5 shrink-0 text-slate-700" />
+                  <Clock className="h-5 w-5 shrink-0 text-white/75" />
                   Job Tracker
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setWatchPanelOpen((value) => !value)}
-                  className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-slate-800 transition hover:bg-slate-100/60 active:scale-[0.98]"
+                  className="fm-drawer-row mt-2 flex w-full items-center justify-between gap-4 rounded-xl px-3 py-3.5 text-left text-sm font-semibold tracking-[-0.02em] text-white/80 transition hover:bg-white/10 active:scale-[0.98]"
                 >
                   <span className="flex min-w-0 items-center gap-4">
-                    <Globe2 className="h-5 w-5 shrink-0 text-slate-700" />
+                    <Globe2 className="h-5 w-5 shrink-0 text-white/75" />
                     <span className="min-w-0 truncate">Watch</span>
                   </span>
-                  <ChevronDown className={`h-4 w-4 text-slate-400 transition ${watchPanelOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-4 w-4 text-white/45 transition ${watchPanelOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {watchPanelOpen && (
@@ -7248,11 +7011,12 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
               </div>
 
               <div className="mt-8">
-                <h3 className="fm-drawer-heading px-1 text-xs font-semibold uppercase tracking-widest text-slate-400">Pinned</h3>
+                <h3 className="fm-drawer-heading px-1 text-xs font-semibold uppercase tracking-widest text-white/45">Quick actions</h3>
                 <div className="mt-3 space-y-2">
                   {[
                     { label: 'Find jobs', action: () => quickAsk('I am looking for available jobs in South Africa. Search automatically and show me current jobs with apply links.') },
                     { label: 'Build My CV', action: openCvBuilder },
+                    { label: 'Interview Prep', action: () => quickAsk('Help me prepare for an interview. Give me questions and strong answers.') },
                   ].map((item) => (
                     <button
                       key={item.label}
@@ -7261,9 +7025,9 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                         setJobsOpen(false);
                         item.action();
                       }}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[15px] font-medium text-slate-700 transition hover:bg-slate-100/70 active:scale-[0.98]"
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[15px] font-medium text-white/80 transition hover:bg-white/10 active:scale-[0.98]"
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50 text-slate-600 shadow-sm">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 shadow-sm">
                         <Send className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 truncate">{item.label}</span>
@@ -7274,7 +7038,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
 
               {chatSessions.length > 0 && (
                 <div className="mt-8">
-                  <h3 className="fm-drawer-heading px-1 text-xs font-semibold uppercase tracking-widest text-slate-400">Recent Chats</h3>
+                  <h3 className="fm-drawer-heading px-1 text-xs font-semibold uppercase tracking-widest text-white/45">Recent Chats</h3>
                   <div className="mt-3 space-y-1">
                     {chatSessions.slice(0, 10).map((session) => (
                       <button
@@ -7285,7 +7049,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
                           openChatSession(session);
                         }}
                         className={`block w-full rounded-xl px-3 py-2.5 text-left text-[14px] leading-snug font-medium transition active:scale-[0.98] ${
-                          session.id === activeSessionId ? 'bg-slate-200/60 font-semibold text-slate-950' : 'text-slate-600 hover:bg-slate-100/50 hover:text-slate-800'
+                          session.id === activeSessionId ? 'bg-white/10 font-semibold text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
                         }`}
                       >
                         <span className="line-clamp-2">{session.title || 'New chat'}</span>
@@ -7296,7 +7060,7 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
               )}
             </div>
 
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-end bg-gradient-to-t from-slate-50 via-slate-50/90 to-slate-50/0 px-6 py-5 pb-8">
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-end bg-gradient-to-t from-[#0b0b0b] via-[#0b0b0b]/90 to-[#0b0b0b]/0 px-6 py-5 pb-8">
               <button
                 type="button"
                 onClick={() => {
@@ -7321,22 +7085,30 @@ Give me: main idea, key points, step-by-step explanation, action steps, and quic
       )}
 
       {practicalLabOpen && (
-        <div className="fixed inset-0 z-[110] overflow-y-auto bg-slate-100 dark:bg-slate-950">
-          <div className="sticky top-0 z-[111] flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
+        <div className="fixed inset-0 z-[110] overflow-y-auto bg-[#0b0b0b] text-white">
+          <div className="sticky top-0 z-[111] flex items-center justify-between border-b border-white/10 bg-[#111111]/95 px-4 py-3 shadow-sm backdrop-blur">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">FaceMeX AI</p>
-              <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">Practical Lab Library</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-400">FaceMeX AI</p>
+              <h2 className="truncate text-base font-semibold text-white">Practical Lab Library</h2>
             </div>
             <button
               type="button"
               onClick={() => setPracticalLabOpen(false)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               aria-label="Close Practical Lab Library"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
-          <PracticalLabLibrary />
+          <Suspense
+            fallback={
+              <div className="flex min-h-[50vh] items-center justify-center text-sm text-white/60">
+                Loading Practical Lab...
+              </div>
+            }
+          >
+            <PracticalLabLibrary />
+          </Suspense>
         </div>
       )}
       
