@@ -5202,7 +5202,7 @@ Apply link: ${job.applyUrl}`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-[#0d0d0d] text-white lg:bg-black lg:text-white">
+    <div className="fm-ai-workspace fixed inset-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-full min-w-0 overflow-hidden bg-[#0d0d0d] text-white lg:bg-black lg:text-white">
       <style>{`
         @keyframes fmSoftFloatIn {
           from {
@@ -5555,11 +5555,45 @@ Apply link: ${job.applyUrl}`;
 
 
         @media (max-width: 1023px) {
+          .fm-ai-workspace {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100dvh;
+            min-height: 0;
+            overflow: hidden;
+            color-scheme: dark;
+            background: #0d0d0d !important;
+          }
+
+          .fm-ai-workspace,
+          .fm-ai-workspace main,
+          .fm-ai-workspace section {
+            min-width: 0;
+            min-height: 0;
+          }
+
+          .fm-ai-workspace button,
+          .fm-ai-workspace input,
+          .fm-ai-workspace textarea {
+            -webkit-tap-highlight-color: transparent;
+          }
+
+          .fm-ai-workspace button {
+            min-height: 42px;
+            color: rgba(255, 255, 255, 0.86);
+          }
+
+          .fm-ai-workspace button[aria-label] {
+            min-height: 42px;
+            min-width: 42px;
+          }
+
           .fm-user-prompt-bubble,
           .dark .fm-user-prompt-bubble {
-            background: #f4f4f5 !important;
-            color: #111827 !important;
-            border: 1px solid rgba(15, 23, 42, 0.04);
+            background: #2f2f2f !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: none !important;
           }
 
@@ -5571,7 +5605,7 @@ Apply link: ${job.applyUrl}`;
             font-size: 16px;
             line-height: 1.68;
             letter-spacing: -0.01em;
-            color: #111827;
+            color: rgba(255, 255, 255, 0.9);
           }
 
           .fm-assistant-message h3 {
@@ -5580,21 +5614,85 @@ Apply link: ${job.applyUrl}`;
           }
 
           .fm-composer-card {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.09);
-            box-shadow: 0 14px 45px rgba(15, 23, 42, 0.12);
+            background: #2b2b2b;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 14px 45px rgba(0, 0, 0, 0.28);
+            width: 100%;
+            border-radius: 22px;
+            padding: 8px 10px;
+          }
+
+          .fm-composer-card textarea {
+            min-height: 44px !important;
+            max-height: 120px !important;
+            overflow-y: auto !important;
+            padding-top: 10px !important;
+            padding-bottom: 10px !important;
           }
 
           .fm-mobile-chat-shell {
             background:
-              radial-gradient(circle at 50% 0%, rgba(241, 245, 249, 0.86), rgba(255, 255, 255, 0) 34%),
-              #ffffff;
+              radial-gradient(circle at 50% 0%, rgba(55, 65, 81, 0.28), rgba(13, 13, 13, 0) 34%),
+              #0d0d0d;
+            height: 100%;
+            padding-top: 56px;
+          }
+
+          .fm-chat-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+            padding: 12px 12px calc(1.5rem + env(safe-area-inset-bottom));
+          }
+
+          .fm-chat-scroll::-webkit-scrollbar {
+            width: 5px;
+          }
+
+          .fm-chat-scroll::-webkit-scrollbar-thumb {
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+          }
+
+          .fm-ai-workspace footer {
+            padding: 8px 10px calc(env(safe-area-inset-bottom) + 8px);
+            background: rgba(13, 13, 13, 0.98) !important;
+          }
+
+          .fm-ai-workspace footer > div {
+            width: 100%;
+            max-width: none;
+          }
+
+          .fm-ai-workspace footer textarea {
+            min-width: 0;
+            color: #ffffff !important;
+            font-size: 16px !important;
+            line-height: 1.35 !important;
+          }
+
+          .fm-ai-workspace footer textarea::placeholder {
+            color: rgba(255, 255, 255, 0.45) !important;
+          }
+
+          .fm-ai-workspace .fm-assistant-message .bg-white,
+          .fm-ai-workspace .fm-assistant-message .bg-slate-50,
+          .fm-ai-workspace .fm-assistant-message .bg-slate-100 {
+            background: #171717 !important;
+            color: rgba(255, 255, 255, 0.84) !important;
+          }
+
+          .fm-ai-workspace .fm-assistant-message .text-slate-950,
+          .fm-ai-workspace .fm-assistant-message .text-slate-800,
+          .fm-ai-workspace .fm-assistant-message .text-slate-700,
+          .fm-ai-workspace .fm-assistant-message .text-slate-600,
+          .fm-ai-workspace .fm-assistant-message .text-slate-500 {
+            color: rgba(255, 255, 255, 0.84) !important;
           }
 
           .fm-premium-drawer {
             background:
-              linear-gradient(180deg, #ffffff 0%, #fbfbfc 64%, #f8fafc 100%);
-            box-shadow: 28px 0 80px rgba(15, 23, 42, 0.18);
+              linear-gradient(180deg, #171717 0%, #111111 64%, #0b0b0b 100%);
+            box-shadow: 28px 0 80px rgba(0, 0, 0, 0.45);
           }
 
           .fm-drawer-row {
@@ -5610,7 +5708,7 @@ Apply link: ${job.applyUrl}`;
             font-size: 14px;
             font-weight: 700;
             letter-spacing: -0.02em;
-            color: #111827;
+            color: rgba(255, 255, 255, 0.45);
           }
 
           .fm-drawer-chat-button {
@@ -5631,7 +5729,7 @@ Apply link: ${job.applyUrl}`;
         }
       `}</style>
 
-      <aside className={`${focusMode ? 'hidden' : 'flex'} h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-white/10 bg-[#171717] text-white lg:flex lg:flex-col`}>
+      <aside className="hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-white/10 bg-[#171717] text-white lg:flex lg:flex-col">
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#171717] px-4">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-xs font-black text-black">F</div>
@@ -5872,7 +5970,7 @@ Apply link: ${job.applyUrl}`;
         {focusMode ? 'Exit focus' : 'Focus'}
       </button>
 
-      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[64px] items-center justify-between border-b border-white/10 bg-[#0d0d0d] px-4 pt-2 shadow-sm shadow-black/20 lg:hidden">
+      <header className="pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[56px] items-center justify-between border-b border-white/10 bg-[#0d0d0d] px-3 shadow-sm shadow-black/20 lg:hidden">
 
         {isDeveloper && developerMode && (
           <div className="mx-auto mb-6 max-w-xl rounded-2xl border border-red-200 bg-white p-4 shadow-lg">
@@ -5959,7 +6057,7 @@ Apply link: ${job.applyUrl}`;
         </div>
       
       </header>
-      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[66px] text-white sm:px-4 sm:pb-4 lg:bg-black lg:text-white lg:px-0 lg:py-0 lg:pt-0">
+      <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[56px] text-white sm:px-4 sm:pb-4 lg:bg-black lg:text-white lg:px-0 lg:py-0 lg:pt-0">
         <section className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden bg-[#0d0d0d] text-white lg:max-w-none lg:bg-black">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
