@@ -2,32 +2,28 @@ import { api } from './api';
 
 /*
 |--------------------------------------------------------------------------
-| FACEMEX AI CLIENT
+| FACEMEX AI REPLY CLIENT
 |--------------------------------------------------------------------------
 |
-| GENERAL AI
-|   Groq -> Gemini -> Cerebras -> OpenRouter -> DeepSeek
+| ONE FRONTEND AI GATEWAY
 |
-| IMAGE
-|   Gemini Vision
+| Normal chat
+|   -> Backend -> Groq -> Gemini -> Cerebras -> OpenRouter -> DeepSeek
 |
-| DOCUMENT
-|   Gemini
+| Lesson
+|   -> Backend -> AI using supplied lesson/context
 |
-| JOB SEARCH
-|   Gemini + Google Search
+| Image
+|   -> Backend -> Gemini Vision
 |
-| JOB VERIFICATION
-|   Gemini + Google Search
+| Job search
+|   -> Backend -> Gemini + Google Search
 |
-| DOCUMENT VERIFICATION
-|   Gemini + Google Search
+| Job verification
+|   -> Backend -> Gemini + Google Search
 |
-| WEB VERIFICATION
-|   Gemini + Google Search
-|
-| LESSON / HOMEWORK
-|   General AI unless current web information is required
+| Document verification
+|   -> Backend -> Gemini + Google Search
 |
 |--------------------------------------------------------------------------
 */
@@ -66,14 +62,26 @@ export interface AIReplyOptions {
   verify?: boolean;
 
   /*
-   * Explicit request type.
+   * Optional lesson information.
+   *
+   * The important part:
+   * this file can also build lesson material
+   * automatically from context if these are not supplied.
    */
+  lessonTitle?: string;
+
+  lessonContent?: string;
+
+  lessonDescription?: string;
+
+  lessonUrl?: string;
+
   type?:
     | 'reply'
     | 'vision'
     | 'document'
     | 'lesson'
-    | 'homework'
+    | 'lesson-summary'
     | 'job-search'
     | 'job-verification'
     | 'document-verification'
@@ -82,7 +90,7 @@ export interface AIReplyOptions {
 
 /*
 |--------------------------------------------------------------------------
-| HELPERS
+| BASIC HELPERS
 |--------------------------------------------------------------------------
 */
 
@@ -116,14 +124,139 @@ function hasDocument(
 
 /*
 |--------------------------------------------------------------------------
-| TEXT DETECTION
+| CONTEXT BUILDER
+|--------------------------------------------------------------------------
+*/
+
+function buildConversationContext(
+  context: AIReplyContextMessage[]
+): string {
+  if (!Array.isArray(context)) {
+    return '';
+  }
+
+  return context
+    .slice(-12)
+    .map((message) => {
+      const sender =
+        String(
+          message?.sender || 'User'
+        ).trim();
+
+      const content =
+        String(
+          message?.content || ''
+        ).trim();
+
+      if (!content) {
+        return '';
+      }
+
+      return `${sender}: ${content}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+/*
+|--------------------------------------------------------------------------
+| LESSON MATERIAL
+|--------------------------------------------------------------------------
+|
+| This is the important fix.
+|
+| If the caller gives us lessonContent, use it.
+|
+| If it doesn't, use the existing conversation/context
+| as the lesson material.
+|
+| This means the AI is no longer told:
+|
+| "Summarize this lesson"
+|
+| with absolutely nothing to summarize.
+|--------------------------------------------------------------------------
+*/
+
+function buildLessonMaterial(
+  options: AIReplyOptions
+): string {
+  const directContent =
+    String(
+      options.lessonContent || ''
+    ).trim();
+
+  const description =
+    String(
+      options.lessonDescription || ''
+    ).trim();
+
+  const title =
+    String(
+      options.lessonTitle || ''
+    ).trim();
+
+  const context =
+    buildConversationContext(
+      options.context
+    );
+
+  const sections: string[] = [];
+
+  if (title) {
+    sections.push(
+      `LESSON TITLE:\n${title}`
+    );
+  }
+
+  if (description) {
+    sections.push(
+      `LESSON DESCRIPTION:\n${description}`
+    );
+  }
+
+  if (directContent) {
+    sections.push(
+      `LESSON CONTENT:\n${directContent}`
+    );
+  }
+
+  /*
+   * If explicit lesson content wasn't supplied,
+   * use the available context.
+   */
+  if (!directContent && context) {
+    sections.push(
+      `AVAILABLE LESSON / CONVERSATION MATERIAL:\n${context}`
+    );
+  }
+
+  if (
+    options.lessonUrl &&
+    String(options.lessonUrl).trim()
+  ) {
+    sections.push(
+      `LESSON URL:\n${String(
+        options.lessonUrl
+      ).trim()}`
+    );
+  }
+
+  return sections.join('\n\n').trim();
+}
+
+/*
+|--------------------------------------------------------------------------
+| VERIFICATION DETECTION
 |--------------------------------------------------------------------------
 */
 
 function looksLikeVerificationRequest(
   message: string
 ): boolean {
-  const text = message.toLowerCase();
+  const text =
+    String(message || '')
+      .toLowerCase();
 
   const words = [
     'verify',
@@ -149,15 +282,24 @@ function looksLikeVerificationRequest(
     'confirm this company',
   ];
 
-  return words.some((word) =>
-    text.includes(word)
+  return words.some(
+    (word) =>
+      text.includes(word)
   );
 }
+
+/*
+|--------------------------------------------------------------------------
+| JOB SEARCH DETECTION
+|--------------------------------------------------------------------------
+*/
 
 function looksLikeJobSearchRequest(
   message: string
 ): boolean {
-  const text = message.toLowerCase();
+  const text =
+    String(message || '')
+      .toLowerCase();
 
   const words = [
     'find me a job',
@@ -168,74 +310,59 @@ function looksLikeJobSearchRequest(
     'search jobs',
     'jobs near',
     'jobs in',
-    'vacancies in',
     'vacancy in',
+    'vacancies in',
     'hiring in',
     'employment opportunities',
     'work opportunities',
     'career opportunities',
+    'job opportunities',
     'latest jobs',
     'current jobs',
     'available jobs',
     'job openings',
-    'job opportunities',
     'internships',
-    'internship opportunities',
     'learnerships',
-    'learnership opportunities',
   ];
 
-  return words.some((word) =>
-    text.includes(word)
+  return words.some(
+    (word) =>
+      text.includes(word)
   );
 }
+
+/*
+|--------------------------------------------------------------------------
+| LESSON DETECTION
+|--------------------------------------------------------------------------
+*/
 
 function looksLikeLessonRequest(
   message: string
 ): boolean {
-  const text = message.toLowerCase();
+  const text =
+    String(message || '')
+      .toLowerCase();
 
   const words = [
     'summarize this lesson',
     'summarise this lesson',
     'summarize the lesson',
     'summarise the lesson',
+    'summarize this',
+    'summarise this',
     'explain this lesson',
     'explain the lesson',
     'teach me this lesson',
-    'what is this lesson about',
     'lesson summary',
     'lesson explanation',
     'help me understand this lesson',
-    'what did i learn',
-    'summarise this',
-    'summarize this',
+    'what is this lesson about',
   ];
 
-  return words.some((word) =>
-    text.includes(word)
-  );
-}
-
-function looksLikeHomeworkRequest(
-  message: string
-): boolean {
-  const text = message.toLowerCase();
-
-  const words = [
-    'homework',
-    'assignment',
-    'solve this',
-    'solve the question',
-    'help me with this question',
-    'explain this question',
-    'answer this question',
-    'help me understand',
-    'step by step',
-  ];
-
-  return words.some((word) =>
-    text.includes(word)
+  return words.some(
+    (word) =>
+      text.includes(word)
   );
 }
 
@@ -252,93 +379,68 @@ function determineRequestType(
   | 'vision'
   | 'document'
   | 'lesson'
-  | 'homework'
+  | 'lesson-summary'
   | 'job-search'
   | 'job-verification'
   | 'document-verification'
   | 'web-verification' {
 
-  const {
-    userMessage,
-    image,
-    document,
-    verify,
-    type,
-  } = options;
-
   /*
-   * Explicit type ALWAYS wins.
-   *
-   * This is important because the backend must not
-   * guess what the frontend already knows.
+   * Explicit type always wins.
    */
-  if (type) {
-    return type;
+  if (options.type) {
+    return options.type;
   }
 
-  const verificationRequested =
-    Boolean(verify) ||
+  const verification =
+    Boolean(options.verify) ||
     looksLikeVerificationRequest(
-      userMessage
+      options.userMessage
     );
 
-  const jobSearchRequested =
+  const jobSearch =
     looksLikeJobSearchRequest(
-      userMessage
+      options.userMessage
     );
 
   /*
-   * Job + attachment + verification
+   * Image + verification
    */
   if (
-    jobSearchRequested &&
-    (
-      hasImage(image) ||
-      hasDocument(document)
-    ) &&
-    verificationRequested
+    hasImage(options.image) &&
+    verification
   ) {
     return 'job-verification';
   }
 
   /*
-   * Document verification
+   * Document + verification
    */
   if (
-    hasDocument(document) &&
-    verificationRequested
+    hasDocument(options.document) &&
+    verification
   ) {
     return 'document-verification';
   }
 
   /*
-   * Image verification
+   * Normal job search
    */
-  if (
-    hasImage(image) &&
-    verificationRequested
-  ) {
-    return 'web-verification';
-  }
-
-  /*
-   * Live job search
-   */
-  if (jobSearchRequested) {
+  if (jobSearch) {
     return 'job-search';
   }
 
   /*
-   * Image analysis
+   * Normal image
    */
-  if (hasImage(image)) {
+  if (hasImage(options.image)) {
     return 'vision';
   }
 
   /*
-   * Document analysis
+   * Normal document
    */
-  if (hasDocument(document)) {
+  if (hasDocument(options.document)) {
     return 'document';
   }
 
@@ -347,21 +449,14 @@ function determineRequestType(
    */
   if (
     looksLikeLessonRequest(
-      userMessage
+      options.userMessage
     )
   ) {
-    return 'lesson';
-  }
-
-  /*
-   * Homework
-   */
-  if (
-    looksLikeHomeworkRequest(
-      userMessage
+    return /summar/i.test(
+      options.userMessage
     )
-  ) {
-    return 'homework';
+      ? 'lesson-summary'
+      : 'lesson';
   }
 
   return 'reply';
@@ -369,42 +464,7 @@ function determineRequestType(
 
 /*
 |--------------------------------------------------------------------------
-| CONTEXT
-|--------------------------------------------------------------------------
-*/
-
-function buildConversationContext(
-  context: AIReplyContextMessage[]
-): string {
-
-  return context
-    .slice(-8)
-    .map((message) => {
-
-      const sender =
-        String(
-          message.sender || 'User'
-        ).trim();
-
-      const content =
-        String(
-          message.content || ''
-        ).trim();
-
-      if (!content) {
-        return '';
-      }
-
-      return `${sender}: ${content}`;
-
-    })
-    .filter(Boolean)
-    .join('\n');
-}
-
-/*
-|--------------------------------------------------------------------------
-| PROMPTS
+| NORMAL CHAT PROMPT
 |--------------------------------------------------------------------------
 */
 
@@ -412,12 +472,11 @@ function buildNormalReplyPrompt(
   options: AIReplyOptions
 ): string {
 
-  const {
-    context,
-    userMessage,
-    tone = 'casual',
-    maxLength = 150,
-  } = options;
+  const tone =
+    options.tone || 'casual';
+
+  const maxLength =
+    options.maxLength || 150;
 
   const toneInstruction = {
     professional:
@@ -430,36 +489,170 @@ function buildNormalReplyPrompt(
       'Write warmly, naturally and friendly.',
   }[tone];
 
+  const context =
+    buildConversationContext(
+      options.context
+    );
+
   return `
 You are FaceMeX AI.
 
-Help the user respond naturally to the latest message.
+Answer the user's actual request.
 
-Recent conversation:
-${buildConversationContext(context) || '(No previous conversation)'}
+RECENT CONVERSATION:
+${context || '(No previous conversation)'}
 
-Latest user request:
-${userMessage}
+USER REQUEST:
+${options.userMessage}
 
-Tone:
+TONE:
 ${toneInstruction}
 
-Rules:
+RULES:
 - Answer the actual request.
-- Return ONLY the response.
-- Do not explain your reasoning.
-- Do not mention that you are an AI.
-- Do not use quotation marks around the response.
-- Keep it natural.
-- Keep it concise.
-- Do not ask unnecessary questions.
+- Be useful.
+- Be accurate.
+- Do not invent facts.
+- Do not invent jobs.
+- Do not invent companies.
+- Do not invent links.
+- Do not mention internal AI systems.
+- Do not mention routing.
+- Do not say "as an AI".
+- Keep the response natural.
 - Maximum ${maxLength} characters.
 `.trim();
 }
 
 /*
 |--------------------------------------------------------------------------
-| VISION PROMPT
+| LESSON PROMPT
+|--------------------------------------------------------------------------
+*/
+
+function buildLessonPrompt(
+  options: AIReplyOptions
+): string {
+
+  const material =
+    buildLessonMaterial(
+      options
+    );
+
+  const title =
+    options.lessonTitle ||
+    'Lesson';
+
+  const isSummary =
+    options.type ===
+      'lesson-summary' ||
+    /summar/i.test(
+      options.userMessage
+    );
+
+  /*
+   * CRITICAL:
+   *
+   * If no lesson material exists,
+   * don't hallucinate a summary.
+   */
+  if (!material) {
+    return `
+You are FaceMeX AI, an educational assistant.
+
+The user asked:
+
+"${options.userMessage}"
+
+The actual lesson content was not supplied.
+
+Do NOT invent a lesson summary.
+
+Tell the user clearly:
+
+"I need the lesson content, transcript, or lesson material to summarize it accurately."
+
+Do not provide a generic Homework Help explanation.
+
+Do not pretend that you have seen the lesson.
+`.trim();
+  }
+
+  if (isSummary) {
+    return `
+You are FaceMeX AI's lesson summarization assistant.
+
+LESSON:
+${title}
+
+ACTUAL LESSON MATERIAL:
+${material}
+
+USER REQUEST:
+${options.userMessage}
+
+Your task is to summarize the ACTUAL lesson material above.
+
+IMPORTANT:
+- Use the supplied lesson material.
+- Do not invent information.
+- Do not replace the lesson with generic Homework Help instructions.
+- Do not describe FaceMeX.
+- Do not explain how to use FaceMeX.
+- Do not create unrelated educational material.
+
+Structure your response:
+
+### Lesson Summary
+
+**Main idea**
+Explain the central idea.
+
+**Key concepts**
+List the most important concepts.
+
+**Important points**
+List the important facts or ideas.
+
+**Simple explanation**
+Explain the lesson in simple learner-friendly language.
+
+**What to remember**
+Give the most important revision points.
+
+Only use information supported by the lesson material.
+`.trim();
+  }
+
+  return `
+You are FaceMeX AI's educational assistant.
+
+LESSON:
+${title}
+
+ACTUAL LESSON MATERIAL:
+${material}
+
+USER QUESTION:
+${options.userMessage}
+
+Answer the user's question using the actual lesson material.
+
+IMPORTANT:
+- Do not invent information.
+- Do not give a generic Homework Help process.
+- Do not talk about FaceMeX unless asked.
+- Explain difficult concepts simply.
+- Use examples when they are supported by the lesson.
+- If the lesson does not contain the requested information, say so.
+
+Return the educational answer directly.
+`.trim();
+}
+
+/*
+|--------------------------------------------------------------------------
+| IMAGE PROMPT
 |--------------------------------------------------------------------------
 */
 
@@ -468,36 +661,41 @@ function buildVisionPrompt(
 ): string {
 
   return `
-You are FaceMeX AI's visual analysis assistant.
+You are FaceMeX AI's image analysis assistant.
 
-The user has attached an image.
+The user has uploaded an image.
 
-You MUST analyze the actual image before answering.
-
-User's question:
+USER QUESTION:
 ${options.userMessage}
 
+IMPORTANT:
+You MUST analyze the actual uploaded image.
+
+Analyze what is visibly present.
+
+Look for:
+- text
+- headings
+- names
+- dates
+- numbers
+- company names
+- logos
+- job titles
+- locations
+- requirements
+- contact information
+- application instructions
+
 Rules:
+- Do not invent information.
+- Do not claim that something is visible if it is not.
+- If text is unreadable, say that it is unreadable.
+- If the image contains a job advertisement, extract the visible job information.
+- If the user asks whether it is legitimate, appearance alone is NOT proof of legitimacy.
+- Explain what can be determined from the image and what requires external verification.
 
-- Inspect the attached image carefully.
-- Read visible text when possible.
-- Describe only information actually visible.
-- Do not invent missing information.
-- If this is a job advertisement, identify:
-  - employer
-  - position
-  - location
-  - requirements
-  - closing date
-  - reference number
-  - application instructions
-- If something is unreadable, say so.
-- If the user asks whether the image is legitimate, do NOT determine legitimacy from appearance alone.
-- Explain what can and cannot be determined from the image.
-
-Give the user a useful answer.
-
-Do not talk about internal routing or APIs.
+Return the useful answer directly.
 `.trim();
 }
 
@@ -514,40 +712,33 @@ function buildDocumentPrompt(
   return `
 You are FaceMeX AI's document analysis assistant.
 
-The user has attached a document.
+The user uploaded a document.
 
-User's question:
+USER QUESTION:
 ${options.userMessage}
 
-Rules:
+Analyze the actual document.
 
-- Analyze the actual document.
-- Use the document contents.
+Rules:
+- Use the document's actual contents.
 - Do not invent missing information.
-- Accurately handle:
-  - dates
-  - names
-  - numbers
-  - tables
-  - requirements
-  - reference numbers
-  - application instructions
-- If asked to summarize, summarize the actual document.
-- If asked to explain something, explain it clearly.
-- If asked whether the document is legitimate, do not determine legitimacy from appearance alone.
-- Explain what requires external verification.
+- Accurately handle names, dates, numbers, tables and requirements.
+- Summarize the actual document when requested.
+- Explain difficult sections clearly.
+- If authenticity is requested, do not determine authenticity from appearance alone.
+- Explain what needs external verification.
 
-Return a clear answer.
+Return a useful answer.
 `.trim();
 }
 
 /*
 |--------------------------------------------------------------------------
-| LESSON PROMPT
+| JOB SEARCH PROMPT
 |--------------------------------------------------------------------------
 */
 
-function buildLessonPrompt(
+function buildJobSearchPrompt(
   options: AIReplyOptions
 ): string {
 
@@ -557,87 +748,49 @@ function buildLessonPrompt(
     );
 
   return `
-You are FaceMeX AI's learning assistant.
+You are FaceMeX's live job-search assistant.
 
-The user is asking about an educational lesson.
+The user wants CURRENT job opportunities.
 
-User request:
+USER REQUEST:
 ${options.userMessage}
 
-Lesson/conversation context:
-${context || '(No additional lesson text was supplied)'}
+CONTEXT:
+${context || '(None)'}
 
-IMPORTANT:
+Use current web search.
 
-Do NOT answer with a generic description of FaceMeX.
+Prioritize:
+- Official employer websites
+- Government websites
+- University websites
+- Official recruitment portals
+- Reputable recruitment sources
 
-Do NOT describe the "Homework Help process" unless that is actually what the user asked about.
+Never invent:
+- jobs
+- employers
+- vacancies
+- closing dates
+- application URLs
 
-The user wants help with the actual lesson.
+For each job found, provide where available:
 
-If the lesson content is available in the context:
-- Identify the main topic.
-- Summarize the actual lesson.
-- Explain the important concepts.
-- Highlight key terms.
-- Give simple examples where useful.
-- Keep the explanation appropriate for a learner.
-- Do not invent lesson content.
+1. Job title
+2. Employer
+3. Location
+4. Closing date
+5. Posting date
+6. Requirements
+7. Source
+8. Application URL
 
-If the actual lesson content is NOT available:
-- Clearly say that the lesson content was not supplied.
-- Ask the user to provide the lesson text, screenshot or material.
-- Do not invent a summary.
+Clearly distinguish official sources from third-party job boards.
 
-When summarizing:
-1. Main idea
-2. Key concepts
-3. Important facts
-4. Simple explanation
-5. What the learner should remember
+If you cannot verify a listing, say:
+"Could not independently verify."
 
-Return the educational answer directly.
-`.trim();
-}
-
-/*
-|--------------------------------------------------------------------------
-| HOMEWORK PROMPT
-|--------------------------------------------------------------------------
-*/
-
-function buildHomeworkPrompt(
-  options: AIReplyOptions
-): string {
-
-  const context =
-    buildConversationContext(
-      options.context
-    );
-
-  return `
-You are FaceMeX AI's Homework Help assistant.
-
-Student request:
-${options.userMessage}
-
-Recent context:
-${context || '(No previous context)'}
-
-Help the student understand the problem.
-
-Rules:
-- Explain step by step.
-- Do not simply give an unexplained answer.
-- Use simple language.
-- Show calculations when necessary.
-- Explain important terms.
-- Do not invent information.
-- If information is missing, ask for it.
-- If there is a correct final answer, clearly identify it.
-- Help the learner understand how to solve similar problems.
-
-Return the answer directly.
+Return useful current job results.
 `.trim();
 }
 
@@ -656,165 +809,127 @@ You are FaceMeX Verification AI.
 
 The user wants information verified using current web sources.
 
-User request:
+USER REQUEST:
 ${options.userMessage}
 
+If an image or document is attached:
+analyze it first.
+
+Extract:
+- employer
+- organization
+- institution
+- job title
+- location
+- closing date
+- reference number
+- website
+- application method
+- contact information
+
+Then compare the information with current authoritative web sources.
+
+Prefer:
+- official company websites
+- government websites
+- official university websites
+- official recruitment portals
+- official institutional websites
+
+Clearly distinguish:
+
+WHAT THE ATTACHMENT SAYS
+
+WHAT THE OFFICIAL SOURCE SAYS
+
+WHAT MATCHES
+
+WHAT DOES NOT MATCH
+
+WHAT COULD NOT BE VERIFIED
+
 IMPORTANT:
+- A professional-looking poster is NOT proof of legitimacy.
+- Do not invent sources.
+- Do not invent URLs.
+- Do not claim certainty beyond the evidence.
 
-1. Analyze the supplied image or document when one is attached.
+Use evidence-based language such as:
 
-2. Extract useful identifying information.
+"Confirmed by official source."
 
-3. Identify:
-   - organizations
-   - companies
-   - institutions
-   - job titles
-   - reference numbers
-   - dates
-   - locations
-   - websites
-   - application information
+"Matching official listing found."
 
-4. Use current web search to verify the information.
+"Could not independently verify."
 
-5. Prefer authoritative sources:
-   - Government websites
-   - Official company websites
-   - Official university websites
-   - Official recruitment portals
-   - Official institutional sources
+"Details do not match."
 
-6. Compare the supplied information against current sources.
+"Needs further verification."
 
-7. Clearly distinguish:
-   - What the attachment says
-   - What the web sources say
-   - What is confirmed
-   - What could not be confirmed
-   - What conflicts
-
-8. Never call a job legitimate merely because the poster looks professional.
-
-9. Never invent a source.
-
-10. Never invent an application URL.
-
-11. If no authoritative matching source can be found, say so.
-
-For job advertisements identify where available:
-
-- Employer
-- Position
-- Location
-- Closing date
-- Reference number
-- Application method
-- Official listing
-- Application URL
-- Any mismatch between the attachment and official source
-
-Use careful verification language:
-
-"Confirmed by official source"
-
-"Matching official listing found"
-
-"Could not independently verify"
-
-"Details do not match"
-
-"Needs further verification"
-
-Do not claim certainty beyond the evidence.
-
-Return a useful evidence-based verification.
+Return a clear verification result.
 `.trim();
 }
 
 /*
 |--------------------------------------------------------------------------
-| PAYLOAD
+| BUILD FINAL REQUEST
 |--------------------------------------------------------------------------
 */
 
 function buildPayload(
   options: AIReplyOptions,
-  requestType: ReturnType<
-    typeof determineRequestType
-  >
+  type:
+    | 'reply'
+    | 'vision'
+    | 'document'
+    | 'lesson'
+    | 'lesson-summary'
+    | 'job-search'
+    | 'job-verification'
+    | 'document-verification'
+    | 'web-verification'
 ) {
-
-  const maxLength =
-    options.maxLength ?? 150;
 
   let prompt: string;
 
-  switch (requestType) {
+  switch (type) {
 
     case 'vision':
       prompt =
-        buildVisionPrompt(options);
+        buildVisionPrompt(
+          options
+        );
       break;
 
     case 'document':
       prompt =
-        buildDocumentPrompt(options);
+        buildDocumentPrompt(
+          options
+        );
       break;
 
     case 'lesson':
+    case 'lesson-summary':
       prompt =
-        buildLessonPrompt(options);
+        buildLessonPrompt(
+          options
+        );
       break;
 
-    case 'homework':
+    case 'job-search':
       prompt =
-        buildHomeworkPrompt(options);
+        buildJobSearchPrompt(
+          options
+        );
       break;
 
     case 'job-verification':
     case 'document-verification':
     case 'web-verification':
       prompt =
-        buildVerificationPrompt(options);
-      break;
-
-    case 'job-search':
-      prompt = `
-You are FaceMeX's live job search assistant.
-
-Find CURRENT jobs matching the user's request.
-
-User request:
-${options.userMessage}
-
-Use live web search.
-
-Prioritize:
-- Official employer websites
-- Government websites
-- University websites
-- Official recruitment portals
-
-Never invent jobs.
-
-Never invent employers.
-
-Never invent application URLs.
-
-For each useful result provide:
-- Job title
-- Employer
-- Location
-- Closing date if available
-- Source
-- Application URL if available
-- Important requirements if available
-
-Clearly distinguish official sources from third-party job boards.
-
-If a job cannot be independently verified, say so.
-`.trim();
+        buildVerificationPrompt(
+          options
+        );
       break;
 
     case 'reply':
@@ -826,65 +941,72 @@ If a job cannot be independently verified, say so.
       break;
   }
 
-  const isVerification =
-    requestType ===
+  const verification =
+    type ===
       'job-verification' ||
-    requestType ===
+    type ===
       'document-verification' ||
-    requestType ===
+    type ===
       'web-verification';
 
-  const isLiveSearch =
-    requestType ===
-      'job-search' ||
-    isVerification;
-
+  /*
+   * IMPORTANT:
+   *
+   * We send the generated prompt as BOTH
+   * "prompt" and "message".
+   *
+   * Your backend's normalizeMessages()
+   * understands both fields.
+   *
+   * This guarantees the actual lesson/image/
+   * verification instructions reach the AI.
+   */
   return {
-
-    /*
-     * This gives the backend the exact task.
-     */
-    task:
-      requestType === 'vision'
-        ? 'vision'
-        : requestType === 'document'
-        ? 'document'
-        : requestType === 'lesson'
-        ? 'lesson_explanation'
-        : requestType === 'homework'
-        ? 'homework'
-        : requestType === 'job-search'
-        ? 'job_search'
-        : requestType ===
-          'job-verification'
-        ? 'job_verification'
-        : requestType ===
-          'document-verification'
-        ? 'document_verification'
-        : requestType ===
-          'web-verification'
-        ? 'job_verification'
-        : 'general_chat',
-
-    type: requestType,
 
     prompt,
 
     message:
-      options.userMessage,
+      prompt,
 
     context:
-      options.context,
+      options.context || [],
+
+    type,
+
+    task:
+      type === 'vision'
+        ? 'vision'
+
+        : type === 'document'
+        ? 'document'
+
+        : type === 'lesson' ||
+          type === 'lesson-summary'
+        ? 'lesson_explanation'
+
+        : type === 'job-search'
+        ? 'job_search'
+
+        : type ===
+            'job-verification' ||
+          type ===
+            'document-verification' ||
+          type ===
+            'web-verification'
+        ? 'job_verification'
+
+        : 'general_chat',
 
     verify:
       Boolean(options.verify) ||
-      isVerification,
+      verification,
 
-    googleSearch:
-      isLiveSearch,
+    maxLength:
+      options.maxLength || 150,
 
-    maxLength,
-
+    /*
+     * IMAGE
+     */
     image:
       hasImage(options.image)
         ? {
@@ -892,8 +1014,7 @@ If a job cannot be independently verified, say so.
               options.image!.data,
 
             mimeType:
-              options.image!
-                .mimeType ||
+              options.image!.mimeType ||
               'image/jpeg',
 
             name:
@@ -901,10 +1022,11 @@ If a job cannot be independently verified, say so.
           }
         : null,
 
+    /*
+     * DOCUMENT
+     */
     document:
-      hasDocument(
-        options.document
-      )
+      hasDocument(options.document)
         ? {
             data:
               options.document?.data,
@@ -913,14 +1035,34 @@ If a job cannot be independently verified, say so.
               options.document?.url,
 
             mimeType:
-              options.document!
-                .mimeType ||
+              options.document!.mimeType ||
               'application/pdf',
 
             name:
               options.document?.name,
           }
         : null,
+
+    /*
+     * LESSON DATA
+     *
+     * These are also sent separately so your
+     * backend can use them in the future.
+     */
+    lessonTitle:
+      options.lessonTitle || '',
+
+    lessonContent:
+      options.lessonContent ||
+      buildLessonMaterial(
+        options
+      ),
+
+    lessonDescription:
+      options.lessonDescription || '',
+
+    lessonUrl:
+      options.lessonUrl || '',
   };
 }
 
@@ -934,14 +1076,15 @@ function extractReply(
   data: any
 ): string {
 
-  let reply = String(
-    data?.text ??
+  const reply =
+    String(
+      data?.text ??
       data?.reply ??
       data?.content ??
       data?.response ??
       data?.message ??
       ''
-  ).trim();
+    ).trim();
 
   if (!reply) {
     throw new Error(
@@ -949,10 +1092,7 @@ function extractReply(
     );
   }
 
-  /*
-   * Remove accidental markdown code fences.
-   */
-  reply = reply
+  return reply
     .replace(
       /^```(?:text|markdown)?/i,
       ''
@@ -962,72 +1102,11 @@ function extractReply(
       ''
     )
     .trim();
-
-  /*
-   * Remove unnecessary wrapping quotes.
-   */
-  if (
-    (
-      reply.startsWith('"') &&
-      reply.endsWith('"')
-    ) ||
-    (
-      reply.startsWith("'") &&
-      reply.endsWith("'")
-    )
-  ) {
-    reply = reply
-      .substring(
-        1,
-        reply.length - 1
-      )
-      .trim();
-  }
-
-  return reply;
 }
 
 /*
 |--------------------------------------------------------------------------
-| ERROR EXTRACTION
-|--------------------------------------------------------------------------
-*/
-
-function extractErrorDetails(
-  error: unknown
-): string {
-
-  if (
-    error instanceof Error &&
-    error.message
-  ) {
-
-    try {
-
-      const parsed =
-        JSON.parse(
-          error.message
-        );
-
-      return (
-        parsed?.error ||
-        parsed?.message ||
-        parsed?.details ||
-        error.message
-      );
-
-    } catch {
-
-      return error.message;
-    }
-  }
-
-  return 'Please try again.';
-}
-
-/*
-|--------------------------------------------------------------------------
-| MAIN AI FUNCTION
+| MAIN FUNCTION
 |--------------------------------------------------------------------------
 */
 
@@ -1035,55 +1114,49 @@ export async function generateAIReply(
   options: AIReplyOptions
 ): Promise<string> {
 
-  const maxLength =
-    options.maxLength ?? 150;
-
-  const requestType =
+  const type =
     determineRequestType(
       options
     );
 
-  const payload =
-    buildPayload(
-      options,
-      requestType
-    );
-
   console.log(
-    '[FaceMeX AI] Client request:',
+    '[FaceMeX AI] Request',
     {
-      type:
-        requestType,
-
-      task:
-        payload.task,
-
-      googleSearch:
-        payload.googleSearch,
+      type,
 
       hasImage:
-        Boolean(
-          payload.image
+        hasImage(
+          options.image
         ),
 
       hasDocument:
+        hasDocument(
+          options.document
+        ),
+
+      hasLessonContent:
         Boolean(
-          payload.document
+          buildLessonMaterial(
+            options
+          )
         ),
     }
   );
 
+  const payload =
+    buildPayload(
+      options,
+      type
+    );
+
   try {
 
     /*
-     * ALL requests use the same backend entry point.
+     * EVERYTHING goes through your existing
+     * /api/ai/reply endpoint.
      *
-     * The backend decides:
-     *
-     * General -> Groq first
-     * Search -> Gemini + Google Search
-     * Image -> Gemini
-     * Verification -> Gemini + Search
+     * No separate frontend image-analysis
+     * endpoint is required.
      */
     const data =
       await api.post(
@@ -1092,40 +1165,43 @@ export async function generateAIReply(
       );
 
     let reply =
-      extractReply(data);
+      extractReply(
+        data
+      );
 
     /*
-     * Verification and job-search responses
-     * MUST NOT be aggressively truncated.
+     * Long-answer requests must NOT be
+     * truncated to 150 characters.
      */
-    const noTruncate =
-      requestType ===
-        'job-search' ||
-      requestType ===
-        'job-verification' ||
-      requestType ===
-        'document-verification' ||
-      requestType ===
-        'web-verification' ||
-      requestType ===
-        'vision' ||
-      requestType ===
-        'document' ||
-      requestType ===
-        'lesson' ||
-      requestType ===
-        'homework';
+    const needsFullResponse =
+      type === 'vision' ||
+      type === 'document' ||
+      type === 'lesson' ||
+      type === 'lesson-summary' ||
+      type === 'job-search' ||
+      type === 'job-verification' ||
+      type === 'document-verification' ||
+      type === 'web-verification';
 
     if (
-      noTruncate ||
-      reply.length <= maxLength
+      needsFullResponse
     ) {
       return reply;
     }
 
     /*
-     * Normal social/chat replies can be short.
+     * Normal social replies can remain short.
      */
+    const maxLength =
+      options.maxLength ?? 150;
+
+    if (
+      reply.length <=
+      maxLength
+    ) {
+      return reply;
+    }
+
     return (
       reply
         .substring(
@@ -1142,14 +1218,20 @@ export async function generateAIReply(
   } catch (error) {
 
     console.error(
-      '[FaceMeX AI] Request failed:',
+      'FaceMeX AI reply failed:',
       error
     );
 
-    const details =
-      extractErrorDetails(
-        error
-      );
+    let details =
+      'Please try again.';
+
+    if (
+      error instanceof Error &&
+      error.message
+    ) {
+      details =
+        error.message;
+    }
 
     throw new Error(
       `Failed to generate FaceMeX AI response. ${details}`
