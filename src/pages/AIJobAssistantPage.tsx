@@ -3007,6 +3007,13 @@ const [developerPlan, setDeveloperPlan] = useState<
 
 const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [newSubfolderName, setNewSubfolderName] = useState('');
+  const [workspaceProjects, setWorkspaceProjects] = useState<Array<{ id: string; name: string; folders: string[]; createdAt: string }>>([
+    { id: 'starter-project', name: 'Workflows', folders: ['Research', 'Applications', 'Documents'], createdAt: new Date().toISOString() },
+  ]);
   const [watchSearch, setWatchSearch] = useState('');
   const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
   const [watchBusy, setWatchBusy] = useState(false);
@@ -3038,6 +3045,19 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     if (deepSeekLimit === null) return true;
     return deepSeekUsage < deepSeekLimit;
   }, [deepSeekLimit, deepSeekUsage]);
+
+  const hasProAccess = useMemo(() => {
+    return (
+      currentTier === 'pro' ||
+      currentTier === 'business' ||
+      currentTier === 'creator' ||
+      currentTier === 'exclusive' ||
+      hasTier?.('pro') ||
+      hasTier?.('business') ||
+      hasTier?.('creator') ||
+      hasTier?.('exclusive')
+    );
+  }, [currentTier, hasTier]);
 
   const remainingAIUses = useMemo(() => {
     if (deepSeekLimit === null) return null;
@@ -3266,8 +3286,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
     const featuresList = [
       { label: 'Scheduled', action: () => openSchedulePanel() },
-      { label: 'Job Tracker', action: () => setTrackerOpen(true) },
-      { label: 'Practical Lab', action: () => setPracticalLabOpen(true) },
+      { label: 'Job Tracker', action: () => openJobTracker() },
+      { label: 'Practical Lab', action: () => openPracticalLab() },
     ];
 
     const features = featuresList.filter((f) => matches(f.label));
@@ -3630,6 +3650,88 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }
   };
 
+  const handleCreateProject = () => {
+    const trimmedName = newProjectName.trim();
+
+    if (!trimmedName) {
+      toast({
+        title: 'Project name needed',
+        description: 'Give your project a name before creating it.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const projectId = safeId();
+    const nextProject = {
+      id: projectId,
+      name: trimmedName,
+      folders: ['General'],
+      createdAt: new Date().toISOString(),
+    };
+
+    setWorkspaceProjects((prev) => [nextProject, ...prev]);
+    setSelectedProjectId(projectId);
+    setNewProjectName('');
+    setNewSubfolderName('');
+    setProjectsOpen(true);
+    toast({ title: 'Project created', description: `${trimmedName} is ready for organizing your work.` });
+  };
+
+  const handleAddSubfolder = () => {
+    if (!selectedProjectId) {
+      toast({
+        title: 'Select a project',
+        description: 'Choose a project before creating a subfolder.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const trimmedFolderName = newSubfolderName.trim();
+    if (!trimmedFolderName) {
+      toast({
+        title: 'Folder name needed',
+        description: 'Add a name for your subfolder before saving it.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setWorkspaceProjects((prev) =>
+      prev.map((project) =>
+        project.id === selectedProjectId
+          ? {
+              ...project,
+              folders: Array.from(new Set([...(project.folders || []), trimmedFolderName])),
+            }
+          : project
+      )
+    );
+    setNewSubfolderName('');
+    toast({ title: 'Subfolder added', description: `${trimmedFolderName} is now in the project.` });
+  };
+
+  const openJobTracker = () => {
+    if (!hasProAccess) {
+      setSubscriptionOpen(true);
+      toast({ title: 'Pro required', description: 'Unlock Job Tracker with FaceMeX Pro.' });
+      return;
+    }
+
+    setTrackerOpen(true);
+  };
+
+  const openPracticalLab = () => {
+    if (!hasProAccess) {
+      setSubscriptionOpen(true);
+      toast({ title: 'Pro required', description: 'Unlock the Practical Lab with FaceMeX Pro.' });
+      return;
+    }
+
+    setPracticalLabOpen(true);
+  };
+
   const stopScreenShare = () => {
     if (screenShareStreamRef.current) {
       screenShareStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -3641,6 +3743,12 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   };
 
   const startScreenShare = async () => {
+    if (!hasProAccess) {
+      setSubscriptionOpen(true);
+      setScreenShareError('Screen sharing is available on FaceMeX Pro. Upgrade to continue.');
+      return;
+    }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
       setScreenShareError('Screen sharing is not supported in this browser.');
       return;
@@ -4421,12 +4529,14 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         feature: 'FaceMeX Career Workspace',
       });
 
-      setTrackerOpen(true);
+      openJobTracker();
 
-      toast({
-        title: 'Job Tracker opened',
-        description: 'Track saved jobs, applied jobs, interviews, rejected jobs, and offers.',
-      });
+      if (hasProAccess) {
+        toast({
+          title: 'Job Tracker opened',
+          description: 'Track saved jobs, applied jobs, interviews, rejected jobs, and offers.',
+        });
+      }
 
       return;
     }
@@ -5832,11 +5942,14 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setTrackerOpen(true)}
-            className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/80 transition hover:bg-white/5 hover:text-white"
+            onClick={openJobTracker}
+            className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+              hasProAccess ? 'text-white/80 hover:bg-white/5 hover:text-white' : 'cursor-not-allowed text-white/40'
+            }`}
           >
             <Clock className="h-4 w-4" />
-            Job Tracker
+            <span className="min-w-0 flex-1">Job Tracker</span>
+            {!hasProAccess && <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />}
           </button>
 
           <button
@@ -5946,11 +6059,23 @@ Apply link: ${job.applyUrl}`;
 
           <button
             type="button"
-            onClick={() => setPracticalLabOpen(true)}
+            onClick={() => setProjectsOpen(true)}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/80 transition hover:bg-white/5 hover:text-white"
           >
+            <FolderKanban className="h-4 w-4" />
+            Projects
+          </button>
+
+          <button
+            type="button"
+            onClick={openPracticalLab}
+            className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+              hasProAccess ? 'text-white/80 hover:bg-white/5 hover:text-white' : 'cursor-not-allowed text-white/40'
+            }`}
+          >
             <BookOpen className="h-4 w-4" />
-            Practical Lab
+            <span className="min-w-0 flex-1">Practical Lab</span>
+            {!hasProAccess && <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />}
           </button>
 
           {chatSessions.length > 0 && (
@@ -6068,15 +6193,30 @@ Apply link: ${job.applyUrl}`;
 
         {/* Right */}
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={screenShareActive ? stopScreenShare : startScreenShare}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#171717] text-white/80 transition active:scale-[0.98] hover:bg-white/10"
-            aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-            title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-          >
-            <MonitorUp className="h-4 w-4" />
-          </button>
+          {hasProAccess ? (
+            <button
+              type="button"
+              onClick={screenShareActive ? stopScreenShare : startScreenShare}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#171717] text-white/80 transition active:scale-[0.98] hover:bg-white/10"
+              aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+              title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+            >
+              <MonitorUp className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setSubscriptionOpen(true);
+                setScreenShareError('Screen sharing is available on FaceMeX Pro.');
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-[#171717] text-amber-300 transition active:scale-[0.98] hover:bg-white/10"
+              aria-label="Upgrade to Pro for screen sharing"
+              title="Upgrade to Pro for screen sharing"
+            >
+              <ShieldCheck className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </header>
       <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[56px] text-white sm:px-3 sm:pb-3 lg:bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.12),_transparent_24%),_#0b0b0b] lg:text-white lg:px-0 lg:py-0 lg:pt-0">
@@ -6956,7 +7096,11 @@ Apply link: ${job.applyUrl}`;
                               type="button"
                               onClick={() => {
                                 setGlobalSearchOpen(false);
-                                setPracticalLabOpen(true);
+                                if (hasProAccess) {
+                                  setPracticalLabOpen(true);
+                                } else {
+                                  setSubscriptionOpen(true);
+                                }
                                 openYoutubeLessonCategory(category);
                               }}
                               className="flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-white/10"
@@ -7056,12 +7200,15 @@ Apply link: ${job.applyUrl}`;
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  setTrackerOpen(true);
+                  openJobTracker();
                 }}
-                className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+                className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                  hasProAccess ? 'text-white/75 hover:bg-white/10 hover:text-white' : 'cursor-not-allowed text-white/40'
+                }`}
               >
                 <Clock className="h-4 w-4" />
-                Job Tracker
+                <span className="min-w-0 flex-1">Job Tracker</span>
+                {!hasProAccess && <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />}
               </button>
 
               <button
@@ -7189,7 +7336,7 @@ Apply link: ${job.applyUrl}`;
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  quickAsk('Help me plan and manage a project step by step, with milestones, tasks, and next actions.');
+                  setProjectsOpen(true);
                 }}
                 className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
               >
@@ -7203,12 +7350,15 @@ Apply link: ${job.applyUrl}`;
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  setPracticalLabOpen(true);
+                  openPracticalLab();
                 }}
-                className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+                className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                  hasProAccess ? 'text-white/75 hover:bg-white/10 hover:text-white' : 'cursor-not-allowed text-white/40'
+                }`}
               >
                 <BookOpen className="h-4 w-4" />
-                Practical Lab
+                <span className="min-w-0 flex-1">Practical Lab</span>
+                {!hasProAccess && <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />}
               </button>
 
               {chatSessions.length > 0 && (
@@ -7254,6 +7404,100 @@ Apply link: ${job.applyUrl}`;
         </div>
       )}
 
+      {projectsOpen && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-[4px]" onClick={() => setProjectsOpen(false)}>
+          <div
+            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-[440px] flex-col overflow-hidden border-l border-white/10 bg-[#171717] text-white shadow-[0_0_40px_rgba(0,0,0,0.35)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-400">Workspace</p>
+                <h3 className="text-base font-semibold text-white">Projects</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProjectsOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-white/80 transition hover:bg-white/10"
+                aria-label="Close projects"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+              <div className="rounded-2xl border border-white/10 bg-[#101010] p-3">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Create project</label>
+                <div className="flex gap-2">
+                  <input
+                    value={newProjectName}
+                    onChange={(event) => setNewProjectName(event.target.value)}
+                    placeholder="Project name"
+                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:border-sky-400/60"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateProject}
+                    className="rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400"
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {workspaceProjects.map((project) => (
+                  <div key={project.id} className="rounded-2xl border border-white/10 bg-[#111111] p-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProjectId(project.id)}
+                      className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left transition ${
+                        selectedProjectId === project.id ? 'bg-white/5 text-white' : 'text-white/80 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <FolderKanban className="h-4 w-4" />
+                        {project.name}
+                      </span>
+                      <span className="text-[11px] text-white/45">{project.folders.length} folders</span>
+                    </button>
+
+                    <div className="mt-3 space-y-2">
+                      {project.folders.map((folder) => (
+                        <div key={`${project.id}-${folder}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#181818] px-2.5 py-2 text-sm text-white/75">
+                          <span className="flex items-center gap-2">
+                            <ChevronRight className="h-3.5 w-3.5 text-white/45" />
+                            {folder}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedProjectId === project.id && (
+                      <div className="mt-3 flex gap-2">
+                        <input
+                          value={newSubfolderName}
+                          onChange={(event) => setNewSubfolderName(event.target.value)}
+                          placeholder="Add subfolder"
+                          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:border-sky-400/60"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddSubfolder}
+                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {subscriptionOpen && (
         <SubscriptionModal
           currentTier={currentTier}
@@ -7292,4 +7536,3 @@ Apply link: ${job.applyUrl}`;
     </div>
   );
 }
-
