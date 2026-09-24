@@ -18,6 +18,7 @@ import {
   Edit3,
   ExternalLink,
   FileText,
+  FolderKanban,
   Globe2,
   ImagePlus,
   Loader2,
@@ -5980,38 +5981,29 @@ Apply link: ${job.applyUrl}`;
         )}
 
         {/* Left */}
-        <div className="pointer-events-auto flex min-w-0 items-center gap-3">
+        <div className="pointer-events-auto flex min-w-0 items-center gap-2">
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-white/10"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#171717] text-white shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-white/10"
             aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
           </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/facemex-plus')}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-[#171717] px-2.5 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-white/85 transition active:scale-[0.98] hover:bg-white/10"
+            aria-label="Get Plus"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Get Plus</span>
+          </button>
         </div>
 
         {/* Right */}
-        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-      
-          <button
-            type="button"
-            onClick={() => setGlobalSearchOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-white/10"
-            aria-label="Search FaceMeX"
-          >
-            <Search className="h-5 w-5" />
-          </button>
-      
-          <button
-            type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] ring-4 ring-emerald-500/10 transition active:scale-[0.98] hover:bg-emerald-600"
-            aria-label="Profile"
-          >
-            {firstName?.[0]?.toUpperCase() || "F"}
-          </button>
-      
-        </div>
+        <div className="pointer-events-auto flex shrink-0 items-center gap-2" />
       
       </header>
       <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[56px] text-white sm:px-3 sm:pb-3 lg:bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.12),_transparent_24%),_#0b0b0b] lg:text-white lg:px-0 lg:py-0 lg:pt-0">
@@ -6132,7 +6124,7 @@ Apply link: ${job.applyUrl}`;
             </div>
           </div>
 
-          <footer className="shrink-0 border-t border-white/10 bg-[#0d0d0d]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111]/95 sm:p-4 lg:border-white/10 lg:bg-[#111111] lg:px-6 lg:pb-6">
+          <footer className="shrink-0 border-t border-white/5 bg-[#0d0d0d]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl dark:border-white/5 dark:bg-[#111]/95 sm:p-4 lg:border-white/10 lg:bg-[#111111] lg:px-6 lg:pb-6">
             <div className="mx-auto w-full max-w-3xl lg:max-w-[760px]">
               {selectedImages.length > 0 && (
                 <div className="mb-2 grid grid-cols-4 gap-2">
@@ -6153,12 +6145,12 @@ Apply link: ${job.applyUrl}`;
                 </div>
               )}
 
-              <div className="fm-composer-card rounded-[26px] border border-white/10 bg-[#181818] px-3 py-2 sm:px-3 lg:border-slate-200 lg:bg-white">
+              <div className="fm-composer-card rounded-[26px] border border-white/10 bg-[#1a1a1a] px-2.5 py-2 sm:px-3 lg:border-slate-200 lg:bg-white">
                 <div className="flex items-end gap-2">
                   <button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
-                    className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/6 text-white/80 transition active:scale-[0.98] hover:bg-white/10 lg:h-9 lg:w-9 lg:bg-white/6 lg:text-white/80 lg:hover:bg-white/10"
+                    className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2b2b2b] text-white/80 transition active:scale-[0.98] hover:bg-white/10 lg:h-9 lg:w-9 lg:bg-white/6 lg:text-white/80 lg:hover:bg-white/10"
                     aria-label="Upload image or document"
                   >
                     <Plus className="h-4 w-4" />
@@ -6169,7 +6161,7 @@ Apply link: ${job.applyUrl}`;
                     onChange={(e) => setPrompt(e.target.value)}
                     onFocus={() => setFollowUpExpanded(true)}
                     placeholder={composerPlaceholder}
-                    className={`min-h-[42px] flex-1 min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-1.5 text-[15px] leading-5 text-white placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                    className={`min-h-[42px] flex-1 min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-1.5 text-[15px] leading-5 text-white/90 placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
                       inputHasContent ? 'max-h-28' : 'h-10 max-h-10 overflow-hidden'
                     }`}
                     onKeyDown={(e) => {
@@ -6183,10 +6175,10 @@ Apply link: ${job.applyUrl}`;
                   <Button
                     onClick={() => sendPrompt()}
                     disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
-                    className="mb-1 h-10 w-10 shrink-0 rounded-full bg-white text-slate-950 shadow-lg shadow-black/10 transition hover:bg-slate-200 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 lg:bg-white lg:text-slate-950 lg:hover:bg-slate-200"
+                    className="mb-1 h-9 w-9 shrink-0 rounded-full bg-white text-slate-950 shadow-lg shadow-black/10 transition hover:bg-slate-200 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 lg:bg-white lg:text-slate-950 lg:hover:bg-slate-200"
                     aria-label="Send"
                   >
-                    {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>
                 </div>
 
@@ -6912,35 +6904,20 @@ Apply link: ${job.applyUrl}`;
           >
             <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#171717] px-4">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-xs font-black text-black">F</div>
+                <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-[#1d1d1d] text-xs font-black text-white">F</div>
                 <div className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-white">FaceMeX</div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setJobsOpen(false);
-                    setGlobalSearchOpen(true);
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 transition hover:bg-white/10 hover:text-white"
-                  aria-label="Search FaceMeX"
-                >
-                  <Search className="h-4 w-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setJobsOpen(false);
-                    navigate('/feed');
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-4 ring-emerald-500/10 transition hover:bg-emerald-600"
-                  aria-label="Back to FaceMeX feed"
-                >
-                  {firstName?.[0]?.toUpperCase() || 'F'}
-                </button>
-              </div>
+              <button
+                type="button"
+                aria-pressed={focusMode}
+                onClick={() => setFocusMode((value) => !value)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-[#1d1d1d] px-2.5 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-white/80 transition hover:bg-white/10"
+                aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Focus</span>
+              </button>
             </div>
 
             <div className="fm-mobile-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
@@ -7104,6 +7081,18 @@ Apply link: ${job.applyUrl}`;
                 CV & documents
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setJobsOpen(false);
+                  quickAsk('Help me plan and manage a project step by step, with milestones, tasks, and next actions.');
+                }}
+                className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+              >
+                <FolderKanban className="h-4 w-4" />
+                Projects
+              </button>
+
               <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Do</div>
 
               <button
@@ -7199,3 +7188,4 @@ Apply link: ${job.applyUrl}`;
     </div>
   );
 }
+
