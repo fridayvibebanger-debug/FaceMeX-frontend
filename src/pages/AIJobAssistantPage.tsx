@@ -27,6 +27,8 @@ import {
   Mail,
   MapPin,
   Menu,
+  Mic,
+  MonitorUp,
   MoreVertical,
   Pin,
   PinOff,
@@ -2941,6 +2943,7 @@ export default function AIJobAssistantPage() {
   const navigate = useNavigate();
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const screenShareStreamRef = useRef<MediaStream | null>(null);
 
   const userStore = useUserStore() as any;
   const { tier, hasTier } = userStore;
@@ -2977,6 +2980,9 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  const [screenShareActive, setScreenShareActive] = useState(false);
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [practicalLabOpen, setPracticalLabOpen] = useState(false);
   const [activeLibrarySection, setActiveLibrarySection] = useState<LibrarySectionKey>('students');
@@ -3059,6 +3065,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   }, [chatMessages]);
 
   const inputHasContent = prompt.trim().length > 0 || selectedImages.length > 0;
+  const showMobileBlankWorkspace = isMobileViewport && !focusMode && chatMessages.length === 0 && !busy && !selectedWatchVideo;
 
   const composerPlaceholder = practicalLabOpen
     ? 'Ask FaceMeX about this simulation...'
@@ -3127,6 +3134,16 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -3610,6 +3627,53 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const stopScreenShare = () => {
+    if (screenShareStreamRef.current) {
+      screenShareStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenShareStreamRef.current = null;
+    }
+
+    setScreenShareActive(false);
+    setScreenShareError(null);
+  };
+
+  const startScreenShare = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      setScreenShareError('Screen sharing is not supported in this browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        },
+        audio: false,
+      });
+
+      if (!stream) {
+        setScreenShareError('Screen sharing permission was not granted.');
+        return;
+      }
+
+      screenShareStreamRef.current = stream;
+      setScreenShareActive(true);
+      setScreenShareError(null);
+
+      stream.getVideoTracks().forEach((track) => {
+        track.addEventListener('ended', () => {
+          stopScreenShare();
+        });
+      });
+    } catch (error: any) {
+      const message = error?.message || 'Screen sharing permission was denied.';
+      setScreenShareError(message);
+      setScreenShareActive(false);
     }
   };
 
@@ -6003,19 +6067,51 @@ Apply link: ${job.applyUrl}`;
         </div>
 
         {/* Right */}
-        <div className="pointer-events-auto flex shrink-0 items-center gap-2" />
-      
+        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={screenShareActive ? stopScreenShare : startScreenShare}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#171717] text-white/80 transition active:scale-[0.98] hover:bg-white/10"
+            aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+            title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+          >
+            <MonitorUp className="h-4 w-4" />
+          </button>
+        </div>
       </header>
       <main className="fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[56px] text-white sm:px-3 sm:pb-3 lg:bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.12),_transparent_24%),_#0b0b0b] lg:text-white lg:px-0 lg:py-0 lg:pt-0">
         <section className="mx-auto flex h-full w-full max-w-[760px] flex-col overflow-hidden rounded-none border-0 bg-[#0d0d0d] text-white shadow-none lg:max-w-none lg:rounded-[30px] lg:border lg:border-white/8 lg:bg-[#111111] lg:text-white lg:shadow-[0_18px_60px_rgba(0,0,0,0.42)]">
           <div className="fm-chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 lg:px-6 lg:py-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 lg:max-w-[760px] lg:gap-6 lg:pb-8">
-              {chatMessages.length === 0 && !busy && !selectedWatchVideo && (
+              {!isMobileViewport && !focusMode && chatMessages.length === 0 && !busy && !selectedWatchVideo && (
                 <WelcomeHero
                   firstName={firstName}
                   onQuickAsk={quickAsk}
                   onOpenMEXA={() => navigate('/mexa')}
                 />
+              )}
+
+              {showMobileBlankWorkspace && (
+                <div className="min-h-[48vh] w-full" aria-hidden="true" />
+              )}
+
+              {screenShareError && isMobileViewport && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                  {screenShareError}
+                </div>
+              )}
+
+              {screenShareActive && isMobileViewport && (
+                <div className="flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                  <span>Screen sharing active</span>
+                  <button
+                    type="button"
+                    onClick={stopScreenShare}
+                    className="rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-1 font-medium text-emerald-100"
+                  >
+                    Stop sharing
+                  </button>
+                </div>
               )}
 
               {selectedWatchVideo ? (
@@ -6171,6 +6267,14 @@ Apply link: ${job.applyUrl}`;
                       }
                     }}
                   />
+
+                  <button
+                    type="button"
+                    aria-label="Voice input"
+                    className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2b2b2b] text-white/80 transition active:scale-[0.98] hover:bg-white/10"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
 
                   <Button
                     onClick={() => sendPrompt()}
