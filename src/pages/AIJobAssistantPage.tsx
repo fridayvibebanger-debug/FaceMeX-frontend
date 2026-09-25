@@ -3008,11 +3008,17 @@ const [developerPlan, setDeveloperPlan] = useState<
 const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<'all' | 'created' | 'shared'>('all');
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [guidedSearchOpen, setGuidedSearchOpen] = useState(false);
+  const [guidedSearchJob, setGuidedSearchJob] = useState('');
+  const [guidedSearchLocation, setGuidedSearchLocation] = useState('');
+  const [guidedSearchStep, setGuidedSearchStep] = useState<'job' | 'location'>('job');
   const [newProjectName, setNewProjectName] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [newSubfolderName, setNewSubfolderName] = useState('');
-  const [workspaceProjects, setWorkspaceProjects] = useState<Array<{ id: string; name: string; folders: string[]; createdAt: string }>>([
-    { id: 'starter-project', name: 'Workflows', folders: ['Research', 'Applications', 'Documents'], createdAt: new Date().toISOString() },
+  const [workspaceProjects, setWorkspaceProjects] = useState<Array<{ id: string; name: string; folders: string[]; createdAt: string; owner: 'created' | 'shared' }>>([
+    { id: 'starter-project', name: 'Workflows', folders: ['Research', 'Applications', 'Documents'], createdAt: new Date().toISOString(), owner: 'created' },
   ]);
   const [watchSearch, setWatchSearch] = useState('');
   const [watchVideos, setWatchVideos] = useState<YouTubeLessonVideo[]>([]);
@@ -3118,6 +3124,35 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     if (savedFilter === 'all') return savedMessages;
     return savedMessages.filter((message) => message.savedCategory === savedFilter);
   }, [savedFilter, savedMessages]);
+
+  const formatProjectDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Unknown date';
+
+    const month = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(date);
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    const currentYear = new Date().getFullYear();
+
+    return year === currentYear ? `${month} ${Number(day)}` : `${month} ${day}, ${year}`;
+  };
+
+  const visibleProjects = useMemo(() => {
+    const cleaned = projectSearchQuery.trim().toLowerCase();
+
+    return workspaceProjects.filter((project) => {
+      const matchesFilter =
+        projectFilter === 'all' ||
+        (projectFilter === 'created' && project.owner === 'created') ||
+        (projectFilter === 'shared' && project.owner === 'shared');
+
+      const matchesSearch =
+        !cleaned ||
+        `${project.name} ${formatProjectDate(project.createdAt)}`.toLowerCase().includes(cleaned);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [projectFilter, projectSearchQuery, workspaceProjects]);
 
   const usageLabel = useMemo(() => {
     if (creatorPlus || currentTier === 'plus' || currentTier === 'pro') return 'Unlimited';
@@ -3668,6 +3703,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       name: trimmedName,
       folders: ['General'],
       createdAt: new Date().toISOString(),
+      owner: 'created' as const,
     };
 
     setWorkspaceProjects((prev) => [nextProject, ...prev]);
@@ -3713,7 +3749,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   };
 
   const openJobTracker = () => {
-    if (!hasProAccess) {
+    if (isMobileViewport && !hasProAccess) {
       setSubscriptionOpen(true);
       toast({ title: 'Pro required', description: 'Unlock Job Tracker with FaceMeX Pro.' });
       return;
@@ -3723,7 +3759,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   };
 
   const openPracticalLab = () => {
-    if (!hasProAccess) {
+    if (isMobileViewport && !hasProAccess) {
       setSubscriptionOpen(true);
       toast({ title: 'Pro required', description: 'Unlock the Practical Lab with FaceMeX Pro.' });
       return;
@@ -3932,10 +3968,33 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   };
 
   const openSchedulePanel = (basePrompt?: string) => {
+    if (isMobileViewport && !hasProAccess) {
+      setSubscriptionOpen(true);
+      toast({ title: 'Pro required', description: 'Schedule is available on FaceMeX Pro.' });
+      return;
+    }
+
     setSchedulePrompt(clean(basePrompt) || getDefaultSchedulePrompt(messages));
     setScheduleEmail((prev) => prev || getUserEmail(userStore));
     setScheduleStep('choose');
     setScheduleOpen(true);
+  };
+
+  const openGuidedSearch = () => {
+    setGuidedSearchJob('');
+    setGuidedSearchLocation('');
+    setGuidedSearchStep('job');
+    setGuidedSearchOpen(true);
+  };
+
+  const submitGuidedSearch = () => {
+    const nextJob = guidedSearchJob.trim();
+    const nextLocation = guidedSearchLocation.trim();
+
+    if (!nextJob || !nextLocation) return;
+
+    setGuidedSearchOpen(false);
+    quickAsk(`Find ${nextJob} jobs in ${nextLocation}. Search for current opportunities with the best matches, employer details, salary if available, location, closing dates, requirements, and official application links.`);
   };
 
   const createScheduledTask = async (frequency: ScheduledTask['frequency']) => {
@@ -6956,6 +7015,72 @@ Apply link: ${job.applyUrl}`;
         </div>
       )}
 
+      {guidedSearchOpen && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm" onClick={() => setGuidedSearchOpen(false)}>
+          <div
+            className="w-full max-w-[420px] rounded-[28px] border border-white/10 bg-[#0d0d0d] p-5 text-white shadow-[0_28px_90px_rgba(0,0,0,0.45)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-5 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/50">Search</p>
+              <h3 className="mt-2 text-xl font-semibold text-white">
+                {guidedSearchStep === 'job' ? 'What job are you looking for?' : 'Where do you want to search?'}
+              </h3>
+            </div>
+
+            {guidedSearchStep === 'job' ? (
+              <div className="space-y-4">
+                <input
+                  value={guidedSearchJob}
+                  onChange={(event) => setGuidedSearchJob(event.target.value)}
+                  placeholder="Type job title or field"
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-[#171717] px-3 text-[15px] text-white outline-none placeholder:text-white/45"
+                  autoFocus
+                />
+
+                <button
+                  type="button"
+                  disabled={!guidedSearchJob.trim()}
+                  onClick={() => setGuidedSearchStep('location')}
+                  className="h-11 w-full rounded-2xl bg-white text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  Next
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <input
+                  value={guidedSearchLocation}
+                  onChange={(event) => setGuidedSearchLocation(event.target.value)}
+                  placeholder="Tzaneen, Polokwane, Johannesburg..."
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-[#171717] px-3 text-[15px] text-white outline-none placeholder:text-white/45"
+                  autoFocus
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGuidedSearchStep('job')}
+                    className="h-11 rounded-2xl border border-white/10 bg-transparent text-sm font-medium text-white/80"
+                  >
+                    Back
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!guidedSearchLocation.trim()}
+                    onClick={submitGuidedSearch}
+                    className="h-11 rounded-2xl bg-white text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    Search Jobs
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {globalSearchOpen && (
         <div className="fixed inset-0 z-[85] flex items-start justify-center bg-black/60 px-4 pt-4 backdrop-blur-xl lg:items-center lg:bg-black/60 lg:px-6 lg:pt-0" onClick={() => setGlobalSearchOpen(false)}>
           <div
@@ -7187,7 +7312,7 @@ Apply link: ${job.applyUrl}`;
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  setGlobalSearchOpen(true);
+                  openGuidedSearch();
                 }}
                 className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
               >
@@ -7404,95 +7529,96 @@ Apply link: ${job.applyUrl}`;
         </div>
       )}
 
-      {projectsOpen && (
-        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-[4px]" onClick={() => setProjectsOpen(false)}>
+      {projectsOpen && isMobileViewport && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-[4px]"
+          onClick={() => setProjectsOpen(false)}
+        >
           <div
-            className="absolute right-0 top-0 flex h-full w-[92vw] max-w-[440px] flex-col overflow-hidden border-l border-white/10 bg-[#171717] text-white shadow-[0_0_40px_rgba(0,0,0,0.35)]"
+            className="absolute inset-0 mx-auto flex w-full max-w-[440px] flex-col overflow-hidden bg-[#050505] text-white"
             onClick={(event) => event.stopPropagation()}
+            onTouchStart={(event) => {
+              const touch = event.touches[0];
+              if (touch) {
+                (event.currentTarget as any).__facemexTouchStartX = touch.clientX;
+              }
+            }}
+            onTouchEnd={(event) => {
+              const touchStartX = (event.currentTarget as any).__facemexTouchStartX;
+              const touchEnd = event.changedTouches[0];
+              if (touchStartX == null || !touchEnd) return;
+
+              const diff = touchEnd.clientX - touchStartX;
+              if (Math.abs(diff) > 72) {
+                setProjectsOpen(false);
+              }
+            }}
           >
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-400">Workspace</p>
-                <h3 className="text-base font-semibold text-white">Projects</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setProjectsOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-white/80 transition hover:bg-white/10"
-                aria-label="Close projects"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="px-5 pb-3 pt-6 text-center">
+              <h3 className="text-[22px] font-semibold tracking-[-0.04em] text-white">Projects</h3>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-              <div className="rounded-2xl border border-white/10 bg-[#101010] p-3">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Create project</label>
-                <div className="flex gap-2">
-                  <input
-                    value={newProjectName}
-                    onChange={(event) => setNewProjectName(event.target.value)}
-                    placeholder="Project name"
-                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:border-sky-400/60"
-                  />
+            <div className="px-4 pb-3">
+              <div className="flex gap-2 rounded-full bg-[#101010] p-1">
+                {([
+                  ['all', 'All'],
+                  ['created', 'Created by you'],
+                  ['shared', 'Shared with you'],
+                ] as const).map(([value, label]) => (
                   <button
+                    key={value}
                     type="button"
-                    onClick={handleCreateProject}
-                    className="rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400"
+                    onClick={() => setProjectFilter(value)}
+                    className={`flex-1 rounded-full px-3 py-2 text-[12px] font-medium transition ${
+                      projectFilter === value ? 'bg-[#2a2a2a] text-white' : 'text-[#a1a1aa] hover:text-white'
+                    }`}
                   >
-                    Create
+                    {label}
                   </button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {workspaceProjects.map((project) => (
-                  <div key={project.id} className="rounded-2xl border border-white/10 bg-[#111111] p-3">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProjectId(project.id)}
-                      className={`flex w-full items-center justify-between rounded-xl px-2 py-2 text-left transition ${
-                        selectedProjectId === project.id ? 'bg-white/5 text-white' : 'text-white/80 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 text-sm font-medium">
-                        <FolderKanban className="h-4 w-4" />
-                        {project.name}
-                      </span>
-                      <span className="text-[11px] text-white/45">{project.folders.length} folders</span>
-                    </button>
-
-                    <div className="mt-3 space-y-2">
-                      {project.folders.map((folder) => (
-                        <div key={`${project.id}-${folder}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#181818] px-2.5 py-2 text-sm text-white/75">
-                          <span className="flex items-center gap-2">
-                            <ChevronRight className="h-3.5 w-3.5 text-white/45" />
-                            {folder}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {selectedProjectId === project.id && (
-                      <div className="mt-3 flex gap-2">
-                        <input
-                          value={newSubfolderName}
-                          onChange={(event) => setNewSubfolderName(event.target.value)}
-                          placeholder="Add subfolder"
-                          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:border-sky-400/60"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddSubfolder}
-                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 ))}
               </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              <div className="space-y-1">
+                {visibleProjects.length > 0 ? (
+                  visibleProjects.map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => setSelectedProjectId(project.id)}
+                      className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${
+                        selectedProjectId === project.id ? 'bg-[#111111]' : 'bg-transparent hover:bg-[#111111]'
+                      }`}
+                    >
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-[#1b1b1b] text-white/80">
+                        <FolderKanban className="h-5 w-5" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[15px] font-medium text-white">{project.name}</div>
+                        <div className="mt-0.5 text-[12px] text-[#9ca3af]">{formatProjectDate(project.createdAt)}</div>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-[#111111] p-4 text-sm text-[#a1a1aa]">
+                    No matching projects found.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 px-4 pb-[calc(env(safe-area-inset-bottom)+14px)] pt-3">
+              <label className="flex items-center gap-3 rounded-full border border-white/10 bg-[#111111] px-3 py-3 text-[#a1a1aa]">
+                <Search className="h-4 w-4 shrink-0" />
+                <input
+                  value={projectSearchQuery}
+                  onChange={(event) => setProjectSearchQuery(event.target.value)}
+                  placeholder="Search"
+                  className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-[#a1a1aa]"
+                />
+              </label>
             </div>
           </div>
         </div>
