@@ -3,22 +3,28 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 export type WorkspaceProject = {
   id: string;
   name: string;
+  description: string;
   createdAt: string;
   updatedAt: string;
   owner: 'created' | 'shared';
+  storageInitialized?: boolean;
 };
 
 export type ProjectConversation = {
   id: string;
-  projectId: string;
+  projectId: string | null;
   title: string;
   createdAt: string;
   updatedAt: string;
 };
 
+export type WorkspaceConversationSession = ProjectConversation & {
+  messages: ProjectMessage[];
+};
+
 export type ProjectMessage = {
   id: string;
-  projectId: string;
+  projectId: string | null;
   conversationId: string;
   role: 'user' | 'assistant';
   content: string;
@@ -43,6 +49,7 @@ function mapProject(row: any): WorkspaceProject {
   return {
     id: row.id,
     name: row.name,
+    description: row.description || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     owner: 'created',
@@ -59,7 +66,7 @@ function mapConversation(row: any): ProjectConversation {
   };
 }
 
-function mapMessage(row: any, projectId: string): ProjectMessage {
+function mapMessage(row: any, projectId: string | null): ProjectMessage {
   return {
     id: row.id,
     projectId,
@@ -75,7 +82,7 @@ export async function listProjects(): Promise<WorkspaceProject[]> {
   const client = requireSupabase();
   const { data, error } = await client
     .from('workspace_projects')
-    .select('id,name,created_at,updated_at')
+    .select('id,name,description,created_at,updated_at')
     .order('updated_at', { ascending: false });
   throwIfError(error);
   return (data || []).map(mapProject);
@@ -89,11 +96,18 @@ export async function createProject(name: string): Promise<WorkspaceProject> {
 
   const { data, error } = await client
     .from('workspace_projects')
-    .insert({ user_id: authData.user.id, name: name.trim() })
-    .select('id,name,created_at,updated_at')
+    .insert({ user_id: authData.user.id, name: name.trim(), description: '' })
+    .select('id,name,description,created_at,updated_at')
     .single();
   throwIfError(error);
-  return mapProject(data);
+  const project = mapProject(data);
+  try {
+    await ensureProjectStorageFolders(project, authData.user.id);
+    return { ...project, storageInitialized: true };
+  } catch (error) {
+    console.error('FaceMeX project folder initialization failed', error);
+    return { ...project, storageInitialized: false };
+  }
 }
 
 export async function renameProject(projectId: string, name: string): Promise<WorkspaceProject> {
@@ -102,15 +116,36 @@ export async function renameProject(projectId: string, name: string): Promise<Wo
     .from('workspace_projects')
     .update({ name: name.trim() })
     .eq('id', projectId)
-    .select('id,name,created_at,updated_at')
+    .select('id,name,description,created_at,updated_at')
     .single();
   throwIfError(error);
   return mapProject(data);
 }
 
+export async function ensureProjectStorageFolders(project: WorkspaceProject, userId?: string): Promise<void> {
+  const client = requireSupabase();
+  const identity = userId
+    ? { id: userId }
+    : (await client.auth.getUser()).data.user;
+  if (!identity?.id) throw new Error('Sign in to initialize project storage.');
+
+  const storage = client.storage.from('facemex-files');
+  const folders = ['files', 'images', 'documents'];
+  const results = await Promise.all(folders.map((folder) => storage.upload(
+    `${identity.id}/projects/${project.id}/${folder}/.keep`,
+    new Blob([''], { type: 'text/plain' }),
+    { contentType: 'text/plain', upsert: true },
+  )));
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw new Error(failed.error.message);
+}
+
 export async function deleteProject(projectId: string): Promise<void> {
   const client = requireSupabase();
-  const storage = client.storage.from('workspace-project-files');
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to delete a project.');
+  const storage = client.storage.from('facemex-files');
   const listProjectFiles = async (prefix: string): Promise<string[]> => {
     const pageSize = 100;
     const allEntries: any[] = [];
@@ -128,7 +163,7 @@ export async function deleteProject(projectId: string): Promise<void> {
     return files.flat();
   };
 
-  const filePaths = await listProjectFiles(projectId);
+  const filePaths = await listProjectFiles(`${authData.user.id}/projects/${projectId}`);
   if (filePaths.length > 0) {
     const { error: storageError } = await storage.remove(filePaths);
     throwIfError(storageError);
@@ -141,7 +176,7 @@ export async function deleteProject(projectId: string): Promise<void> {
 export async function listProjectConversations(projectId: string): Promise<ProjectConversation[]> {
   const client = requireSupabase();
   const { data, error } = await client
-    .from('workspace_project_conversations')
+    .from('workspace_conversations')
     .select('id,project_id,title,created_at,updated_at')
     .eq('project_id', projectId)
     .order('updated_at', { ascending: false });
@@ -149,21 +184,88 @@ export async function listProjectConversations(projectId: string): Promise<Proje
   return (data || []).map(mapConversation);
 }
 
-export async function createProjectConversation(projectId: string, title = 'New chat'): Promise<ProjectConversation> {
+export async function listWorkspaceConversationSessions(): Promise<WorkspaceConversationSession[]> {
   const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to load saved conversations.');
+
+  const { data: conversations, error } = await client
+    .from('workspace_conversations')
+    .select('id,project_id,title,created_at,updated_at')
+    .eq('user_id', authData.user.id)
+    .is('project_id', null)
+    .order('updated_at', { ascending: false })
+    .limit(24);
+  throwIfError(error);
+  if (!conversations?.length) return [];
+
+  const ids = conversations.map((conversation) => conversation.id);
+  const { data: messages, error: messagesError } = await client
+    .from('workspace_messages')
+    .select('id,conversation_id,role,content,created_at,metadata')
+    .in('conversation_id', ids)
+    .order('created_at', { ascending: true })
+    .limit(1200);
+  throwIfError(messagesError);
+
+  const messagesByConversation = new Map<string, ProjectMessage[]>();
+  for (const row of messages || []) {
+    const mapped = mapMessage(row, null);
+    const images = Array.isArray(mapped.metadata?.images) ? mapped.metadata.images as Array<Record<string, any>> : [];
+    const signedImages = await Promise.all(images.map(async (image) => {
+      if (!image.storagePath) return image;
+      const { data: signed, error: signedError } = await client.storage
+        .from('facemex-files')
+        .createSignedUrl(image.storagePath, 60 * 60);
+      if (signedError) throw signedError;
+      return { ...image, dataUrl: signed.signedUrl };
+    }));
+    mapped.metadata = { ...mapped.metadata, images: signedImages };
+    messagesByConversation.set(row.conversation_id, [
+      ...(messagesByConversation.get(row.conversation_id) || []),
+      mapped,
+    ]);
+  }
+
+  return conversations.map((row) => ({
+    ...mapConversation(row),
+    messages: messagesByConversation.get(row.id) || [],
+  }));
+}
+
+export async function createWorkspaceConversation(title = 'New chat'): Promise<ProjectConversation> {
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to create a conversation.');
   const { data, error } = await client
-    .from('workspace_project_conversations')
-    .insert({ project_id: projectId, title })
+    .from('workspace_conversations')
+    .insert({ user_id: authData.user.id, project_id: null, title: title.slice(0, 120) })
     .select('id,project_id,title,created_at,updated_at')
     .single();
   throwIfError(error);
   return mapConversation(data);
 }
 
-export async function listProjectMessages(conversationId: string, projectId: string): Promise<ProjectMessage[]> {
+export async function createProjectConversation(projectId: string, title = 'New chat'): Promise<ProjectConversation> {
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to create a project conversation.');
+  const { data, error } = await client
+    .from('workspace_conversations')
+    .insert({ user_id: authData.user.id, project_id: projectId, title })
+    .select('id,project_id,title,created_at,updated_at')
+    .single();
+  throwIfError(error);
+  return mapConversation(data);
+}
+
+export async function listProjectMessages(conversationId: string, projectId: string | null): Promise<ProjectMessage[]> {
   const client = requireSupabase();
   const { data, error } = await client
-    .from('workspace_project_messages')
+    .from('workspace_messages')
     .select('id,conversation_id,role,content,created_at,metadata')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
@@ -174,7 +276,7 @@ export async function listProjectMessages(conversationId: string, projectId: str
     const hydratedImages = await Promise.all(images.map(async (image) => {
       if (!image.storagePath) return image;
       const { data: signedData, error: signedError } = await client.storage
-        .from('workspace-project-files')
+        .from('facemex-files')
         .createSignedUrl(image.storagePath, 60 * 60);
       if (signedError) throw signedError;
       return { ...image, dataUrl: signedData.signedUrl };
@@ -199,7 +301,7 @@ export async function searchProjectContext(projectId: string, prompt: string): P
     .slice(0, 5);
 
   let query = client
-    .from('workspace_project_messages')
+    .from('workspace_messages')
     .select('id,conversation_id,role,content,created_at')
     .in('conversation_id', conversationIds)
     .order('created_at', { ascending: false })
@@ -219,6 +321,9 @@ export async function searchProjectContext(projectId: string, prompt: string): P
 
 export async function saveProjectMessage(message: ProjectMessage): Promise<void> {
   const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to save this conversation.');
   const metadata = { ...(message.metadata || {}) };
   const images = Array.isArray(metadata.images) ? metadata.images as Array<Record<string, any>> : [];
   if (images.length > 0) {
@@ -233,9 +338,12 @@ export async function saveProjectMessage(message: ProjectMessage): Promise<void>
       const blobResponse = await fetch(image.dataUrl);
       const blob = await blobResponse.blob();
       const fileName = String(image.name || `image-${index}`).replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `${message.projectId}/${message.conversationId}/${message.id}/${index}-${fileName}`;
+      const parentPath = message.projectId
+        ? `${authData.user.id}/projects/${message.projectId}/images`
+        : `${authData.user.id}/conversations/${message.conversationId}/images`;
+      const storagePath = `${parentPath}/${message.id}-${index}-${fileName}`;
       const { error: uploadError } = await client.storage
-        .from('workspace-project-files')
+        .from('facemex-files')
         .upload(storagePath, blob, { contentType: blob.type || 'application/octet-stream', upsert: true });
       throwIfError(uploadError);
       attachmentPathCache.set(cacheKey, storagePath);
@@ -243,7 +351,7 @@ export async function saveProjectMessage(message: ProjectMessage): Promise<void>
     }));
   }
 
-  const { error } = await client.from('workspace_project_messages').upsert({
+  const { error } = await client.from('workspace_messages').upsert({
     id: message.id,
     conversation_id: message.conversationId,
     role: message.role,
@@ -257,7 +365,7 @@ export async function saveProjectMessage(message: ProjectMessage): Promise<void>
 export async function updateProjectConversationTitle(conversationId: string, title: string): Promise<void> {
   const client = requireSupabase();
   const { error } = await client
-    .from('workspace_project_conversations')
+    .from('workspace_conversations')
     .update({ title: title.slice(0, 100) })
     .eq('id', conversationId);
   throwIfError(error);
