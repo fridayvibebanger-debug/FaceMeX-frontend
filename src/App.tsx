@@ -110,6 +110,44 @@ function AppAnalyticsTracker() {
   return null;
 }
 
+function PageSeoMetadata() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const isJobAssistantRoute = location.pathname === '/ai/job-assistant';
+    const title = isJobAssistantRoute
+      ? 'FaceMeX AI Job Assistant — Find Jobs & Career Opportunities'
+      : 'FaceMeX — AI for Learning, Careers, Jobs & Opportunity';
+    const description = isJobAssistantRoute
+      ? 'Use FaceMeX AI Job Assistant to discover job opportunities, explore careers and get help preparing for applications and interviews.'
+      : 'FaceMeX is an AI workspace for learning, careers, jobs and opportunity. Get help with lessons, CVs, interviews, documents and career decisions.';
+    const canonicalUrl = isJobAssistantRoute
+      ? 'https://facemexsocial.com/ai/job-assistant'
+      : 'https://facemexsocial.com/';
+
+    document.title = title;
+    const descriptionMeta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    if (descriptionMeta) descriptionMeta.content = description;
+
+    const canonicalMeta = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (canonicalMeta) canonicalMeta.href = canonicalUrl;
+
+    const ogTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]');
+    if (ogTitle) ogTitle.content = title;
+    const ogDescription = document.querySelector<HTMLMetaElement>('meta[property="og:description"]');
+    if (ogDescription) ogDescription.content = description;
+    const ogUrl = document.querySelector<HTMLMetaElement>('meta[property="og:url"]');
+    if (ogUrl) ogUrl.content = canonicalUrl;
+
+    const twitterTitle = document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]');
+    if (twitterTitle) twitterTitle.content = title;
+    const twitterDescription = document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
+    if (twitterDescription) twitterDescription.content = description;
+  }, [location.pathname]);
+
+  return null;
+}
+
 function App() {
   const { restoreSession } = useAuthStore();
 
@@ -119,6 +157,7 @@ function App() {
 
   return (
     <>
+      <PageSeoMetadata />
       <TierSync />
       <LiveNotificationListener />
       <GlobalCallListener />
