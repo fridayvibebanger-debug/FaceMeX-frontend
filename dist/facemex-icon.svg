@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">FaceMeX symbol</title>
+  <desc id="desc">A standalone FaceMeX connection and progress symbol.</desc>
+  <defs>
+    <linearGradient id="bg" x1="65" y1="48" x2="462" y2="466" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#171E3B"/>
+      <stop offset="0.55" stop-color="#172A59"/>
+      <stop offset="1" stop-color="#0B5CDB"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="100" y1="100" x2="420" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="0.48" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#17D7E8"/>
+    </linearGradient>
+  </defs>
+  <rect x="30" y="30" width="452" height="452" rx="122" fill="url(#bg)"/>
+  <path d="M119 329c27-86 74-137 149-137 58 0 102 31 126 80" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" opacity=".96"/>
+  <path d="M141 374c52-57 110-86 175-86 70 0 127 32 172 95" fill="none" stroke="url(#accent)" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="119" cy="329" r="22" fill="#17D7E8"/>
+  <circle cx="344" cy="337" r="22" fill="#7C5CFF"/>
+  <circle cx="446" cy="422" r="22" fill="#fff"/>
+  <path d="M344 337 446 422M119 329l225 8" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity=".86"/>
+  <path d="M422 194c20-26 49-40 80-40 39 0 72 22 90 56M493 154l12-31 26 25" fill="none" stroke="#17D7E8" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
