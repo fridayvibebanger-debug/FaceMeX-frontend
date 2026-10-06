@@ -36,6 +36,7 @@ import ProGroupDetailPage from './pages/ProGroupDetailPage';
 import SavedPostsPage from './pages/SavedPostsPage';
 import AIResumePage from './pages/AIResumePage';
 import AIJobAssistantPage from './pages/AIJobAssistantPage';
+import FaceMeXSettingsPage from './pages/FaceMeXSettingsPage';
 import PricingPage from './pages/PricingPage';
 import TierGate from './components/auth/TierGate';
 import PRDPage from './pages/PRDPage';
@@ -354,10 +355,10 @@ function App() {
         />
 
         <Route
-          path="/settings"
+          path="/ai/settings"
           element={
             <ProtectedRoute>
-              <SettingsPage />
+              <FaceMeXSettingsPage />
             </ProtectedRoute>
           }
         />
