@@ -42,11 +42,16 @@ export default function FaceMeXSettingsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f7f8] text-[#202123] dark:bg-[#0d0d0d] dark:text-[#f5f5f5] lg:flex lg:items-center lg:justify-center lg:bg-[#f3f3f3] lg:dark:bg-[#0a0a0a]">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-4 sm:px-6 lg:mx-0 lg:h-[min(680px,calc(100dvh-64px))] lg:min-h-[520px] lg:max-w-[960px] lg:flex-row lg:overflow-hidden lg:rounded-2xl lg:border lg:border-[#e6e6e6] lg:bg-white lg:p-0 lg:shadow-[0_22px_70px_rgba(15,23,42,0.08)] lg:dark:border-[#303030] lg:dark:bg-[#171717] lg:dark:shadow-[0_22px_70px_rgba(0,0,0,0.45)]">
+    <main className="min-h-screen bg-[#f7f7f8] text-[#202123] dark:bg-[#0d0d0d] dark:text-[#f5f5f5] lg:fixed lg:inset-0 lg:z-[100] lg:flex lg:items-center lg:justify-center lg:overflow-y-auto lg:bg-black/30 lg:p-6 lg:backdrop-blur-[2px] lg:dark:bg-black/55">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="facemex-settings-title"
+        className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-4 sm:px-6 lg:mx-0 lg:h-[min(720px,calc(100dvh-48px))] lg:min-h-[520px] lg:max-w-[960px] lg:flex-row lg:overflow-hidden lg:rounded-[20px] lg:border lg:border-[#e6e6e6] lg:bg-white lg:p-0 lg:shadow-[0_12px_48px_rgba(0,0,0,0.18)] lg:dark:border-[#303030] lg:dark:bg-[#171717] lg:dark:shadow-[0_12px_48px_rgba(0,0,0,0.55)]"
+      >
         <aside className="shrink-0 lg:h-full lg:w-[220px] lg:border-r lg:border-[#efefef] lg:px-3 lg:py-4 lg:dark:border-[#303030]">
           <div className="mb-4 flex items-center justify-between lg:px-1">
-            <span className="text-[15px] font-semibold text-[#202123] dark:text-white">Settings</span>
+            <span id="facemex-settings-title" className="text-[15px] font-semibold text-[#202123] dark:text-white">Settings</span>
             <button
               type="button"
               onClick={() => navigate(returnPath)}
