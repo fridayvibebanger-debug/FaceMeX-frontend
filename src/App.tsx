@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { trackAppOpen, trackEvent } from '@/lib/analytics';
+import { initializeAnalytics, trackAppOpen, trackEvent } from '@/lib/analytics';
 
 import { useAuthStore } from './store/authStore';
 
@@ -58,6 +58,8 @@ import LiveNotificationListener from '@/components/LiveNotificationListener';
 import GlobalCallListener from '@/components/calls/GlobalCallListener';
 import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
+import PublicSeoPage, { isPublicSeoPath } from './pages/PublicSeoPage';
+import { getSeoMetadata, SEO_SITE_ORIGIN } from './lib/seo';
 
 const PracticalLabLibrary = lazy(() => import('./pages/PracticalLabLibrary'));
 import NotificationsPage from './pages/NotificationsPage';
@@ -67,6 +69,18 @@ import EnterpriseHomePage from './enterprise/pages/EnterpriseHomePage';
 import DepartmentDetailPage from './enterprise/pages/DepartmentDetailPage';
 
 const DEFAULT_AUTHENTICATED_ROUTE = '/ai/job-assistant';
+
+function PublicHomeRoute() {
+  const { isAuthenticated } = useAuthStore();
+  return isAuthenticated ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <PublicSeoPage />;
+}
+
+function PublicSignupRoute() {
+  const { isAuthenticated } = useAuthStore();
+  return isAuthenticated
+    ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />
+    : <AuthPage initialMode="signup" />;
+}
 
 function PublicAuthRoute() {
   const { isAuthenticated, isInitialized } = useAuthStore();
@@ -99,15 +113,24 @@ function AppAnalyticsTracker() {
   }, [isInitialized, isAuthenticated]);
 
   useEffect(() => {
-    if (!isInitialized || !isAuthenticated) return;
+    if (!isInitialized || (!isAuthenticated && !isPublicSeoPath(location.pathname))) return;
 
-    trackEvent('page_view', location.pathname, {
-      path: location.pathname,
-      search: location.search,
-      fullPath: `${location.pathname}${location.search}`,
-    });
-  }, [isInitialized, isAuthenticated, location.pathname, location.search]);
+    const safePath = location.pathname
+      .replace(/\/projects\/[^/]+/g, '/projects/:id')
+      .replace(/\/profile\/[^/]+/g, '/profile/:id')
+      .replace(/\/messages\/[^/]+/g, '/messages/:id')
+      .replace(/\/watch\/[^/]+/g, '/watch/:id')
+      .replace(/\/world\/event\/[^/]+/g, '/world/event/:id');
+    trackEvent('page_view', undefined, { page_path: safePath });
+  }, [isInitialized, isAuthenticated, location.pathname]);
 
+  return null;
+}
+
+function AnalyticsBootstrap() {
+  useEffect(() => {
+    initializeAnalytics();
+  }, []);
   return null;
 }
 
@@ -115,35 +138,59 @@ function PageSeoMetadata() {
   const location = useLocation();
 
   useEffect(() => {
-    const isJobAssistantRoute = location.pathname === '/ai/job-assistant';
-    const title = isJobAssistantRoute
-      ? 'FaceMeX AI Job Assistant — Find Jobs & Career Opportunities'
-      : 'FaceMeX — AI for Learning, Careers, Jobs & Opportunity';
-    const description = isJobAssistantRoute
-      ? 'Use FaceMeX AI Job Assistant to discover job opportunities, explore careers and get help preparing for applications and interviews.'
-      : 'FaceMeX is an AI workspace for learning, careers, jobs and opportunity. Get help with lessons, CVs, interviews, documents and career decisions.';
-    const canonicalUrl = isJobAssistantRoute
-      ? 'https://facemexsocial.com/ai/job-assistant'
-      : 'https://facemexsocial.com/';
+    const { title, description, canonical, indexable } = getSeoMetadata(location.pathname);
+    const publicPage = isPublicSeoPath(location.pathname);
+    const finalTitle = publicPage ? title : location.pathname === '/ai/job-assistant'
+      ? 'FaceMeX AI Workspace'
+      : location.pathname.startsWith('/projects/')
+        ? 'FaceMeX Project Workspace'
+        : title;
+    const finalDescription = publicPage
+      ? description
+      : 'Sign in to access your private FaceMeX learning and career workspace.';
+    const finalCanonical = publicPage ? canonical : '';
+    const shouldIndex = publicPage && indexable;
 
-    document.title = title;
-    const descriptionMeta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-    if (descriptionMeta) descriptionMeta.content = description;
+    document.title = finalTitle;
+    const setMeta = (selector: string, attribute: 'name' | 'property', key: string, content: string) => {
+      let element = document.querySelector<HTMLMetaElement>(selector);
+      if (!element) {
+        element = document.createElement('meta');
+        element.setAttribute(attribute, key);
+        document.head.appendChild(element);
+      }
+      element.content = content;
+    };
+    setMeta('meta[name="description"]', 'name', 'description', finalDescription);
+    setMeta('meta[name="robots"]', 'name', 'robots', shouldIndex ? 'index, follow' : 'noindex, follow');
+    setMeta('meta[property="og:title"]', 'property', 'og:title', finalTitle);
+    setMeta('meta[property="og:description"]', 'property', 'og:description', finalDescription);
+    setMeta('meta[property="og:type"]', 'property', 'og:type', location.pathname.startsWith('/resources/') ? 'article' : 'website');
+    setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'FaceMeX');
+    setMeta('meta[property="og:image"]', 'property', 'og:image', `${SEO_SITE_ORIGIN}/facemex-icon-512.png`);
+    setMeta('meta[property="og:image:alt"]', 'property', 'og:image:alt', 'FaceMeX');
+    setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary');
+    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', finalTitle);
+    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', finalDescription);
+    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', `${SEO_SITE_ORIGIN}/facemex-icon-512.png`);
+    if (finalCanonical) {
+      setMeta('meta[property="og:url"]', 'property', 'og:url', finalCanonical);
+    } else {
+      document.querySelector('meta[property="og:url"]')?.remove();
+    }
 
-    const canonicalMeta = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-    if (canonicalMeta) canonicalMeta.href = canonicalUrl;
+    let canonicalLink = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (finalCanonical) {
+      if (!canonicalLink) {
+        canonicalLink = document.createElement('link');
+        canonicalLink.rel = 'canonical';
+        document.head.appendChild(canonicalLink);
+      }
+      canonicalLink.href = finalCanonical;
+    } else {
+      canonicalLink?.remove();
+    }
 
-    const ogTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]');
-    if (ogTitle) ogTitle.content = title;
-    const ogDescription = document.querySelector<HTMLMetaElement>('meta[property="og:description"]');
-    if (ogDescription) ogDescription.content = description;
-    const ogUrl = document.querySelector<HTMLMetaElement>('meta[property="og:url"]');
-    if (ogUrl) ogUrl.content = canonicalUrl;
-
-    const twitterTitle = document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]');
-    if (twitterTitle) twitterTitle.content = title;
-    const twitterDescription = document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
-    if (twitterDescription) twitterDescription.content = description;
   }, [location.pathname]);
 
   return null;
@@ -159,16 +206,26 @@ function App() {
   return (
     <>
       <PageSeoMetadata />
+      <AnalyticsBootstrap />
       <TierSync />
       <LiveNotificationListener />
       <GlobalCallListener />
       <AppAnalyticsTracker />
 
       <Routes>
-        <Route path="/" element={<PublicAuthRoute />} />
+        <Route path="/" element={<PublicHomeRoute />} />
         <Route path="/login" element={<PublicAuthRoute />} />
-        <Route path="/signup" element={<PublicAuthRoute />} />
+        <Route path="/signup" element={<PublicSignupRoute />} />
         <Route path="/auth" element={<PublicAuthRoute />} />
+        <Route path="/ai-for-students" element={<PublicSeoPage />} />
+        <Route path="/ai-study-assistant" element={<PublicSeoPage />} />
+        <Route path="/student-career-guidance" element={<PublicSeoPage />} />
+        <Route path="/online-learning" element={<PublicSeoPage />} />
+        <Route path="/ai-career-assistant" element={<PublicSeoPage />} />
+        <Route path="/jobs-in-south-africa" element={<PublicSeoPage />} />
+        <Route path="/about" element={<PublicSeoPage />} />
+        <Route path="/resources" element={<PublicSeoPage />} />
+        <Route path="/resources/:slug" element={<PublicSeoPage />} />
 
         <Route path="/prd" element={<PRDPage />} />
         <Route path="/tos" element={<TermsOfService />} />
@@ -625,7 +682,7 @@ function App() {
           }
         />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<PublicSeoPage />} />
       </Routes>
     </>
   );
