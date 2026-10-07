@@ -37,15 +37,6 @@ function HomeSchema() {
             description: 'An AI workspace with tools for learning, job discovery and career preparation.',
             publisher: { '@id': `${SEO_SITE_ORIGIN}/#organization` },
           },
-          {
-            '@type': 'SoftwareApplication',
-            name: 'FaceMeX',
-            url: `${SEO_SITE_ORIGIN}/`,
-            applicationCategory: 'EducationalApplication',
-            operatingSystem: 'Web',
-            description: 'An AI workspace with tools for learning, job discovery and career preparation.',
-            publisher: { '@id': `${SEO_SITE_ORIGIN}/#organization` },
-          },
         ],
       }}
     />
