@@ -139,17 +139,14 @@ function PageSeoMetadata() {
 
   useEffect(() => {
     const { title, description, canonical, indexable } = getSeoMetadata(location.pathname);
-    const publicPage = isPublicSeoPath(location.pathname);
-    const finalTitle = publicPage ? title : location.pathname === '/ai/job-assistant'
+    const finalTitle = location.pathname === '/ai/job-assistant'
       ? 'FaceMeX AI Workspace'
       : location.pathname.startsWith('/projects/')
         ? 'FaceMeX Project Workspace'
         : title;
-    const finalDescription = publicPage
-      ? description
-      : 'Sign in to access your private FaceMeX learning and career workspace.';
-    const finalCanonical = publicPage ? canonical : '';
-    const shouldIndex = publicPage && indexable;
+    const finalDescription = description;
+    const finalCanonical = indexable ? canonical : '';
+    const shouldIndex = indexable;
 
     document.title = finalTitle;
     const setMeta = (selector: string, attribute: 'name' | 'property', key: string, content: string) => {
