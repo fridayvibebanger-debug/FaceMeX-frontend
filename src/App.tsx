@@ -79,7 +79,7 @@ function PublicSignupRoute() {
   const { isAuthenticated } = useAuthStore();
   return isAuthenticated
     ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />
-    : <AuthPage initialMode="signup" />;
+    : <AuthPage />;
 }
 
 function PublicAuthRoute() {
