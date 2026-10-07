@@ -29,6 +29,107 @@
   status = 200
   force = true
 
+# Serve generated route-specific HTML before the SPA fallback.
+[[redirects]]
+  from = "/ai-for-students"
+  to = "/ai-for-students/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/ai-study-assistant"
+  to = "/ai-study-assistant/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/student-career-guidance"
+  to = "/student-career-guidance/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/online-learning"
+  to = "/online-learning/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/ai-career-assistant"
+  to = "/ai-career-assistant/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/jobs-in-south-africa"
+  to = "/jobs-in-south-africa/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/about"
+  to = "/about/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/resources"
+  to = "/resources/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/resources/*"
+  to = "/resources/:splat/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/login"
+  to = "/login/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/signup"
+  to = "/signup/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/auth"
+  to = "/auth/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/reset-password"
+  to = "/reset-password/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/tos"
+  to = "/tos/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/privacy"
+  to = "/privacy/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/ethics"
+  to = "/ethics/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/screenshot-policy"
+  to = "/screenshot-policy/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/community-rules"
+  to = "/community-rules/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/pricing"
+  to = "/pricing/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/prd"
+  to = "/prd/index.html"
+  status = 200
+
 # Single Page App redirects
 [[redirects]]
   from = "/*"
