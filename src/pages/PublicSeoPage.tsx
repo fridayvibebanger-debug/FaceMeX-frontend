@@ -25,7 +25,7 @@ function HomeSchema() {
             url: `${SEO_SITE_ORIGIN}/`,
             logo: {
               '@type': 'ImageObject',
-              url: `${SEO_SITE_ORIGIN}/facemex-icon-512.png`,
+              url: `${SEO_SITE_ORIGIN}/facemex-logo.png`,
             },
             description: 'An AI workspace with tools for learning, job discovery and career preparation.',
           },
@@ -107,7 +107,7 @@ function SeoSiteFrame({ children }: { children: ReactNode }) {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <Link to="/" aria-label="FaceMeX home" className="inline-flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-            <img src="/facemex-icon-64.png" alt="" width="32" height="32" className="h-8 w-8 rounded-lg" />
+            <img src="/facemex-logo.png" alt="" width="32" height="32" className="h-8 w-8 rounded-lg" />
             <span>FaceMeX</span>
           </Link>
           <nav aria-label="Main navigation" className="flex items-center gap-3 text-sm sm:gap-5">
@@ -209,7 +209,7 @@ function SeoArticleSchema({ article, path }: { article: NonNullable<ReturnType<t
           '@type': 'Organization',
           name: 'FaceMeX',
           url: `${SEO_SITE_ORIGIN}/`,
-          logo: { '@type': 'ImageObject', url: `${SEO_SITE_ORIGIN}/facemex-icon-512.png` },
+          logo: { '@type': 'ImageObject', url: `${SEO_SITE_ORIGIN}/facemex-logo.png` },
         },
         mainEntityOfPage: `${SEO_SITE_ORIGIN}${path}`,
       }}
