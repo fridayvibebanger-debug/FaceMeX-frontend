@@ -66,11 +66,11 @@ try {
     html = replaceMeta(html, 'property', 'og:description', metadata.description);
     html = replaceMeta(html, 'property', 'og:url', metadata.canonical);
     html = replaceMeta(html, 'property', 'og:type', route.startsWith('/resources/') ? 'article' : 'website');
-    html = replaceMeta(html, 'property', 'og:image', 'https://facemexsocial.com/facemex-icon-512.png');
+    html = replaceMeta(html, 'property', 'og:image', 'https://facemexsocial.com/facemex-logo.png');
     html = replaceMeta(html, 'property', 'og:image:alt', 'FaceMeX');
     html = replaceMeta(html, 'name', 'twitter:title', metadata.title);
     html = replaceMeta(html, 'name', 'twitter:description', metadata.description);
-    html = replaceMeta(html, 'name', 'twitter:image', 'https://facemexsocial.com/facemex-icon-512.png');
+    html = replaceMeta(html, 'name', 'twitter:image', 'https://facemexsocial.com/facemex-logo.png');
 
     const canonical = `<link rel="canonical" href="${escapeHtml(metadata.canonical)}" />`;
     html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/i, canonical);
