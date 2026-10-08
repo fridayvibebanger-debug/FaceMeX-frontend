@@ -164,12 +164,12 @@ function PageSeoMetadata() {
     setMeta('meta[property="og:description"]', 'property', 'og:description', finalDescription);
     setMeta('meta[property="og:type"]', 'property', 'og:type', location.pathname.startsWith('/resources/') ? 'article' : 'website');
     setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'FaceMeX');
-    setMeta('meta[property="og:image"]', 'property', 'og:image', `${SEO_SITE_ORIGIN}/facemex-icon-512.png`);
+    setMeta('meta[property="og:image"]', 'property', 'og:image', `${SEO_SITE_ORIGIN}/facemex-logo.png`);
     setMeta('meta[property="og:image:alt"]', 'property', 'og:image:alt', 'FaceMeX');
     setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary');
     setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', finalTitle);
     setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', finalDescription);
-    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', `${SEO_SITE_ORIGIN}/facemex-icon-512.png`);
+    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', `${SEO_SITE_ORIGIN}/facemex-logo.png`);
     if (finalCanonical) {
       setMeta('meta[property="og:url"]', 'property', 'og:url', finalCanonical);
     } else {
