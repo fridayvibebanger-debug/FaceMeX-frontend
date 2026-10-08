@@ -59,6 +59,22 @@ function BreadcrumbSchema({ title, path }: { title: string; path: string }) {
   );
 }
 
+function WebPageSchema({ title, description, path }: { title: string; description: string; path: string }) {
+  return (
+    <StructuredData
+      id={`facemex-webpage-${path.replace(/[^a-z0-9]+/gi, '-')}`}
+      data={{
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: title,
+        description,
+        url: `${SEO_SITE_ORIGIN}${path}`,
+        isPartOf: { '@id': `${SEO_SITE_ORIGIN}/#website` },
+      }}
+    />
+  );
+}
+
 function FaqSchema({ faqs }: { faqs: Array<{ question: string; answer: string }> }) {
   return (
     <StructuredData
@@ -283,6 +299,190 @@ function NotFoundPage() {
   );
 }
 
+function StudentLandingPage({ page }: { page: NonNullable<ReturnType<typeof getSeoPage>> }) {
+  const faqs = page.faqs || [];
+  const tools = [
+    {
+      title: 'AI learning and career workspace',
+      description: 'Ask questions, continue a conversation and find workspace tools such as Watch lessons, Projects and Interview Prep.',
+      href: '/ai/job-assistant',
+      label: 'Open the AI workspace',
+      icon: Sparkles,
+    },
+    {
+      title: 'CV and documents',
+      description: 'Use the existing CV and document workspace to draft and improve application materials based on your real details.',
+      href: '/ai/resume',
+      label: 'Open CV tools',
+      icon: FileText,
+    },
+    {
+      title: 'Find jobs',
+      description: 'Explore job opportunities, then verify listing details and application destinations with the original source.',
+      href: '/jobs',
+      label: 'Open Jobs',
+      icon: BriefcaseBusiness,
+    },
+    {
+      title: 'Practical Lab',
+      description: 'Explore interactive practical activities for topics including biology, chemistry, physics, mathematics and engineering.',
+      href: '/practical-lab',
+      label: 'Open Practical Lab',
+      icon: Lightbulb,
+    },
+  ];
+
+  return (
+    <SeoSiteFrame>
+      <main id="main-content">
+        <BreadcrumbSchema title={page.heading} path={page.path} />
+        <WebPageSchema title={page.heading} description={page.description} path={page.path} />
+        <nav aria-label="Breadcrumb" className="mx-auto max-w-6xl px-4 pt-6 text-sm text-slate-600 sm:px-6 lg:px-8">
+          <ol className="flex flex-wrap items-center gap-2">
+            <li><Link to="/" className="underline underline-offset-4 hover:text-slate-950">Home</Link></li>
+            <li aria-hidden="true">/</li>
+            <li aria-current="page" className="font-medium text-slate-900">AI for Students</li>
+          </ol>
+        </nav>
+
+        <section className="border-b border-slate-200 bg-slate-50">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
+            <div className="max-w-3xl">
+              <p className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                Learning and career tools in one workspace
+              </p>
+              <h1 className="mt-5 text-4xl font-semibold tracking-tight sm:text-5xl">{page.heading}</h1>
+              <p className="mt-5 text-lg leading-8 text-slate-600">{page.introduction}</p>
+              <p className="mt-5 text-sm font-semibold tracking-wide text-slate-700">Learn. Understand. Prepare. Build. Find opportunities.</p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link to="/signup" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">
+                  Try FaceMeX <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <a href="#student-tools" className="inline-flex min-h-12 items-center justify-center rounded-xl px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">
+                  Explore FaceMeX
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+          <section aria-labelledby="student-challenges-heading">
+            <h2 id="student-challenges-heading" className="max-w-3xl text-2xl font-semibold tracking-tight sm:text-3xl">
+              Support for the work around studying and starting a career
+            </h2>
+            <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
+              A tough topic, a busy exam period or a first job application can each raise different questions. FaceMeX brings together an AI assistant and practical tools; use them alongside your course materials, educators and trusted opportunity sources.
+            </p>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {page.sections.map((section) => (
+                <article key={section.heading} className="rounded-2xl border border-slate-200 p-5 sm:p-6">
+                  <h3 className="text-lg font-semibold tracking-tight">{section.heading}</h3>
+                  {section.paragraphs.map((paragraph) => <p key={paragraph} className="mt-3 text-sm leading-6 text-slate-600">{paragraph}</p>)}
+                  {section.bullets && (
+                    <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
+                      {section.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
+                    </ul>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section id="student-tools" aria-labelledby="student-tools-heading" className="mt-14 scroll-mt-6 border-t border-slate-200 pt-10">
+            <h2 id="student-tools-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">Explore FaceMeX tools for students</h2>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+              These are existing parts of the FaceMeX application, not separate public services. The workspace and its tools require an account and sign-in.
+            </p>
+            <div className="mt-7 grid gap-4 sm:grid-cols-2">
+              {tools.map((tool) => {
+                const Icon = tool.icon;
+                return (
+                  <article key={tool.href} className="flex flex-col rounded-2xl border border-slate-200 p-5 sm:p-6">
+                    <Icon className="h-5 w-5 text-slate-600" aria-hidden="true" />
+                    <h3 className="mt-4 text-lg font-semibold">{tool.title}</h3>
+                    <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">{tool.description}</p>
+                    <Link to={tool.href} className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-slate-800 underline underline-offset-4 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">
+                      {tool.label} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </article>
+                );
+              })}
+            </div>
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              Watch lessons, Projects and Interview Prep are available from within the AI workspace; they do not have separate public landing pages here.
+            </p>
+          </section>
+
+          <section aria-labelledby="how-it-works-heading" className="mt-14 border-t border-slate-200 pt-10">
+            <h2 id="how-it-works-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">A practical way to get started</h2>
+            <ol className="mt-6 grid gap-4 md:grid-cols-3">
+              <li className="rounded-2xl bg-slate-50 p-5">
+                <p className="text-sm font-semibold text-slate-500">01 · Ask</p>
+                <h3 className="mt-2 text-lg font-semibold">Say what you’re working on</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Name the subject, topic, level and the specific question or step where you need help.</p>
+              </li>
+              <li className="rounded-2xl bg-slate-50 p-5">
+                <p className="text-sm font-semibold text-slate-500">02 · Learn</p>
+                <h3 className="mt-2 text-lg font-semibold">Work through the explanation</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Ask follow-up questions, compare responses with trusted materials, and practise the idea yourself.</p>
+              </li>
+              <li className="rounded-2xl bg-slate-50 p-5">
+                <p className="text-sm font-semibold text-slate-500">03 · Prepare</p>
+                <h3 className="mt-2 text-lg font-semibold">Take a useful next step</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Use available tools to prepare a document, practise an interview or explore an opportunity.</p>
+              </li>
+            </ol>
+          </section>
+
+          <section aria-labelledby="student-audience-heading" className="mt-14 border-t border-slate-200 pt-10">
+            <h2 id="student-audience-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">For students at different stages</h2>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+              High school, college and university students can use FaceMeX to explore learning questions and practise study skills. Graduates and students preparing for work can also use existing career tools to draft documents, practise interview responses and explore jobs. FaceMeX is not affiliated with a particular school or university.
+            </p>
+          </section>
+
+          {faqs.length > 0 && (
+            <section aria-labelledby="student-faq-heading" className="mt-14 border-t border-slate-200 pt-10">
+              <h2 id="student-faq-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">Frequently asked questions</h2>
+              <div className="mt-5 divide-y divide-slate-200">
+                {faqs.map((faq) => (
+                  <details key={faq.question} className="group py-4">
+                    <summary className="cursor-pointer list-none pr-6 font-medium text-slate-900 marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">
+                      {faq.question}
+                    </summary>
+                    <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">{faq.answer}</p>
+                  </details>
+                ))}
+              </div>
+              <FaqSchema faqs={faqs} />
+            </section>
+          )}
+
+          <section className="mt-14 rounded-2xl bg-slate-50 p-6 sm:p-8" aria-labelledby="student-cta-heading">
+            <h2 id="student-cta-heading" className="text-2xl font-semibold tracking-tight">Ready to work on your next question?</h2>
+            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">Create an account to use the FaceMeX workspace and its learning and career tools. Check AI responses against trusted sources and your course guidance.</p>
+            <Link to="/signup" className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">
+              Try FaceMeX <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </section>
+
+          <nav aria-label="Related FaceMeX pages" className="mt-12 border-t border-slate-200 pt-8">
+            <h2 className="text-lg font-semibold">Related guides and pages</h2>
+            <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium">
+              <li><Link className="underline underline-offset-4" to="/ai-study-assistant">Study assistant guide</Link></li>
+              <li><Link className="underline underline-offset-4" to="/student-career-guidance">Career guidance</Link></li>
+              <li><Link className="underline underline-offset-4" to="/jobs-in-south-africa">Job-search information</Link></li>
+              <li><Link className="underline underline-offset-4" to="/resources">Learning and career resources</Link></li>
+            </ul>
+          </nav>
+        </div>
+      </main>
+    </SeoSiteFrame>
+  );
+}
+
 export default function PublicSeoPage() {
   const { pathname } = useLocation();
   const page = getSeoPage(pathname);
@@ -290,6 +490,7 @@ export default function PublicSeoPage() {
   if (pathname === '/resources') return <ResourceHub />;
   if (pathname.startsWith('/resources/')) return <ArticlePage path={pathname} />;
   if (!page) return <NotFoundPage />;
+  if (pathname === '/ai-for-students') return <StudentLandingPage page={page} />;
 
   const isHome = page.path === '/';
   const faqs = page.faqs || [];
