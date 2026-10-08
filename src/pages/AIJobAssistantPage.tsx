@@ -198,7 +198,7 @@ type YouTubeLessonVideo = {
 };
 
 const AI_CV_BUILDER_PATH = '/ai/resume';
-const FACE_MEX_AI_ICON_SRC = '/facemex_ai_flow_icon.png';
+const FACE_MEX_AI_ICON_SRC = '/facemex-logo.png';
 
 const JOBS_BATCH_SIZE = 10;
 const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
