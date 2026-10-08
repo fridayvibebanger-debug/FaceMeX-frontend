@@ -36,8 +36,8 @@ export type SeoArticle = {
 export const seoLandingPages: SeoLandingPage[] = [
   {
     path: '/',
-    title: 'FaceMeX — AI Learning and Career Assistant',
-    description: 'Use FaceMeX for AI study help, practical learning, job discovery, CV support and interview preparation in one learning and career workspace.',
+    title: 'FaceMeX — AI Learning, Careers & Opportunities',
+    description: 'AI assistance for learning and practical tools for job discovery, CV and document preparation, and interview practice — in one FaceMeX workspace.',
     heading: 'AI support for learning and career preparation',
     introduction: 'FaceMeX brings an AI assistant together with practical tools for learning, job discovery and career preparation. Ask questions, work through a topic, and get help turning your next step into an action.',
     sections: [
@@ -65,21 +65,42 @@ export const seoLandingPages: SeoLandingPage[] = [
   },
   {
     path: '/ai-for-students',
-    title: 'AI for Students | FaceMeX Learning Assistant',
-    description: 'Explore practical ways students can use FaceMeX for explanations, revision, lesson summaries, guided activities and early career preparation.',
-    heading: 'AI for students — learn, practise and prepare',
-    introduction: 'FaceMeX gives students a place to ask learning questions, organise explanations and practise ideas. Use it as a study aid alongside lessons, course materials and trusted sources.',
+    title: 'AI for Students | Study & Build Your Career | FaceMeX',
+    description: 'FaceMeX helps students understand difficult topics, study for exams, prepare career documents, practise interviews and explore jobs and opportunities.',
+    heading: 'AI for Students',
+    introduction: 'Learn, understand, prepare and build. FaceMeX brings AI learning support together with practical tools for career preparation and opportunity discovery. Ask about a topic, work through what you do not understand, then use the workspace tools to prepare for your next step.',
     sections: [
-      { heading: 'Understand difficult lessons', paragraphs: ['Ask the assistant to explain a concept in clear steps, define unfamiliar terms, or give an example. Add your grade or level and describe what is confusing so the response can be more relevant.'], bullets: ['Ask for a simpler explanation.', 'Request a worked example and then try a similar problem yourself.', 'Ask follow-up questions when a step is unclear.'] },
-      { heading: 'Make revision more active', paragraphs: ['Turn material you provide into concise notes, key terms or practice questions. Compare the output with your teacher’s notes and correct anything that does not match your course.'], bullets: ['Summarise a supplied passage or lesson transcript.', 'Ask for a short revision plan based on your available study time.', 'Use questions to test recall instead of only rereading notes.'] },
-      { heading: 'Connect study with next steps', paragraphs: ['FaceMeX also includes Practical Lab activities, job and career exploration, CV and document assistance, and interview practice. These tools can help you explore options, but they do not replace educators or official requirements.'] },
+      {
+        heading: 'Use FaceMeX to study',
+        paragraphs: ['Start with your course material and a clear goal. Ask the AI assistant to organise notes you provide, explain a term, or help you make a manageable revision plan. Compare the result with your class notes and course requirements.'],
+        bullets: ['Break a broad topic into smaller questions.', 'Ask for a short summary of material you provide.', 'Use follow-up questions to check your understanding.'],
+      },
+      {
+        heading: 'Use FaceMeX to understand difficult topics',
+        paragraphs: ['Describe the subject, your level and the exact step that is confusing. Ask for a step-by-step explanation or an example, then try a similar question yourself. AI can make mistakes, so verify important facts and calculations against trusted learning materials.'],
+      },
+      {
+        heading: 'Use FaceMeX to prepare for exams',
+        paragraphs: ['Use the assistant to structure revision sessions or generate practice questions from topics you specify. Test yourself before looking at suggested answers, note what you still need to review, and check the plan against your syllabus and assessment dates.'],
+      },
+      {
+        heading: 'Use FaceMeX to build your career',
+        paragraphs: ['The AI workspace includes CV and document support and interview-practice prompts. Use your own accurate experience and examples, review every suggestion, and follow the application or institution’s requirements.'],
+      },
+      {
+        heading: 'Use FaceMeX to find opportunities',
+        paragraphs: ['The Jobs area helps users explore job opportunities. Check each listing, closing date, employer and application destination at the original source before sharing personal information. FaceMeX does not guarantee a job or interview.'],
+      },
     ],
     faqs: [
-      { question: 'Can FaceMeX help explain school subjects?', answer: 'You can ask the AI assistant to explain topics and work through examples. Check the response against your course materials and ask a teacher when you need authoritative guidance.' },
-      { question: 'Can I use it to summarise a lesson?', answer: 'Yes. FaceMeX can help structure notes from material you provide, such as text or a lesson transcript. Review summaries for missing details or errors.' },
-      { question: 'Will AI do my work for me?', answer: 'FaceMeX is intended to support learning. Use explanations and examples to understand the task, follow your school’s academic-integrity rules, and submit work that reflects your own understanding.' },
+      { question: 'What can students use FaceMeX for?', answer: 'Students can use the AI workspace for explanations and study support, and use existing tools for practical learning, CV and document preparation, interview practice and job discovery. Some tools require signing in.' },
+      { question: 'Can FaceMeX help explain difficult subjects?', answer: 'You can ask the AI assistant to explain a topic in steps, define terms or provide an example. Check the answer against your course materials and ask a teacher when you need authoritative guidance.' },
+      { question: 'Can students use FaceMeX for career preparation?', answer: 'Yes. The workspace includes CV and document support and interview-practice prompts. Review suggestions carefully and make sure your documents accurately reflect your experience.' },
+      { question: 'Can FaceMeX help students find jobs?', answer: 'The Jobs area lets users explore opportunities. Job details can change, so verify the employer, listing and application destination at the original source. FaceMeX does not guarantee employment.' },
+      { question: 'Is FaceMeX useful for university students?', answer: 'University students can use the AI assistant to work through course topics, organise revision and prepare career documents. Follow your institution’s academic-integrity and AI-use rules.' },
+      { question: 'How does FaceMeX use AI?', answer: 'FaceMeX provides an AI assistant that responds to the questions and context you provide. Its responses can be incomplete or incorrect, so verify important information and avoid treating AI output as an authoritative source.' },
     ],
-    cta: 'Try FaceMeX AI',
+    cta: 'Try FaceMeX',
   },
   {
     path: '/ai-study-assistant',
@@ -327,6 +348,53 @@ export function getSeoArticle(path: string) {
   return seoArticles.find((article) => article.slug === slug);
 }
 
+export const nonIndexableSeoRoutes: Record<string, { title: string; description: string }> = {
+  '/login': {
+    title: 'Sign In | FaceMeX',
+    description: 'Sign in to your FaceMeX account to access your private workspace.',
+  },
+  '/signup': {
+    title: 'Create an Account | FaceMeX',
+    description: 'Create a FaceMeX account to access the learning and career workspace.',
+  },
+  '/auth': {
+    title: 'Account Authentication | FaceMeX',
+    description: 'Authenticate to access your FaceMeX account.',
+  },
+  '/reset-password': {
+    title: 'Reset Your Password | FaceMeX',
+    description: 'Reset the password for your FaceMeX account.',
+  },
+  '/tos': {
+    title: 'Terms of Service | FaceMeX',
+    description: 'Review the terms that apply to using FaceMeX.',
+  },
+  '/privacy': {
+    title: 'Privacy Policy | FaceMeX',
+    description: 'Review information about privacy when using FaceMeX.',
+  },
+  '/ethics': {
+    title: 'AI Ethics Policy | FaceMeX',
+    description: 'Read the FaceMeX policy concerning responsible use of AI.',
+  },
+  '/screenshot-policy': {
+    title: 'Screenshot and Recording Policy | FaceMeX',
+    description: 'Review FaceMeX guidance on screenshots and recordings.',
+  },
+  '/community-rules': {
+    title: 'Community Rules | FaceMeX',
+    description: 'Review the rules that apply to FaceMeX community spaces.',
+  },
+  '/pricing': {
+    title: 'Plans and Pricing | FaceMeX',
+    description: 'View plan information for FaceMeX.',
+  },
+  '/prd': {
+    title: 'Product Requirements | FaceMeX',
+    description: 'Internal product requirements information for FaceMeX.',
+  },
+};
+
 export function getSeoMetadata(path: string) {
   const page = getSeoPage(path);
   if (page) return { title: page.title, description: page.description, canonical: `${SEO_SITE_ORIGIN}${page.path}`, indexable: true };
@@ -350,14 +418,19 @@ export function getSeoMetadata(path: string) {
     return {
       title: 'Jobs | FaceMeX',
       description: 'Sign in to use FaceMeX job discovery and career preparation tools.',
-      canonical: `${SEO_SITE_ORIGIN}/jobs`,
+      canonical: '',
       indexable: false,
     };
   }
 
+  const nonIndexableRoute = nonIndexableSeoRoutes[path];
+  if (nonIndexableRoute) {
+    return { ...nonIndexableRoute, canonical: '', indexable: false };
+  }
+
   return {
     title: 'FaceMeX',
-    description: 'FaceMeX AI learning and career workspace.',
+    description: 'Sign in to access your private FaceMeX workspace.',
     canonical: '',
     indexable: false,
   };
