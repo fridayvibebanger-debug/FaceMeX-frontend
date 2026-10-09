@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowUp,
   BookOpen,
   Briefcase,
   Building2,
@@ -3090,7 +3091,7 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth < 1024 : false));
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : false));
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(() => getAppearanceMode());
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(() => getPersonalizationProfile(userStore.id));
@@ -3220,7 +3221,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   }, [chatMessages]);
 
   const inputHasContent = prompt.trim().length > 0 || selectedImages.length > 0;
-  const showMobileBlankWorkspace = isMobileViewport && !focusMode && chatMessages.length === 0 && !busy && !selectedWatchVideo && !selectedProjectId;
+  const showMobileBlankWorkspace = !isDesktopViewport && !focusMode && chatMessages.length === 0 && !busy && !selectedWatchVideo && !selectedProjectId;
 
   const composerPlaceholder = practicalLabOpen
     ? 'Ask FaceMeX about this simulation...'
@@ -3333,52 +3334,11 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   }, [userStore.id]);
 
   useEffect(() => {
-    const root = workspaceScrollRef.current;
-    if (!root) return;
-    if (isDesktopViewport) {
-      setComposerVisible(true);
-      return;
-    }
-
-    let frameId: number | null = null;
-    let lastScrollY = root.scrollTop;
-
-    const updateComposerVisibility = () => {
-      const currentScrollY = root.scrollTop;
-      const delta = currentScrollY - lastScrollY;
-      lastScrollY = currentScrollY;
-
-      const isTyping = document.activeElement === composerTextareaRef.current && Boolean(composerTextareaRef.current?.value.trim());
-      if (isTyping) {
-        setComposerVisible(true);
-      } else if (Math.abs(delta) > 1) {
-        setComposerVisible(false);
-      }
-
-      if (composerHideTimerRef.current !== null) {
-        window.clearTimeout(composerHideTimerRef.current);
-      }
-
-      composerHideTimerRef.current = window.setTimeout(() => {
-        setComposerVisible(true);
-      }, 280);
-    };
-
-    const onScroll = () => {
-      if (frameId !== null) return;
-      frameId = window.requestAnimationFrame(() => {
-        updateComposerVisibility();
-        frameId = null;
-      });
-    };
-
-    root.addEventListener('scroll', onScroll, { passive: true });
+    setComposerVisible(true);
     return () => {
-      root.removeEventListener('scroll', onScroll);
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
       if (composerHideTimerRef.current !== null) window.clearTimeout(composerHideTimerRef.current);
     };
-  }, [isDesktopViewport]);
+  }, []);
 
   useEffect(() => {
     const textarea = composerTextareaRef.current;
@@ -3397,7 +3357,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobileViewport(window.innerWidth < 768);
+      setIsMobileViewport(window.innerWidth < 1024);
       setIsDesktopViewport(window.innerWidth >= 1024);
     };
 
@@ -6501,6 +6461,10 @@ Start with the most useful next action. Do not invent personal details, course r
             box-shadow: none !important;
           }
 
+          .fm-theme-light .fm-mobile-title {
+            color: #252525 !important;
+          }
+
           .fm-theme-light .fm-ai-workspace footer {
             border-color: #e5e5e5 !important;
             background: rgba(255, 255, 255, 0.98) !important;
@@ -6879,9 +6843,9 @@ Start with the most useful next action. Do not invent personal details, course r
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: none;
             width: 100%;
-            min-height: 48px;
-            border-radius: 9999px;
-            padding: 4px 8px;
+            min-height: 52px;
+            border-radius: 28px;
+            padding: 5px 8px;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -6932,6 +6896,8 @@ Start with the most useful next action. Do not invent personal details, course r
           .fm-ai-workspace footer {
             padding: 8px 10px calc(env(safe-area-inset-bottom) + 8px);
             background: rgba(13, 13, 13, 0.98) !important;
+            transform: none !important;
+            opacity: 1 !important;
           }
 
           .fm-ai-workspace footer > div {
@@ -7749,6 +7715,275 @@ Start with the most useful next action. Do not invent personal details, course r
             color: #202020 !important;
           }
         }
+
+        @media (max-width: 1023px) {
+          .fm-ai-workspace,
+          .fm-ai-workspace .fm-workspace-main,
+          .fm-ai-workspace .fm-conversation-panel,
+          .fm-ai-workspace .fm-chat-scroll {
+            width: 100%;
+            max-width: none;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace .fm-workspace-main,
+          .fm-ai-workspace .fm-conversation-panel {
+            background: #fff !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light,
+          .fm-ai-workspace.fm-theme-light .fm-workspace-main,
+          .fm-ai-workspace.fm-theme-light .fm-conversation-panel,
+          .fm-ai-workspace.fm-theme-light .fm-chat-scroll {
+            color-scheme: light;
+            background: #fff !important;
+            color: #252525 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark,
+          .fm-ai-workspace.fm-theme-dark .fm-workspace-main,
+          .fm-ai-workspace.fm-theme-dark .fm-conversation-panel,
+          .fm-ai-workspace.fm-theme-dark .fm-chat-scroll {
+            color-scheme: dark;
+            background: #0d0d0d !important;
+            color: #f5f5f5 !important;
+          }
+
+          .fm-ai-workspace .fm-mobile-topbar {
+            border-color: #f0f0f0 !important;
+            background: #fff !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace .fm-mobile-title,
+          .fm-ai-workspace .fm-mobile-topbar button {
+            color: #262626 !important;
+          }
+
+          .fm-ai-workspace .fm-mobile-topbar button {
+            border: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace .fm-mobile-header-button:hover {
+            background: #f3f3f3 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-topbar {
+            border-color: #292929 !important;
+            background: #0d0d0d !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-title,
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-topbar button {
+            color: #f5f5f5 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-header-button:hover {
+            background: #262626 !important;
+          }
+
+          .fm-ai-workspace .fm-chat-scroll {
+            padding: 16px 16px calc(112px + env(safe-area-inset-bottom)) !important;
+            scrollbar-width: none;
+          }
+
+          .fm-ai-workspace .fm-chat-scroll::-webkit-scrollbar {
+            display: none;
+          }
+
+          .fm-ai-workspace .fm-assistant-message {
+            color: #252525 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message * {
+            color: #f1f1f1 !important;
+          }
+
+          .fm-ai-workspace .fm-user-prompt-bubble {
+            border: 0 !important;
+            border-radius: 20px !important;
+            background: #f1f1f1 !important;
+            color: #252525 !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-user-prompt-bubble {
+            background: #2f2f2f !important;
+            color: #fff !important;
+          }
+
+          .fm-ai-workspace footer {
+            top: auto !important;
+            right: 0;
+            bottom: 0 !important;
+            left: 0;
+            padding: 8px 12px calc(env(safe-area-inset-bottom) + 12px) !important;
+            border: 0 !important;
+            background: linear-gradient(to top, #fff 78%, rgba(255, 255, 255, 0)) !important;
+            backdrop-filter: none !important;
+            transform: none !important;
+            opacity: 1 !important;
+            transition: none !important;
+          }
+
+          .fm-ai-workspace footer > div {
+            width: 100%;
+            max-width: 768px;
+          }
+
+          .fm-ai-workspace .fm-composer-card {
+            display: flex;
+            width: 100%;
+            min-height: 52px;
+            padding: 5px 7px;
+            border: 1px solid #d9d9d9 !important;
+            border-radius: 26px !important;
+            background: #fff !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card > div:first-child {
+            min-height: 40px;
+            gap: 6px;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card button[aria-label='Upload image or document'] {
+            width: 36px !important;
+            min-width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            color: #555 !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card textarea {
+            min-height: 28px !important;
+            max-height: 120px !important;
+            padding: 4px !important;
+            color: #262626 !important;
+            font-size: 16px !important;
+            line-height: 22px !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card textarea::placeholder {
+            color: #858585 !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card button[aria-label='Send'] {
+            width: 36px !important;
+            min-width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 !important;
+            border: 0 !important;
+            background: #e7e7e7 !important;
+            color: #999 !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card button[aria-label='Send']:not(:disabled) {
+            background: #202020 !important;
+            color: #fff !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer {
+            background: linear-gradient(to top, #0d0d0d 78%, rgba(13, 13, 13, 0)) !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-composer-card {
+            border-color: #414141 !important;
+            background: #1d1d1d !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card textarea {
+            color: #f5f5f5 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card textarea::placeholder,
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card button[aria-label='Upload image or document'] {
+            color: #aaa !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card button[aria-label='Send'] {
+            background: #383838 !important;
+            color: #aaa !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card button[aria-label='Send']:not(:disabled) {
+            background: #f1f1f1 !important;
+            color: #202020 !important;
+          }
+
+          .fm-ai-workspace .fm-mobile-empty-heading {
+            position: absolute;
+            top: 39%;
+            right: 16px;
+            left: 16px;
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
+          }
+
+          .fm-ai-workspace .fm-mobile-empty-heading h1 {
+            margin: 0;
+            color: #252525;
+            font-size: 22px;
+            font-weight: 500;
+            line-height: 1.25;
+            letter-spacing: -0.03em;
+            text-align: center;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-empty-heading h1 {
+            color: #f1f1f1;
+          }
+
+          .fm-ai-workspace section.fm-mobile-empty .fm-chat-scroll {
+            overflow: hidden;
+          }
+
+          .fm-ai-workspace section.fm-mobile-empty footer {
+            top: 43% !important;
+            bottom: auto !important;
+            padding: 0 12px !important;
+            background: transparent !important;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .fm-ai-workspace .fm-mobile-empty-heading {
+            display: none !important;
+          }
+
+          .fm-ai-workspace footer {
+            position: fixed !important;
+            z-index: 60 !important;
+            display: block !important;
+            top: auto !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            visibility: visible !important;
+            transform: none !important;
+            opacity: 1 !important;
+            padding: 8px 12px calc(env(safe-area-inset-bottom) + 12px) !important;
+            background: linear-gradient(to top, #fff 78%, rgba(255, 255, 255, 0)) !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer {
+            background: linear-gradient(to top, #0d0d0d 78%, rgba(13, 13, 13, 0)) !important;
+          }
+
+          .fm-ai-workspace section.fm-mobile-empty footer {
+            top: auto !important;
+            bottom: 0 !important;
+          }
+        }
       `}</style>
 
       <aside className="fm-desktop-sidebar hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-[#e8e8e8] bg-[#f7f7f6] text-[#282828] lg:flex lg:flex-col">
@@ -8184,43 +8419,12 @@ Start with the most useful next action. Do not invent personal details, course r
         </div>
       </header>
 
-      <header className="fm-mobile-topbar pointer-events-none fixed left-0 right-0 top-0 z-[65] flex h-[56px] items-center justify-between border-b border-white/10 bg-[#0d0d0d] px-3 shadow-sm shadow-black/20 lg:hidden">
-
-        {isDeveloper && developerMode && (
-          <div className="mx-auto mb-6 max-w-xl rounded-2xl border border-red-200 bg-white p-4 shadow-lg">
-            <h3 className="mb-3 text-lg font-bold">
-              Developer Mode
-            </h3>
-        
-            <div className="grid grid-cols-2 gap-2">
-              {["free", "plus", "pro", "business"].map((plan) => (
-                <button
-                  key={plan}
-                  onClick={() => setDeveloperPlan(plan as any)}
-                  className={`rounded-xl border px-4 py-3 font-semibold transition ${
-                    developerPlan === plan
-                      ? "bg-black text-white"
-                      : "bg-white hover:bg-gray-100"
-                  }`}
-                >
-                  {plan.toUpperCase()}
-                </button>
-              ))}
-            </div>
-        
-            <div className="mt-4 rounded-lg bg-gray-100 p-3 text-sm">
-              Current Test Plan:
-              <strong> {developerPlan.toUpperCase()}</strong>
-            </div>
-          </div>
-        )}
-
-        {/* Left */}
-        <div className="pointer-events-auto flex min-w-0 items-center gap-2">
+      <header className="fm-mobile-topbar fixed left-0 right-0 top-0 z-[65] flex h-[56px] items-center justify-between border-b border-white/10 bg-[#0d0d0d] px-3 lg:hidden">
+        <div className="flex min-w-0 items-center gap-1">
           <button
             type="button"
             onClick={() => setJobsOpen(true)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#171717] text-white shadow-[0_8px_22px_rgba(15,23,42,0.08)] transition active:scale-[0.98] hover:bg-white/10"
+            className="fm-mobile-header-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition active:scale-[0.98] hover:bg-white/10"
             aria-label="Open sidebar"
           >
             <Menu className="h-5 w-5" />
@@ -8229,48 +8433,78 @@ Start with the most useful next action. Do not invent personal details, course r
           <button
             type="button"
             onClick={() => navigate('/facemex-plus')}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-[#171717] px-2.5 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-white/85 transition active:scale-[0.98] hover:bg-white/10"
+            className="fm-mobile-header-button inline-flex h-10 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-medium text-white transition active:scale-[0.98] hover:bg-white/10"
             aria-label="Get Plus"
+            title="Get Plus"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             <span>Get Plus</span>
           </button>
         </div>
 
-        {/* Right */}
-        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-          {hasProAccess ? (
-            <button
-              type="button"
-              onClick={screenShareActive ? stopScreenShare : startScreenShare}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#171717] text-white/80 transition active:scale-[0.98] hover:bg-white/10"
-              aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-              title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-            >
-              <MonitorUp className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setSubscriptionOpen(true);
-                setScreenShareError('Screen sharing is available on FaceMeX Pro.');
-              }}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-[#171717] text-amber-300 transition active:scale-[0.98] hover:bg-white/10"
-              aria-label="Upgrade to Pro for screen sharing"
-              title="Upgrade to Pro for screen sharing"
-            >
-              <ShieldCheck className="h-4 w-4" />
-            </button>
-          )}
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => navigate('/ai/settings', { state: { from: location.pathname } })}
+            className="fm-mobile-header-button hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition active:scale-[0.98] hover:bg-white/10 md:flex lg:hidden"
+            aria-label="Settings"
+            title="Settings"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (hasProAccess) {
+                if (screenShareActive) stopScreenShare();
+                else void startScreenShare();
+                return;
+              }
+              setSubscriptionOpen(true);
+              setScreenShareError('Screen sharing is available on FaceMeX Pro.');
+            }}
+            className="fm-mobile-header-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition active:scale-[0.98] hover:bg-white/10"
+            aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+            title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+          >
+            <MonitorUp className="h-5 w-5" />
+          </button>
         </div>
       </header>
+      {isDeveloper && developerMode && (
+        <div className="fixed right-3 top-[64px] z-[70] rounded-2xl border border-red-200 bg-white p-4 text-slate-900 shadow-lg lg:hidden">
+          <h3 className="mb-3 text-lg font-bold">Developer Mode</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {["free", "plus", "pro", "business"].map((plan) => (
+              <button
+                key={plan}
+                onClick={() => setDeveloperPlan(plan as any)}
+                className={`rounded-xl border px-4 py-3 font-semibold transition ${
+                  developerPlan === plan ? "bg-black text-white" : "bg-white hover:bg-gray-100"
+                }`}
+              >
+                {plan.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 rounded-lg bg-gray-100 p-3 text-sm">
+            Current Test Plan:
+            <strong> {developerPlan.toUpperCase()}</strong>
+          </div>
+        </div>
+      )}
       <main className="fm-workspace-main fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[56px] text-white sm:px-3 sm:pb-3 lg:bg-white lg:px-0 lg:py-0 lg:pt-0 lg:text-[#262626]">
-        <section className={`fm-conversation-panel relative mx-auto flex h-full w-full max-w-[760px] flex-col overflow-hidden rounded-none border-0 bg-[#0d0d0d] text-white shadow-none lg:max-w-none lg:rounded-none lg:border-0 lg:bg-white lg:text-[#262626] lg:shadow-none ${showDesktopEmptyState ? 'fm-desktop-empty' : ''}`}>
+        <section className={`fm-conversation-panel relative mx-auto flex h-full w-full max-w-[760px] flex-col overflow-hidden rounded-none border-0 bg-[#0d0d0d] text-white shadow-none lg:max-w-none lg:rounded-none lg:border-0 lg:bg-white lg:text-[#262626] lg:shadow-none ${showDesktopEmptyState ? 'fm-desktop-empty' : ''} ${showMobileBlankWorkspace ? 'fm-mobile-empty' : ''}`}>
           <div ref={workspaceScrollRef} className="fm-chat-scroll relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[320px] pt-4 sm:px-5 sm:pb-[340px] lg:px-6 lg:pb-32 lg:pt-8">
             {!isMobileViewport && chatMessages.length === 0 && !busy && !selectedWatchVideo && !activeProject && (
               <div className="fm-desktop-empty-heading">
                 <h1 className="text-center text-[24px] font-medium leading-8 text-white lg:text-[#292929]">What are you working on?</h1>
+              </div>
+            )}
+
+            {showMobileBlankWorkspace && (
+              <div className="fm-mobile-empty-heading" aria-hidden="true">
+                <h1>What are you working on?</h1>
               </div>
             )}
 
@@ -8442,12 +8676,6 @@ Start with the most useful next action. Do not invent personal details, course r
                 </div>
               )}
 
-              {remainingAIUses !== null && mexaPlan === 'free' && (
-                <div className="mt-2 text-center text-[11px] text-slate-400 lg:hidden">
-                  {remainingAIUses} of 5 free AI uses remaining today.
-                </div>
-              )}
-
               <div className="fm-composer-card rounded-full lg:order-3">
                 <div className="flex min-h-8 items-center gap-2">
                   <button
@@ -8462,7 +8690,7 @@ Start with the most useful next action. Do not invent personal details, course r
                   <div className="flex min-w-0 flex-1 items-center rounded-full px-1">
                     <Textarea
                       ref={composerTextareaRef}
-                      rows={isDesktopViewport ? 1 : 2}
+                      rows={1}
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       onFocus={() => {
@@ -8489,7 +8717,7 @@ Start with the most useful next action. Do not invent personal details, course r
                     aria-label={voiceListening ? 'Stop voice input' : 'Start voice input'}
                     aria-pressed={voiceListening}
                     title={voiceListening ? 'Listening' : 'Voice input'}
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition active:scale-[0.98] hover:bg-white/10 ${voiceListening ? 'bg-red-500/20 text-red-300' : 'text-white/75'}`}
+                    className={`hidden h-8 w-8 shrink-0 items-center justify-center rounded-full transition active:scale-[0.98] hover:bg-white/10 lg:flex ${voiceListening ? 'bg-red-500/20 text-red-300' : 'text-white/75'}`}
                   >
                     <Mic className="h-4 w-4" />
                   </button>
@@ -8505,7 +8733,13 @@ Start with the most useful next action. Do not invent personal details, course r
                     }`}
                     aria-label="Send"
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isMobileViewport ? (
+                      <ArrowUp className="h-4 w-4" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
 
@@ -8529,12 +8763,13 @@ Start with the most useful next action. Do not invent personal details, course r
               </div>
 
               {remainingAIUses !== null && mexaPlan !== 'free' && (
-                <div className="mt-2 text-center text-[11px] text-slate-400">
+                <div className="mt-2 hidden text-center text-[11px] text-slate-400 lg:block">
                   {mexaPlan === 'plus'
                     ? 'FaceMeX Plus: unlimited AI, unlimited images, 50 docs/month, no scheduling, no model changes, limited video, Adzuna jobs.'
                     : 'FaceMeX Pro: all Plus features plus scheduling, Google jobs, unlimited uploads & documents, unlimited everything.'}
                 </div>
               )}
+
             </div>
           </footer>
         </section>
@@ -9499,6 +9734,19 @@ Start with the most useful next action. Do not invent personal details, course r
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
+                  navigate('/ai/settings', { state: { from: location.pathname } });
+                }}
+                aria-label="Open Settings"
+                className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white md:hidden"
+              >
+                <Settings className="h-4 w-4" />
+                <span className="min-w-0 flex-1">Settings</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setJobsOpen(false);
                   openPracticalLab();
                 }}
                 className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
@@ -9542,9 +9790,9 @@ Start with the most useful next action. Do not invent personal details, course r
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  navigate('/ai/settings', { state: { from: location.pathname } });
+                  navigate('/profile');
                 }}
-                aria-label="Open Settings"
+                aria-label="Open profile"
                 className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-2 ring-emerald-400/20">
@@ -9553,7 +9801,7 @@ Start with the most useful next action. Do not invent personal details, course r
 
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-white">{userDisplayName}</p>
-                  <p className="text-[12px] text-white/40">Back to FaceMeX</p>
+                  <p className="text-[12px] text-white/40">View profile</p>
                 </div>
               </button>
             </div>
