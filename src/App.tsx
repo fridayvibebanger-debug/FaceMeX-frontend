@@ -15,7 +15,6 @@ import WatchPage from './pages/WatchPage';
 import ProfilePage from './pages/ProfilePage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import MessagesPage from './pages/MessagesPage';
-import SettingsPage from './pages/SettingsPage';
 import VirtualWorldsPage from './pages/VirtualWorldsPage';
 import WorldPage from './pages/WorldPage';
 import BoothPage from './pages/BoothPage';
@@ -36,7 +35,8 @@ import ProGroupDetailPage from './pages/ProGroupDetailPage';
 import SavedPostsPage from './pages/SavedPostsPage';
 import AIResumePage from './pages/AIResumePage';
 import AIJobAssistantPage from './pages/AIJobAssistantPage';
-import FaceMeXSettingsPage from './pages/FaceMeXSettingsPage';
+import FaceMeXSettingsPage from './components/facemex-settings/FaceMeXSettingsPage';
+import FaceMeXSettingsSync from './components/facemex-settings/FaceMeXSettingsSync';
 import PricingPage from './pages/PricingPage';
 import TierGate from './components/auth/TierGate';
 import PRDPage from './pages/PRDPage';
@@ -205,6 +205,7 @@ function App() {
       <PageSeoMetadata />
       <AnalyticsBootstrap />
       <TierSync />
+      <FaceMeXSettingsSync />
       <LiveNotificationListener />
       <GlobalCallListener />
       <AppAnalyticsTracker />
@@ -409,7 +410,7 @@ function App() {
         />
 
         <Route
-          path="/ai/settings"
+          path="/ai/settings/:category?"
           element={
             <ProtectedRoute>
               <FaceMeXSettingsPage />
