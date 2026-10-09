@@ -11,6 +11,7 @@ import {
   Megaphone,
   Search,
   ShoppingBag,
+  Settings2,
   Sun,
   Wrench,
   Moon,
@@ -36,6 +37,7 @@ import { Link } from 'react-router-dom';
 import { useUserStore } from '@/store/userStore';
 import IdentityVerifiedBadge from '@/components/safety/IdentityVerifiedBadge';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
+import { APPEARANCE_CHANGE_EVENT, applyAppearanceMode, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 
 import {
   Drawer,
@@ -53,14 +55,20 @@ export default function Navbar() {
   const navigate = useNavigate();
   const { tier, addons, loadMe, mode, setMode } = useUserStore();
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (typeof window !== 'undefined' && localStorage.getItem('theme') === 'dark') ? 'dark' : 'light');
+  const [theme, setTheme] = useState<AppearanceMode>(() => getAppearanceMode());
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    const onAppearanceChange = (event: Event) => {
+      const mode = (event as CustomEvent<AppearanceMode>).detail;
+      if (mode === 'light' || mode === 'dark') setTheme(mode);
+    };
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, onAppearanceChange);
+    return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, onAppearanceChange);
+  }, []);
+
+  const toggleTheme = () => {
+    applyAppearanceMode(theme === 'dark' ? 'light' : 'dark');
+  };
 
   useEffect(() => {
     loadMe().catch(() => {});
@@ -282,15 +290,15 @@ export default function Navbar() {
                       </DrawerClose>
 
                       <DrawerClose asChild>
-                        <Link to="/ai/settings" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
-                          <Wrench className="h-4 w-4 text-muted-foreground" />
+                        <Link to="/ai/settings" state={{ from: location.pathname }} className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
+                          <Settings2 className="h-4 w-4 text-muted-foreground" />
                           <span className="flex-1 text-sm font-medium">Settings</span>
                         </Link>
                       </DrawerClose>
 
                       <button
                         type="button"
-                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                        onClick={toggleTheme}
                         className="w-full flex items-center justify-start text-left gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent"
                       >
                         {theme === 'dark' ? (
@@ -376,7 +384,7 @@ export default function Navbar() {
           </div>
 
           <div className="hidden md:flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/60 px-1.5 py-0.5 shadow-sm">
-            <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            <Button variant="ghost" size="icon" onClick={toggleTheme}>
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
             <Popover>
