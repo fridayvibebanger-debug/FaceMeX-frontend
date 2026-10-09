@@ -1,18 +1,12 @@
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
+import { api, API_URL } from '@/lib/api';
+import { io, Socket } from 'socket.io-client';
+import { getCachedFaceMeXNotificationPreference } from '@/services/facemexSettingsService';
+import { useAuthStore } from '@/store/authStore';
 
 export interface Notification {
   id: string;
-  type:
-    | 'like'
-    | 'comment'
-    | 'follow'
-    | 'message'
-    | 'event'
-    | 'circle'
-    | 'endorsement'
-    | 'connection_request'
-    | 'post';
+  type: 'like' | 'comment' | 'follow' | 'message' | 'event' | 'circle' | 'endorsement';
   title: string;
   message: string;
   avatar?: string;
@@ -23,35 +17,45 @@ export interface Notification {
 
 interface NotificationState {
   notifications: Notification[];
+  allNotifications: Notification[];
   unreadCount: number;
-  addNotification: (
-    notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>
-  ) => void;
+  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>) => void;
   markAsRead: (notificationId: string) => void;
   markAllAsRead: () => void;
   clearNotification: (notificationId: string) => void;
   initRealtime: (userId: string) => void;
+  applySettingsFilters: () => void;
   load: () => Promise<void>;
   read: (id: string) => Promise<void>;
   readAll: () => Promise<void>;
 }
 
-function mapNotification(n: any): Notification {
-  return {
-    id: String(n.id),
-    type: (n.type || 'message') as Notification['type'],
-    title: n.title || 'Notification',
-    message: n.message || '',
-    avatar: n.avatar || undefined,
-    timestamp: new Date(n.created_at || n.timestamp || Date.now()),
-    isRead: !!n.is_read,
-    actionUrl: n.action_url || undefined,
-  };
+let socket: Socket | null = null;
+let socketInitializedFor: string | null = null;
+
+function upsert(list: Notification[], item: Notification) {
+  const idx = list.findIndex((x) => x.id === item.id);
+  if (idx === -1) return [item, ...list];
+  const next = [...list];
+  next[idx] = item;
+  return next;
+}
+
+function notificationIsEnabled(notification: Notification) {
+  return getCachedFaceMeXNotificationPreference(
+    useAuthStore.getState().user?.id,
+    notification.type,
+  );
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
+  allNotifications: [],
   unreadCount: 0,
+  applySettingsFilters: () => set((state) => {
+    const notifications = state.allNotifications.filter(notificationIsEnabled);
+    return { notifications, unreadCount: notifications.filter((item) => !item.isRead).length };
+  }),
 
   addNotification: (notification) => {
     const newNotification: Notification = {
@@ -60,134 +64,112 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       timestamp: new Date(),
       isRead: false,
     };
-
     set((state) => {
-      const next = [newNotification, ...state.notifications];
-
+      const allNotifications = [newNotification, ...state.allNotifications];
+      const notifications = allNotifications.filter(notificationIsEnabled);
       return {
-        notifications: next,
-        unreadCount: next.filter((n) => !n.isRead).length,
+        allNotifications,
+        notifications,
+        unreadCount: notifications.filter((item) => !item.isRead).length,
       };
     });
   },
 
   markAsRead: (notificationId) =>
-    set((state) => {
-      const next = state.notifications.map((n) =>
+    set((state) => ({
+      notifications: state.notifications.map((n) =>
         n.id === notificationId ? { ...n, isRead: true } : n
-      );
-
-      return {
-        notifications: next,
-        unreadCount: next.filter((n) => !n.isRead).length,
-      };
-    }),
+      ),
+      allNotifications: state.allNotifications.map((n) =>
+        n.id === notificationId ? { ...n, isRead: true } : n
+      ),
+      unreadCount: Math.max(0, state.unreadCount - 1),
+    })),
 
   markAllAsRead: () =>
     set((state) => ({
-      notifications: state.notifications.map((n) => ({
-        ...n,
-        isRead: true,
-      })),
+      notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
+      allNotifications: state.allNotifications.map((n) => ({ ...n, isRead: true })),
       unreadCount: 0,
     })),
 
   clearNotification: (notificationId) =>
     set((state) => {
-      const next = state.notifications.filter((n) => n.id !== notificationId);
-
+      const notification = state.notifications.find((n) => n.id === notificationId);
       return {
-        notifications: next,
-        unreadCount: next.filter((n) => !n.isRead).length,
+        notifications: state.notifications.filter((n) => n.id !== notificationId),
+        allNotifications: state.allNotifications.filter((n) => n.id !== notificationId),
+        unreadCount: notification && !notification.isRead 
+          ? Math.max(0, state.unreadCount - 1) 
+          : state.unreadCount,
       };
     }),
 
   initRealtime: (userId: string) => {
+    if (!import.meta.env.DEV) return;
     if (!userId) return;
+    if (!API_URL) return;
+    if (socket && socketInitializedFor === userId) return;
 
-    const channel = supabase
-      .channel(`notifications-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          get().load().catch(() => {});
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  },
-
-  load: async () => {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user?.id) {
-      set({ notifications: [], unreadCount: 0 });
-      return;
+    if (socket) {
+      try {
+        socket.off('notify');
+        socket.close();
+      } catch {
+      }
+      socket = null;
+      socketInitializedFor = null;
     }
 
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    socket = io(API_URL, { withCredentials: true });
+    socketInitializedFor = userId;
+    socket.emit('user:join', { userId });
 
-    if (error) {
-      console.log('Load notifications error:', error.message);
-      set({ notifications: [], unreadCount: 0 });
-      return;
-    }
-
-    const list = (data || []).map(mapNotification);
-
-    set({
-      notifications: list,
-      unreadCount: list.filter((n) => !n.isRead).length,
+    socket.on('notify', (n: any) => {
+      if (!n) return;
+      const item: Notification = {
+        id: String(n.id || n._id || Date.now()),
+        type: (n.type || 'message') as Notification['type'],
+        title: String(n.title || 'Notification'),
+        message: String(n.message || ''),
+        avatar: typeof n.avatar === 'string' ? n.avatar : undefined,
+        timestamp: new Date(typeof n.timestamp === 'number' ? n.timestamp : Date.now()),
+        isRead: !!n.isRead,
+        actionUrl: typeof n.actionUrl === 'string' ? n.actionUrl : undefined,
+      };
+      set((state) => {
+        const allNotifications = upsert(state.allNotifications, item);
+        const notifications = allNotifications.filter(notificationIsEnabled);
+        return { allNotifications, notifications, unreadCount: notifications.filter((x) => !x.isRead).length };
+      });
     });
   },
 
+  load: async () => {
+    const data = await api.get('/api/notifications');
+    const list: Notification[] = (data.notifications || []).map((n: any) => ({
+      id: String(n.id),
+      type: n.type || 'message',
+      title: n.title || 'Notification',
+      message: n.message || '',
+      avatar: n.avatar || undefined,
+      timestamp: new Date(n.timestamp || Date.now()),
+      isRead: !!n.isRead,
+      actionUrl: n.actionUrl || undefined,
+    }));
+    const visibleNotifications = list.filter(notificationIsEnabled);
+    set({
+      allNotifications: list,
+      notifications: visibleNotifications,
+      unreadCount: visibleNotifications.filter(n => !n.isRead).length,
+    })
+  },
   read: async (id: string) => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', id);
-
-    if (error) {
-      console.log('Read notification error:', error.message);
-      return;
-    }
-
-    get().markAsRead(id);
+    await api.post(`/api/notifications/${id}/read`)
+    get().markAsRead(id)
   },
-
   readAll: async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user?.id) return;
-
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.log('Read all notifications error:', error.message);
-      return;
-    }
-
-    get().markAllAsRead();
-  },
+    await api.post('/api/notifications/read-all')
+    get().markAllAsRead()
+  }
 }));
