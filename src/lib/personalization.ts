@@ -4,6 +4,11 @@ export type PersonalizationProfile = {
   role: string;
   goals: string;
   preferences: string;
+  responseStyle?: 'default' | 'professional' | 'friendly' | 'concise' | 'detailed';
+  warmth?: 'low' | 'balanced' | 'high';
+  enthusiasm?: 'low' | 'balanced' | 'high';
+  formatting?: 'standard' | 'headers-and-lists' | 'minimal';
+  emojiUsage?: 'never' | 'sometimes' | 'often';
 };
 
 export const PERSONALIZATION_CHANGE_EVENT = 'facemex:personalization-change';
@@ -14,6 +19,11 @@ const emptyProfile: PersonalizationProfile = {
   role: '',
   goals: '',
   preferences: '',
+  responseStyle: 'default',
+  warmth: 'balanced',
+  enthusiasm: 'balanced',
+  formatting: 'standard',
+  emojiUsage: 'sometimes',
 };
 
 function storageKey(userId?: string | null) {
@@ -31,6 +41,11 @@ export function getPersonalizationProfile(userId?: string | null): Personalizati
       role: typeof value.role === 'string' ? value.role : '',
       goals: typeof value.goals === 'string' ? value.goals : '',
       preferences: typeof value.preferences === 'string' ? value.preferences : '',
+      responseStyle: value.responseStyle ?? 'default',
+      warmth: value.warmth ?? 'balanced',
+      enthusiasm: value.enthusiasm ?? 'balanced',
+      formatting: value.formatting ?? 'standard',
+      emojiUsage: value.emojiUsage ?? 'sometimes',
     };
   } catch {
     return { ...emptyProfile };
@@ -40,8 +55,8 @@ export function getPersonalizationProfile(userId?: string | null): Personalizati
 export function savePersonalizationProfile(userId: string | null | undefined, profile: PersonalizationProfile) {
   try {
     localStorage.setItem(storageKey(userId), JSON.stringify(profile));
-  } catch {
-    // The current session can still use the in-memory profile.
+  } catch (error) {
+    console.warn('FaceMeX personalization could not be cached in this browser.', error);
   }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(PERSONALIZATION_CHANGE_EVENT, { detail: { userId, profile } }));
@@ -49,6 +64,13 @@ export function savePersonalizationProfile(userId: string | null | undefined, pr
 }
 
 export function buildPersonalizationContext(profile: PersonalizationProfile) {
+  const responseGuidance = [
+    profile.responseStyle && profile.responseStyle !== 'default' && `Base response style: ${profile.responseStyle}.`,
+    profile.warmth && `Warmth: ${profile.warmth}.`,
+    profile.enthusiasm && `Enthusiasm: ${profile.enthusiasm}.`,
+    profile.formatting && `Formatting: ${profile.formatting === 'headers-and-lists' ? 'use helpful headers and lists' : profile.formatting}.`,
+    profile.emojiUsage && `Emoji usage: ${profile.emojiUsage}.`,
+  ].filter(Boolean);
   const details = [
     `Context type: ${profile.audience === 'organization' ? 'organization or company' : 'individual'}`,
     profile.name && `Name: ${profile.name}`,
@@ -57,5 +79,6 @@ export function buildPersonalizationContext(profile: PersonalizationProfile) {
     profile.preferences && `Response preferences: ${profile.preferences}`,
   ].filter(Boolean);
 
+  if (responseGuidance.length) details.push(...responseGuidance);
   return details.length > 1 ? `Personalization profile (use when relevant):\n${details.join('\n')}` : '';
 }

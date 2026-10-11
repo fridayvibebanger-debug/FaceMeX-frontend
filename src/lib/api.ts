@@ -11,10 +11,10 @@ function clean(value: any) {
   return String(value || '').trim();
 }
 
-function buildUrl(path: string) {
-  const base = API_URL.replace(/\/+$/, '');
+function buildUrl(path: string, baseUrl = API_URL) {
+  const base = baseUrl.replace(/\/+$/, '');
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${cleanPath}`;
+  return base ? `${base}${cleanPath}` : cleanPath;
 }
 
 function normalizeBearerToken(token: string) {
@@ -235,7 +235,7 @@ async function parseResponse(res: Response) {
   }
 }
 
-async function request(path: string, options: RequestInit = {}) {
+async function request(path: string, options: RequestInit = {}, baseUrl = API_URL) {
   const authHeaders = await buildAuthHeaders();
 
   const isFormData =
@@ -253,7 +253,7 @@ async function request(path: string, options: RequestInit = {}) {
     ...((options.headers as Record<string, string>) || {}),
   };
 
-  const res = await fetch(buildUrl(path), {
+  const res = await fetch(buildUrl(path, baseUrl), {
     ...options,
     credentials: 'include',
     headers: mergedHeaders,
@@ -292,6 +292,21 @@ export const api = {
             ? JSON.stringify(body)
             : undefined,
     }),
+
+  postViaSameOriginProxy: (path: string, body?: any) =>
+    request(
+      path,
+      {
+        method: 'POST',
+        body:
+          body instanceof FormData
+            ? body
+            : body !== undefined
+              ? JSON.stringify(body)
+              : undefined,
+      },
+      ''
+    ),
 
   put: (path: string, body?: any) =>
     request(path, {
