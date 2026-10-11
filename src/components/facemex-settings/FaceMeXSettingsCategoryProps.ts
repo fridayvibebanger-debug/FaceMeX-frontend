@@ -5,7 +5,7 @@ export type FaceMeXSettingsCategoryProps = {
   onSave: (settings: FaceMeXSettings) => Promise<boolean>;
   saving: boolean;
   saved: boolean;
-  user: { name?: string; email?: string } | null;
+  user: { name?: string; email?: string; avatar?: string; joinedDate?: Date } | null;
   plan: string;
   onSignOut: () => void;
 };

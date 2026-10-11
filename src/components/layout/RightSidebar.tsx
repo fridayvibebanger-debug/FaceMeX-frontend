@@ -1,392 +1,128 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { API_URL } from '@/lib/api';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Search, UserPlus, Users, ExternalLink, Circle } from 'lucide-react';
+import { Check, UserPlus, X } from 'lucide-react';
 import { useFriendStore } from '@/store/friendStore';
 import { useUserStore } from '@/store/userStore';
-import { Input } from '@/components/ui/input';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabaseClient';
-
-type ActiveUser = {
-  id: string;
-  full_name?: string | null;
-  name?: string | null;
-  username?: string | null;
-  email?: string | null;
-  bio?: string | null;
-  headline?: string | null;
-  avatar?: string | null;
-  avatar_url?: string | null;
-  location?: string | null;
-  tier?: string | null;
-  is_active?: boolean | null;
-  last_seen?: string | null;
-};
 
 export default function RightSidebar() {
-  const navigate = useNavigate();
+  const { id: userId, name: userName } = useUserStore();
+  const { incoming, outgoing, initRealtime, loadRequests, sendRequest, acceptRequest, declineRequest } = useFriendStore();
 
-  const { id: storeUserId, name: storeUserName } = useUserStore();
+  useEffect(() => {
+    initRealtime(userId);
+    loadRequests().catch(() => {});
+  }, [initRealtime, loadRequests, userId]);
 
-  const { outgoing, initRealtime, loadRequests, sendRequest } = useFriendStore();
-
-  const [authUserId, setAuthUserId] = useState('');
-  const [authUserName, setAuthUserName] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [onlineUsers, setOnlineUsers] = useState<ActiveUser[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [sendingId, setSendingId] = useState<string | null>(null);
-
-  const currentUserId = storeUserId || authUserId;
-  const currentUserName = storeUserName || authUserName || 'FaceMeX User';
+  const [suggestedUsers, setSuggestedUsers] = useState<Array<any>>(() => [
+    { id: '2', name: 'Sarah Johnson', bio: 'Designer & Creator' },
+    { id: '3', name: 'Mike Chen', bio: 'Photographer' },
+    { id: '4', name: 'Emma Wilson', bio: 'Developer' },
+  ]);
 
   useEffect(() => {
     let mounted = true;
-
-    async function loadAuthUser() {
-      const { data } = await supabase.auth.getUser();
-      const user = data?.user;
-
-      if (!mounted || !user) return;
-
-      setAuthUserId(user.id);
-      setAuthUserName(
-        user.user_metadata?.full_name ||
-          user.user_metadata?.name ||
-          user.email?.split('@')[0] ||
-          'FaceMeX User'
-      );
-    }
-
-    loadAuthUser();
-
-    return () => {
-      mounted = false;
-    };
+    (async () => {
+      try {
+        if (!API_URL) return;
+        const res = await fetch(`${API_URL}/api/users/suggested`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!mounted) return;
+        if (Array.isArray(data.users) && data.users.length) setSuggestedUsers(data.users.slice(0, 6));
+      } catch (err) {
+        // ignore, keep defaults
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    initRealtime(currentUserId);
-    loadRequests().catch(() => {});
-  }, [initRealtime, loadRequests, currentUserId]);
-
-  const getDisplayName = (user: ActiveUser) => {
-    return (
-      user.full_name ||
-      user.name ||
-      user.username ||
-      user.email?.split('@')[0] ||
-      'FaceMeX Member'
-    );
-  };
-
-  const getDisplayBio = (user: ActiveUser) => {
-    return user.headline || user.bio || user.location || 'Online now';
-  };
-
-  const getAvatar = (user: ActiveUser) => {
-    return user.avatar_url || user.avatar || '';
-  };
-
   const getInitials = (name: string) => {
-    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-
+    const parts = String(name || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
     if (!parts.length) return '?';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   };
 
-  const isAlreadyRequested = (targetUserId: string) => {
-    return outgoing.some(
-      (request) =>
-        request.toUserId === targetUserId &&
-        request.status === 'pending'
-    );
-  };
-
-  const loadOnlineConnectedUsers = async () => {
-    if (!currentUserId) return;
-
-    setLoading(true);
-
-    try {
-      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-
-      const [{ data: followingRows }, { data: connectionRows }] =
-        await Promise.all([
-          supabase
-            .from('follows')
-            .select('following_id')
-            .eq('follower_id', currentUserId),
-
-          supabase
-            .from('connection_requests')
-            .select('sender_id, receiver_id, status')
-            .eq('status', 'accepted')
-            .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`),
-        ]);
-
-      const followingIds = (followingRows || [])
-        .map((row: any) => row.following_id)
-        .filter(Boolean);
-
-      const connectionIds = (connectionRows || [])
-        .map((row: any) =>
-          row.sender_id === currentUserId ? row.receiver_id : row.sender_id
-        )
-        .filter(Boolean);
-
-      const allowedIds = Array.from(
-        new Set([...followingIds, ...connectionIds])
-      ).filter((id) => id && id !== currentUserId);
-
-      if (allowedIds.length === 0) {
-        setOnlineUsers([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(
-          'id, full_name, name, username, email, bio, headline, avatar_url, avatar, location, tier, is_active, last_seen'
-        )
-        .in('id', allowedIds)
-        .eq('is_active', true)
-        .gte('last_seen', twoMinutesAgo)
-        .order('last_seen', { ascending: false })
-        .limit(12);
-
-      if (error) {
-        console.error('Failed to load online connected users:', error);
-        setOnlineUsers([]);
-        return;
-      }
-
-      setOnlineUsers((data || []) as ActiveUser[]);
-    } catch (error) {
-      console.error('Failed to load online connected users:', error);
-      setOnlineUsers([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    loadOnlineConnectedUsers();
-
-    const channel = supabase
-      .channel(`right-sidebar-online-connected-${currentUserId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-        },
-        () => {
-          loadOnlineConnectedUsers();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'follows',
-        },
-        () => {
-          loadOnlineConnectedUsers();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'connection_requests',
-        },
-        () => {
-          loadOnlineConnectedUsers();
-        }
-      )
-      .subscribe();
-
-    const interval = window.setInterval(() => {
-      loadOnlineConnectedUsers();
-    }, 15000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      window.clearInterval(interval);
-    };
-  }, [currentUserId]);
-
-  const filteredUsers = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-
-    if (!q) return onlineUsers;
-
-    return onlineUsers.filter((user) => {
-      const name = getDisplayName(user).toLowerCase();
-      const bio = getDisplayBio(user).toLowerCase();
-
-      return name.includes(q) || bio.includes(q);
-    });
-  }, [searchQuery, onlineUsers]);
-
-  const handleConnect = async (targetUser: ActiveUser) => {
-    if (!currentUserId || !targetUser.id) return;
-
-    try {
-      setSendingId(targetUser.id);
-
-      await sendRequest(
-        {
-          id: currentUserId,
-          name: currentUserName,
-        },
-        {
-          id: targetUser.id,
-          name: getDisplayName(targetUser),
-        }
-      );
-    } finally {
-      setSendingId(null);
-    }
-  };
+  const isAlreadyRequested = (targetUserId: string) => outgoing.some((r) => r.toUserId === targetUserId && r.status === 'pending');
 
   return (
     <aside className="hidden xl:block fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 border-l border-slate-200/70 dark:border-slate-800/70 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-xl px-3 py-4 overflow-y-auto">
       <div className="space-y-3">
         <Card className="border border-slate-200/70 dark:border-slate-800/70 shadow-sm rounded-2xl bg-white/90 dark:bg-slate-900/90">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Connect
-                </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Online people you follow or are connected with.
-                </p>
-              </div>
-
-              <div className="h-9 w-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-slate-900 dark:text-slate-50">Friend requests</CardTitle>
           </CardHeader>
-
-          <CardContent className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search online contacts..."
-                className="h-9 rounded-full pl-9 text-xs"
-              />
-            </div>
-
-            {loading ? (
-              <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-4 text-center">
-                <p className="text-xs text-muted-foreground">
-                  Loading online contacts...
-                </p>
-              </div>
-            ) : filteredUsers.length ? (
-              <div className="space-y-2">
-                {filteredUsers.map((user) => {
-                  const name = getDisplayName(user);
-                  const bio = getDisplayBio(user);
-                  const pending = isAlreadyRequested(user.id);
-                  const sending = sendingId === user.id;
-
-                  return (
-                    <div
-                      key={user.id}
-                      className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-2.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <Avatar className="h-10 w-10">
-                            <AvatarImage src={getAvatar(user)} alt={name} />
-                            <AvatarFallback>{getInitials(name)}</AvatarFallback>
-                          </Avatar>
-
-                          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-slate-900" />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
-                              {name}
-                            </p>
-
-                            <Circle className="h-2.5 w-2.5 fill-emerald-500 text-emerald-500 shrink-0" />
-                          </div>
-
-                          <p className="text-xs text-muted-foreground truncate">
-                            {bio}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 rounded-full text-xs"
-                          onClick={() => navigate(`/profile/${user.id}`)}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                          View
-                        </Button>
-
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-8 rounded-full text-xs"
-                          disabled={pending || sending}
-                          onClick={() => handleConnect(user)}
-                        >
-                          <UserPlus className="h-3.5 w-3.5 mr-1" />
-                          {sending ? 'Sending' : pending ? 'Pending' : 'Connect'}
-                        </Button>
-                      </div>
+          <CardContent className="space-y-2">
+            {incoming.length ? (
+              incoming.map((u) => (
+                <div
+                  key={u.id}
+                  className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-2.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      <AvatarFallback>{getInitials(u.fromName)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-50 truncate">{u.fromName}</p>
+                      <p className="text-xs text-muted-foreground truncate">Wants to connect</p>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Button size="sm" className="h-8 px-3 rounded-full text-xs" onClick={() => acceptRequest(u.id).catch(() => {})}>
+                      <Check className="h-4 w-4 mr-1" />
+                      Accept
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 px-3 rounded-full text-xs" onClick={() => declineRequest(u.id).catch(() => {})}>
+                      <X className="h-4 w-4 mr-1" />
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              ))
             ) : (
-              <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-5 text-center">
-                <Users className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
-                <p className="text-xs font-medium text-slate-900 dark:text-slate-50">
-                  No online contacts
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Only users you follow or are connected with will show here when they are online.
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground">No requests right now</p>
             )}
+          </CardContent>
+        </Card>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full text-xs"
-              onClick={() => navigate('/connect')}
-            >
-              Open Connect Page
-            </Button>
+        <Card className="border border-slate-200/70 dark:border-slate-800/70 shadow-sm rounded-2xl bg-white/90 dark:bg-slate-900/90">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-slate-900 dark:text-slate-50">Suggested for you</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {suggestedUsers.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-center justify-between rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-white/70 dark:bg-slate-950/20 px-3 py-2.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/50 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-50 truncate">{user.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.bio}</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full h-8 px-3 text-xs flex-shrink-0"
+                  disabled={isAlreadyRequested(user.id)}
+                  onClick={() => sendRequest({ id: userId, name: userName }, { id: user.id, name: user.name }).catch(() => {})}
+                >
+                  <UserPlus className="h-4 w-4 mr-1" />
+                  {isAlreadyRequested(user.id) ? 'Requested' : 'Add'}
+                </Button>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

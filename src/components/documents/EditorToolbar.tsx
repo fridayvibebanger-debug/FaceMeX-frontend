@@ -25,6 +25,7 @@ import {
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { toast } from '@/components/ui/use-toast';
 
 type EditorToolbarProps = {
   editor: Editor | null;
@@ -132,6 +133,14 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
     editor.chain().focus().updateAttributes(type, attributes).run();
   };
 
+  const adjustParagraphSpacing = (attribute: 'spaceBefore' | 'spaceAfter', increment: number) => {
+    const type = editor?.isActive('heading') ? 'heading' : 'paragraph';
+    const current = editor?.getAttributes(type)[attribute] as string | null | undefined;
+    const currentPixels = Number.parseFloat(current || '0') || 0;
+    const nextPixels = Math.min(96, Math.max(0, currentPixels + increment));
+    updateParagraph({ [attribute]: `${nextPixels}px` });
+  };
+
   const findMatches = () => {
     if (!editor || !findQuery.trim()) return [];
     const query = findQuery.toLocaleLowerCase();
@@ -154,22 +163,41 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
   };
 
   const selectFirstMatch = () => {
-    const match = findMatches()[0];
-    if (match) editor?.chain().focus().setTextSelection(match).run();
+    const matches = findMatches();
+    if (!matches.length) {
+      toast({ title: 'No matches found', description: 'Check the search text and try again.' });
+      return;
+    }
+    const selection = editor?.state.selection;
+    const nextMatch = matches.find((match) => match.from > (selection?.from ?? -1)) || matches[0];
+    editor?.chain().focus().setTextSelection(nextMatch).run();
   };
 
   const replaceCurrent = () => {
     if (!editor) return;
-    const match = findMatches()[0];
-    if (match) editor.chain().focus().insertContentAt(match, replaceQuery).run();
+    const { from, to } = editor.state.selection;
+    const selectedText = editor.state.doc.textBetween(from, to, '\n');
+    const match = selectedText.toLocaleLowerCase() === findQuery.toLocaleLowerCase()
+      ? { from, to }
+      : findMatches()[0];
+    if (!match) {
+      toast({ title: 'No matches found', description: 'Check the search text and try again.' });
+      return;
+    }
+    editor.chain().focus().insertContentAt(match, replaceQuery).run();
   };
 
   const replaceAll = () => {
     if (!editor || !findQuery.trim()) return;
     const matches = findMatches();
+    if (!matches.length) {
+      toast({ title: 'No matches found', description: 'Check the search text and try again.' });
+      return;
+    }
     for (const match of [...matches].reverse()) {
       editor.commands.insertContentAt(match, replaceQuery);
     }
+    toast({ title: 'Text replaced', description: `Replaced ${matches.length} match${matches.length === 1 ? '' : 'es'}.` });
   };
 
   const applyHighlight = (color: string) => {
@@ -209,6 +237,7 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
 
     try {
       await navigator.clipboard.writeText(content);
+      toast({ title: 'Copied', description: 'Document text copied to the clipboard.' });
     } catch {
       const helper = document.createElement('textarea');
       helper.value = content;
@@ -217,8 +246,13 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
       helper.style.opacity = '0';
       document.body.appendChild(helper);
       helper.select();
-      document.execCommand('copy');
+      const copied = document.execCommand('copy');
       document.body.removeChild(helper);
+      if (copied) {
+        toast({ title: 'Copied', description: 'Document text copied to the clipboard.' });
+      } else {
+        toast({ title: 'Could not copy', description: 'Your browser blocked clipboard access.', variant: 'destructive' });
+      }
     }
   };
 
@@ -235,10 +269,12 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
     editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
     setTableOpen(false);
   };
+  const zoomIndex = zoomOptions.reduce((closest, value, index) =>
+    Math.abs(value - zoom) < Math.abs(zoomOptions[closest] - zoom) ? index : closest, 0);
 
   return (
     <TooltipProvider>
-      <div className="flex flex-nowrap gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2 md:gap-1.5 lg:border-slate-700 lg:bg-[#11151b] lg:overflow-x-auto [&>div]:shrink-0 [&>div]:min-w-0">
+      <div className="fm-editor-toolbar flex flex-nowrap gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2 md:gap-1.5 lg:border-slate-700 lg:bg-[#11151b] [&>div]:shrink-0 [&>div]:min-w-0">
         <div className="flex shrink-0 gap-1 border-r border-slate-300 pr-2 lg:border-slate-600">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -284,10 +320,10 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
           >
             {lineSpacingOptions.map((spacing) => <option key={spacing.value} value={spacing.value}>{spacing.label}</option>)}
           </select>
-          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceBefore: '12px' })} aria-label="Add space before paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Before +</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceBefore: '0px' })} aria-label="Remove space before paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Before -</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceAfter: '12px' })} aria-label="Add space after paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">After +</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => updateParagraph({ spaceAfter: '0px' })} aria-label="Remove space after paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">After -</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => adjustParagraphSpacing('spaceBefore', 6)} aria-label="Add space before paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Before +</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => adjustParagraphSpacing('spaceBefore', -6)} aria-label="Remove space before paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Before -</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => adjustParagraphSpacing('spaceAfter', 6)} aria-label="Add space after paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">After +</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => adjustParagraphSpacing('spaceAfter', -6)} aria-label="Remove space after paragraph" className="h-10 px-2 text-[10px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">After -</Button>
         </div>
 
         <div className="flex shrink-0 gap-1 border-r border-slate-300 pr-2 lg:border-slate-600">
@@ -528,7 +564,7 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().sinkListItem('listItem').run()} aria-label="Increase indent" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().sinkListItem('listItem').run()} disabled={!editor?.can().sinkListItem('listItem')} aria-label="Increase indent" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                 <Indent className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -537,7 +573,7 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().liftListItem('listItem').run()} aria-label="Decrease indent" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().liftListItem('listItem').run()} disabled={!editor?.can().liftListItem('listItem')} aria-label="Decrease indent" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                 <Outdent className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -557,7 +593,7 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().unsetLink().run()} aria-label="Remove link" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+              <Button type="button" variant="outline" size="icon" onClick={() => editor?.chain().focus().unsetLink().run()} disabled={!editor?.isActive('link')} aria-label="Remove link" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                 <span className="text-[10px] font-black">L</span>
               </Button>
             </TooltipTrigger>
@@ -691,11 +727,11 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
 
         <div className="flex shrink-0 gap-1">
           {onZoomChange && <>
-            <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(Math.max(50, zoom - 10))} aria-label="Zoom out" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomOut className="h-4 w-4" /></Button>
+            <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(zoomOptions[Math.max(0, zoomIndex - 1)])} disabled={zoomIndex === 0} aria-label="Zoom out" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomOut className="h-4 w-4" /></Button>
             <select value={zoom} onChange={(event) => onZoomChange(Number(event.target.value))} aria-label="Document zoom" className="h-10 min-w-[68px] rounded-md border border-slate-300 bg-white px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900 lg:text-slate-100">
               {zoomOptions.map((option) => <option key={option} value={option}>{option}%</option>)}
             </select>
-            <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(Math.min(200, zoom + 10))} aria-label="Zoom in" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomIn className="h-4 w-4" /></Button>
+            <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(zoomOptions[Math.min(zoomOptions.length - 1, zoomIndex + 1)])} disabled={zoomIndex === zoomOptions.length - 1} aria-label="Zoom in" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomIn className="h-4 w-4" /></Button>
           </>}
           <Button type="button" onClick={onSave} className="h-10 rounded-md bg-blue-600 px-3 text-xs text-white hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" aria-label="Save document">
             <Save className="mr-1 h-3.5 w-3.5" />
@@ -704,7 +740,7 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
         </div>
       </div>
       {findOpen && (
-        <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 lg:border-slate-700 lg:bg-[#181d24]">
+        <div className="fm-editor-toolbar mt-2 flex flex-nowrap items-center gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 lg:border-slate-700 lg:bg-[#181d24]">
           <input value={findQuery} onChange={(event) => setFindQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') selectFirstMatch(); }} placeholder="Find" aria-label="Find text" className="h-9 min-w-[120px] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:border-slate-600 lg:bg-slate-900 lg:text-white" />
           <input value={replaceQuery} onChange={(event) => setReplaceQuery(event.target.value)} placeholder="Replace" aria-label="Replace text" className="h-9 min-w-[120px] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:border-slate-600 lg:bg-slate-900 lg:text-white" />
           <Button type="button" variant="outline" size="sm" onClick={selectFirstMatch} aria-label="Find next match" className="h-9 shrink-0 text-xs">Find next</Button>

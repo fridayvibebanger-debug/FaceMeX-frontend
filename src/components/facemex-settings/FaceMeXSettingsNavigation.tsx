@@ -1,15 +1,16 @@
 import {
   Bell,
+  Brain,
   Briefcase,
   Gauge,
   HardDrive,
-  History,
   LockKeyhole,
   Palette,
   Settings2,
   Shield,
   ShieldCheck,
   UserRound,
+  Mic,
   type LucideIcon,
 } from 'lucide-react';
 import FaceMeXSettingsRow from './FaceMeXSettingsRow';
@@ -23,7 +24,9 @@ const groups: Array<{ title: string; items: Array<{ title: SettingsCategory; des
   ] },
   { title: 'Preferences', items: [
     { title: 'Personalization', description: 'Help FaceMeX tailor its responses', icon: Settings2 },
+    { title: 'Memory', description: 'Manage your saved memory preference', icon: Brain },
     { title: 'General', description: 'Appearance and language', icon: Palette },
+    { title: 'Voice', description: 'Voice input and speech options', icon: Mic },
   ] },
   { title: 'Controls', items: [
     { title: 'Usage and limits', description: 'Your current FaceMeX plan', icon: Gauge },
@@ -33,8 +36,8 @@ const groups: Array<{ title: string; items: Array<{ title: SettingsCategory; des
   ] },
   { title: 'Data', items: [
     { title: 'Storage', description: 'Files in your workspace', icon: HardDrive },
-    { title: 'Privacy center', description: 'FaceMeX privacy information', icon: Shield },
-    { title: 'History and data', description: 'Workspace conversation history', icon: History },
+    { title: 'Privacy center', description: 'Privacy settings and resources', icon: Shield },
+    { title: 'Data controls', description: 'Export and manage your data', icon: HardDrive },
   ] },
 ];
 

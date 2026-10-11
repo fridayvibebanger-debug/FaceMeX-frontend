@@ -1,12 +1,10 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { AlignmentType, BorderStyle, Document, HeadingLevel, PageBreak as DocxPageBreak, Packer, Paragraph, Table as DocxTable, TableCell as DocxTableCell, TableRow as DocxTableRow, TextRun, WidthType } from 'docx';
 import {
-  ChevronDown,
-  ChevronUp,
   Download,
-  FileText,
-  Menu,
-  Printer,
+  ArrowUp,
+  X,
   Save,
   Sparkles,
   Wand2,
@@ -31,12 +29,42 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
 import { api } from '@/lib/api';
-import { getDocument, saveDocument } from '@/lib/documents';
+import { getDocument, saveDocument, type PersistedDocument } from '@/lib/documents';
 import { useUserStore } from '@/store/userStore';
+import { useNavigate } from 'react-router-dom';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import EditorToolbar from './EditorToolbar';
+import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 
-type DocumentKind = 'cv' | 'cover-letter' | 'portfolio' | 'bio' | 'linkedin-profile' | 'portfolio-website';
+const DOCUMENT_AI_DAILY_LIMIT = 3;
+const DOCUMENT_AI_USAGE_EVENT = 'facemex:document-ai-usage';
+
+function getDocumentAIUsageKey(userId: string | null | undefined, date = new Date()) {
+  const day = date.toLocaleDateString('en-CA');
+  return `facemex_document_ai_usage_${userId || 'signed-out'}_${day}`;
+}
+
+function readDocumentAIUsage(userId: string | null | undefined) {
+  try {
+    const value = Number(window.localStorage.getItem(getDocumentAIUsageKey(userId)) || 0);
+    return Number.isInteger(value) && value >= 0 ? value : 0;
+  } catch {
+    return null;
+  }
+}
+
+export type DocumentKind =
+  | 'cv'
+  | 'cover-letter'
+  | 'portfolio'
+  | 'bio'
+  | 'linkedin-profile'
+  | 'portfolio-website'
+  | 'business-plan'
+  | 'presentation'
+  | 'proposal'
+  | 'report'
+  | 'meeting-notes';
 type TemplateKey = 'classic' | 'modern' | 'minimal' | 'executive';
 type FontKey = 'sans' | 'serif' | 'mono';
 type PageOrientation = 'portrait' | 'landscape';
@@ -61,7 +89,14 @@ type FormState = {
   linkedinSummary?: string;
 };
 
-type Props = { kind: DocumentKind; documentId?: string; documentName?: string; projectId?: string | null };
+type Props = {
+  kind: DocumentKind;
+  documentId?: string;
+  documentName?: string;
+  projectId?: string | null;
+  onDocumentSaved?: (document: PersistedDocument) => void;
+  embeddedWorkspace?: boolean;
+};
 
 const templates: Array<{ key: TemplateKey; label: string; description: string }> = [
   { key: 'modern', label: 'Modern', description: 'Clean accent bar and clear hierarchy.' },
@@ -93,8 +128,136 @@ function escapeHtml(value: string) {
     .replace(/"/g, '&quot;');
 }
 
+function renderDocumentInlineMarkdown(text: string) {
+  const parts: ReactNode[] = [];
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+
+    if (match[1] && match[2]) {
+      parts.push(
+        <a key={`link-${key++}`} href={match[2]} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          {match[1]}
+        </a>
+      );
+    } else if (match[3]) {
+      parts.push(<strong key={`bold-${key++}`} className="font-semibold">{match[3]}</strong>);
+    } else if (match[4]) {
+      parts.push(<code key={`code-${key++}`} className="rounded bg-black/10 px-1.5 py-0.5 font-mono text-[0.9em] lg:bg-white/10">{match[4]}</code>);
+    } else if (match[5]) {
+      parts.push(<em key={`italic-${key++}`}>{match[5]}</em>);
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+}
+
+function renderDocumentMarkdown(text: string) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+
+    if (!line) continue;
+
+    if (line.startsWith('```')) {
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith('```')) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      blocks.push(
+        <pre key={`code-block-${index}`} className="my-3 max-w-full overflow-x-auto rounded-xl bg-black/[0.06] p-3 font-mono text-[13px] leading-6 lg:bg-white/[0.06]">
+          <code>{codeLines.join('\n')}</code>
+        </pre>
+      );
+      continue;
+    }
+
+    const heading = line.match(/^#{1,4}\s+(.+)$/);
+    if (heading) {
+      blocks.push(
+        <h3 key={`heading-${index}`} className="mt-4 text-base font-semibold tracking-tight first:mt-0">
+          {renderDocumentInlineMarkdown(heading[1])}
+        </h3>
+      );
+      continue;
+    }
+
+    if (/^[-*_]{3,}$/.test(line)) {
+      blocks.push(<hr key={`rule-${index}`} className="my-3 border-0 border-t border-current/15" />);
+      continue;
+    }
+
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      blocks.push(
+        <blockquote key={`quote-${index}`} className="border-l-2 border-current/25 pl-3 text-foreground/70">
+          {renderDocumentInlineMarkdown(quote[1])}
+        </blockquote>
+      );
+      continue;
+    }
+
+    const numbered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (numbered) {
+      const items = [numbered[1]];
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1].trim().match(/^\d+[.)]\s+(.+)$/);
+        if (!next) break;
+        items.push(next[1]);
+        index += 1;
+      }
+      blocks.push(
+        <ol key={`ordered-${index}`} className="my-2 list-decimal space-y-1 pl-6 marker:font-medium">
+          {items.map((item, itemIndex) => <li key={itemIndex} className="pl-1">{renderDocumentInlineMarkdown(item)}</li>)}
+        </ol>
+      );
+      continue;
+    }
+
+    const bullet = line.match(/^[-*•]\s+(.+)$/);
+    if (bullet) {
+      const items = [bullet[1]];
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1].trim().match(/^[-*•]\s+(.+)$/);
+        if (!next) break;
+        items.push(next[1]);
+        index += 1;
+      }
+      blocks.push(
+        <ul key={`unordered-${index}`} className="my-2 list-disc space-y-1 pl-6 marker:text-current/60">
+          {items.map((item, itemIndex) => <li key={itemIndex} className="pl-1">{renderDocumentInlineMarkdown(item)}</li>)}
+        </ul>
+      );
+      continue;
+    }
+
+    blocks.push(
+      <p key={`paragraph-${index}`} className="my-2 first:mt-0 last:mb-0">
+        {renderDocumentInlineMarkdown(line)}
+      </p>
+    );
+  }
+
+  return <div className="space-y-2 text-[15px] leading-7">{blocks}</div>;
+}
+
 function buildLocalCv(form: FormState) {
   return [
+    form.fullName || 'Your Name',
+    form.jobTitle || 'Professional Title',
+    [form.email, form.phone, form.location].filter(Boolean).join(' · ') || '[ADD YOUR CONTACT DETAILS]',
+    '',
     'PROFESSIONAL SUMMARY',
     form.summary || '[ADD A PROFESSIONAL SUMMARY BASED ON YOUR REAL GOALS AND EXPERIENCE]',
     '',
@@ -114,6 +277,9 @@ function buildLocalCv(form: FormState) {
 
 function buildLocalLetter(form: FormState) {
   return [
+    form.fullName || 'Your Name',
+    [form.email, form.phone, form.location].filter(Boolean).join(' · ') || '[ADD YOUR CONTACT DETAILS]',
+    '',
     form.company ? `Dear Hiring Manager at ${form.company},` : 'Dear Hiring Manager,',
     '',
     `I am writing to apply for the ${form.jobTitle || 'available position'} opportunity${form.company ? ` at ${form.company}` : ''}.`,
@@ -209,13 +375,168 @@ function buildLocalPortfolioWebsite(form: FormState) {
   ].join('\n');
 }
 
-function createEditorHtml(text: string) {
+function buildLocalBusinessPlan(form: FormState) {
+  return [
+    form.company || form.fullName || 'Business Plan',
+    form.jobTitle || 'Business plan',
+    '',
+    'EXECUTIVE SUMMARY',
+    form.summary || '[Explain the business, customer, value proposition, and goals.]',
+    '',
+    'PROBLEM & OPPORTUNITY',
+    form.experience || '[Describe the customer problem and evidence of demand.]',
+    '',
+    'PRODUCTS & SERVICES',
+    form.skills || '[Describe the product or service and how it creates value.]',
+    '',
+    'TARGET MARKET & COMPETITION',
+    '[Define target customers, market size assumptions, alternatives, and differentiation.]',
+    '',
+    'BUSINESS MODEL & PRICING',
+    '[Explain revenue streams, pricing, and unit economics.]',
+    '',
+    'MARKETING & SALES',
+    '[Describe positioning, channels, customer acquisition, and retention.]',
+    '',
+    'OPERATIONS & TEAM',
+    form.education || '[Describe key operations, capabilities, roles, and partners.]',
+    '',
+    'FINANCIAL PLAN',
+    form.extras || '[Add verified startup costs, assumptions, forecasts, and funding needs.]',
+    '',
+    'MILESTONES, RISKS & NEXT STEPS',
+    '[List measurable milestones, key risks, mitigations, and immediate actions.]',
+  ].join('\n');
+}
+
+function buildLocalPresentation(form: FormState) {
+  return [
+    form.fullName || 'Presentation title',
+    form.jobTitle || '[Audience or subtitle]',
+    '',
+    'SLIDE 01 — TITLE',
+    form.summary || '[State the core idea in one sentence.]',
+    '',
+    'SLIDE 02 — THE OPPORTUNITY',
+    form.experience || '[Describe the need, audience, or challenge.]',
+    '',
+    'SLIDE 03 — THE SOLUTION',
+    form.skills || '[Explain your solution and why it works.]',
+    '',
+    'SLIDE 04 — EVIDENCE & IMPACT',
+    '[Add verified data, examples, customer insight, or proof points.]',
+    '',
+    'SLIDE 05 — PLAN & TIMELINE',
+    form.education || '[Show the key phases, owners, and milestones.]',
+    '',
+    'SLIDE 06 — RESOURCES & ASK',
+    form.extras || '[State the budget, support, or decision you need.]',
+    '',
+    'SLIDE 07 — NEXT STEPS',
+    '[Close with actions, owner, and timing.]',
+  ].join('\n');
+}
+
+function buildLocalProposal(form: FormState) {
+  return [
+    form.company || form.fullName || 'Project Proposal',
+    form.jobTitle || 'Proposal',
+    '',
+    'EXECUTIVE SUMMARY',
+    form.summary || '[Summarize the need, proposed solution, and expected value.]',
+    '',
+    'BACKGROUND & NEED',
+    form.experience || '[Describe the current situation and why action is needed.]',
+    '',
+    'OBJECTIVES & SUCCESS MEASURES',
+    form.skills || '[List measurable outcomes and how success will be evaluated.]',
+    '',
+    'PROPOSED APPROACH & SCOPE',
+    '[Describe the work included, exclusions, assumptions, and methodology.]',
+    '',
+    'DELIVERABLES & TIMELINE',
+    form.education || '[List deliverables, phases, dates, and responsibilities.]',
+    '',
+    'BUDGET & RESOURCES',
+    form.extras || '[Add cost assumptions, required resources, and payment terms.]',
+    '',
+    'RISKS & MITIGATIONS',
+    '[Identify material risks and practical mitigations.]',
+    '',
+    'NEXT STEPS',
+    '[Specify the decision needed, owner, and target date.]',
+  ].join('\n');
+}
+
+function buildLocalReport(form: FormState) {
+  return [
+    form.fullName || 'Report title',
+    form.jobTitle || 'Prepared for [audience]',
+    '',
+    'EXECUTIVE SUMMARY',
+    form.summary || '[Summarize the purpose, key findings, and recommended action.]',
+    '',
+    'BACKGROUND & OBJECTIVES',
+    form.experience || '[Describe context, scope, and the questions this report addresses.]',
+    '',
+    'METHOD & SOURCES',
+    form.education || '[Record the method, dates, data, and sources used.]',
+    '',
+    'FINDINGS',
+    form.skills || '[Present evidence-based findings. Cite sources where available.]',
+    '',
+    'ANALYSIS',
+    '[Explain implications, limitations, and alternative interpretations.]',
+    '',
+    'RECOMMENDATIONS',
+    form.extras || '[List practical recommendations with owners and priorities.]',
+    '',
+    'APPENDIX & REFERENCES',
+    '[Add supporting tables, definitions, and source references.]',
+  ].join('\n');
+}
+
+function buildLocalMeetingNotes(form: FormState) {
+  return [
+    form.fullName || 'Meeting notes',
+    form.jobTitle || '[Meeting name]',
+    '',
+    'MEETING DETAILS',
+    form.company || '[Date, time, location, facilitator]',
+    '',
+    'ATTENDEES',
+    form.extras || '[List attendees and their roles.]',
+    '',
+    'OBJECTIVE & AGENDA',
+    form.summary || '[State the meeting objective and agenda.]',
+    '',
+    'DISCUSSION NOTES',
+    form.experience || '[Capture key discussion points and context.]',
+    '',
+    'DECISIONS',
+    form.skills || '[Record decisions and any rationale.]',
+    '',
+    'ACTION ITEMS',
+    form.education || '[Action — owner — due date — status]',
+    '',
+    'NEXT MEETING',
+    '[Add proposed date and preparation needed.]',
+  ].join('\n');
+}
+
+function createEditorHtml(text: string, slides = false) {
+  let slideStarted = false;
   const lines = text.split(/\r?\n/);
   const html = lines
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return '<p></p>';
-      if (/^[A-Z][A-Z ]{3,}$/.test(trimmed)) return `<h2>${escapeHtml(trimmed)}</h2>`;
+      if (slides && /^SLIDE\s+\d+/i.test(trimmed)) {
+        const pageBreak = slideStarted ? '<div data-page-break="true"></div>' : '';
+        slideStarted = true;
+        return `${pageBreak}<h1>${escapeHtml(trimmed)}</h1>`;
+      }
+      if (/^[A-Z][A-Z0-9 &:/–—-]{3,}$/.test(trimmed)) return `<h2>${escapeHtml(trimmed)}</h2>`;
       if (/^[-*]\s+/.test(trimmed)) return `<ul><li>${escapeHtml(trimmed.replace(/^[-*]\s+/, ''))}</li></ul>`;
       return `<p>${escapeHtml(trimmed)}</p>`;
     })
@@ -313,7 +634,9 @@ function documentHtml(
     ? '#172033'
     : template === 'executive'
       ? '#0f766e'
-      : '#2563eb';
+      : template === 'classic'
+        ? '#475569'
+        : '#2563eb';
 
   const header = kind === 'cv'
     ? `<div class="name">${escapeHtml(form.fullName || 'Your Name')}</div><div class="meta">${[form.email, form.phone, form.location, form.idNumber].filter(Boolean).map(escapeHtml).join('  |  ')}</div>`
@@ -424,16 +747,91 @@ function makeDocxBlocks(content: string): Array<Paragraph | DocxTable> {
   return blocks.length ? blocks : [new Paragraph({ children: [new TextRun({ text: '' })] })];
 }
 
-export default function DocumentStudio({ kind, documentId, documentName, projectId = null }: Props) {
-  const { id: userId, tier, hasTier } = useUserStore();
-  const isPlus = String(tier).toLowerCase() === 'plus' || hasTier('pro');
+export default function DocumentStudio({
+  kind,
+  documentId,
+  documentName,
+  projectId = null,
+  onDocumentSaved,
+  embeddedWorkspace = false,
+}: Props) {
+  const navigate = useNavigate();
+  const { id: userId, hasTier } = useUserStore();
+  const isPlus = hasTier('plus');
   const isPro = hasTier('pro');
+  const currentUsageKey = getDocumentAIUsageKey(userId);
+  const [dailyAiUsage, setDailyAiUsage] = useState(() => readDocumentAIUsage(userId));
+  const [loadedUsageKey, setLoadedUsageKey] = useState(currentUsageKey);
+  const [usageDay, setUsageDay] = useState(() => new Date().toLocaleDateString('en-CA'));
+  const today = new Date().toLocaleDateString('en-CA');
+  const currentDailyAiUsage = usageDay === today ? dailyAiUsage : 0;
+  const freeAiLimitReached = !isPlus && (
+    loadedUsageKey !== currentUsageKey ||
+    dailyAiUsage === null ||
+    currentDailyAiUsage >= DOCUMENT_AI_DAILY_LIMIT
+  );
+  const recordDocumentAIUsage = () => {
+    if (isPlus) return;
+    const key = getDocumentAIUsageKey(userId);
+    try {
+      const current = readDocumentAIUsage(userId);
+      if (current === null) throw new Error('Browser storage is unavailable.');
+      const next = Math.min(current + 1, DOCUMENT_AI_DAILY_LIMIT);
+      window.localStorage.setItem(key, String(next));
+      setUsageDay(new Date().toLocaleDateString('en-CA'));
+      setDailyAiUsage(next);
+      setLoadedUsageKey(key);
+      window.dispatchEvent(new CustomEvent(DOCUMENT_AI_USAGE_EVENT, { detail: { key, usage: next } }));
+    } catch {
+      setDailyAiUsage(null);
+      toast({
+        title: 'Could not save today’s AI usage',
+        description: 'AI requests are paused because this browser could not save the daily usage limit. Check your browser storage settings and reload.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  useEffect(() => {
+    const refreshUsage = () => {
+      setLoadedUsageKey(getDocumentAIUsageKey(userId));
+      setUsageDay(new Date().toLocaleDateString('en-CA'));
+      setDailyAiUsage(readDocumentAIUsage(userId));
+    };
+    refreshUsage();
+    const interval = window.setInterval(refreshUsage, 60_000);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === getDocumentAIUsageKey(userId)) refreshUsage();
+    };
+    const onUsage = (event: Event) => {
+      const detail = (event as CustomEvent<{ key: string; usage: number }>).detail;
+      if (detail?.key === getDocumentAIUsageKey(userId)) setDailyAiUsage(detail.usage);
+    };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener(DOCUMENT_AI_USAGE_EVENT, onUsage);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(DOCUMENT_AI_USAGE_EVENT, onUsage);
+    };
+  }, [userId]);
+
+  const [appearance, setAppearance] = useState<AppearanceMode>(() => getAppearanceMode());
+
+  useEffect(() => {
+    const handleAppearanceChange = (event: Event) => {
+      const nextMode = (event as CustomEvent<AppearanceMode>).detail;
+      if (nextMode === 'light' || nextMode === 'dark') setAppearance(nextMode);
+    };
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
+    return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
+  }, []);
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [template, setTemplate] = useState<TemplateKey>('modern');
   const [font, setFont] = useState<FontKey>('sans');
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
-  const [orientation, setOrientation] = useState<PageOrientation>('portrait');
+  const [orientation, setOrientation] = useState<PageOrientation>(kind === 'presentation' ? 'landscape' : 'portrait');
   const [highlightColor, setHighlightColor] = useState('#fef08a');
   const [zoom, setZoom] = useState<ZoomLevel>(100);
   const [busy, setBusy] = useState(false);
@@ -442,13 +840,16 @@ export default function DocumentStudio({ kind, documentId, documentName, project
   const [draftSaved, setDraftSaved] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'loading' | 'saving' | 'saved' | 'error'>('loading');
   const [draftHydrated, setDraftHydrated] = useState(false);
-  const [coachOpen, setCoachOpen] = useState(false);
   const [coachPrompt, setCoachPrompt] = useState('');
+  const [coachMode, setCoachMode] = useState<'draft' | 'ask' | 'review' | 'edit'>('draft');
   const [coachResponse, setCoachResponse] = useState('');
   const [coachSuggestion, setCoachSuggestion] = useState<{ original: string; suggested: string; explanation: string; from: number; to: number } | null>(null);
+  const [hasCoachSelection, setHasCoachSelection] = useState(false);
   const [coachBusy, setCoachBusy] = useState(false);
+  const [advancedFormattingOpen, setAdvancedFormattingOpen] = useState(false);
   const documentSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const coachTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const coachSelectionRef = useRef<{ from: number; to: number; original: string } | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
 
   const documentTitles: Record<DocumentKind, string> = {
@@ -458,6 +859,11 @@ export default function DocumentStudio({ kind, documentId, documentName, project
     bio: 'Bio Builder',
     'linkedin-profile': 'LinkedIn Profile',
     'portfolio-website': 'Portfolio Website',
+    'business-plan': 'Business Plan',
+    presentation: 'Presentation Deck',
+    proposal: 'Project Proposal',
+    report: 'Report',
+    'meeting-notes': 'Meeting Notes',
   };
 
   const title = documentName || documentTitles[kind];
@@ -476,6 +882,16 @@ export default function DocumentStudio({ kind, documentId, documentName, project
         return buildLocalLinkedInProfile(docForm);
       case 'portfolio-website':
         return buildLocalPortfolioWebsite(docForm);
+      case 'business-plan':
+        return buildLocalBusinessPlan(docForm);
+      case 'presentation':
+        return buildLocalPresentation(docForm);
+      case 'proposal':
+        return buildLocalProposal(docForm);
+      case 'report':
+        return buildLocalReport(docForm);
+      case 'meeting-notes':
+        return buildLocalMeetingNotes(docForm);
       default:
         return buildLocalCv(docForm);
     }
@@ -483,8 +899,8 @@ export default function DocumentStudio({ kind, documentId, documentName, project
 
   const localContent = useMemo(() => buildLocalContent(kind, form), [form, kind]);
 
-  const saveDocumentWithRetry = async (key: string, draft: Parameters<typeof saveDocument>[1]) => {
-    const save = documentSaveQueue.current.catch(() => undefined).then(async () => {
+  const saveDocumentWithRetry = async (key: string, draft: Parameters<typeof saveDocument>[1]): Promise<PersistedDocument> => {
+    const save: Promise<PersistedDocument> = documentSaveQueue.current.catch(() => undefined).then(async () => {
       let lastError: unknown;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
@@ -500,11 +916,16 @@ export default function DocumentStudio({ kind, documentId, documentName, project
     return save;
   };
 
-  const [content, setContent] = useState(() => createEditorHtml(localContent));
+  const [content, setContent] = useState(() => createEditorHtml(localContent, kind === 'presentation'));
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] } }),
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3, 4] },
+        link: false,
+        underline: false,
+        horizontalRule: false,
+      }),
       Underline,
       TextStyle,
       FontFamily.configure({ types: ['textStyle'] }),
@@ -526,9 +947,28 @@ export default function DocumentStudio({ kind, documentId, documentName, project
       attributes: {
         class: 'prose prose-slate max-w-none focus:outline-none min-h-[420px] text-[16px] leading-7 text-slate-900',
       },
+      handleDOMEvents: {
+        blur: (view) => {
+          const { from, to } = view.state.selection;
+          const hasSelection = from !== to;
+          coachSelectionRef.current = hasSelection
+            ? { from, to, original: view.state.doc.textBetween(from, to, '\n') }
+            : null;
+          setHasCoachSelection(hasSelection);
+          return false;
+        },
+      },
     },
     onUpdate: ({ editor }) => {
       setContent(editor.getHTML());
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      const hasSelection = from !== to;
+      coachSelectionRef.current = hasSelection
+        ? { from, to, original: editor.state.doc.textBetween(from, to, '\n') }
+        : null;
+      setHasCoachSelection(hasSelection);
     },
   });
 
@@ -545,6 +985,16 @@ export default function DocumentStudio({ kind, documentId, documentName, project
 
     const loadDraft = async () => {
       let localDraft: any = null;
+      const applyLocalDraft = () => {
+        if (localDraft.form) setForm({ ...emptyForm, ...localDraft.form });
+        if (typeof localDraft.content === 'string' && localDraft.content.trim()) setContent(localDraft.content);
+        if (localDraft.template) setTemplate(localDraft.template);
+        if (localDraft.font) setFont(localDraft.font);
+        if (localDraft.alignment) setAlignment(localDraft.alignment);
+        if (localDraft.orientation) setOrientation(localDraft.orientation);
+        if (localDraft.highlightColor) setHighlightColor(localDraft.highlightColor);
+        setDraftSaved(true);
+      };
       try {
         localDraft = JSON.parse(localStorage.getItem(getDraftKey(kind, documentId, userId)) || 'null');
       } catch {
@@ -556,23 +1006,24 @@ export default function DocumentStudio({ kind, documentId, documentName, project
         if (cancelled) return;
         if (saved) {
           const metadata = saved.metadata || {};
-          if (metadata.form) setForm({ ...emptyForm, ...(metadata.form as Partial<FormState>) });
-          setContent(saved.content || '<p></p>');
-          if (metadata.template) setTemplate(metadata.template as TemplateKey);
-          if (metadata.font) setFont(metadata.font as FontKey);
-          if (metadata.alignment) setAlignment(metadata.alignment as 'left' | 'center' | 'right' | 'justify');
-          if (metadata.orientation) setOrientation(metadata.orientation as PageOrientation);
-          if (metadata.highlightColor) setHighlightColor(String(metadata.highlightColor));
-          setDraftSaved(true);
-          setSyncStatus('saved');
+          const localSavedAt = Date.parse(localDraft?.savedAt || '');
+          const remoteSavedAt = Date.parse(saved.updatedAt || '');
+          if (localDraft && Number.isFinite(localSavedAt) && localSavedAt > remoteSavedAt) {
+            applyLocalDraft();
+            setSyncStatus('saving');
+          } else {
+            if (metadata.form) setForm({ ...emptyForm, ...(metadata.form as Partial<FormState>) });
+            setContent(saved.content || '<p></p>');
+            if (metadata.template) setTemplate(metadata.template as TemplateKey);
+            if (metadata.font) setFont(metadata.font as FontKey);
+            if (metadata.alignment) setAlignment(metadata.alignment as 'left' | 'center' | 'right' | 'justify');
+            if (metadata.orientation) setOrientation(metadata.orientation as PageOrientation);
+            if (metadata.highlightColor) setHighlightColor(String(metadata.highlightColor));
+            setDraftSaved(true);
+            setSyncStatus('saved');
+          }
         } else if (localDraft) {
-          if (localDraft.form) setForm({ ...emptyForm, ...localDraft.form });
-          if (typeof localDraft.content === 'string' && localDraft.content.trim()) setContent(localDraft.content);
-          if (localDraft.template) setTemplate(localDraft.template);
-          if (localDraft.font) setFont(localDraft.font);
-          if (localDraft.alignment) setAlignment(localDraft.alignment);
-          if (localDraft.orientation) setOrientation(localDraft.orientation);
-          if (localDraft.highlightColor) setHighlightColor(localDraft.highlightColor);
+          applyLocalDraft();
           setSyncStatus('saving');
         } else {
           setSyncStatus('saved');
@@ -581,13 +1032,7 @@ export default function DocumentStudio({ kind, documentId, documentName, project
         console.error('FaceMeX document load failed', error);
         if (cancelled) return;
         if (localDraft) {
-          if (localDraft.form) setForm({ ...emptyForm, ...localDraft.form });
-          if (typeof localDraft.content === 'string' && localDraft.content.trim()) setContent(localDraft.content);
-          if (localDraft.template) setTemplate(localDraft.template);
-          if (localDraft.font) setFont(localDraft.font);
-          if (localDraft.alignment) setAlignment(localDraft.alignment);
-          if (localDraft.orientation) setOrientation(localDraft.orientation);
-          if (localDraft.highlightColor) setHighlightColor(localDraft.highlightColor);
+          applyLocalDraft();
         }
         setSyncStatus('error');
       } finally {
@@ -610,7 +1055,7 @@ export default function DocumentStudio({ kind, documentId, documentName, project
     if (!draftHydrated) return;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, font, alignment, highlightColor, orientation }));
+        localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, font, alignment, highlightColor, orientation, savedAt: new Date().toISOString() }));
       } catch {
         setDraftSaved(false);
       }
@@ -624,9 +1069,10 @@ export default function DocumentStudio({ kind, documentId, documentName, project
         projectId,
       };
       void saveDocumentWithRetry(documentId || kind, draft)
-        .then(() => {
+        .then((saved) => {
           setDraftSaved(true);
           setSyncStatus('saved');
+          onDocumentSaved?.(saved);
         })
         .catch((error) => {
           console.error('FaceMeX document autosave failed', error);
@@ -636,7 +1082,7 @@ export default function DocumentStudio({ kind, documentId, documentName, project
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [alignment, content, font, form, kind, template, documentId, highlightColor, title, userId, draftHydrated, projectId, orientation]);
+  }, [alignment, content, font, form, kind, template, documentId, highlightColor, title, userId, draftHydrated, projectId, orientation, onDocumentSaved]);
 
   const update = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -711,6 +1157,57 @@ export default function DocumentStudio({ kind, documentId, documentName, project
           ['experience', 'Portfolio / Work'],
           ['extras', 'Contact & CTA'],
         ];
+      case 'business-plan':
+        return [
+          ['company', 'Business name'],
+          ['jobTitle', 'Plan period / industry'],
+          ['summary', 'Executive summary'],
+          ['experience', 'Problem & market opportunity'],
+          ['skills', 'Products & business model'],
+          ['education', 'Operations & team'],
+          ['extras', 'Financial assumptions & funding needs'],
+        ];
+      case 'presentation':
+        return [
+          ['fullName', 'Presentation title'],
+          ['jobTitle', 'Audience / subtitle'],
+          ['summary', 'Core message'],
+          ['experience', 'Opportunity / challenge'],
+          ['skills', 'Solution / key points'],
+          ['education', 'Plan / timeline'],
+          ['extras', 'Evidence, resources & call to action'],
+        ];
+      case 'proposal':
+        return [
+          ['company', 'Client / project name'],
+          ['jobTitle', 'Proposal title'],
+          ['summary', 'Executive summary'],
+          ['experience', 'Background & need'],
+          ['skills', 'Objectives & success measures'],
+          ['education', 'Deliverables & timeline'],
+          ['extras', 'Budget, risks & next steps'],
+        ];
+      case 'report':
+        return [
+          ['fullName', 'Report title'],
+          ['jobTitle', 'Prepared for / reporting period'],
+          ['summary', 'Executive summary'],
+          ['experience', 'Background & objectives'],
+          ['education', 'Method & sources'],
+          ['skills', 'Key findings'],
+          ['extras', 'Recommendations & references'],
+        ];
+      case 'meeting-notes':
+        return [
+          ['fullName', 'Meeting notes title'],
+          ['jobTitle', 'Meeting name'],
+          ['company', 'Date / facilitator'],
+          ['summary', 'Objective & agenda'],
+          ['experience', 'Discussion notes'],
+          ['skills', 'Decisions'],
+          ['education', 'Action items & owners'],
+          ['extras', 'Attendees / next meeting'],
+        ];
       default:
         return [];
     }
@@ -721,6 +1218,11 @@ export default function DocumentStudio({ kind, documentId, documentName, project
   const Icon = isPlus ? Sparkles : Wand2;
 
   const generate = async () => {
+    if (freeAiLimitReached) {
+      toast({ title: 'Daily free AI limit reached', description: 'Upgrade to FaceMeX Plus or Pro for more document AI access.' });
+      return;
+    }
+
     if (kind === 'cv' && (!form.fullName.trim() || !form.email.trim())) {
       toast({ title: 'Add your details', description: 'Enter your name and email first.' });
       return;
@@ -734,22 +1236,47 @@ export default function DocumentStudio({ kind, documentId, documentName, project
     setBusy(true);
     try {
       let nextContent = createEditorHtml(localContent);
-      if (isPlus) {
-        const endpoint = kind === 'cv' ? '/api/ai/pro/resume-builder' : '/api/ai/pro/cover-letter';
-        const payload = kind === 'cv'
-          ? { ...form, tier: isPro ? 'pro' : 'plus', template }
-          : { jobTitle: form.jobTitle, company: form.company, resumeSummary: form.summary, extras: form.extras, candidateName: form.fullName, tier: isPro ? 'pro' : 'plus', template };
-
-        const response = await api.post(endpoint, payload);
-        const generated = String(kind === 'cv' ? response.resumeText || localContent : response.letter || localContent);
-        nextContent = createEditorHtml(generated);
+      {
+        const endpoint = !isPlus
+          ? '/api/ai/workspace'
+          : kind === 'cv'
+          ? '/api/ai/pro/resume-builder'
+          : kind === 'cover-letter'
+            ? '/api/ai/pro/cover-letter'
+            : '/api/ai/workspace';
+        const candidateDetails = { ...form };
+        delete candidateDetails.idNumber;
+        const request = kind === 'cv'
+          ? `Create a polished, ATS-friendly CV using only the candidate details below. Keep every claim factual; do not invent experience, achievements, skills, dates, or qualifications. Use clear section headings and concise bullets. Template style: ${template}. Candidate details: ${JSON.stringify(candidateDetails)}`
+          : kind === 'cover-letter'
+            ? `Create a tailored, professional cover letter using only the candidate details below. Do not invent experience, achievements, skills, dates, or qualifications. Template style: ${template}. Candidate details: ${JSON.stringify(candidateDetails)}`
+            : `Create a polished ${kind.replace(/-/g, ' ')} using only the user details below. Never invent experience, qualifications, skills, dates, contact details, achievements, or project results. Use clear section headings. Template style: ${template}. User details: ${JSON.stringify(candidateDetails)}`;
+        const response = await api.postViaSameOriginProxy(endpoint, {
+          messages: [{ role: 'user', content: request }],
+          ...(kind === 'cv' ? { task: 'resume_builder' } : kind === 'cover-letter' ? { task: 'cover_letter' } : {}),
+          tier: isPro ? 'pro' : isPlus ? 'plus' : 'free',
+          template,
+        });
+        const generated = String(
+          kind === 'cv'
+            ? response?.resumeText || response?.answer || response?.reply || response?.content || response?.response || response?.text || ''
+            : response?.letter || response?.answer || response?.reply || response?.content || response?.response || response?.text || ''
+        ).trim();
+        if (!generated) throw new Error('The AI service returned an empty document.');
+        nextContent = createEditorHtml(generated, kind === 'presentation');
+        recordDocumentAIUsage();
       }
 
       setContent(nextContent);
-      toast({ title: 'Document ready', description: isPlus ? 'AI generation complete.' : 'Free template generated.' });
-    } catch {
-      setContent(createEditorHtml(localContent));
-      toast({ title: 'Using local template', description: 'You can still edit and download your document.' });
+      toast({ title: 'Document ready', description: 'AI generation complete.' });
+    } catch (error) {
+      console.error('FaceMeX document generation failed', error);
+      setContent(createEditorHtml(localContent, kind === 'presentation'));
+      toast({
+        title: 'AI generation failed',
+        description: 'A local starter document is ready to edit. Check your connection and try AI generation again.',
+        variant: 'destructive',
+      });
     } finally {
       setBusy(false);
     }
@@ -757,7 +1284,10 @@ export default function DocumentStudio({ kind, documentId, documentName, project
 
   const printDocument = () => {
     const win = window.open('', '_blank');
-    if (!win) return;
+    if (!win) {
+      toast({ title: 'PDF window was blocked', description: 'Allow pop-ups for FaceMeX, then try printing again.', variant: 'destructive' });
+      return;
+    }
 
     win.document.write(documentHtml(kind, form, content, template, font, alignment, highlightColor, orientation));
     win.document.close();
@@ -766,28 +1296,35 @@ export default function DocumentStudio({ kind, documentId, documentName, project
   };
 
   const downloadDocx = async () => {
-    const doc = new Document({
-      sections: [{
-        properties: {
-          page: {
-            size: orientation === 'portrait' ? { width: 11906, height: 16838 } : { width: 16838, height: 11906 },
-            margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 },
+    try {
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              size: orientation === 'portrait' ? { width: 11906, height: 16838 } : { width: 16838, height: 11906 },
+              margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 },
+            },
           },
-        },
-        children: [
-          new Paragraph({ children: [new TextRun({ text: form.fullName || 'Your Name', bold: true, size: 34 })] }),
-          ...makeDocxBlocks(content),
-        ],
-      }],
-    });
+          children: [
+            new Paragraph({ children: [new TextRun({ text: form.fullName || 'Your Name', bold: true, size: 34 })] }),
+            ...makeDocxBlocks(content),
+          ],
+        }],
+      });
 
-    const blob = await Packer.toBlob(doc);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${documentName || kind}.docx`;
-    link.click();
-    URL.revokeObjectURL(url);
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${documentName || kind}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      console.error('FaceMeX DOCX export failed', error);
+      toast({ title: 'DOCX export failed', description: 'Please try again. Your document remains available in the editor.', variant: 'destructive' });
+    }
   };
 
   const clearDocument = () => {
@@ -796,10 +1333,17 @@ export default function DocumentStudio({ kind, documentId, documentName, project
   };
 
   const handleSave = async () => {
+    let localCopySaved = false;
     try {
-      localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, font, alignment, highlightColor, orientation }));
-      setSyncStatus('saving');
-      await saveDocumentWithRetry(documentId || kind, {
+      localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, font, alignment, highlightColor, orientation, savedAt: new Date().toISOString() }));
+      localCopySaved = true;
+    } catch (error) {
+      console.error('FaceMeX local document recovery failed', error);
+    }
+
+    setSyncStatus('saving');
+    try {
+      const saved = await saveDocumentWithRetry(documentId || kind, {
         title,
         documentType: kind,
         content,
@@ -808,64 +1352,87 @@ export default function DocumentStudio({ kind, documentId, documentName, project
       });
       setDraftSaved(true);
       setSyncStatus('saved');
+      onDocumentSaved?.(saved);
       toast({ title: 'Saved', description: 'Your draft has been saved.' });
     } catch (error) {
       console.error('FaceMeX document save failed', error);
       setSyncStatus('error');
-      toast({ title: 'Cloud save failed', description: 'A local recovery copy is available. Check your connection and try again.', variant: 'destructive' });
+      toast({
+        title: 'Cloud save failed',
+        description: localCopySaved
+          ? 'A local recovery copy is available. Check your connection and try again.'
+          : 'The cloud save failed and browser storage could not keep a local recovery copy. Copy your document text somewhere safe before leaving this page.',
+        variant: 'destructive',
+      });
     }
   };
 
-  const askDocumentCoach = async (mode: 'ask' | 'teach' | 'review' | 'edit') => {
-    const selection = editor?.state.selection;
-    const original = selection && selection.from !== selection.to
+  const askDocumentCoach = async (mode: 'ask' | 'review' | 'edit' | 'draft') => {
+    if (freeAiLimitReached) {
+      toast({ title: 'Daily free AI limit reached', description: 'Upgrade to FaceMeX Plus or Pro for more document AI access.' });
+      return;
+    }
+
+    const selectedRange = mode === 'edit' ? coachSelectionRef.current : null;
+    const selection = selectedRange || editor?.state.selection;
+    const original = selectedRange?.original || (selection && selection.from !== selection.to
       ? editor?.state.doc.textBetween(selection.from, selection.to, '\n') || ''
-      : '';
+      : '');
     if (mode === 'edit' && !original.trim()) {
       toast({ title: 'Select document text first', description: 'Highlight the text you want FaceMeX to improve.' });
       return;
     }
 
     const userQuestion = coachPrompt.trim();
-    if (mode === 'ask' && !userQuestion) {
+    if ((mode === 'ask' || mode === 'draft') && !userQuestion) {
       toast({ title: 'Ask FaceMeX a question', description: 'Enter what you want help with.' });
       return;
     }
 
-    const instruction = mode === 'teach'
-      ? 'Teach the user to build this document step by step. Give only the next step, explain it simply, and ask one focused question. Never invent personal facts.'
-      : mode === 'review'
-        ? 'Review this document for clarity, spelling, grammar, structure, repetition, and professionalism. Give specific feedback and identify missing information as questions/placeholders. Never invent qualifications, skills, experience, or dates.'
-        : mode === 'edit'
-          ? `Improve only the selected text. Keep all facts unchanged. Return a JSON object with string properties suggested and explanation. Selected text: ${JSON.stringify(original)}`
-          : `Answer the user's document-writing question in simple language. Never invent personal facts. Question: ${userQuestion}`;
+    const instruction = mode === 'review'
+      ? `Review this document for clarity, spelling, grammar, structure, repetition, and professionalism. Reply like a helpful writing assistant: start with a brief overall assessment, then use clear Markdown headings and concise bullets for specific strengths, recommended improvements, and missing information. Give actionable examples where useful. Focus on: ${userQuestion || 'the overall document quality'}. Never invent qualifications, skills, experience, or dates.`
+      : mode === 'edit'
+        ? `Improve only the selected text according to this request: ${userQuestion}. Keep all facts unchanged. Return a JSON object with string properties suggested and explanation. Selected text: ${JSON.stringify(original)}`
+        : mode === 'draft'
+          ? `Apply the user's requested changes to the complete ${kind} below. Return only the complete updated document text, with clear section headings and concise bullet points where useful. Preserve every relevant existing fact and user-provided detail unless the user explicitly asks to remove or change it. If the document is blank or contains placeholders, fill only what the user has provided and leave obvious placeholders or omit missing information. Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
+          : `Answer the user's document-writing question in a clear, conversational, helpful style. Use short paragraphs and Markdown headings or bullets when they improve readability. Never invent personal facts. Question: ${userQuestion}`;
 
     setCoachBusy(true);
     setCoachResponse('');
     setCoachSuggestion(null);
     try {
-      const response = await api.post('/api/ai/workspace', {
-        prompt: `${instruction}\n\nDocument type: ${kind}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(form)}`,
-        message: instruction,
-        question: instruction,
-        originalPrompt: userQuestion || instruction,
+      const userDetails = { ...form };
+      delete userDetails.idNumber;
+      const response = await api.postViaSameOriginProxy('/api/ai/workspace', {
+        messages: [{
+          role: 'user',
+          content: `${instruction}\n\nDocument type: ${kind}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(userDetails)}`,
+        }],
         intent: 'document_analysis',
         source: 'facemex-document-coach',
         directAnswer: true,
       });
-      const answer = String(response?.answer || response?.reply || response?.text || response?.content || response?.data?.answer || 'FaceMeX could not provide a response. Please try again.');
+      const answer = String(response?.answer || response?.reply || response?.text || response?.content || response?.data?.answer || '').trim();
+      if (!answer) {
+        throw new Error('The AI service returned an empty response.');
+      }
       if (mode === 'edit') {
         const jsonText = answer.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
         try {
           const parsed = JSON.parse(jsonText);
+          const suggested = String(parsed.suggested || '').trim();
+          if (!suggested) throw new Error('The AI service returned an empty edit suggestion.');
           setCoachSuggestion({
             original,
-            suggested: String(parsed.suggested || ''),
+            suggested,
             explanation: String(parsed.explanation || ''),
             from: selection!.from,
             to: selection!.to,
           });
+          setCoachPrompt('');
+          if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
         } catch {
+          if (answer.trim().startsWith('{')) throw new Error('The AI service returned an invalid edit suggestion.');
           setCoachSuggestion({
             original,
             suggested: answer,
@@ -873,13 +1440,26 @@ export default function DocumentStudio({ kind, documentId, documentName, project
             from: selection!.from,
             to: selection!.to,
           });
+          setCoachPrompt('');
+          if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
         }
+      } else if (mode === 'draft') {
+        applyAiDraft(answer);
+        setCoachPrompt('');
+        if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
       } else {
         setCoachResponse(answer);
+        setCoachPrompt('');
+        if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
       }
+      recordDocumentAIUsage();
     } catch (error) {
       console.error('FaceMeX document coach request failed', error);
-      toast({ title: 'FaceMeX could not complete that request', description: 'Please try again.' , variant: 'destructive' });
+      toast({
+        title: 'FaceMeX could not complete that request',
+        description: error instanceof Error ? error.message : 'Please check your connection and try again.',
+        variant: 'destructive',
+      });
     } finally {
       setCoachBusy(false);
     }
@@ -895,15 +1475,41 @@ export default function DocumentStudio({ kind, documentId, documentName, project
     }
     editor.chain().focus().insertContentAt(
       { from: coachSuggestion.from, to: coachSuggestion.to },
-      coachSuggestion.suggested,
+      createEditorHtml(coachSuggestion.suggested, kind === 'presentation'),
     ).run();
+    coachSelectionRef.current = null;
+    setHasCoachSelection(false);
     setCoachSuggestion(null);
     toast({ title: 'Suggestion applied', description: 'You can undo this change from the editor toolbar.' });
   };
 
+  const applyAiDraft = (responseText: string) => {
+    if (!editor || !responseText.trim()) return;
+    const draft = responseText.replace(/^```(?:text|markdown)?\s*/i, '').replace(/\s*```$/, '');
+    const html = createEditorHtml(draft, kind === 'presentation');
+    editor.commands.setContent(html);
+    setContent(html);
+    setCoachResponse('');
+    toast({ title: 'Document updated', description: 'FaceMeX applied your requested changes. Review the result and undo if needed.' });
+  };
+
   const wordCount = (editor?.getText() || '').trim().split(/\s+/).filter(Boolean).length;
   const pageWidthPx = orientation === 'portrait' ? 794 : 1123;
-  const pageHeightPx = orientation === 'portrait' ? 1123 : 794;
+  const composerPlaceholder = coachMode === 'draft'
+    ? `Ask FaceMeX to write or edit your ${kind === 'cv' ? 'CV' : 'document'}`
+    : coachMode === 'ask'
+      ? 'Ask a question about this document'
+      : coachMode === 'review'
+        ? 'What should FaceMeX review? (optional)'
+        : 'Select text in the document, then describe the improvement';
+
+  const resizeCoachTextarea = (value: string) => {
+    const textarea = coachTextareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    setCoachPrompt(value);
+  };
 
   if (initError) {
     return (
@@ -920,199 +1526,155 @@ export default function DocumentStudio({ kind, documentId, documentName, project
   }
 
   return (
-    <div className="fm-document-workspace min-h-screen bg-[#0b0b0b] text-white">
-      <style>{`
-        .fm-document-workspace button {
-          border-color: rgba(255, 255, 255, 0.12);
-          background-color: #1b1b1b;
-          color: #f4f4f5;
-        }
-        .fm-document-workspace button:hover:not(:disabled) {
-          background-color: #292929;
-        }
-        .fm-document-workspace input:not([type='color']),
-        .fm-document-workspace textarea,
-        .fm-document-workspace select {
-          border-color: rgba(255, 255, 255, 0.12);
-          background-color: #171717;
-          color: #f4f4f5;
-        }
-        .fm-document-workspace option {
-          background-color: #171717;
-          color: #f4f4f5;
-        }
-      `}</style>
+    <div className={`fm-document-workspace fm-theme-${appearance} ${embeddedWorkspace ? 'h-full min-h-0' : 'h-screen h-[100dvh]'} overflow-hidden bg-slate-50 text-slate-900 lg:bg-[#0b0b0b] lg:text-white`}>
       <SensitiveContentShield
         context={kind === 'cv' ? 'cv' : 'cover-letter'}
-        className="mx-auto max-w-[1500px] px-3 pb-8 pt-4 sm:px-6 lg:px-8 lg:pt-7"
+        className="mx-auto flex h-full min-h-0 max-w-[1500px] flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-5 lg:px-8 lg:pt-5"
+        contentClassName="flex h-full min-h-0 flex-col"
       >
-        <div className="mb-5 flex items-end justify-between gap-3">
+        <div className="fm-document-editor-header mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[.22em] text-blue-500">FaceMeX Documents</p>
-            <h1 className="mt-1 text-2xl font-semibold lg:text-3xl">{title}</h1>
+            <p className="text-xs font-medium text-slate-500 lg:text-white/55">FaceMeX · {kind === 'cv' ? 'CV editor' : 'Document editor'}</p>
+            <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900 lg:text-white lg:text-2xl">{title}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase lg:border-white/10 lg:bg-white/[0.06] lg:text-white/70">
-              {tier} plan
+            <span className="text-xs text-slate-500 lg:text-white/55" role="status" aria-live="polite">
+              {syncStatus === 'loading' ? 'Loading...' : syncStatus === 'saving' ? 'Saving...' : syncStatus === 'error' ? 'Sync issue' : draftSaved ? 'Saved' : 'Unsaved'}
             </span>
-            <span className="text-xs text-slate-500 lg:text-white/50">
-              {syncStatus === 'loading' ? 'Loading...' : syncStatus === 'saving' ? 'Saving...' : syncStatus === 'error' ? 'Unable to sync' : draftSaved ? 'Saved ✓' : 'Unsaved changes'}
-            </span>
+            <Button type="button" variant="outline" size="sm" onClick={handleSave} className="h-9 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+              <Save className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Save</span>
+            </Button>
+            <Button type="button" variant="outline" size="icon" onClick={printDocument} aria-label="Export PDF" title="Export PDF" className="h-9 w-9 rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+              <Download className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        <div className="flex gap-5">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="hidden h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 lg:flex lg:border-white/10 lg:bg-white/[0.06] lg:text-white lg:hover:bg-white/10 xl:hidden"
-            aria-label="Toggle details sidebar"
-          >
-            <Menu className="h-4 w-4" />
-          </button>
-
-          <aside className={`w-full rounded-2xl border border-white/10 bg-[#111111] p-4 shadow-sm xl:w-[280px] ${
-            sidebarOpen ? 'block' : 'hidden xl:block'
-          }`}>
-            <button
-              type="button"
-              onClick={() => setDetailsOpen((value) => !value)}
-              className="flex min-h-12 w-full items-center gap-3 rounded-xl text-left hover:bg-white/5"
-            >
-              <FileText className="h-5 w-5 text-blue-500" />
-              <span className="min-w-0 flex-1">
-                <strong className="block text-sm text-white">Your details</strong>
-                <small className="block text-xs text-white/50">Tap to {detailsOpen ? 'hide' : 'show'}</small>
-              </span>
-              {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-
-            {detailsOpen && (
-              <div className="mt-4 space-y-3">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 xl:flex-row xl:gap-4">
+          {detailsOpen && (
+            <>
+              <button
+                type="button"
+                className="absolute inset-0 z-20 cursor-default bg-black/60 xl:hidden"
+                onClick={() => setDetailsOpen(false)}
+                aria-label="Close document details"
+              />
+              <aside
+                id="document-details-panel"
+                aria-labelledby="document-details-title"
+                className="absolute inset-x-0 top-0 z-30 mx-auto flex h-[min(78dvh,680px)] max-h-[calc(100%-1rem)] min-h-0 w-full max-w-2xl flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-2xl xl:static xl:mx-0 xl:h-full xl:max-h-none xl:w-[280px] xl:max-w-none xl:shrink-0 xl:shadow-none"
+              >
+              <div className="mb-3 flex shrink-0 items-center justify-between">
+                <h2 id="document-details-title" className="text-sm font-semibold text-slate-900 lg:text-white">Document details</h2>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setDetailsOpen(false)} className="h-8 px-2 text-xs text-slate-500 lg:text-white/60">
+                  Done
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
                 {fields.map(([key, label]) =>
                   key === 'summary' || key === 'experience' || key === 'skills' || key === 'education' || key === 'extras'
                     ? (
                         <label key={key} className="block space-y-1">
-                          <span className="text-xs font-semibold text-white/70">{label}</span>
+                          <span className="text-xs font-semibold text-slate-600 lg:text-white/70">{label}</span>
                           <Textarea
                             rows={key === 'experience' ? 4 : 3}
                             value={form[key as keyof FormState]}
                             onChange={(event) => update(key as keyof FormState, event.target.value)}
-                            className="border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                            className="border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 lg:border-white/10 lg:bg-white/[0.04] lg:text-white lg:placeholder:text-white/35"
                           />
                         </label>
                       )
                     : (
                         <label key={key} className="block space-y-1">
-                          <span className="text-xs font-semibold text-white/70">{label}</span>
+                          <span className="text-xs font-semibold text-slate-600 lg:text-white/70">{label}</span>
                           <Input
                             value={form[key as keyof FormState]}
                             onChange={(event) => update(key as keyof FormState, event.target.value)}
-                            className="border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
+                            className="border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 lg:border-white/10 lg:bg-white/[0.04] lg:text-white lg:placeholder:text-white/35"
                           />
                         </label>
                       ),
                 )}
 
-                <Button onClick={generate} disabled={busy} className="h-11 w-full rounded-xl bg-blue-600 text-white hover:bg-blue-700 lg:bg-blue-600 lg:hover:bg-blue-700">
+                <Button onClick={generate} disabled={busy || freeAiLimitReached} className="h-11 w-full rounded-xl bg-blue-600 text-white hover:bg-blue-700 lg:bg-blue-600 lg:hover:bg-blue-700">
                   <Icon className="mr-2 h-4 w-4" />
-                  {busy ? 'Generating...' : isPlus ? 'Generate with AI' : 'Generate document'}
+                  {busy ? 'Generating...' : 'Generate with AI'}
                 </Button>
 
-                <div className="border-t border-white/10 pt-3">
-                  <Button type="button" variant="outline" onClick={() => setCoachOpen((open) => !open)} className="h-11 w-full rounded-xl border-white/10 bg-white/[0.04] text-white hover:bg-white/10">
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    {coachOpen ? 'Close Document Coach' : 'Ask FaceMeX Document Coach'}
-                  </Button>
-                  {coachOpen && (
-                    <div className="mt-3 space-y-2">
-                      <Textarea
-                        value={coachPrompt}
-                        onChange={(event) => setCoachPrompt(event.target.value)}
-                        placeholder="Ask how to write, improve, or understand this document..."
-                        className="min-h-20 border-white/10 bg-white/[0.04] text-white placeholder:text-white/40"
-                        disabled={coachBusy}
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button type="button" variant="outline" onClick={() => void askDocumentCoach('teach')} disabled={coachBusy} className="min-h-11 border-white/10 bg-white/[0.04] text-white hover:bg-white/10">
-                          Teach Me
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => void askDocumentCoach('review')} disabled={coachBusy} className="min-h-11 border-white/10 bg-white/[0.04] text-white hover:bg-white/10">
-                          Review with FaceMeX
-                        </Button>
-                        <Button type="button" onClick={() => void askDocumentCoach('ask')} disabled={coachBusy} className="min-h-11 bg-blue-600 text-white hover:bg-blue-700">
-                          Ask
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => void askDocumentCoach('edit')} disabled={coachBusy} className="min-h-11 border-white/10 bg-white/[0.04] text-white hover:bg-white/10">
-                          Improve Selection
-                        </Button>
-                      </div>
-                      {coachBusy && <p className="text-xs text-white/55">FaceMeX is reviewing your document...</p>}
-                      {coachResponse && <div className="whitespace-pre-wrap rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm leading-6 text-white/85">{coachResponse}</div>}
-                      {coachSuggestion && (
-                        <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                          <div>
-                            <p className="text-xs font-semibold text-white/55">ORIGINAL</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-white/75">{coachSuggestion.original}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-white/55">SUGGESTED</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-white">{coachSuggestion.suggested}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-white/55">WHY</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-white/75">{coachSuggestion.explanation}</p>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button type="button" onClick={applyCoachSuggestion} className="min-h-11 bg-blue-600 text-white hover:bg-blue-700">Apply</Button>
-                            <Button type="button" variant="outline" onClick={() => setCoachSuggestion(null)} className="min-h-11 border-white/10 bg-white/[0.04] text-white hover:bg-white/10">Keep Original</Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
               </div>
-            )}
-          </aside>
+              </aside>
+            </>
+          )}
 
-          <main className="min-h-[calc(100vh-9rem)] min-w-0 flex-1 rounded-2xl border border-white/10 bg-[#111111] p-3 shadow-sm lg:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
-              <div>
-                <h2 className="font-semibold text-white">Document editor</h2>
-                <p className="text-xs text-white/50">A4 {orientation} · {wordCount} words</p>
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-10 items-center justify-between gap-3 border-b border-slate-200 pb-2 lg:border-white/10">
+              <p className="text-xs text-slate-500 lg:text-white/50">A4 {orientation} · {wordCount} words</p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDetailsOpen((open) => !open)}
+                  aria-expanded={detailsOpen}
+                  aria-controls="document-details-panel"
+                  className="h-8 rounded-lg px-2.5 text-xs text-slate-600 lg:text-white/70"
+                >
+                  {detailsOpen ? 'Hide details' : 'Details'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAdvancedFormattingOpen((open) => !open)}
+                  aria-expanded={advancedFormattingOpen}
+                  className="h-8 rounded-lg px-2.5 text-xs text-slate-600 lg:text-white/70"
+                >
+                  {advancedFormattingOpen ? 'Done' : 'Format'}
+                </Button>
               </div>
+            </div>
 
-              <div className="flex flex-wrap gap-2">
+            {advancedFormattingOpen && (
+              <div className="fm-document-format-panel mt-2 rounded-xl border border-slate-200 bg-white p-2 lg:border-white/10 lg:bg-[#171717]">
+              <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 lg:border-white/10">
                 <select
                   value={orientation}
                   onChange={(event) => setOrientation(event.target.value as PageOrientation)}
                   aria-label="A4 page orientation"
-                  className="h-9 rounded-xl border border-white/10 bg-white/[0.06] px-2 text-xs text-white"
+                  className="fm-document-control h-9 rounded-full border border-slate-200 bg-white px-3 text-xs text-slate-700 lg:border-white/10 lg:bg-white/[0.06] lg:text-white"
                 >
                   <option value="portrait">A4 Portrait</option>
                   <option value="landscape">A4 Landscape</option>
                 </select>
-                <Button variant="outline" size="sm" onClick={printDocument} className="rounded-xl h-9 border-white/10 bg-white/[0.06] text-white hover:bg-white/10">
-                  <Printer className="mr-1.5 h-3.5 w-3.5" />
-                  PDF
-                </Button>
-                <Button variant="outline" size="sm" onClick={downloadDocx} className="rounded-xl h-9 border-white/10 bg-white/[0.06] text-white hover:bg-white/10">
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  DOCX
+                <Button type="button" variant="outline" size="sm" onClick={() => setTemplatesOpen((value) => !value)} aria-expanded={templatesOpen} className="fm-document-control h-9 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                  Page style
                 </Button>
               </div>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between rounded-t-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-              <span className="text-xs font-bold text-white">Home</span>
-              <Button variant="ghost" size="sm" onClick={() => setTemplatesOpen((value) => !value)} className="rounded-md text-white hover:bg-white/10">
-                <Menu className="mr-1.5 h-4 w-4" />
-                {templatesOpen ? 'Hide templates' : 'Templates'}
-              </Button>
-            </div>
-
-            <div className="rounded-b-xl border border-t-0 border-white/10 bg-white/[0.02] p-2">
+              {templatesOpen && (
+                <div className="mb-2 grid gap-2 sm:grid-cols-2">
+                  {templates.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setTemplate(item.key);
+                        setTemplatesOpen(false);
+                      }}
+                      aria-pressed={template === item.key}
+                      data-template={item.key}
+                      className={`fm-template-choice rounded-xl border p-3 text-left ${
+                        template === item.key
+                          ? 'border-blue-500 bg-blue-50 lg:border-blue-500 lg:bg-blue-500/20'
+                          : 'border-slate-200 bg-slate-50 lg:border-white/10 lg:bg-white/[0.05]'
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold lg:text-white">{item.label}</span>
+                      <span className="mt-1 block text-xs text-slate-500 lg:text-white/50">{item.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <EditorToolbar
                 editor={editor}
                 onSave={handleSave}
@@ -1124,39 +1686,165 @@ export default function DocumentStudio({ kind, documentId, documentName, project
                 onZoomChange={(value) => setZoom(value)}
               />
             </div>
-
-            {templatesOpen && (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:w-60 lg:grid-cols-1 lg:rounded-r-xl lg:border lg:border-white/10 lg:bg-white/[0.03] lg:p-3">
-                {templates.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => {
-                      setTemplate(item.key);
-                      setTemplatesOpen(false);
-                    }}
-                    className={`rounded-xl border p-3 text-left ${
-                      template === item.key
-                        ? 'border-blue-500 bg-blue-50 lg:border-blue-500 lg:bg-blue-500/20'
-                        : 'border-slate-200 bg-slate-50 lg:border-white/10 lg:bg-white/[0.05]'
-                    }`}
-                  >
-                    <span className="block text-sm font-semibold lg:text-white">{item.label}</span>
-                    <span className="mt-1 block text-xs text-slate-500 lg:text-white/50">{item.description}</span>
-                  </button>
-                ))}
-              </div>
             )}
 
-            <div className="mt-3 overflow-auto rounded-xl bg-slate-100 p-2 sm:p-5 lg:bg-[#1a1a1a]">
-              <div className="mx-auto overflow-hidden" style={{ width: '100%', maxWidth: pageWidthPx, minHeight: `${Math.round(pageHeightPx * zoom / 100)}px` }}>
-                <div className="block border-0 bg-white shadow-xl" style={{ width: '100%', minHeight: `${pageHeightPx}px`, transform: `scale(${zoom / 100})`, transformOrigin: 'top center', marginBottom: `${Math.round(pageHeightPx * (zoom / 100 - 1))}px` }}>
-                  <div className="w-full bg-white p-4" style={{ minHeight: `${pageHeightPx}px` }}>
+            <div className="fm-document-canvas mt-2 min-h-0 min-w-0 flex-1 overflow-auto rounded-xl bg-[#202124] p-3 sm:p-5 lg:mt-3 lg:p-8">
+              <div className="mx-auto w-full" style={{ maxWidth: pageWidthPx }}>
+                <div
+                  className="fm-document-page mx-auto bg-white text-slate-900 shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
+                  data-template={template}
+                  data-orientation={orientation}
+                  role="region"
+                  aria-label={`Document page, A4 ${orientation}`}
+                  tabIndex={0}
+                  style={{
+                    width: '100%',
+                    maxWidth: pageWidthPx,
+                    minHeight: 0,
+                    aspectRatio: orientation === 'portrait' ? '210 / 297' : '297 / 210',
+                    overflowY: 'auto',
+                    overscrollBehaviorY: 'contain',
+                    WebkitOverflowScrolling: 'touch',
+                    zoom: zoom / 100,
+                  }}
+                >
+                  <div className="w-full p-7 sm:p-12">
                     <EditorContent editor={editor} className="document-editor" />
                   </div>
                 </div>
               </div>
             </div>
+
+            {(coachResponse || coachSuggestion) && (
+              <section className="fm-document-response mt-2 max-h-[30vh] shrink-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 shadow-sm lg:border-white/10 lg:bg-[#171717] lg:text-white" aria-live="polite" aria-label="FaceMeX answer">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 lg:bg-white/[0.08] lg:text-white/80">
+                      <Sparkles className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 lg:text-white">FaceMeX</p>
+                      <p className="text-[11px] text-slate-500 lg:text-white/45">{coachSuggestion ? 'Suggested edit' : 'Document assistant'}</p>
+                    </div>
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => { setCoachResponse(''); setCoachSuggestion(null); }} className="h-8 w-8 shrink-0 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:text-white/55 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Dismiss response">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                {coachResponse && (
+                  <div className="fm-document-response-content">
+                    {renderDocumentMarkdown(coachResponse)}
+                  </div>
+                )}
+                {coachSuggestion && (
+                  <>
+                    <div className="fm-document-response-content">
+                      {renderDocumentMarkdown(coachSuggestion.suggested)}
+                    </div>
+                    {coachSuggestion.explanation && (
+                      <p className="mt-3 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600 lg:border-white/10 lg:text-white/60">
+                        {coachSuggestion.explanation}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button type="button" onClick={applyCoachSuggestion} className="h-9 rounded-full bg-blue-600 px-4 text-white hover:bg-blue-700">Apply edit</Button>
+                      <Button type="button" variant="outline" onClick={() => setCoachSuggestion(null)} className="h-9 rounded-full border-slate-200 bg-white px-4 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.04] lg:text-white lg:hover:bg-white/10">Keep original</Button>
+                    </div>
+                  </>
+                )}
+              </section>
+            )}
+
+            <div className="fm-document-composer-shell shrink-0 px-0 pt-2 sm:px-2 lg:pt-3">
+                <div className="mx-auto w-full max-w-4xl">
+                  <div className="fm-document-composer flex items-end gap-2">
+                    <select
+                      value={coachMode}
+                      onChange={(event) => {
+                        const nextMode = event.target.value as typeof coachMode;
+                        if (nextMode === 'edit' && editor) {
+                          const { from, to } = editor.state.selection;
+                          if (from !== to) {
+                            coachSelectionRef.current = {
+                              from,
+                              to,
+                              original: editor.state.doc.textBetween(from, to, '\n'),
+                            };
+                            setHasCoachSelection(true);
+                          }
+                        }
+                        setCoachMode(nextMode);
+                        setCoachResponse('');
+                        setCoachSuggestion(null);
+                      }}
+                      aria-label="Choose document AI action"
+                      disabled={coachBusy || freeAiLimitReached}
+                      className="fm-document-mode-select mb-1 h-8 max-w-[40%] min-w-0 shrink-0 rounded-full border-0 bg-white/10 px-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="draft">Edit document</option>
+                      <option value="ask">Ask</option>
+                      <option value="review">Review</option>
+                      <option value="edit">Edit selection</option>
+                    </select>
+                    <Textarea
+                      ref={coachTextareaRef}
+                      rows={1}
+                      value={coachPrompt}
+                      onChange={(event) => resizeCoachTextarea(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault();
+                          void askDocumentCoach(coachMode);
+                        }
+                      }}
+                      placeholder={composerPlaceholder}
+                      aria-label="Describe document changes for FaceMeX"
+                      className="min-h-8 max-h-[120px] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-[15px] leading-5 text-white/90 shadow-none placeholder:text-white/45 focus-visible:ring-0 focus-visible:ring-offset-0"
+                      disabled={coachBusy || freeAiLimitReached}
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => void askDocumentCoach(coachMode)}
+                      disabled={
+                        coachBusy ||
+                        freeAiLimitReached ||
+                        (coachMode !== 'review' && !coachPrompt.trim()) ||
+                        (coachMode === 'edit' && !hasCoachSelection)
+                      }
+                      aria-label={coachBusy ? 'FaceMeX is updating your document' : `Send ${coachMode} request to FaceMeX`}
+                      title={coachBusy ? 'FaceMeX is working' : 'Send to FaceMeX'}
+                      className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 p-0 text-white shadow-lg shadow-black/10 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-[#2b2b2b] disabled:text-white/40"
+                    >
+                      {coachBusy ? <Sparkles className="h-4 w-4 animate-pulse" /> : <ArrowUp className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p className="mt-1.5 px-2 text-center text-[11px] text-white/40" role={coachBusy ? 'status' : undefined}>
+                    {coachBusy ? 'FaceMeX is working…' : 'AI can make mistakes. Review important details.'}
+                  </p>
+                  {!isPlus && (
+                    dailyAiUsage === null ? (
+                      <p className="mt-2 text-center text-xs text-rose-300" role="status">
+                        Daily AI usage could not be saved. AI requests are paused.
+                      </p>
+                    ) : currentDailyAiUsage >= DOCUMENT_AI_DAILY_LIMIT ? (
+                      <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-center text-xs text-white/65" role="status">
+                        <span>You’ve used all 3 free document AI uses for today.</span>
+                        <Button
+                          type="button"
+                          onClick={() => navigate('/facemex-plus')}
+                          className="h-8 rounded-full bg-blue-600 px-3 text-xs text-white hover:bg-blue-700"
+                        >
+                          Upgrade to Plus or Pro
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-center text-xs text-white/50" aria-live="polite">
+                        {DOCUMENT_AI_DAILY_LIMIT - currentDailyAiUsage} of {DOCUMENT_AI_DAILY_LIMIT} free AI uses left today
+                      </p>
+                    )
+                  )}
+                </div>
+              </div>
           </main>
         </div>
       </SensitiveContentShield>

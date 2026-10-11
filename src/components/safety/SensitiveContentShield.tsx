@@ -7,9 +7,10 @@ interface SensitiveContentShieldProps {
   children: ReactNode;
   context: string;
   className?: string;
+  contentClassName?: string;
 }
 
-export default function SensitiveContentShield({ children, context, className }: SensitiveContentShieldProps) {
+export default function SensitiveContentShield({ children, context, className, contentClassName }: SensitiveContentShieldProps) {
   const [shielded, setShielded] = useState(false);
   const [revealUntil, setRevealUntil] = useState<number>(0);
   const [, forceTick] = useState(0);
@@ -70,7 +71,7 @@ export default function SensitiveContentShield({ children, context, className }:
 
   return (
     <div className={`relative ${className || ''}`}>
-      <div className={active ? 'pointer-events-none select-none blur-sm' : ''}>{children}</div>
+      <div className={`${contentClassName || ''} ${active ? 'pointer-events-none select-none blur-sm' : ''}`.trim()}>{children}</div>
       {active ? (
         <div className="absolute inset-0 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl border border-border/60 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur p-4">

@@ -13,6 +13,7 @@ import {
   ShoppingBag,
   Settings2,
   Sun,
+  UserRound,
   Wrench,
   Moon,
   X,
@@ -121,8 +122,6 @@ export default function Navbar() {
     location.pathname.startsWith('/groups/pro/') ||
     location.pathname === '/ai/settings' ||
     location.pathname.startsWith('/ai/settings/') ||
-    location.pathname === '/safety' ||
-    location.pathname.startsWith('/safety/') ||
     location.pathname === '/privacy' ||
     location.pathname === '/tos' ||
     location.pathname === '/ethics' ||
@@ -271,7 +270,7 @@ export default function Navbar() {
                       <DrawerClose asChild>
                         <Link to="/ai/resume" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
                           <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span className="flex-1 text-sm font-medium">AI CV Builder</span>
+                          <span className="flex-1 text-sm font-medium">CV & Documents</span>
                         </Link>
                       </DrawerClose>
 
@@ -286,6 +285,13 @@ export default function Navbar() {
                         <Link to="/saved" className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
                           <Bookmark className="h-4 w-4 text-muted-foreground" />
                           <span className="flex-1 text-sm font-medium">Saved Posts</span>
+                        </Link>
+                      </DrawerClose>
+
+                      <DrawerClose asChild>
+                        <Link to="/ai/settings/account" state={{ from: location.pathname }} className="flex items-center gap-3 rounded-2xl border bg-card px-3 py-3 hover:bg-accent">
+                          <UserRound className="h-4 w-4 text-muted-foreground" />
+                          <span className="flex-1 text-sm font-medium">Account</span>
                         </Link>
                       </DrawerClose>
 
@@ -492,7 +498,7 @@ export default function Navbar() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => logout()}
+              onClick={() => void logout().catch((error) => console.error('Failed to sign out', error))}
               className="text-xs"
             >
               Logout
@@ -503,7 +509,7 @@ export default function Navbar() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => logout()}
+              onClick={() => void logout().catch((error) => console.error('Failed to sign out', error))}
               className="text-xs"
             >
               Logout

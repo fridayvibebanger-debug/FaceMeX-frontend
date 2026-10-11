@@ -1,9 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, TrendingUp, Clock, Filter } from 'lucide-react';
 import PostCard from './PostCard';
-import MarketplaceAdSlide from '@/components/feed/MarketplaceAdSlide';
 import CreatePostModal from './CreatePostModal';
 import { usePostStore } from '@/store/postStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,10 +12,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useUserStore } from '@/store/userStore';
 import { api } from '@/lib/api';
-import { supabase } from '@/lib/supabase';
 
 interface BusinessPromotion {
   id: string;
@@ -39,162 +37,80 @@ type FeedFilter = 'ai-curated' | 'recent' | 'trending';
 
 const STORAGE_KEY_PROMOTIONS = 'faceme_business_promotions_v1';
 
-const StablePostCard = memo(PostCard);
-
-function safePostTime(post: any) {
-  const raw = post?.timestamp || post?.createdAt || post?.created_at || Date.now();
-  const date = raw instanceof Date ? raw : new Date(raw);
-  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-}
-
 function BusinessPromotionsStrip() {
-  const [items, setItems] = useState<BusinessPromotion[]>([]);
-  const [loadingPromos, setLoadingPromos] = useState(true);
+  const [items, setItems] = useState<BusinessPromotion[]>(() => []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadFeedPromotions() {
-      setLoadingPromos(true);
-
-      const { data, error } = await supabase
-        .from('business_promotions')
-        .select(
-          'id, business_name, headline, description, image_url, cta_label, cta_url, tags, start_at, end_at, paid_amount_zar, paid_days'
-        )
-        .eq('placement', 'feed')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(12);
-
-      if (!cancelled && !error && data) {
-        const mapped: BusinessPromotion[] = data.map((item: any) => ({
-          id: String(item.id),
-          businessName: item.business_name || 'Business',
-          headline: item.headline || 'Sponsored promotion',
-          description: item.description || '',
-          imageUrl: item.image_url || '',
-          ctaLabel: item.cta_label || '',
-          ctaUrl: item.cta_url || '',
-          tags: Array.isArray(item.tags) ? item.tags : [],
-          startAt: item.start_at ? new Date(item.start_at).getTime() : undefined,
-          endAt: item.end_at ? new Date(item.end_at).getTime() : undefined,
-          paidAmountZar:
-            typeof item.paid_amount_zar === 'number'
-              ? item.paid_amount_zar
-              : item.paid_amount_zar
-                ? Number(item.paid_amount_zar)
-                : undefined,
-          paidDays:
-            typeof item.paid_days === 'number'
-              ? item.paid_days
-              : item.paid_days
-                ? Number(item.paid_days)
-                : undefined,
-        }));
-
-        setItems(mapped);
-        setLoadingPromos(false);
-        return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_PROMOTIONS);
+      if (raw) {
+        const parsed = JSON.parse(raw) as BusinessPromotion[];
+        setItems(parsed);
       }
-
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY_PROMOTIONS);
-
-        if (!cancelled && raw) {
-          const parsed = JSON.parse(raw) as BusinessPromotion[];
-          setItems(parsed);
-        }
-      } catch {
-        if (!cancelled) {
-          setItems([]);
-        }
-      }
-
-      if (!cancelled) {
-        setLoadingPromos(false);
-      }
-    }
-
-    loadFeedPromotions();
-
-    return () => {
-      cancelled = true;
-    };
+    } catch {}
   }, []);
 
   const displayItems = useMemo(() => {
     const now = Date.now();
+    const raw = localStorage.getItem(STORAGE_KEY_PROMOTIONS);
+    if (!raw) return [];
 
-    return items.filter((p) => {
-      const until =
-        typeof p.monthlyPaidUntil === 'number' ? p.monthlyPaidUntil : p.endAt;
-
-      if (!until) return true;
-      if (p.startAt && now < p.startAt) return false;
-
-      return now <= until;
-    });
+    try {
+      const parsed = JSON.parse(raw) as BusinessPromotion[];
+      const active = parsed.filter((p) => {
+        const until = typeof p.monthlyPaidUntil === 'number' ? p.monthlyPaidUntil : p.endAt;
+        if (!until) return true;
+        if (p.startAt && now < p.startAt) return false;
+        return now <= until;
+      });
+      return active.length ? active : [];
+    } catch {
+      return [];
+    }
   }, [items]);
 
-  if (loadingPromos || displayItems.length === 0) return null;
+  if (displayItems.length === 0) return null;
 
   return (
     <div className="mb-4">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-semibold">Sponsored</span>
         <span className="text-[11px] text-muted-foreground">
           Businesses on the feed slide
         </span>
       </div>
-
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2 dark:border-slate-800/70 dark:bg-slate-900/90">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-white/90 dark:bg-slate-900/90 px-3 py-2">
         <div className="relative h-24 sm:h-28">
           <motion.div
             className="absolute inset-y-0 left-0 flex items-center gap-3 pr-8"
             initial={{ x: '0%' }}
             animate={{ x: ['0%', '-50%'] }}
-            transition={{
-              duration: Math.max(30, displayItems.length * 8),
-              repeat: Infinity,
-              ease: 'linear',
-            }}
+            transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
           >
             {[...displayItems, ...displayItems].map((item, index) => (
               <div
                 key={`${item.id}-${index}`}
-                className="flex min-w-[240px] items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/90"
+                className="flex items-center gap-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/90 dark:bg-slate-900/90 px-3 py-2 min-w-[240px] shadow-sm"
               >
-                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-slate-200/80 dark:bg-slate-800/80">
+                <div className="h-12 w-12 rounded-lg bg-slate-200/80 dark:bg-slate-800/80 overflow-hidden flex items-center justify-center">
                   {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.businessName}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
+                    <img src={item.imageUrl} alt={item.businessName} className="h-full w-full object-cover" />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800 text-xs font-bold text-white">
-                      {item.businessName.charAt(0)}
-                    </div>
+                    <div className="h-full w-full bg-gradient-to-br from-slate-700 via-slate-900 to-slate-800" />
                   )}
                 </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-semibold">
-                    {item.headline}
-                  </div>
-                  <div className="truncate text-[11px] text-muted-foreground">
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold truncate">{item.headline}</div>
+                  <div className="text-[11px] text-muted-foreground truncate">
                     {item.businessName}
                   </div>
                 </div>
-
                 {item.ctaLabel && item.ctaUrl && (
                   <a
                     href={item.ctaUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="whitespace-nowrap rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-600 dark:text-blue-300"
+                    className="text-[11px] px-2 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300 whitespace-nowrap"
                   >
                     {item.ctaLabel}
                   </a>
@@ -203,10 +119,10 @@ function BusinessPromotionsStrip() {
             ))}
           </motion.div>
 
+          {/* Right-side blue light sweep */}
           <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent" />
-
           <motion.div
-            className="pointer-events-none absolute bottom-2 right-4 top-2 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
+            className="pointer-events-none absolute top-2 bottom-2 right-4 w-1.5 rounded-full bg-gradient-to-b from-blue-400 via-blue-500 to-blue-400 shadow-[0_0_16px_rgba(59,130,246,0.9)]"
             initial={{ opacity: 0.4, y: 0 }}
             animate={{ opacity: [0.2, 0.8, 0.2], y: [0, 4, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
@@ -221,325 +137,112 @@ export default function NewsFeed() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [filter, setFilter] = useState<FeedFilter>('ai-curated');
   const { posts, trendingHashtags, loadPosts } = usePostStore();
-
+  const [displayPosts, setDisplayPosts] = useState(posts);
   const [newPostsAvailable, setNewPostsAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(5);
   const [observerNode, setObserverNode] = useState<HTMLDivElement | null>(null);
-
   const { mode, setMode } = useUserStore();
   const [skillQuery, setSkillQuery] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
-  const latestKnownPostIdRef = useRef<string | null>(null);
-  const didInitialLoadRef = useRef(false);
-  const visibleCountRef = useRef(5);
-
-  const [hiddenNewPostIds, setHiddenNewPostIds] = useState<Set<string>>(
-    () => new Set<string>()
-  );
-
-  const activeSkill = mode === 'professional' ? skillQuery.trim() : '';
-
-  const [peopleForSkill, setPeopleForSkill] = useState<
-    Array<{ id: string; name: string; avatar?: string; openToCollab?: boolean }>
-  >([]);
-
-  const [openToCollabUsers, setOpenToCollabUsers] = useState<
-    Array<{ id: string; name: string; avatar?: string; openToCollab?: boolean }>
-  >([]);
-
+  // Simulate real-time updates
   useEffect(() => {
-    visibleCountRef.current = visibleCount;
-  }, [visibleCount]);
+    const interval = setInterval(() => {
+      if (Math.random() > 0.7) {
+        setNewPostsAvailable(true);
+      }
+    }, 10000);
 
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync skill filter from URL (?skill=) and ensure professional mode on deep-link
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const skill = params.get('skill') || '';
-
     if (skill) {
       setSkillQuery(skill);
-
       if (mode !== 'professional') {
+        // fire and forget; local state already updates immediately
         setMode('professional');
       }
     } else {
+      // if URL no longer has a skill param, reset local query
       setSkillQuery('');
     }
   }, [location.search, mode, setMode]);
 
+  // Initial load from API and reload on mode / skill change
   useEffect(() => {
-    if (didInitialLoadRef.current) return;
-
-    didInitialLoadRef.current = true;
-
-    let cancelled = false;
-
-    async function runInitialLoad() {
-      if (posts.length === 0) {
-        setLoading(true);
-      }
-
-      try {
-        await loadPosts();
-      } catch (error) {
-        console.log('NewsFeed initial load failed:', error);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    runInitialLoad();
-
-    return () => {
-      cancelled = true;
-    };
-    // Run once only. Filtering must not reload/remount the whole feed.
+    setLoading(true);
+    Promise.all([
+      loadPosts(skillQuery || undefined).catch(() => {}),
+      new Promise((r) => setTimeout(r, 400)),
+    ]).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mode, skillQuery]);
 
+  // Filter posts based on selected filter and current mode
   useEffect(() => {
-    if (posts.length > 0) {
-      setLoading(false);
-    }
-  }, [posts.length]);
-
-  useEffect(() => {
-    if (posts[0]?.id && !newPostsAvailable) {
-      latestKnownPostIdRef.current = posts[0].id;
-    }
-  }, [posts, newPostsAvailable]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let pollTimer: number | null = null;
-
-    async function setInitialLatestPost() {
-      const { data, error } = await supabase
-        .from('posts')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (error) {
-        console.log('Initial latest post check failed:', error.message);
-        return;
-      }
-
-      if (!cancelled && data?.[0]?.id) {
-        latestKnownPostIdRef.current = data[0].id;
-      }
-    }
-
-    setInitialLatestPost();
-
-    const channel = supabase
-      .channel('facemex-new-post-banner-stable-v2')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'posts',
-        },
-        (payload) => {
-          const newPostId = String(payload.new?.id || '');
-          const latestKnownPostId = latestKnownPostIdRef.current;
-
-          if (!newPostId) return;
-
-          if (!latestKnownPostId) {
-            latestKnownPostIdRef.current = newPostId;
-            return;
-          }
-
-          if (newPostId !== latestKnownPostId) {
-            setHiddenNewPostIds((prev) => {
-              const next = new Set(prev);
-              next.add(newPostId);
-              return next;
-            });
-
-            setNewPostsAvailable(true);
-          }
-        }
-      )
-      .subscribe();
-
-    pollTimer = window.setInterval(async () => {
-      if (document.hidden) return;
-
-      const { data, error } = await supabase
-        .from('posts')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (error) {
-        console.log('New post poll failed:', error.message);
-        return;
-      }
-
-      const newestId = data?.[0]?.id;
-      const latestKnownPostId = latestKnownPostIdRef.current;
-
-      if (!newestId) return;
-
-      if (!latestKnownPostId) {
-        latestKnownPostIdRef.current = newestId;
-        return;
-      }
-
-      if (newestId !== latestKnownPostId) {
-        setHiddenNewPostIds((prev) => {
-          const next = new Set(prev);
-          next.add(newestId);
-          return next;
-        });
-
-        setNewPostsAvailable(true);
-      }
-    }, 15000);
-
-    return () => {
-      cancelled = true;
-
-      if (pollTimer) {
-        window.clearInterval(pollTimer);
-      }
-
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const displayPosts = useMemo(() => {
     let filtered = [...posts];
-
-    if (mode) {
-      filtered = filtered.filter(
-        (p: any) =>
-          (p.mode === 'professional' ? 'professional' : 'social') === mode
-      );
-    }
-
-    if (activeSkill) {
-      const cleanSkill = activeSkill.toLowerCase();
-
-      filtered = filtered.filter((p: any) => {
-        const content = String(p.content || '').toLowerCase();
-        const tags = Array.isArray(p.hashtags)
-          ? p.hashtags.map((tag: string) => tag.toLowerCase())
-          : [];
-
-        return (
-          content.includes(cleanSkill) ||
-          content.includes(`#${cleanSkill}`) ||
-          tags.includes(cleanSkill)
-        );
-      });
-    }
-
-    filtered = filtered.filter((p) => !hiddenNewPostIds.has(p.id));
-
+    // Safety: ensure we only show posts for the active mode
+    if (mode) filtered = filtered.filter((p: any) => (p.mode === 'professional' ? 'professional' : 'social') === mode);
+    
     switch (filter) {
       case 'ai-curated':
-        filtered.sort((a: any, b: any) => {
-          const bScore = b.aiScore || safePostTime(b);
-          const aScore = a.aiScore || safePostTime(a);
-          return bScore - aScore;
-        });
+        filtered.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
         break;
-
       case 'recent':
-        filtered.sort((a, b) => safePostTime(b) - safePostTime(a));
+        filtered.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         break;
-
       case 'trending':
-        filtered.sort(
-          (a: any, b: any) => b.likes + b.shares * 2 - (a.likes + a.shares * 2)
-        );
-        break;
-
-      default:
+        filtered.sort((a, b) => (b.likes + b.shares * 2) - (a.likes + a.shares * 2));
         break;
     }
-
-    return filtered;
-  }, [posts, filter, mode, activeSkill, hiddenNewPostIds]);
-
-  useEffect(() => {
+    
+    setDisplayPosts(filtered);
     setVisibleCount(5);
-  }, [filter, mode, activeSkill]);
+  }, [posts, filter, mode]);
 
   useEffect(() => {
     if (!observerNode) return;
-
     const onIntersect: IntersectionObserverCallback = (entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          setVisibleCount((count) => {
-            const next = Math.min(count + 5, displayPosts.length);
-            return next === count ? count : next;
-          });
+          setVisibleCount((c) => c + 5);
         }
       });
     };
-
-    const io = new IntersectionObserver(onIntersect, {
-      rootMargin: '300px',
-      threshold: 0.01,
-    });
-
+    const io = new IntersectionObserver(onIntersect, { rootMargin: '200px' });
     io.observe(observerNode);
-
     return () => io.disconnect();
-  }, [observerNode, displayPosts.length]);
+  }, [observerNode]);
 
-  const loadNewPosts = async () => {
-    setLoading(true);
-
-    try {
-      await loadPosts();
-
-      const { data } = await supabase
-        .from('posts')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (data?.[0]?.id) {
-        latestKnownPostIdRef.current = data[0].id;
-      }
-
-      setHiddenNewPostIds(new Set<string>());
-      setNewPostsAvailable(false);
-    } catch (error) {
-      console.log('Load new posts failed:', error);
-    } finally {
-      setLoading(false);
-    }
+  const loadNewPosts = () => {
+    setNewPostsAvailable(false);
+    // Refresh feed
+    const refreshed = mode ? posts.filter((p: any) => (p.mode === 'professional' ? 'professional' : 'social') === mode) : posts;
+    setDisplayPosts([...refreshed]);
   };
 
+  const activeSkill = mode === 'professional' ? skillQuery.trim() : '';
+  const [peopleForSkill, setPeopleForSkill] = useState<Array<{ id: string; name: string; avatar?: string; openToCollab?: boolean }>>([]);
+  const [openToCollabUsers, setOpenToCollabUsers] = useState<Array<{ id: string; name: string; avatar?: string; openToCollab?: boolean }>>([]);
+
+  // Load professionals for the active skill from backend discovery endpoint
   useEffect(() => {
     if (!activeSkill) {
       setPeopleForSkill([]);
       return;
     }
-
     let cancelled = false;
-
     (async () => {
       try {
-        const data = await api.get(
-          `/api/users/discover?skill=${encodeURIComponent(activeSkill)}`
-        );
-
+        const data = await api.get(`/api/users/discover?skill=${encodeURIComponent(activeSkill)}`);
         if (!cancelled) {
           const users = Array.isArray(data.users) ? data.users : [];
-
           setPeopleForSkill(
             users.map((u: any) => ({
               id: String(u.id),
@@ -553,7 +256,6 @@ export default function NewsFeed() {
         if (!cancelled) setPeopleForSkill([]);
       }
     })();
-
     return () => {
       cancelled = true;
     };
@@ -561,14 +263,11 @@ export default function NewsFeed() {
 
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       try {
         const data = await api.get('/api/users/collab');
-
         if (!cancelled) {
           const users = Array.isArray(data.users) ? data.users : [];
-
           setOpenToCollabUsers(
             users.map((u: any) => ({
               id: String(u.id),
@@ -582,14 +281,14 @@ export default function NewsFeed() {
         if (!cancelled) setOpenToCollabUsers([]);
       }
     })();
-
     return () => {
       cancelled = true;
     };
   }, []);
 
   return (
-    <div className="relative mx-auto max-w-3xl space-y-4 px-2 py-4 pb-24 sm:px-4 md:space-y-6 md:py-8 lg:px-6">
+    <div className="relative max-w-3xl mx-auto py-4 md:py-8 px-2 sm:px-4 lg:px-6 pb-24 space-y-4 md:space-y-6">
+      {/* New Posts Banner */}
       <AnimatePresence>
         {newPostsAvailable && (
           <motion.div
@@ -600,7 +299,7 @@ export default function NewsFeed() {
           >
             <Button
               onClick={loadNewPosts}
-              className="h-9 w-full rounded-full text-xs font-medium"
+              className="w-full h-9 rounded-full text-xs font-medium"
             >
               New posts available. Refresh
             </Button>
@@ -608,44 +307,43 @@ export default function NewsFeed() {
         )}
       </AnimatePresence>
 
+      {/* Composer (ChatGPT-like entry) */}
       <button
         type="button"
         onClick={() => setIsCreateModalOpen(true)}
-        className="w-full rounded-2xl border bg-card px-4 py-4 text-left focus:outline-none focus:ring-2 focus:ring-ring md:px-5 md:py-5"
+        className="w-full text-left rounded-2xl border bg-card px-4 py-4 md:px-5 md:py-5 focus:outline-none focus:ring-2 focus:ring-ring"
       >
-        <div className="text-sm text-muted-foreground md:text-base">
+        <div className="text-sm md:text-base text-muted-foreground">
           Write a post, ask for ideas, or plan your next move…
         </div>
       </button>
 
-      <MarketplaceAdSlide />
+      {/* Business promotions strip */}
       <BusinessPromotionsStrip />
 
+      {/* Filter Options + Professional Skill Search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
-                <Filter className="mr-2 h-4 w-4" />
+                <Filter className="h-4 w-4 mr-2" />
                 {filter === 'ai-curated' && 'AI Curated'}
                 {filter === 'recent' && 'Recent'}
                 {filter === 'trending' && 'Trending'}
               </Button>
             </DropdownMenuTrigger>
-
             <DropdownMenuContent align="start">
               <DropdownMenuItem onClick={() => setFilter('ai-curated')}>
-                <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
+                <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
                 AI Curated
               </DropdownMenuItem>
-
               <DropdownMenuItem onClick={() => setFilter('recent')}>
-                <Clock className="mr-2 h-4 w-4 text-blue-500" />
+                <Clock className="h-4 w-4 mr-2 text-blue-500" />
                 Recent
               </DropdownMenuItem>
-
               <DropdownMenuItem onClick={() => setFilter('trending')}>
-                <TrendingUp className="mr-2 h-4 w-4 text-orange-500" />
+                <TrendingUp className="h-4 w-4 mr-2 text-orange-500" />
                 Trending
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -665,44 +363,38 @@ export default function NewsFeed() {
         </div>
 
         {mode === 'professional' && (
-          <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <input
               value={skillQuery}
-              onChange={(event) => setSkillQuery(event.target.value)}
-              placeholder="Search by skill or #tag"
-              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm sm:w-64"
+              onChange={(e) => setSkillQuery(e.target.value)}
+              placeholder="Search by skill or #tag (e.g. react)"
+              className="flex-1 sm:w-64 px-3 py-2 border rounded-md bg-background text-sm"
             />
           </div>
         )}
       </div>
 
+      {/* Trending Hashtags + Skill Context */}
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-3 rounded-2xl border bg-card p-3 sm:space-y-4 sm:p-4"
+        className="p-3 sm:p-4 rounded-2xl border bg-card space-y-3 sm:space-y-4"
       >
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
-          <span className="text-xs font-semibold sm:text-sm">Trending Now</span>
+          <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+          <span className="text-xs sm:text-sm font-semibold">Trending Now</span>
         </div>
-
         <div className="flex flex-wrap gap-2">
           {trendingHashtags.slice(0, 6).map((tag) => (
             <Badge
               key={tag}
               variant="secondary"
-              className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
               onClick={() => {
                 const params = new URLSearchParams(location.search);
                 params.set('skill', tag);
-
-                navigate({
-                  pathname: '/feed',
-                  search: `?${params.toString()}`,
-                });
-
+                navigate({ pathname: '/feed', search: params.toString() });
                 setSkillQuery(tag);
-
                 if (mode !== 'professional') {
                   setMode('professional');
                 }
@@ -711,51 +403,34 @@ export default function NewsFeed() {
               #{tag}
             </Badge>
           ))}
-
-          {trendingHashtags.length === 0 && (
-            <span className="text-sm text-muted-foreground">
-              No hashtags yet.
-            </span>
-          )}
         </div>
 
         {openToCollabUsers.length > 0 && (
-          <div className="space-y-2 border-t pt-3">
+          <div className="border-t pt-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">
-                Open to collaborate
-              </span>
+              <span className="text-xs font-semibold text-muted-foreground">Open to collaborate</span>
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                {openToCollabUsers.length} profile
-                {openToCollabUsers.length === 1 ? '' : 's'}
+                {openToCollabUsers.length} profile{openToCollabUsers.length === 1 ? '' : 's'}
               </span>
             </div>
-
             <div className="flex flex-wrap gap-2">
               {openToCollabUsers.slice(0, 6).map((p) => (
                 <div
                   key={p.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-full border px-2 py-1 text-xs hover:bg-accent/40"
+                  className="flex items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
                   onClick={() => navigate('/profile')}
                 >
-                  <div className="h-6 w-6 overflow-hidden rounded-full bg-muted">
+                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
                     {p.avatar ? (
-                      <img
-                        src={p.avatar}
-                        alt={p.name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
+                      <img src={p.avatar} alt={p.name} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
+                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
                         {p.name?.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
-
                   <span className="max-w-[120px] truncate">{p.name}</span>
-
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
                     Open to collabs
                   </span>
                 </div>
@@ -770,7 +445,6 @@ export default function NewsFeed() {
               <span className="font-medium">Filtered by:</span>
               <Badge variant="outline">{activeSkill}</Badge>
             </div>
-
             <Button
               variant="ghost"
               size="sm"
@@ -778,12 +452,7 @@ export default function NewsFeed() {
               onClick={() => {
                 const params = new URLSearchParams(location.search);
                 params.delete('skill');
-
-                navigate({
-                  pathname: '/feed',
-                  search: params.toString() ? `?${params.toString()}` : '',
-                });
-
+                navigate({ pathname: '/feed', search: params.toString() });
                 setSkillQuery('');
               }}
             >
@@ -793,13 +462,10 @@ export default function NewsFeed() {
         )}
 
         {activeSkill && (
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-[11px] sm:text-xs">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-[11px] sm:text-xs bg-muted/40 rounded-md px-3 py-2">
             <span className="text-muted-foreground">
-              Explore how creators are using{' '}
-              <span className="font-semibold">#{activeSkill}</span> in social
-              mode.
+              Explore how creators are using <span className="font-semibold">#{activeSkill}</span> in social mode.
             </span>
-
             <Button
               variant="outline"
               size="sm"
@@ -807,14 +473,8 @@ export default function NewsFeed() {
               onClick={() => {
                 const params = new URLSearchParams(location.search);
                 params.set('skill', activeSkill);
-
-                navigate({
-                  pathname: '/feed',
-                  search: `?${params.toString()}`,
-                });
-
+                navigate({ pathname: '/feed', search: params.toString() });
                 setMode('social');
-                setFilter('trending');
               }}
             >
               Browse creative posts
@@ -823,43 +483,34 @@ export default function NewsFeed() {
         )}
 
         {activeSkill && peopleForSkill.length > 0 && (
-          <div className="mt-3 space-y-2 border-t pt-3">
+          <div className="mt-3 border-t pt-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">
                 People with this skill
               </span>
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                {peopleForSkill.length} profile
-                {peopleForSkill.length === 1 ? '' : 's'}
+                {peopleForSkill.length} profile{peopleForSkill.length === 1 ? '' : 's'}
               </span>
             </div>
-
             <div className="flex flex-wrap gap-2">
               {peopleForSkill.slice(0, 6).map((p) => (
                 <div
                   key={p.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-full border px-2 py-1 text-xs hover:bg-accent/40"
+                  className="flex items-center gap-2 rounded-full border px-2 py-1 text-xs cursor-pointer hover:bg-accent/40"
                   onClick={() => navigate('/profile')}
                 >
-                  <div className="h-6 w-6 overflow-hidden rounded-full bg-muted">
+                  <div className="h-6 w-6 rounded-full bg-muted overflow-hidden">
                     {p.avatar ? (
-                      <img
-                        src={p.avatar}
-                        alt={p.name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
+                      <img src={p.avatar} alt={p.name} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold">
+                      <div className="h-full w-full flex items-center justify-center text-[10px] font-semibold">
                         {p.name?.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
-
                   <span>{p.name}</span>
-
                   {p.openToCollab && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
                       Open to collabs
                     </span>
                   )}
@@ -870,49 +521,45 @@ export default function NewsFeed() {
         )}
       </motion.div>
 
-      {loading && posts.length === 0 ? (
+      {/* Posts Feed */}
+      {loading ? (
         <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={index}
-              className="space-y-3 rounded-2xl border bg-card p-4 animate-pulse"
-            >
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="p-4 rounded-2xl border bg-card animate-pulse space-y-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-muted" />
-                <div className="h-4 w-40 rounded bg-muted" />
+                <div className="h-4 w-40 bg-muted rounded" />
               </div>
-
-              <div className="h-4 w-3/4 rounded bg-muted" />
-              <div className="h-48 w-full rounded bg-muted" />
+              <div className="h-4 w-3/4 bg-muted rounded" />
+              <div className="h-48 w-full bg-muted rounded" />
             </div>
           ))}
         </div>
       ) : displayPosts.length === 0 ? (
-        <div className="rounded-2xl border bg-card p-8 text-center">
-          <div className="mb-2 text-lg font-semibold">No posts yet</div>
-          <div className="mb-4 text-sm text-muted-foreground">
-            Be the first to share something.
-          </div>
-
-          <Button onClick={() => setIsCreateModalOpen(true)}>
-            Write your first post
-          </Button>
+        <div className="p-8 text-center rounded-2xl border bg-card">
+          <div className="text-lg font-semibold mb-2">No posts yet</div>
+          <div className="text-sm text-muted-foreground mb-4">Be the first to share something.</div>
+          <Button onClick={() => setIsCreateModalOpen(true)}>Write your first post</Button>
         </div>
       ) : (
         <div className="space-y-4">
-          {displayPosts.slice(0, visibleCount).map((post) => (
-            <div key={post.id}>
-              <StablePostCard post={post} />
-            </div>
-          ))}
-
+          <AnimatePresence mode="popLayout">
+            {displayPosts.slice(0, visibleCount).map((post, index) => (
+              <motion.div
+                key={post.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ delay: index * 0.03 }}
+              >
+                <PostCard post={post} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
           {visibleCount < displayPosts.length && (
             <div className="flex flex-col items-center gap-3">
               <div ref={setObserverNode} className="h-1 w-full" />
-              <Button
-                variant="outline"
-                onClick={() => setVisibleCount((count) => count + 5)}
-              >
+              <Button variant="outline" onClick={() => setVisibleCount((c) => c + 5)}>
                 Load more
               </Button>
             </div>
@@ -920,10 +567,11 @@ export default function NewsFeed() {
         </div>
       )}
 
-      <CreatePostModal
-        open={isCreateModalOpen}
-        onOpenChange={setIsCreateModalOpen}
-      />
-    </div>
-  );
+    {/* Create Post Modal */}
+    <CreatePostModal
+      open={isCreateModalOpen}
+      onOpenChange={setIsCreateModalOpen}
+    />
+  </div>
+);
 }
