@@ -35,8 +35,16 @@ import ProGroupDetailPage from './pages/ProGroupDetailPage';
 import SavedPostsPage from './pages/SavedPostsPage';
 import AIResumePage from './pages/AIResumePage';
 import AIJobAssistantPage from './pages/AIJobAssistantPage';
-import FaceMeXSettingsPage from './components/facemex-settings/FaceMeXSettingsPage';
 import FaceMeXSettingsSync from './components/facemex-settings/FaceMeXSettingsSync';
+import AccountSettingsPage from './pages/AccountSettingsPage';
+import PersonalizationSettingsPage from './pages/PersonalizationSettingsPage';
+import DataControlsPage from './pages/DataControlsPage';
+import PrivacyCenterPage from './pages/PrivacyCenterPage';
+import PrivacyCenterDetailPage from './pages/PrivacyCenterDetailPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import PrivacyGuidePage from './pages/PrivacyGuidePage';
+import SettingsHomePage from './features/settings/pages/SettingsHomePage';
+import SettingsCategoryPage from './features/settings/pages/SettingsCategoryPage';
 import PricingPage from './pages/PricingPage';
 import TierGate from './components/auth/TierGate';
 import PRDPage from './pages/PRDPage';
@@ -44,10 +52,8 @@ import AdsDraftsPage from './pages/AdsDraftsPage';
 import WorldManagePage from './pages/WorldManagePage';
 import WorldEventsPage from './pages/WorldEventsPage';
 import WorldEventDetailPage from './pages/WorldEventDetailPage';
-import SafetyCenter from './pages/SafetyCenter';
 import TrustDashboard from './pages/TrustDashboard';
 import TermsOfService from './pages/policies/TermsOfService';
-import PrivacyPolicy from './pages/policies/PrivacyPolicy';
 import EthicsPolicy from './pages/policies/EthicsPolicy';
 import ScreenshotPolicy from './pages/policies/ScreenshotPolicy';
 import CommunityRules from './pages/policies/CommunityRules';
@@ -227,7 +233,7 @@ function App() {
 
         <Route path="/prd" element={<PRDPage />} />
         <Route path="/tos" element={<TermsOfService />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/ethics" element={<EthicsPolicy />} />
         <Route path="/screenshot-policy" element={<ScreenshotPolicy />} />
         <Route path="/community-rules" element={<CommunityRules />} />
@@ -410,10 +416,91 @@ function App() {
         />
 
         <Route
-          path="/ai/settings/:category?"
+          path="/ai/settings/account"
           element={
             <ProtectedRoute>
-              <FaceMeXSettingsPage />
+              <AccountSettingsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsHomePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/settings/history-and-data"
+          element={
+            <ProtectedRoute>
+              <Navigate to="/ai/settings/data-controls" replace />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/settings/privacy-center"
+          element={
+            <ProtectedRoute>
+              <Navigate to="/privacy-center" replace />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/settings/personalization"
+          element={
+            <ProtectedRoute>
+              <PersonalizationSettingsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/settings/data-controls"
+          element={
+            <ProtectedRoute>
+              <DataControlsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/privacy-center"
+          element={
+            <ProtectedRoute>
+              <PrivacyCenterPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/privacy-center/guides/:slug"
+          element={
+            <ProtectedRoute>
+              <PrivacyGuidePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/privacy-center/:section"
+          element={
+            <ProtectedRoute>
+              <PrivacyCenterDetailPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/settings/:category"
+          element={
+            <ProtectedRoute>
+              <SettingsCategoryPage />
             </ProtectedRoute>
           }
         />
@@ -614,15 +701,6 @@ function App() {
           element={
             <ProtectedRoute>
               <StoriesPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/safety"
-          element={
-            <ProtectedRoute>
-              <SafetyCenter />
             </ProtectedRoute>
           }
         />
