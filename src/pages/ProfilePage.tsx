@@ -1,26 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import {
-  MapPin,
-  Calendar,
-  Link as LinkIcon,
-  UserPlus,
-  UserMinus,
-  Settings,
-  CheckCircle,
-  Briefcase,
-  FileText,
-  Sparkles,
-  MessageCircle,
-  Save,
-  RefreshCw,
-} from 'lucide-react';
+import { MapPin, Calendar, Link as LinkIcon, UserPlus, UserMinus, Settings, CheckCircle, Briefcase, FileText, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePostStore } from '@/store/postStore';
 import { useSubscriptionStore } from '@/store/subscriptionStore';
@@ -29,1133 +14,107 @@ import EditProfileModal from '@/components/profile/EditProfileModal';
 import { AnimatePresence, motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { useUserStore } from '@/store/userStore';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
+import IdentityVerifiedBadge from '@/components/safety/IdentityVerifiedBadge';
+import { deepseekReply } from '@/utils/ai';
 import { toast } from '@/components/ui/use-toast';
 
-type ProfessionalProfile = {
-  headline: string;
-  bio: string;
-  location: string;
-  skills: string[];
-  experience: Array<{
-    role: string;
-    company: string;
-    start?: string;
-    end?: string;
-    summary?: string;
-    verified?: boolean;
-  }>;
-  education: Array<{
-    institution: string;
-    degree?: string;
-    field?: string;
-    start?: string;
-    end?: string;
-    verified?: boolean;
-  }>;
-  links: Array<{
-    type: string;
-    url: string;
-  }>;
-  endorsements: Record<string, number>;
-  openToCollab: boolean;
-  collabNote: string;
-  resumeSummary: string;
-};
-
-const emptyProfessional: ProfessionalProfile = {
-  headline: '',
-  bio: '',
-  location: '',
-  skills: [],
-  experience: [],
-  education: [],
-  links: [],
-  endorsements: {},
-  openToCollab: false,
-  collabNote: '',
-  resumeSummary: '',
-};
-
-function cleanString(value: unknown) {
-  return String(value || '').trim();
-}
-
-function decodeRouteValue(value: unknown) {
-  const raw = cleanString(value);
-
-  if (!raw) return '';
-
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
-}
-
-function valueMatchesProfile(value: unknown, profileId: string) {
-  return cleanString(value) === cleanString(profileId);
-}
-
-function arrayContainsProfile(value: unknown, profileId: string) {
-  if (!Array.isArray(value)) return false;
-
-  return value.some((item: any) => {
-    if (typeof item === 'string') return valueMatchesProfile(item, profileId);
-
-    return (
-      valueMatchesProfile(item?.id, profileId) ||
-      valueMatchesProfile(item?.userId, profileId) ||
-      valueMatchesProfile(item?.user_id, profileId) ||
-      valueMatchesProfile(item?.profileId, profileId) ||
-      valueMatchesProfile(item?.profile_id, profileId)
-    );
-  });
-}
-
-function isRepostByProfile(post: any, profileId: string) {
-  const target = cleanString(profileId);
-
-  if (!target) return false;
-
-  const repostIds = [
-    post?.repostedBy,
-    post?.reposted_by,
-    post?.repostedById,
-    post?.reposted_by_id,
-    post?.repostUserId,
-    post?.repost_user_id,
-    post?.sharedBy,
-    post?.shared_by,
-    post?.sharedById,
-    post?.shared_by_id,
-    post?.repost?.userId,
-    post?.repost?.user_id,
-    post?.repost?.profileId,
-    post?.repost?.profile_id,
-    post?.repost?.by,
-    post?.share?.userId,
-    post?.share?.user_id,
-    post?.share?.profileId,
-    post?.share?.profile_id,
-    post?.shared_by_user?.id,
-    post?.reposted_by_user?.id,
-  ]
-    .map(cleanString)
-    .filter(Boolean);
-
-  return (
-    repostIds.includes(target) ||
-    arrayContainsProfile(post?.reposts, target) ||
-    arrayContainsProfile(post?.reposters, target) ||
-    arrayContainsProfile(post?.shares, target) ||
-    arrayContainsProfile(post?.sharedByUsers, target) ||
-    arrayContainsProfile(post?.repostedByUsers, target)
-  );
-}
-
-function postBelongsToProfile(post: any, profileId: string) {
-  const target = cleanString(profileId);
-
-  if (!target) return false;
-
-  const ids = [
-    post?.userId,
-    post?.user_id,
-    post?.authorId,
-    post?.author_id,
-    post?.ownerId,
-    post?.owner_id,
-    post?.profileId,
-    post?.profile_id,
-    post?.externalId,
-    post?.user?.id,
-    post?.user?._id,
-    post?.author?.id,
-    post?.profile?.id,
-  ]
-    .map(cleanString)
-    .filter(Boolean);
-
-  return ids.includes(target) || isRepostByProfile(post, target);
-}
-
-function getPostDisplayName(post: any) {
-  return (
-    cleanString(post?.userName) ||
-    cleanString(post?.user_name) ||
-    cleanString(post?.name) ||
-    cleanString(post?.authorName) ||
-    cleanString(post?.author_name) ||
-    cleanString(post?.user?.name) ||
-    cleanString(post?.user?.full_name) ||
-    cleanString(post?.author?.name) ||
-    cleanString(post?.author?.full_name) ||
-    'FaceMeX user'
-  );
-}
-
-function getPostAvatar(post: any) {
-  return (
-    cleanString(post?.userAvatar) ||
-    cleanString(post?.user_avatar) ||
-    cleanString(post?.avatar) ||
-    cleanString(post?.authorAvatar) ||
-    cleanString(post?.author_avatar) ||
-    cleanString(post?.user?.avatar) ||
-    cleanString(post?.user?.avatar_url) ||
-    cleanString(post?.author?.avatar) ||
-    cleanString(post?.author?.avatar_url) ||
-    ''
-  );
-}
-
-function getPostImages(post: any) {
-  const images: string[] = [];
-
-  const push = (value: unknown) => {
-    const v = cleanString(value);
-    if (v && !images.includes(v)) images.push(v);
-  };
-
-  if (Array.isArray(post?.images)) {
-    post.images.forEach(push);
-  }
-
-  if (Array.isArray(post?.media)) {
-    post.media.forEach((item: any) => {
-      push(item?.url || item?.src || item?.media_url || item);
-    });
-  }
-
-  push(post?.image);
-  push(post?.image_url);
-  push(post?.media_type === 'image' ? post?.media_url : '');
-  push(post?.mediaUrl);
-
-  return images;
-}
-
-function isPostAuthorVerified(post: any) {
-  return Boolean(
-    post?.verified === true ||
-      post?.userVerified === true ||
-      post?.user_verified === true ||
-      post?.authorVerified === true ||
-      post?.author_verified === true ||
-      post?.accountVerified === true ||
-      post?.account_verified === true ||
-      post?.isVerified === true ||
-      post?.is_verified === true ||
-      post?.user?.verified === true ||
-      post?.user?.userVerified === true ||
-      post?.user?.is_verified === true ||
-      post?.author?.verified === true ||
-      post?.author?.is_verified === true
-  );
-}
-
-function PremiumVerifiedBadge({ size = 'md' }: { size?: 'sm' | 'md' }) {
-  const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
-
-  return (
-    <span
-      title="Verified FaceMeX profile"
-      className="inline-flex items-center gap-1 rounded-full border border-black/20 bg-black px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm ring-1 ring-black/10 dark:border-white/20 dark:bg-white dark:text-black dark:ring-white/20"
-    >
-      <CheckCircle
-        className={`${iconSize} fill-white/20 text-white dark:fill-black/10 dark:text-black`}
-      />
-      Verified
-    </span>
-  );
-}
-
-function PremiumVerifiedIcon() {
-  return (
-    <span
-      title="Verified FaceMeX profile"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black text-white shadow-sm ring-2 ring-background dark:bg-white dark:text-black"
-    >
-      <CheckCircle className="h-3 w-3 fill-white/20 dark:fill-black/10" />
-    </span>
-  );
-}
-
-function normalizePro(value: any): ProfessionalProfile {
-  const experience = Array.isArray(value?.experience)
-    ? value.experience
-        .filter((item: any) => item?.role || item?.company)
-        .map((item: any) => ({
-          role: String(item.role || 'Role'),
-          company: String(item.company || 'Company'),
-          start: item.start || undefined,
-          end: item.end || undefined,
-          summary: item.summary || undefined,
-          verified: Boolean(item.verified),
-        }))
-    : [];
-
-  const education = Array.isArray(value?.education)
-    ? value.education
-        .filter((item: any) => item?.institution)
-        .map((item: any) => ({
-          institution: String(item.institution || 'Institution'),
-          degree: item.degree || undefined,
-          field: item.field || undefined,
-          start: item.start || undefined,
-          end: item.end || undefined,
-          verified: Boolean(item.verified),
-        }))
-    : [];
-
-  return {
-    ...emptyProfessional,
-    ...(value || {}),
-    skills: Array.isArray(value?.skills) ? value.skills : [],
-    experience,
-    education,
-    links: Array.isArray(value?.links) ? value.links : [],
-    endorsements: value?.endorsements || {},
-  };
-}
-
-function getInitial(name?: string, email?: string) {
-  return (
-    name?.charAt(0)?.toUpperCase() ||
-    email?.charAt(0)?.toUpperCase() ||
-    'U'
-  );
-}
-
-function getTierRank(tier?: string) {
-  const clean = String(tier || 'free').toLowerCase();
-
-  const ranks: Record<string, number> = {
-    free: 0,
-    verified: 0,
-    pro: 1,
-    creator: 2,
-    business: 3,
-    exclusive: 4,
-  };
-
-  return ranks[clean] || 0;
-}
-
-function getPostTime(post: any) {
-  return new Date(
-    post?.repostedAt ||
-      post?.reposted_at ||
-      post?.sharedAt ||
-      post?.shared_at ||
-      post?.share_created_at ||
-      post?.createdAt ||
-      post?.created_at ||
-      post?.timestamp ||
-      post?.updated_at ||
-      0
-  ).getTime();
-}
-
-function uniquePosts(posts: any[]) {
-  const seen = new Set<string>();
-
-  return posts.filter((post) => {
-    const key =
-      cleanString(post?.id) ||
-      cleanString(post?._id) ||
-      cleanString(post?.post_id) ||
-      `${cleanString(post?.user_id || post?.userId || post?.author_id || post?.authorId)}-${cleanString(
-        post?.content || post?.caption || post?.body || post?.text
-      )}-${getPostTime(post)}`;
-
-    if (!key) return true;
-    if (seen.has(key)) return false;
-
-    seen.add(key);
-    return true;
-  });
-}
-
 export default function ProfilePage() {
-  const { user, updateProfile } = useAuthStore() as any;
-  const { posts, loadPosts } = usePostStore();
+  const { user } = useAuthStore();
+  const { posts } = usePostStore();
   const { currentTier } = useSubscriptionStore();
-
-  const {
-    professional,
-    saveProfessional,
-    endorseSkill,
-    setMode,
-    addons,
-    mode,
-    hasTier,
-  } = useUserStore();
-
+  const { professional, saveProfessional, endorseSkill, setMode, addons, mode, hasTier } = useUserStore();
   const params = useParams<{ id?: string }>();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const effectiveUserId = user?.id || '';
+  const viewedUserId = params.id || effectiveUserId;
+  const isOwnProfile = viewedUserId === effectiveUserId;
+  const viewedUser = useMemo(() => {
+    if (isOwnProfile) return user;
+    return {
+      id: viewedUserId,
+      name: `User ${String(viewedUserId).slice(0, 6)}`,
+      email: '',
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(viewedUserId)}`,
+      coverPhoto: '',
+      bio: 'Welcome to my profile.',
+      followers: 0,
+      joinedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60),
+      interests: [],
+    } as any;
+  }, [isOwnProfile, user, viewedUserId]);
 
-  const routeState = (location.state || {}) as any;
-
-  const effectiveUserId = cleanString(user?.id);
-
-  const myIdentityIds = useMemo(() => {
-    const ids = new Set<string>();
-
-    const add = (value: unknown) => {
-      const clean = cleanString(value);
-      if (clean) ids.add(clean);
-    };
-
-    add(user?.id);
-    add(user?._id);
-    add(user?.externalId);
-    add(user?.supabaseId);
-    add(user?.authId);
-
-    try {
-      add(localStorage.getItem('faceme_user_id'));
-      add(localStorage.getItem('facemex_user_id'));
-    } catch {
-      // ignore
-    }
-
-    return Array.from(ids);
-  }, [user?.id, user?._id, user?.externalId, user?.supabaseId, user?.authId]);
-
-  const viewedUserId = useMemo(() => {
-    const routeId = decodeRouteValue(params.id);
-    const stateUserId = cleanString(routeState?.userId);
-    const stateProfileId = cleanString(routeState?.profileId);
-
-    if (routeState?.ownProfile === true && effectiveUserId) {
-      return effectiveUserId;
-    }
-
-    return routeId || stateUserId || stateProfileId || effectiveUserId;
-  }, [
-    params.id,
-    routeState?.ownProfile,
-    routeState?.userId,
-    routeState?.profileId,
-    effectiveUserId,
-  ]);
-
-  const isOwnProfile = useMemo(() => {
-    if (routeState?.ownProfile === true) return true;
-    if (!viewedUserId) return false;
-
-    return myIdentityIds.some((id) => id === viewedUserId);
-  }, [routeState?.ownProfile, viewedUserId, myIdentityIds]);
-
-  const [viewedProfile, setViewedProfile] = useState<any>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileNotFound, setProfileNotFound] = useState(false);
+  const userPosts = posts.filter((post) => post.userId === viewedUserId);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-
-  const [profileSupabasePosts, setProfileSupabasePosts] = useState<any[]>([]);
-  const [postsRefreshing, setPostsRefreshing] = useState(false);
-
-  const [followerCount, setFollowerCount] = useState(0);
-  const [connectionCount, setConnectionCount] = useState(0);
+  const [followerCount, setFollowerCount] = useState(user?.followers || 0);
   const [isConnected, setIsConnected] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [isPendingConnection, setIsPendingConnection] = useState(false);
-  const [buttonBusy, setButtonBusy] = useState<
-    'connect' | 'follow' | 'message' | null
-  >(null);
-
-  const [bioEditing, setBioEditing] = useState(false);
-  const [bioDraft, setBioDraft] = useState(user?.bio || '');
-
-  const viewedPro = useMemo(() => {
-    if (isOwnProfile) {
-      return normalizePro(viewedProfile?.professional || professional);
-    }
-
-    return normalizePro(viewedProfile?.professional);
-  }, [isOwnProfile, professional, viewedProfile?.professional]);
-
+  const [connectionCount, setConnectionCount] = useState(0);
   const [newSkill, setNewSkill] = useState('');
-  const [headlineDraft, setHeadlineDraft] = useState(viewedPro.headline || '');
-  const [professionalBioDraft, setProfessionalBioDraft] = useState(
-    viewedPro.bio || ''
-  );
-  const [professionalLocationDraft, setProfessionalLocationDraft] = useState(
-    viewedPro.location || ''
-  );
-  const [resumeDraft, setResumeDraft] = useState(
-    viewedPro.resumeSummary || ''
-  );
-
+  const pro = useMemo(() => professional || { headline: '', bio: '', location: '', skills: [], experience: [], education: [], links: [], endorsements: {}, openToCollab: false, collabNote: '', resumeSummary: '' }, [professional]);
+  const [collabNoteDraft, setCollabNoteDraft] = useState(pro.collabNote || '');
+  const [resumeDraft, setResumeDraft] = useState(pro.resumeSummary || '');
+  const [headlineDraft, setHeadlineDraft] = useState(pro.headline || '');
   const [expRole, setExpRole] = useState('');
   const [expCompany, setExpCompany] = useState('');
   const [expStart, setExpStart] = useState('');
   const [expEnd, setExpEnd] = useState('');
   const [expSummary, setExpSummary] = useState('');
-
   const [eduInstitution, setEduInstitution] = useState('');
   const [eduDegree, setEduDegree] = useState('');
   const [eduField, setEduField] = useState('');
   const [eduStart, setEduStart] = useState('');
   const [eduEnd, setEduEnd] = useState('');
-
+  const [careerGoalsDraft, setCareerGoalsDraft] = useState(pro.careerGoals || '');
+  const [industryInterestDraft, setIndustryInterestDraft] = useState('');
+  const [experienceLevelDraft, setExperienceLevelDraft] = useState(pro.experienceLevel || '');
+  const [smartSummaryDraft, setSmartSummaryDraft] = useState(pro.smartSummary || '');
+  const [smartPositioningDraft, setSmartPositioningDraft] = useState(pro.smartPositioning || '');
+  const [smartSuggestedSkillsDraft, setSmartSuggestedSkillsDraft] = useState<string[]>(pro.smartSuggestedSkills || []);
+  const [aiSmartBusy, setAiSmartBusy] = useState<null | 'rewrite' | 'skills' | 'positioning'>(null);
+  const canUseAI = hasTier('pro');
+  const canSeeAnalytics = isOwnProfile && hasTier('pro');
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'posts' | 'about' | 'professional' | 'photos'>(mode === 'professional' ? 'professional' : 'posts');
   const collabSectionRef = useRef<HTMLDivElement | null>(null);
-
-  const canUseProfessionalProfile =
-    hasTier?.('creator') ||
-    getTierRank(currentTier) >= getTierRank('creator') ||
-    getTierRank(user?.tier) >= getTierRank('creator');
-
-  const canEditProfessional = isOwnProfile && canUseProfessionalProfile;
-  const canSeeAnalytics = isOwnProfile && hasTier?.('pro');
-
-  const [activeTab, setActiveTab] = useState<
-    'posts' | 'professional' | 'photos'
-  >(mode === 'professional' ? 'professional' : 'posts');
-
-  const profilePostUserId = isOwnProfile && effectiveUserId ? effectiveUserId : viewedUserId;
-
-  const loadAllPosts = useCallback(async () => {
-    try {
-      setPostsRefreshing(true);
-      await loadPosts?.();
-    } catch {
-      // keep UI stable
-    } finally {
-      setPostsRefreshing(false);
-    }
-  }, [loadPosts]);
-
-  useEffect(() => {
-    loadAllPosts();
-  }, [loadAllPosts]);
-
-  useEffect(() => {
-    const loadProfile = async () => {
-      if (!viewedUserId) {
-        setProfileLoading(false);
-        setProfileNotFound(true);
-        return;
-      }
-
-      setProfileLoading(true);
-      setProfileNotFound(false);
-
-      const profileIdToFetch = isOwnProfile && effectiveUserId ? effectiveUserId : viewedUserId;
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', profileIdToFetch)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Profile load error:', error);
-        setViewedProfile(null);
-        setProfileNotFound(false);
-        setProfileLoading(false);
-        return;
-      }
-
-      if (!data && isOwnProfile && user?.id) {
-        const fallbackName =
-          user?.name ||
-          user?.email?.split('@')?.[0] ||
-          'FaceMeX user';
-
-        const fallbackAvatar = user?.avatar || '';
-
-        const upsertPayload = {
-          id: user.id,
-          email: user.email || '',
-          full_name: fallbackName,
-          name: fallbackName,
-          username: fallbackName,
-          avatar_url: fallbackAvatar,
-          avatar: fallbackAvatar,
-          bio: user?.bio || '',
-          cover_photo: user?.coverPhoto || '',
-          location: user?.location || '',
-          website: user?.website || '',
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        };
-
-        try {
-          const { data: createdProfile } = await supabase
-            .from('profiles')
-            .upsert(upsertPayload)
-            .select('*')
-            .maybeSingle();
-
-          setViewedProfile(createdProfile || upsertPayload);
-        } catch {
-          setViewedProfile(upsertPayload);
-        }
-
-        setProfileNotFound(false);
-        setProfileLoading(false);
-        return;
-      }
-
-      setViewedProfile(data || null);
-      setProfileNotFound(false);
-      setProfileLoading(false);
-    };
-
-    loadProfile();
-  }, [
-    viewedUserId,
-    isOwnProfile,
-    effectiveUserId,
-    user?.id,
-    user?.email,
-    user?.name,
-    user?.avatar,
-    user?.bio,
-    user?.coverPhoto,
-    user?.location,
-    user?.website,
-  ]);
-
-  const fallbackPostForProfile = useMemo(() => {
-    if (!viewedUserId) return null;
-
-    return (
-      posts.find((post: any) => postBelongsToProfile(post, viewedUserId)) ||
-      null
-    );
-  }, [posts, viewedUserId]);
-
-  const viewedUser = useMemo(() => {
-    if (isOwnProfile) {
-      return {
-        ...user,
-        id: user?.id || effectiveUserId || viewedUserId,
-        email: viewedProfile?.email || user?.email || '',
-        name:
-          viewedProfile?.full_name ||
-          viewedProfile?.name ||
-          viewedProfile?.username ||
-          user?.name ||
-          user?.email?.split('@')?.[0] ||
-          'FaceMeX user',
-        avatar:
-          viewedProfile?.avatar_url ||
-          viewedProfile?.avatar ||
-          user?.avatar ||
-          '',
-        coverPhoto:
-          viewedProfile?.cover_photo ||
-          viewedProfile?.coverPhoto ||
-          user?.coverPhoto ||
-          '',
-        bio: viewedProfile?.bio || user?.bio || '',
-        joinedDate: viewedProfile?.created_at
-          ? new Date(viewedProfile.created_at)
-          : user?.joinedDate
-            ? new Date(user.joinedDate)
-            : null,
-        interests: viewedProfile?.interests || user?.interests || [],
-        location: viewedProfile?.location || user?.location || '',
-        website: viewedProfile?.website || user?.website || '',
-        tier:
-          viewedProfile?.tier ||
-          viewedProfile?.subscription_tier ||
-          user?.tier ||
-          currentTier ||
-          'free',
-        verified:
-          viewedProfile?.verified === true ||
-          viewedProfile?.is_verified === true ||
-          viewedProfile?.userVerified === true ||
-          viewedProfile?.user_verified === true ||
-          user?.verified === true ||
-          user?.is_verified === true ||
-          user?.isVerified === true ||
-          addons?.verified === true,
-      } as any;
-    }
-
-    if (viewedProfile) {
-      const realName =
-        viewedProfile.full_name ||
-        viewedProfile.name ||
-        viewedProfile.username ||
-        viewedProfile.email?.split('@')[0] ||
-        'FaceMeX user';
-
-      return {
-        id: viewedProfile.id || viewedUserId,
-        email: viewedProfile.email || '',
-        name: realName,
-        avatar: viewedProfile.avatar_url || viewedProfile.avatar || '',
-        coverPhoto: viewedProfile.cover_photo || viewedProfile.coverPhoto || '',
-        bio: viewedProfile.bio || '',
-        joinedDate: viewedProfile.created_at
-          ? new Date(viewedProfile.created_at)
-          : null,
-        interests: viewedProfile.interests || [],
-        location: viewedProfile.location || '',
-        website: viewedProfile.website || '',
-        tier: viewedProfile.tier || viewedProfile.subscription_tier || 'free',
-        verified:
-          viewedProfile.verified === true ||
-          viewedProfile.is_verified === true ||
-          viewedProfile.userVerified === true ||
-          viewedProfile.user_verified === true,
-      } as any;
-    }
-
-    if (routeState?.userName || routeState?.userAvatar || fallbackPostForProfile) {
-      const name =
-        cleanString(routeState?.userName) ||
-        getPostDisplayName(fallbackPostForProfile) ||
-        'FaceMeX user';
-
-      const avatar =
-        cleanString(routeState?.userAvatar) ||
-        getPostAvatar(fallbackPostForProfile) ||
-        '';
-
-      return {
-        id: viewedUserId,
-        email: '',
-        name,
-        avatar,
-        coverPhoto: '',
-        bio: '',
-        joinedDate: null,
-        interests: [],
-        location: '',
-        website: '',
-        tier: 'free',
-        verified: isPostAuthorVerified(fallbackPostForProfile),
-      } as any;
-    }
-
-    return null;
-  }, [
-    isOwnProfile,
-    user,
-    effectiveUserId,
-    viewedUserId,
-    viewedProfile,
-    currentTier,
-    addons?.verified,
-    routeState?.userName,
-    routeState?.userAvatar,
-    fallbackPostForProfile,
-  ]);
-
-  const isProfileVerified = Boolean(viewedUser?.verified);
-
-  const normalizeProfilePostFromRow = useCallback(
-    (row: any, options?: { repostedAt?: string; repostedBy?: string; isRepost?: boolean }) => {
-      const normalizedImages = getPostImages(row);
-      const authorVerified =
-        row?.userVerified === true ||
-        row?.user_verified === true ||
-        row?.authorVerified === true ||
-        row?.author_verified === true ||
-        row?.verified === true ||
-        viewedUser?.verified === true;
-
-      return {
-        ...row,
-        id:
-          cleanString(row?.id) ||
-          cleanString(row?._id) ||
-          cleanString(row?.post_id) ||
-          `${profilePostUserId}-${getPostTime(row)}`,
-        userId: cleanString(
-          row?.userId ||
-            row?.user_id ||
-            row?.authorId ||
-            row?.author_id ||
-            row?.profile_id ||
-            profilePostUserId
-        ),
-        user_id: cleanString(
-          row?.user_id ||
-            row?.userId ||
-            row?.author_id ||
-            row?.authorId ||
-            row?.profile_id ||
-            profilePostUserId
-        ),
-        userName:
-          cleanString(row?.userName || row?.user_name || row?.authorName || row?.author_name) ||
-          viewedUser?.name ||
-          'FaceMeX user',
-        user_name:
-          cleanString(row?.user_name || row?.userName || row?.author_name || row?.authorName) ||
-          viewedUser?.name ||
-          'FaceMeX user',
-        userAvatar:
-          cleanString(row?.userAvatar || row?.user_avatar || row?.authorAvatar || row?.author_avatar) ||
-          viewedUser?.avatar ||
-          '',
-        user_avatar:
-          cleanString(row?.user_avatar || row?.userAvatar || row?.author_avatar || row?.authorAvatar) ||
-          viewedUser?.avatar ||
-          '',
-        verified: authorVerified,
-        userVerified: authorVerified,
-        user_verified: authorVerified,
-        authorVerified: authorVerified,
-        author_verified: authorVerified,
-        isVerified: authorVerified,
-        is_verified: authorVerified,
-        createdAt: row?.createdAt || row?.created_at || row?.timestamp || new Date().toISOString(),
-        created_at: row?.created_at || row?.createdAt || row?.timestamp || new Date().toISOString(),
-        repostedAt:
-          options?.repostedAt ||
-          row?.repostedAt ||
-          row?.reposted_at ||
-          row?.sharedAt ||
-          row?.shared_at ||
-          row?.created_at,
-        reposted_at:
-          options?.repostedAt ||
-          row?.reposted_at ||
-          row?.repostedAt ||
-          row?.shared_at ||
-          row?.sharedAt ||
-          row?.created_at,
-        repostedBy:
-          options?.repostedBy ||
-          row?.repostedBy ||
-          row?.reposted_by ||
-          row?.sharedBy ||
-          row?.shared_by,
-        reposted_by:
-          options?.repostedBy ||
-          row?.reposted_by ||
-          row?.repostedBy ||
-          row?.shared_by ||
-          row?.sharedBy,
-        isRepost:
-          options?.isRepost ||
-          row?.isRepost === true ||
-          row?.is_repost === true ||
-          Boolean(row?.reposted_by || row?.repostedBy || row?.shared_by || row?.sharedBy),
-        is_repost:
-          options?.isRepost ||
-          row?.is_repost === true ||
-          row?.isRepost === true ||
-          Boolean(row?.reposted_by || row?.repostedBy || row?.shared_by || row?.sharedBy),
-        images: normalizedImages,
-      };
-    },
-    [profilePostUserId, viewedUser?.avatar, viewedUser?.name, viewedUser?.verified]
-  );
-
-  const loadProfilePostsDirect = useCallback(async () => {
-    if (!profilePostUserId) {
-      setProfileSupabasePosts([]);
-      return;
-    }
-
-    const collected: any[] = [];
-
-    const directColumns = ['user_id', 'author_id', 'profile_id', 'owner_id'];
-
-    for (const column of directColumns) {
-      try {
-        const { data, error } = await supabase
-          .from('posts')
-          .select('*')
-          .eq(column, profilePostUserId)
-          .order('created_at', { ascending: false })
-          .limit(100);
-
-        if (!error && Array.isArray(data)) {
-          collected.push(...data.map((row) => normalizeProfilePostFromRow(row)));
-        }
-      } catch {
-        // try next possible column
-      }
-    }
-
-    const repostColumns = [
-      'reposted_by',
-      'reposted_by_id',
-      'repost_user_id',
-      'shared_by',
-      'shared_by_id',
-    ];
-
-    for (const column of repostColumns) {
-      try {
-        const { data, error } = await supabase
-          .from('posts')
-          .select('*')
-          .eq(column, profilePostUserId)
-          .order('created_at', { ascending: false })
-          .limit(100);
-
-        if (!error && Array.isArray(data)) {
-          collected.push(
-            ...data.map((row) =>
-              normalizeProfilePostFromRow(row, {
-                repostedBy: profilePostUserId,
-                repostedAt:
-                  row?.reposted_at ||
-                  row?.repostedAt ||
-                  row?.shared_at ||
-                  row?.sharedAt ||
-                  row?.created_at,
-                isRepost: true,
-              })
-            )
-          );
-        }
-      } catch {
-        // try next possible repost column
-      }
-    }
-
-    const repostTables = ['post_reposts', 'reposts'];
-
-    for (const tableName of repostTables) {
-      try {
-        const { data, error } = await supabase
-          .from(tableName)
-          .select('*, posts(*)')
-          .eq('user_id', profilePostUserId)
-          .order('created_at', { ascending: false })
-          .limit(100);
-
-        if (!error && Array.isArray(data)) {
-          collected.push(
-            ...data
-              .map((row: any) => {
-                const postRow = row?.posts || row?.post || row;
-
-                return normalizeProfilePostFromRow(postRow, {
-                  repostedBy: profilePostUserId,
-                  repostedAt: row?.created_at || row?.reposted_at || row?.shared_at,
-                  isRepost: true,
-                });
-              })
-              .filter(Boolean)
-          );
-        }
-      } catch {
-        // table may not exist, ignore
-      }
-    }
-
-    setProfileSupabasePosts(
-      uniquePosts(collected).sort((a: any, b: any) => getPostTime(b) - getPostTime(a))
-    );
-  }, [profilePostUserId, normalizeProfilePostFromRow]);
-
-  const refreshProfilePosts = useCallback(async () => {
-    setPostsRefreshing(true);
-
-    try {
-      await Promise.all([
-        loadPosts?.().catch(() => {}),
-        loadProfilePostsDirect().catch(() => {}),
-      ]);
-    } finally {
-      setPostsRefreshing(false);
-    }
-  }, [loadPosts, loadProfilePostsDirect]);
-
-  useEffect(() => {
-    refreshProfilePosts();
-  }, [refreshProfilePosts]);
-
-  useEffect(() => {
-    if (!profilePostUserId) return;
-
-    const refresh = () => {
-      refreshProfilePosts();
-    };
-
-    const channel = supabase
-      .channel(`profile-posts-live-${profilePostUserId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'posts' },
-        (payload) => {
-          const row = ((payload as any)?.new || (payload as any)?.old || {}) as any;
-
-          const changedForProfile =
-            postBelongsToProfile(row, profilePostUserId) ||
-            cleanString(row?.user_id) === profilePostUserId ||
-            cleanString(row?.author_id) === profilePostUserId ||
-            cleanString(row?.profile_id) === profilePostUserId ||
-            cleanString(row?.reposted_by) === profilePostUserId ||
-            cleanString(row?.reposted_by_id) === profilePostUserId ||
-            cleanString(row?.shared_by) === profilePostUserId ||
-            cleanString(row?.shared_by_id) === profilePostUserId;
-
-          if (changedForProfile || !row?.id) {
-            refresh();
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_reposts' },
-        () => refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'reposts' },
-        () => refresh()
-      )
-      .subscribe();
-
-    window.addEventListener('focus', refresh);
-    window.addEventListener('facemex:post-created', refresh);
-    window.addEventListener('facemex:post-reposted', refresh);
-    window.addEventListener('facemex:posts-updated', refresh);
-    window.addEventListener('facemex:feed-refresh', refresh);
-
-    return () => {
-      supabase.removeChannel(channel);
-      window.removeEventListener('focus', refresh);
-      window.removeEventListener('facemex:post-created', refresh);
-      window.removeEventListener('facemex:post-reposted', refresh);
-      window.removeEventListener('facemex:posts-updated', refresh);
-      window.removeEventListener('facemex:feed-refresh', refresh);
-    };
-  }, [profilePostUserId, refreshProfilePosts]);
-
-  useEffect(() => {
-    setBioDraft(viewedUser?.bio || '');
-  }, [viewedUser?.bio]);
-
-  useEffect(() => {
-    setHeadlineDraft(viewedPro.headline || '');
-    setProfessionalBioDraft(viewedPro.bio || '');
-    setProfessionalLocationDraft(viewedPro.location || '');
-    setResumeDraft(viewedPro.resumeSummary || '');
-  }, [
-    viewedPro.headline,
-    viewedPro.bio,
-    viewedPro.location,
-    viewedPro.resumeSummary,
-  ]);
-
-  const userPosts = useMemo(() => {
-    if (!profilePostUserId) return [];
-
-    const storePosts = posts
-      .filter((post: any) => postBelongsToProfile(post, profilePostUserId))
-      .map((post: any) => normalizeProfilePostFromRow(post, {
-        isRepost: isRepostByProfile(post, profilePostUserId),
-        repostedBy: isRepostByProfile(post, profilePostUserId) ? profilePostUserId : undefined,
-      }));
-
-    const combined = uniquePosts([
-      ...profileSupabasePosts,
-      ...storePosts,
-    ]);
-
-    return combined.sort((a: any, b: any) => getPostTime(b) - getPostTime(a));
-  }, [
-    posts,
-    profilePostUserId,
-    profileSupabasePosts,
-    normalizeProfilePostFromRow,
-  ]);
-
-  const loadProfileRelationships = async () => {
-    if (!profilePostUserId) return;
-
-    try {
-      const [followersResult, connectionsResult] = await Promise.all([
-        supabase
-          .from('follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('following_id', profilePostUserId),
-
-        supabase
-          .from('connection_requests')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'accepted')
-          .or(`sender_id.eq.${profilePostUserId},receiver_id.eq.${profilePostUserId}`),
-      ]);
-
-      setFollowerCount(followersResult.count || 0);
-      setConnectionCount(connectionsResult.count || 0);
-
-      if (!effectiveUserId || isOwnProfile) return;
-
-      const { data: followData } = await supabase
-        .from('follows')
-        .select('id')
-        .eq('follower_id', effectiveUserId)
-        .eq('following_id', profilePostUserId)
-        .maybeSingle();
-
-      setIsFollowing(Boolean(followData));
-
-      const { data: connectionRows } = await supabase
-        .from('connection_requests')
-        .select('id, sender_id, receiver_id, status')
-        .or(`sender_id.eq.${effectiveUserId},receiver_id.eq.${effectiveUserId}`);
-
-      const connection = (connectionRows || []).find((row: any) => {
-        return (
-          (row.sender_id === effectiveUserId &&
-            row.receiver_id === profilePostUserId) ||
-          (row.sender_id === profilePostUserId &&
-            row.receiver_id === effectiveUserId)
-        );
-      });
-
-      setIsConnected(connection?.status === 'accepted');
-      setIsPendingConnection(connection?.status === 'pending');
-    } catch {
-      // keep UI stable
-    }
-  };
-
-  useEffect(() => {
-    if (!profilePostUserId) return;
-
-    loadProfileRelationships();
-
-    const channel = supabase
-      .channel(`profile-relationship-${profilePostUserId}-${effectiveUserId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'follows' },
-        () => loadProfileRelationships()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'connection_requests' },
-        () => loadProfileRelationships()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [profilePostUserId, effectiveUserId, isOwnProfile]);
+  const [jumpToCollab, setJumpToCollab] = useState(false);
 
   useEffect(() => {
     if (isOwnProfile) return;
+    try {
+      const raw = localStorage.getItem(`faceme:connections:${effectiveUserId}`);
+      const ids = raw ? (JSON.parse(raw) as string[]) : [];
+      setIsConnected(Array.isArray(ids) ? ids.includes(viewedUserId) : false);
+    } catch {
+      setIsConnected(false);
+    }
+  }, [effectiveUserId, isOwnProfile, viewedUserId]);
 
+  useEffect(() => {
+    if (isOwnProfile) {
+      setFollowerCount(user?.followers || 0);
+
+      try {
+        const key = `faceme:connections:${effectiveUserId}`;
+        const raw = localStorage.getItem(key);
+        const ids = raw ? (JSON.parse(raw) as string[]) : [];
+        setConnectionCount(Array.isArray(ids) ? ids.length : 0);
+      } catch {
+        setConnectionCount(0);
+      }
+      return;
+    }
+    setFollowerCount(0);
+    setConnectionCount(0);
+  }, [isOwnProfile, user?.followers, user?.isFollowing, viewedUserId]);
+
+  useEffect(() => {
+    if (isOwnProfile) return;
     try {
       const key = `faceme:profile_views:${viewedUserId}`;
       const raw = localStorage.getItem(key);
       const n = raw ? parseInt(raw, 10) || 0 : 0;
       localStorage.setItem(key, String(n + 1));
     } catch {
-      // ignore
     }
   }, [isOwnProfile, viewedUserId]);
 
@@ -1170,496 +129,199 @@ export default function ProfilePage() {
   }, [effectiveUserId]);
 
   const myPostAnalytics = useMemo(() => {
-    const mine = posts.filter((p: any) => postBelongsToProfile(p, effectiveUserId));
-
+    const mine = posts.filter((p) => p.userId === effectiveUserId);
     const totalPosts = mine.length;
-    const totalLikes = mine.reduce((a: number, p: any) => a + (p.likes || 0), 0);
-    const totalComments = mine.reduce(
-      (a: number, p: any) =>
-        a + (Array.isArray(p.comments) ? p.comments.length : 0),
-      0
-    );
-    const totalShares = mine.reduce(
-      (a: number, p: any) => a + (p.shares || 0),
-      0
-    );
-
+    const totalLikes = mine.reduce((a, p) => a + (p.likes || 0), 0);
+    const totalComments = mine.reduce((a, p) => a + (Array.isArray(p.comments) ? p.comments.length : 0), 0);
+    const totalShares = mine.reduce((a, p) => a + (p.shares || 0), 0);
     const engagement = totalLikes + totalComments + totalShares;
-
-    const avgEngagement =
-      totalPosts > 0 ? Math.round((engagement / totalPosts) * 10) / 10 : 0;
-
-    return {
-      totalPosts,
-      totalLikes,
-      totalComments,
-      totalShares,
-      engagement,
-      avgEngagement,
-    };
+    const avgEngagement = totalPosts > 0 ? Math.round((engagement / totalPosts) * 10) / 10 : 0;
+    const topPost = mine
+      .slice()
+      .sort((a, b) => ((b.likes || 0) + (b.comments?.length || 0) + (b.shares || 0)) - ((a.likes || 0) + (a.comments?.length || 0) + (a.shares || 0)))
+      [0];
+    return { totalPosts, totalLikes, totalComments, totalShares, engagement, avgEngagement, topPost };
   }, [posts, effectiveUserId]);
 
-  const hasProfessionalPreview = useMemo(() => {
-    return Boolean(
-      viewedPro.headline ||
-        viewedPro.bio ||
-        viewedPro.location ||
-        viewedPro.skills.length > 0 ||
-        viewedPro.experience.length > 0 ||
-        viewedPro.education.length > 0 ||
-        viewedPro.links.length > 0
-    );
-  }, [viewedPro]);
-
-  const profileTier = String(
-    viewedUser?.tier || currentTier || 'free'
-  ).toLowerCase();
-
-  const handleFollowProfile = async () => {
-    if (!profilePostUserId || isOwnProfile) return;
-
-    setButtonBusy('follow');
-
-    try {
-      const { data: authData, error: authError } =
-        await supabase.auth.getUser();
-
-      if (authError || !authData.user?.id) {
-        toast({
-          title: 'Login required',
-          description: 'Please login again before following someone.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const myUserId = authData.user.id;
-
-      if (myUserId === profilePostUserId) {
-        toast({
-          title: 'Not allowed',
-          description: 'You cannot follow your own profile.',
-        });
-        return;
-      }
-
-      if (isFollowing) {
-        const { error } = await supabase
-          .from('follows')
-          .delete()
-          .eq('follower_id', myUserId)
-          .eq('following_id', profilePostUserId);
-
-        if (error) throw error;
-
-        setIsFollowing(false);
-        setFollowerCount((count) => Math.max(0, count - 1));
-
-        toast({
-          title: 'Unfollowed',
-          description: `You unfollowed ${viewedUser?.name || 'this user'}.`,
-        });
-
-        return;
-      }
-
-      const { error } = await supabase.from('follows').upsert(
-        {
-          follower_id: myUserId,
-          following_id: profilePostUserId,
-          created_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'follower_id,following_id',
-          ignoreDuplicates: true,
-        }
-      );
-
-      if (error) throw error;
-
-      setIsFollowing(true);
-      setFollowerCount((count) => count + 1);
-
-      toast({
-        title: 'Followed',
-        description: `You are now following ${viewedUser?.name || 'this user'}.`,
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Follow failed',
-        description:
-          error?.message ||
-          'Could not update follow right now. Check your Supabase follows policy.',
-        variant: 'destructive',
-      });
-    } finally {
-      setButtonBusy(null);
+  useEffect(() => {
+    if (activeTab === 'professional' && jumpToCollab && collabSectionRef.current) {
+      collabSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setJumpToCollab(false);
     }
+  }, [activeTab, jumpToCollab]);
+
+  useEffect(() => {
+    setHeadlineDraft(pro.headline || '');
+  }, [pro.headline]);
+
+  useEffect(() => {
+    setCareerGoalsDraft(pro.careerGoals || '');
+  }, [pro.careerGoals]);
+
+  useEffect(() => {
+    setExperienceLevelDraft(pro.experienceLevel || '');
+  }, [pro.experienceLevel]);
+
+  useEffect(() => {
+    setSmartSummaryDraft(pro.smartSummary || '');
+  }, [pro.smartSummary]);
+
+  useEffect(() => {
+    setSmartPositioningDraft(pro.smartPositioning || '');
+  }, [pro.smartPositioning]);
+
+  useEffect(() => {
+    setSmartSuggestedSkillsDraft(pro.smartSuggestedSkills || []);
+  }, [pro.smartSuggestedSkills]);
+
+  const addIndustryInterest = async () => {
+    const v = industryInterestDraft.trim();
+    if (!v) return;
+    const next = Array.from(new Set([...(pro.industryInterests || []), v]));
+    setIndustryInterestDraft('');
+    await saveProfessional({ ...pro, industryInterests: next });
   };
 
-  const handleConnectProfile = async () => {
-    if (!effectiveUserId || !profilePostUserId || isOwnProfile) return;
-
-    setButtonBusy('connect');
-
-    try {
-      const { data, error } = await supabase
-        .from('connection_requests')
-        .upsert(
-          {
-            sender_id: effectiveUserId,
-            receiver_id: profilePostUserId,
-            status: 'pending',
-          },
-          {
-            onConflict: 'sender_id,receiver_id',
-          }
-        )
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setIsPendingConnection(true);
-
-      void (async () => {
-        try {
-          await supabase.from('notifications').upsert({
-            id: data.id,
-            user_id: profilePostUserId,
-            actor_id: effectiveUserId,
-            type: 'connection_request',
-            title: 'New connection request',
-            message: `${
-              user?.name || user?.email?.split('@')[0] || 'Someone'
-            } wants to connect with you.`,
-            action_url: '/notifications',
-            is_read: false,
-          });
-        } catch {}
-      })();
-
-      toast({
-        title: 'Connection sent',
-        description: 'Your connection request was sent.',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Connect failed',
-        description: error?.message || 'Could not send connection request.',
-        variant: 'destructive',
-      });
-    } finally {
-      setButtonBusy(null);
-    }
+  const removeIndustryInterest = async (value: string) => {
+    const next = (pro.industryInterests || []).filter((x) => x !== value);
+    await saveProfessional({ ...pro, industryInterests: next });
   };
 
-  const startProfileChat = async () => {
-    if (!effectiveUserId || !profilePostUserId || isOwnProfile) return;
-
-    setButtonBusy('message');
-
-    try {
-      navigate(`/messages/${profilePostUserId}?focus=1`);
-    } finally {
-      setButtonBusy(null);
+  const aiRewriteProfessionally = async () => {
+    if (!isOwnProfile) return;
+    if (!canUseAI) {
+      toast({ title: 'Upgrade needed', description: 'AI tools are available on Pro and above.' });
+      return;
     }
-  };
-
-  const saveBio = async () => {
-    if (!isOwnProfile || !effectiveUserId) return;
-
-    const nextBio = bioDraft.trim();
-
+    setAiSmartBusy('rewrite');
     try {
-      updateProfile?.({
-        bio: nextBio,
-      });
-
-      await supabase
-        .from('profiles')
-        .update({
-          bio: nextBio,
-        })
-        .eq('id', effectiveUserId);
-
-      setBioEditing(false);
-
-      toast({
-        title: 'Bio saved',
-        description: 'Your profile bio was updated.',
-      });
+      const input = `Rewrite this user's Smart Profile professionally (clear, concise, no hype).\n\nSkills: ${(pro.skills || []).join(', ')}\nCareer goals: ${careerGoalsDraft || '(none)'}\nIndustry interests: ${(pro.industryInterests || []).join(', ') || '(none)'}\nExperience level: ${experienceLevelDraft || '(unspecified)'}\n\nOutput 2 short paragraphs max (no headings, no bullets).`;
+      const rewritten = await deepseekReply(input);
+      setSmartSummaryDraft(rewritten);
+      await saveProfessional({ ...pro, careerGoals: careerGoalsDraft, experienceLevel: experienceLevelDraft as any, smartSummary: rewritten });
     } catch {
-      toast({
-        title: 'Bio saved locally',
-        description:
-          'Your bio was saved in the app. Supabase update did not complete.',
-      });
-      setBioEditing(false);
+      toast({ title: 'AI unavailable', description: 'Could not rewrite right now. Try again in a moment.' });
+    } finally {
+      setAiSmartBusy(null);
     }
   };
 
-  const saveProfessionalLive = async (next: ProfessionalProfile) => {
-    if (!canEditProfessional || !effectiveUserId) {
-      toast({
-        title: 'Creator tier required',
-        description:
-          'Professional profile editing is available for Creator, Business and Exclusive users.',
-      });
+  const aiSuggestMissingSkills = async () => {
+    if (!isOwnProfile) return;
+    if (!canUseAI) {
+      toast({ title: 'Upgrade needed', description: 'AI tools are available on Pro and above.' });
       return;
     }
+    setAiSmartBusy('skills');
+    try {
+      const input = `Suggest 6 to 10 missing skills that would strengthen this profile for the stated career goals and industry interests.\n\nCurrent skills: ${(pro.skills || []).join(', ') || '(none)'}\nCareer goals: ${careerGoalsDraft || '(none)'}\nIndustry interests: ${(pro.industryInterests || []).join(', ') || '(none)'}\nExperience level: ${experienceLevelDraft || '(unspecified)'}\n\nReturn ONLY a comma-separated list of skills. No extra text.`;
+      const raw = await deepseekReply(input);
+      const list = raw
+        .split(/,|\n/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 12);
+      const unique = Array.from(new Set(list));
+      setSmartSuggestedSkillsDraft(unique);
+      await saveProfessional({ ...pro, careerGoals: careerGoalsDraft, experienceLevel: experienceLevelDraft as any, smartSuggestedSkills: unique });
+    } catch {
+      toast({ title: 'AI unavailable', description: 'Could not suggest skills right now. Try again later.' });
+    } finally {
+      setAiSmartBusy(null);
+    }
+  };
 
-    await saveProfessional(next);
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        professional: next,
-      })
-      .eq('id', effectiveUserId);
-
-    if (error) {
-      toast({
-        title: 'Saved locally',
-        description:
-          'Professional profile saved in the app. Add the professional jsonb column in Supabase to save it for real users.',
-      });
+  const aiCareerPositioning = async () => {
+    if (!isOwnProfile) return;
+    if (!canUseAI) {
+      toast({ title: 'Upgrade needed', description: 'AI tools are available on Pro and above.' });
       return;
     }
-
-    toast({
-      title: 'Professional profile saved',
-      description:
-        'Your professional information is now visible on your profile.',
-    });
+    setAiSmartBusy('positioning');
+    try {
+      const input = `Write one sentence that positions this user for specific roles (not generic jobs).\nFormat like: "You are well positioned for junior data analyst roles in fintech."\n\nUse this info:\nSkills: ${(pro.skills || []).join(', ') || '(none)'}\nCareer goals: ${careerGoalsDraft || '(none)'}\nIndustry interests: ${(pro.industryInterests || []).join(', ') || '(none)'}\nExperience level: ${experienceLevelDraft || '(unspecified)'}\n\nReturn ONLY the sentence.`;
+      const line = (await deepseekReply(input)).trim();
+      setSmartPositioningDraft(line);
+      await saveProfessional({ ...pro, careerGoals: careerGoalsDraft, experienceLevel: experienceLevelDraft as any, smartPositioning: line });
+    } catch {
+      toast({ title: 'AI unavailable', description: 'Could not generate positioning right now. Try again later.' });
+    } finally {
+      setAiSmartBusy(null);
+    }
   };
-
-  const addSkill = async () => {
-    const skill = newSkill.trim();
-    if (!skill) return;
-
-    const next: ProfessionalProfile = {
-      ...viewedPro,
-      skills: Array.from(new Set([...viewedPro.skills, skill])),
-    };
-
-    setNewSkill('');
-    await saveProfessionalLive(next);
-  };
-
-  const addExperience = async () => {
-    if (!expRole.trim() || !expCompany.trim()) return;
-
-    const next: ProfessionalProfile = {
-      ...viewedPro,
-      experience: [
-        ...viewedPro.experience,
-        {
-          role: expRole.trim(),
-          company: expCompany.trim(),
-          start: expStart.trim() || undefined,
-          end: expEnd.trim() || undefined,
-          summary: expSummary.trim() || undefined,
-          verified: false,
-        },
-      ],
-    };
-
-    setExpRole('');
-    setExpCompany('');
-    setExpStart('');
-    setExpEnd('');
-    setExpSummary('');
-
-    await saveProfessionalLive(next);
-  };
-
-  const addEducation = async () => {
-    if (!eduInstitution.trim()) return;
-
-    const next: ProfessionalProfile = {
-      ...viewedPro,
-      education: [
-        ...viewedPro.education,
-        {
-          institution: eduInstitution.trim(),
-          degree: eduDegree.trim() || undefined,
-          field: eduField.trim() || undefined,
-          start: eduStart.trim() || undefined,
-          end: eduEnd.trim() || undefined,
-          verified: false,
-        },
-      ],
-    };
-
-    setEduInstitution('');
-    setEduDegree('');
-    setEduField('');
-    setEduStart('');
-    setEduEnd('');
-
-    await saveProfessionalLive(next);
-  };
-
-  if (profileLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-background">
-        <Navbar />
-        <div className="max-w-5xl mx-auto pt-20 px-3 sm:px-4 pb-20">
-          <Card className="rounded-2xl border border-border/60 shadow-none">
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              Loading profile...
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  if (profileNotFound || !viewedUser) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-background">
-        <Navbar />
-        <div className="max-w-5xl mx-auto pt-20 px-3 sm:px-4 pb-20">
-          <Card className="rounded-2xl border border-border/60 shadow-none">
-            <CardContent className="py-12 text-center">
-              <p className="text-sm text-muted-foreground">Profile not found.</p>
-              <Button
-                className="mt-4 rounded-full"
-                variant="outline"
-                onClick={() => navigate('/feed')}
-              >
-                Back to feed
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-background">
       <Navbar />
-
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-20 md:pb-6">
+        {/* Profile Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
           <Card className="mb-4 md:mb-6 overflow-hidden rounded-2xl border border-border/60 shadow-none">
+            {/* Cover Photo */}
             <div className="relative h-24 sm:h-28 md:h-40 lg:h-44">
-              {viewedUser?.coverPhoto ? (
+              {user?.coverPhoto ? (
                 <img
-                  src={viewedUser.coverPhoto}
+                  src={user.coverPhoto}
                   alt="Cover"
                   className="w-full h-full object-cover"
-                  loading="lazy"
-                  decoding="async"
                 />
               ) : (
                 <div className="w-full h-full bg-muted/40" />
               )}
             </div>
-
+            
             <CardContent className="relative pt-0 pb-4 md:pb-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 sm:gap-6">
                 <div className="relative z-10 -mt-10 sm:-mt-12 md:-mt-16">
                   <Avatar className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 ring-2 ring-border bg-muted">
-                    <AvatarImage
-                      src={viewedUser?.avatar}
-                      alt={viewedUser?.name}
-                    />
+                    <AvatarImage src={viewedUser?.avatar} alt={viewedUser?.name} />
                     <AvatarFallback className="bg-muted text-foreground text-2xl font-semibold flex items-center justify-center">
-                      {getInitial(viewedUser?.name, viewedUser?.email)}
+                      {(viewedUser?.name && viewedUser.name.charAt(0))
+                        || (viewedUser?.email && viewedUser.email.charAt(0).toUpperCase())
+                        || 'U'}
                     </AvatarFallback>
                   </Avatar>
 
-                  {isProfileVerified && (
-                    <span className="absolute -bottom-2 -right-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-background shadow-md ring-2 ring-background">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-black text-white shadow-sm dark:bg-white dark:text-black">
-                        <CheckCircle className="h-4 w-4 fill-white/20 dark:fill-black/10" />
-                      </span>
+                  {addons?.verified && (
+                    <span className="md:hidden absolute -bottom-1 -right-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-sm ring-1 ring-border">
+                      <CheckCircle className="h-4 w-4 text-foreground/70" />
                     </span>
                   )}
                 </div>
-
+                
                 <div className="flex-1 min-w-0 text-left pt-1 sm:pt-4">
                   <div className="flex flex-wrap items-center justify-start gap-2 mb-1">
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold truncate">
-                      {viewedUser?.name}
-                    </h1>
-
-                    {isProfileVerified && <PremiumVerifiedBadge />}
-                    {isProfileVerified && <PremiumVerifiedIcon />}
-
-                    {profileTier !== 'free' && (
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold truncate">{viewedUser?.name}</h1>
+                    <IdentityVerifiedBadge />
+                    {currentTier !== 'free' && (
                       <Badge variant="secondary" className="ml-1">
-                        {profileTier.toUpperCase()}
+                        {currentTier.toUpperCase()}
                       </Badge>
                     )}
                   </div>
 
-                  {viewedPro.headline ? (
+                  {pro.headline ? (
                     <div className="text-sm md:text-base font-medium text-foreground/90 mb-2 break-words">
-                      {viewedPro.headline}
+                      {pro.headline}
                     </div>
                   ) : null}
 
-                  {isOwnProfile && bioEditing ? (
-                    <div className="mb-3 space-y-2">
-                      <textarea
-                        className="w-full min-h-[72px] rounded-xl border bg-background px-3 py-2 text-sm"
-                        value={bioDraft}
-                        onChange={(event) => setBioDraft(event.target.value)}
-                        placeholder="Write your profile bio..."
-                      />
+                  <p className="text-muted-foreground text-sm leading-relaxed mb-3 break-words">{user?.bio}</p>
 
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="rounded-full"
-                          onClick={saveBio}
-                        >
-                          <Save className="h-4 w-4 mr-2" />
-                          Save bio
-                        </Button>
-
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full"
-                          onClick={() => {
-                            setBioDraft(viewedUser?.bio || '');
-                            setBioEditing(false);
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mb-3">
-                      <p className="text-muted-foreground text-sm leading-relaxed break-words">
-                        {viewedUser?.bio || 'No bio added yet.'}
-                      </p>
-
-                      {isOwnProfile && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="mt-1 h-7 rounded-full px-2 text-xs"
-                          onClick={() => setBioEditing(true)}
-                        >
-                          Edit bio
-                        </Button>
-                      )}
+                  {/* Interests */}
+                  {user?.interests && user.interests.length > 0 && (
+                    <div className="hidden sm:flex flex-wrap gap-2 mb-3 justify-start">
+                      {user.interests.map((interest) => (
+                        <Badge key={interest} variant="outline">
+                          {interest}
+                        </Badge>
+                      ))}
                     </div>
                   )}
-
+                  
                   <div className="flex flex-wrap items-center justify-start gap-3 text-xs sm:text-sm text-muted-foreground">
                     {viewedUser?.location && (
                       <div className="flex items-center">
@@ -1667,43 +329,29 @@ export default function ProfilePage() {
                         {viewedUser.location}
                       </div>
                     )}
-
                     {viewedUser?.joinedDate && (
                       <div className="flex items-center">
                         <Calendar className="h-4 w-4 mr-1" />
-                        Joined{' '}
-                        {formatDistanceToNow(viewedUser.joinedDate, {
-                          addSuffix: true,
-                        })}
+                        Joined {formatDistanceToNow(viewedUser.joinedDate, { addSuffix: true })}
                       </div>
                     )}
-
                     {viewedUser?.website && (
                       <div className="flex items-center">
                         <LinkIcon className="h-4 w-4 mr-1" />
-                        <a
-                          href={
-                            viewedUser.website.startsWith('http')
-                              ? viewedUser.website
-                              : `https://${viewedUser.website}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-foreground/80 hover:text-foreground underline-offset-4 hover:underline"
-                        >
+                        <a href={`https://${viewedUser.website}`} target="_blank" rel="noopener noreferrer" className="text-foreground/80 hover:text-foreground underline-offset-4 hover:underline">
                           {viewedUser.website}
                         </a>
                       </div>
                     )}
                   </div>
                 </div>
-
+                
                 <div className="flex w-full sm:w-auto items-center gap-2 sm:ml-auto flex-shrink-0 mt-1 sm:mt-0">
                   {isOwnProfile ? (
                     <Button
                       onClick={() => setIsEditModalOpen(true)}
                       variant="outline"
-                      className="w-full sm:w-auto rounded-full px-5"
+                      className="w-full sm:w-auto"
                     >
                       <Settings className="h-4 w-4 mr-2" />
                       Edit Profile
@@ -1711,47 +359,7 @@ export default function ProfilePage() {
                   ) : (
                     <div className="flex w-full sm:w-auto items-center gap-2">
                       <AnimatePresence mode="wait">
-                        {isConnected ? (
-                          <motion.div
-                            key="message"
-                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                            transition={{ duration: 0.22 }}
-                            className="w-full sm:w-auto"
-                          >
-                            <Button
-                              type="button"
-                              className="w-full sm:w-auto rounded-full px-5"
-                              onClick={startProfileChat}
-                              disabled={buttonBusy === 'message'}
-                            >
-                              <MessageCircle className="h-4 w-4 mr-2" />
-                              {buttonBusy === 'message'
-                                ? 'Opening...'
-                                : 'Message'}
-                            </Button>
-                          </motion.div>
-                        ) : isPendingConnection ? (
-                          <motion.div
-                            key="pending"
-                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                            transition={{ duration: 0.22 }}
-                            className="w-full sm:w-auto"
-                          >
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full sm:w-auto rounded-full px-5"
-                              disabled
-                            >
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Pending
-                            </Button>
-                          </motion.div>
-                        ) : (
+                        {!isConnected ? (
                           <motion.div
                             key="connect"
                             initial={{ opacity: 0, y: 6, scale: 0.98 }}
@@ -1763,43 +371,31 @@ export default function ProfilePage() {
                             <Button
                               type="button"
                               variant="outline"
-                              className="w-full sm:w-auto rounded-full px-5"
-                              onClick={handleConnectProfile}
-                              disabled={buttonBusy === 'connect'}
+                              className="w-full sm:w-auto"
+                              onClick={() => {
+                                try {
+                                  const key = `faceme:connections:${effectiveUserId}`;
+                                  const raw = localStorage.getItem(key);
+                                  const ids = raw ? (JSON.parse(raw) as string[]) : [];
+                                  const next = Array.isArray(ids) ? Array.from(new Set([...ids, viewedUserId])) : [viewedUserId];
+                                  localStorage.setItem(key, JSON.stringify(next));
+                                  setConnectionCount(next.length);
+                                } catch {}
+                                setIsConnected(true);
+                              }}
                             >
                               <UserPlus className="h-4 w-4 mr-2" />
-                              {buttonBusy === 'connect'
-                                ? 'Sending...'
-                                : 'Connect'}
+                              Connect
                             </Button>
                           </motion.div>
-                        )}
+                        ) : null}
                       </AnimatePresence>
-
-                      <Button
-                        type="button"
-                        variant={isFollowing ? 'secondary' : 'outline'}
-                        className="w-full sm:w-auto rounded-full px-5"
-                        onClick={handleFollowProfile}
-                        disabled={buttonBusy === 'follow'}
-                      >
-                        {isFollowing ? (
-                          <UserMinus className="h-4 w-4 mr-2" />
-                        ) : (
-                          <UserPlus className="h-4 w-4 mr-2" />
-                        )}
-
-                        {buttonBusy === 'follow'
-                          ? 'Please wait...'
-                          : isFollowing
-                            ? 'Unfollow'
-                            : 'Follow'}
-                      </Button>
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* Stats */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -1807,30 +403,18 @@ export default function ProfilePage() {
                 className="grid grid-cols-3 gap-2 sm:flex sm:justify-start sm:space-x-8 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t"
               >
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">
-                    {userPosts.length}
-                  </p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">
-                    Posts
-                  </p>
+                  <p className="text-base sm:text-2xl font-bold">{userPosts.length}</p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">Posts</p>
                 </div>
 
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">
-                    {connectionCount}
-                  </p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">
-                    Connections
-                  </p>
+                  <p className="text-base sm:text-2xl font-bold">{connectionCount}</p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">Connections</p>
                 </div>
 
                 <div className="text-center cursor-pointer hover:bg-muted/30 px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-lg transition-colors">
-                  <p className="text-base sm:text-2xl font-bold">
-                    {followerCount}
-                  </p>
-                  <p className="text-[10px] sm:text-sm text-muted-foreground">
-                    Followers
-                  </p>
+                  <p className="text-base sm:text-2xl font-bold">{followerCount}</p>
+                  <p className="text-[10px] sm:text-sm text-muted-foreground">Followers</p>
                 </div>
               </motion.div>
             </CardContent>
@@ -1842,108 +426,115 @@ export default function ProfilePage() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <h2 className="text-sm font-semibold">Analytics</h2>
-                <Badge variant="outline" className="text-[10px]">
-                  PRO+
-                </Badge>
+                <Badge variant="outline" className="text-[10px]">PRO+</Badge>
               </div>
-
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Profile views
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {profileViews}
-                  </div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Profile views</div>
+                  <div className="mt-1 text-2xl font-semibold">{profileViews}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">From local activity (device-based)</div>
+                </div>
+                <div className="rounded-xl border bg-card p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Post engagement</div>
+                  <div className="mt-1 text-2xl font-semibold">{myPostAnalytics.engagement}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    Recent profile activity
+                    {myPostAnalytics.totalLikes} likes · {myPostAnalytics.totalComments} comments · {myPostAnalytics.totalShares} shares
                   </div>
                 </div>
-
                 <div className="rounded-xl border bg-card p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Post engagement
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {myPostAnalytics.engagement}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {myPostAnalytics.totalLikes} likes ·{' '}
-                    {myPostAnalytics.totalComments} comments ·{' '}
-                    {myPostAnalytics.totalShares} shares
-                  </div>
-                </div>
-
-                <div className="rounded-xl border bg-card p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Average per post
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {myPostAnalytics.avgEngagement}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Across {myPostAnalytics.totalPosts} posts
-                  </div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Average per post</div>
+                  <div className="mt-1 text-2xl font-semibold">{myPostAnalytics.avgEngagement}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Across {myPostAnalytics.totalPosts} posts</div>
                 </div>
               </div>
             </CardContent>
           </Card>
         ) : null}
 
-        {hasProfessionalPreview ? (
+        {(pro.headline || pro.bio || pro.location || (pro.skills && pro.skills.length) || (pro.experience && pro.experience.length) || (pro.education && pro.education.length) || (pro.links && pro.links.length)) && (
           <Card className="mb-4 md:mb-6 rounded-2xl border border-border/60 shadow-none">
             <CardContent className="py-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <h2 className="text-sm font-semibold">Professional</h2>
-                <Badge variant="outline" className="text-[10px]">
-                  Public profile
-                </Badge>
+                <Badge variant="outline" className="text-[10px]">LinkedIn style</Badge>
               </div>
 
               <div className="space-y-3">
-                {viewedPro.headline ? (
-                  <div className="text-sm font-medium text-foreground">
-                    {viewedPro.headline}
-                  </div>
-                ) : null}
+                {pro.headline && (
+                  <div className="text-sm font-medium text-foreground">{pro.headline}</div>
+                )}
 
-                {viewedPro.location ? (
+                {pro.location && (
                   <div className="text-xs text-muted-foreground flex items-center gap-2">
                     <MapPin className="h-3.5 w-3.5" />
-                    <span className="truncate">{viewedPro.location}</span>
+                    <span className="truncate">{pro.location}</span>
                   </div>
-                ) : null}
+                )}
 
-                {viewedPro.skills.length > 0 ? (
+                {(pro.experience && pro.experience.length > 0) && (
+                  <div className="rounded-xl border bg-card p-3">
+                    <div className="text-xs font-semibold mb-1">Experience</div>
+                    <div className="text-xs text-muted-foreground">
+                      {pro.experience[0]?.role}{pro.experience[0]?.company ? ` · ${pro.experience[0].company}` : ''}
+                    </div>
+                  </div>
+                )}
+
+                {(pro.education && pro.education.length > 0) && (
+                  <div className="rounded-xl border bg-card p-3">
+                    <div className="text-xs font-semibold mb-1">Education</div>
+                    <div className="text-xs text-muted-foreground">
+                      {pro.education[0]?.institution}{pro.education[0]?.degree ? ` · ${pro.education[0].degree}` : ''}
+                    </div>
+                  </div>
+                )}
+
+                {(pro.skills && pro.skills.length > 0) && (
                   <div>
                     <div className="text-xs font-semibold mb-2">Skills</div>
                     <div className="flex flex-wrap gap-2">
-                      {viewedPro.skills.slice(0, 12).map((skill) => (
+                      {pro.skills.slice(0, 12).map((s) => (
                         <Badge
-                          key={skill}
+                          key={s}
                           variant="secondary"
                           className="cursor-pointer"
                           onClick={() => {
                             setMode('professional');
-                            navigate(`/feed?skill=${encodeURIComponent(skill)}`);
+                            navigate(`/feed?skill=${encodeURIComponent(s)}`);
                           }}
                         >
-                          {skill}
+                          {s}
                         </Badge>
                       ))}
                     </div>
                   </div>
-                ) : null}
+                )}
+
+                {(pro.links && pro.links.length > 0) && (
+                  <div>
+                    <div className="text-xs font-semibold mb-2">Links</div>
+                    <div className="flex flex-col gap-1">
+                      {pro.links.slice(0, 4).map((l, i) => (
+                        <a
+                          key={i}
+                          className="text-xs text-primary hover:underline truncate"
+                          href={l.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {l.type}: {l.url}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
-        ) : null}
+        )}
 
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as any)}
-          className="w-full"
-        >
+        {/* Profile Content */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
           <TabsList className="w-full justify-start overflow-x-auto flex-nowrap rounded-none bg-transparent p-0 border-b border-border/60">
             <TabsTrigger
               value="posts"
@@ -1951,14 +542,18 @@ export default function ProfilePage() {
             >
               Posts
             </TabsTrigger>
-
+            <TabsTrigger
+              value="about"
+              className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
+            >
+              Smart Profile
+            </TabsTrigger>
             <TabsTrigger
               value="professional"
               className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
             >
               Professional
             </TabsTrigger>
-
             <TabsTrigger
               value="photos"
               className="shrink-0 rounded-none px-3 py-2 text-sm text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-foreground"
@@ -1966,40 +561,15 @@ export default function ProfilePage() {
               Media
             </TabsTrigger>
           </TabsList>
-
+          
           <TabsContent value="posts" className="mt-6 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold">Recent posts</h2>
-                <p className="text-xs text-muted-foreground">
-                  New posts and reposts load first.
-                </p>
-              </div>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="rounded-full"
-                onClick={refreshProfilePosts}
-                disabled={postsRefreshing}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 mr-2 ${
-                    postsRefreshing ? 'animate-spin' : ''
-                  }`}
-                />
-                Refresh
-              </Button>
-            </div>
-
             {userPosts.length > 0 ? (
-              userPosts.map((post: any, index: number) => (
+              userPosts.map((post, index) => (
                 <motion.div
-                  key={post.id || `${index}-${getPostTime(post)}`}
-                  initial={{ opacity: 0, y: 12 }}
+                  key={post.id}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index * 0.025, 0.15) }}
+                  transition={{ delay: index * 0.1 }}
                 >
                   <PostCard post={post} />
                 </motion.div>
@@ -2012,16 +582,10 @@ export default function ProfilePage() {
               </Card>
             )}
           </TabsContent>
-
+          
           <TabsContent value="professional" className="mt-6">
             <Card className="rounded-2xl border border-border/60 shadow-none">
               <CardContent className="py-6">
-                {!canEditProfessional && isOwnProfile ? (
-                  <div className="mb-6 rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-                    Creator, Business and Exclusive tiers can edit and publish a professional profile.
-                  </div>
-                ) : null}
-
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div className="space-y-4">
                     <div>
@@ -2029,76 +593,35 @@ export default function ProfilePage() {
                         <Briefcase className="h-4 w-4 text-muted-foreground" />
                         <span>Headline</span>
                       </h3>
-
-                      {canEditProfessional ? (
+                      {isOwnProfile ? (
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <Input
                             value={headlineDraft}
-                            onChange={(event) =>
-                              setHeadlineDraft(event.target.value)
-                            }
-                            placeholder="Example: Founder · Product Builder · AI Social Platform"
+                            onChange={(e) => setHeadlineDraft(e.target.value)}
+                            placeholder="e.g. Frontend Developer · React · UI Systems"
                           />
-
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="rounded-full"
-                            onClick={() =>
-                              saveProfessionalLive({
-                                ...viewedPro,
-                                headline: headlineDraft,
-                              })
-                            }
+                            onClick={async () => {
+                              await saveProfessional({ ...pro, headline: headlineDraft });
+                            }}
                           >
                             Save
                           </Button>
                         </div>
                       ) : (
-                        <p className="text-muted-foreground">
-                          {viewedPro.headline || 'No headline added yet.'}
-                        </p>
+                        <p className="text-muted-foreground">{pro.headline || 'Add a headline to showcase your role'}</p>
                       )}
                     </div>
 
                     <div>
                       <h3 className="font-semibold mb-1 flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span>Professional bio</span>
+                        <span>Bio</span>
                       </h3>
-
-                      {canEditProfessional ? (
-                        <div className="space-y-2">
-                          <textarea
-                            className="w-full min-h-[88px] rounded-xl border bg-background px-3 py-2 text-sm"
-                            value={professionalBioDraft}
-                            onChange={(event) =>
-                              setProfessionalBioDraft(event.target.value)
-                            }
-                            placeholder="Write your professional background..."
-                          />
-
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="rounded-full"
-                            onClick={() =>
-                              saveProfessionalLive({
-                                ...viewedPro,
-                                bio: professionalBioDraft,
-                              })
-                            }
-                          >
-                            Save bio
-                          </Button>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">
-                          {viewedPro.bio || 'No professional bio added yet.'}
-                        </p>
-                      )}
+                      <p className="text-muted-foreground">{pro.bio || 'Tell others about your professional background'}</p>
                     </div>
 
                     <div>
@@ -2106,135 +629,122 @@ export default function ProfilePage() {
                         <MapPin className="h-4 w-4 text-muted-foreground" />
                         <span>Location</span>
                       </h3>
+                      <p className="text-muted-foreground">{pro.location || 'Set your location'}</p>
+                    </div>
 
-                      {canEditProfessional ? (
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <Input
-                            value={professionalLocationDraft}
-                            onChange={(event) =>
-                              setProfessionalLocationDraft(event.target.value)
-                            }
-                            placeholder="Example: Tzaneen, South Africa"
-                          />
+                    <div>
+                      <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                        <span>Links</span>
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {(pro.links || []).length ? (
+                          pro.links!.map((l, i) => (
+                            <a key={i} className="text-sm text-primary hover:underline" href={l.url} target="_blank" rel="noreferrer">{l.type}: {l.url}</a>
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground text-sm">No links yet</p>
+                        )}
+                      </div>
+                    </div>
 
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="rounded-full"
-                            onClick={() =>
-                              saveProfessionalLive({
-                                ...viewedPro,
-                                location: professionalLocationDraft,
-                              })
-                            }
-                          >
-                            Save
-                          </Button>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">
-                          {viewedPro.location || 'No location added yet.'}
-                        </p>
-                      )}
+                    <div className="pt-4 border-t flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold mb-1 flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-muted-foreground" />
+                          <span>Professional Groups</span>
+                        </h3>
+                        <p className="text-xs text-muted-foreground">Join industry-focused groups for discussions and collaboration.</p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={() => navigate('/groups/pro')}
+                      >
+                        View groups
+                      </Button>
                     </div>
 
                     <div className="pt-4 border-t space-y-3">
-                      <h3 className="font-semibold mb-1 flex items-center gap-2">
-                        <Briefcase className="h-4 w-4 text-muted-foreground" />
-                        <span>Experience</span>
-                      </h3>
-
-                      <div className="space-y-2">
-                        {viewedPro.experience.length > 0 ? (
-                          viewedPro.experience.map((experience, index) => (
-                            <div
-                              key={index}
-                              className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
-                            >
-                              <div>
-                                <div className="font-medium text-sm">
-                                  {experience.role || 'Role'}
+                      <div>
+                        <h3 className="font-semibold mb-1 flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-muted-foreground" />
+                          <span>Experience</span>
+                        </h3>
+                        <div className="space-y-2">
+                          {(pro.experience || []).length ? (
+                            pro.experience!.map((e, idx) => (
+                              <div key={idx} className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                  <div className="font-medium text-sm">{e.role || 'Role'}</div>
+                                  <div className="text-xs text-muted-foreground">{e.company || 'Company'}{(e.start || e.end) && ` • ${e.start || ''}${e.start && e.end ? ' – ' : ''}${e.end || ''}`}</div>
+                                  {e.summary && (
+                                    <div className="text-xs text-muted-foreground mt-1">{e.summary}</div>
+                                  )}
                                 </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {experience.company || 'Company'}
-                                  {(experience.start || experience.end) &&
-                                    ` · ${experience.start || ''}${
-                                      experience.start && experience.end
-                                        ? ' – '
-                                        : ''
-                                    }${experience.end || ''}`}
+                                <div className="flex items-center gap-2">
+                                  {e.verified && <Badge variant="outline" className="text-[10px]">Verified</Badge>}
+                                  {isOwnProfile && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[10px]"
+                                      onClick={async () => {
+                                        const list = [...(pro.experience || [])];
+                                        list[idx] = { ...list[idx], verified: !list[idx].verified };
+                                        await saveProfessional({ ...pro, experience: list });
+                                      }}
+                                    >
+                                      {e.verified ? 'Unverify' : 'Verify (dev)'}
+                                    </Button>
+                                  )}
                                 </div>
-
-                                {experience.summary && (
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    {experience.summary}
-                                  </div>
-                                )}
                               </div>
-
-                              {experience.verified && (
-                                <PremiumVerifiedBadge size="sm" />
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            No experience added yet.
-                          </p>
-                        )}
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Add roles you want to highlight.</p>
+                          )}
+                        </div>
                       </div>
 
-                      {canEditProfessional && (
+                      {isOwnProfile && (
                         <div className="space-y-2">
                           <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              placeholder="Role"
-                              value={expRole}
-                              onChange={(event) => setExpRole(event.target.value)}
-                            />
-
-                            <Input
-                              placeholder="Company"
-                              value={expCompany}
-                              onChange={(event) =>
-                                setExpCompany(event.target.value)
-                              }
-                            />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Role" value={expRole} onChange={(e) => setExpRole(e.target.value)} />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Company" value={expCompany} onChange={(e) => setExpCompany(e.target.value)} />
                           </div>
-
                           <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              placeholder="Start"
-                              value={expStart}
-                              onChange={(event) =>
-                                setExpStart(event.target.value)
-                              }
-                            />
-
-                            <Input
-                              placeholder="End"
-                              value={expEnd}
-                              onChange={(event) => setExpEnd(event.target.value)}
-                            />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Start (e.g. 2022)" value={expStart} onChange={(e) => setExpStart(e.target.value)} />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="End (or Present)" value={expEnd} onChange={(e) => setExpEnd(e.target.value)} />
                           </div>
-
                           <textarea
-                            className="w-full min-h-[50px] px-3 py-2 border rounded-xl text-sm bg-background"
-                            placeholder="Short summary optional"
+                            className="w-full min-h-[50px] px-2 py-1 border rounded text-xs bg-transparent"
+                            placeholder="Short summary (optional)"
                             value={expSummary}
-                            onChange={(event) =>
-                              setExpSummary(event.target.value)
-                            }
+                            onChange={(e) => setExpSummary(e.target.value)}
                           />
-
                           <div className="flex justify-end">
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="rounded-full"
-                              onClick={addExperience}
+                              onClick={async () => {
+                                if (!expRole.trim() || !expCompany.trim()) return;
+                                const next = {
+                                  role: expRole.trim(),
+                                  company: expCompany.trim(),
+                                  start: expStart.trim() || undefined,
+                                  end: expEnd.trim() || undefined,
+                                  summary: expSummary.trim() || undefined,
+                                  verified: false,
+                                };
+                                const list = [...(pro.experience || []), next];
+                                await saveProfessional({ ...pro, experience: list });
+                                setExpRole(''); setExpCompany(''); setExpStart(''); setExpEnd(''); setExpSummary('');
+                              }}
                             >
                               Add experience
                             </Button>
@@ -2244,100 +754,75 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="pt-4 border-t space-y-3">
-                      <h3 className="font-semibold mb-1 flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span>Education</span>
-                      </h3>
-
-                      <div className="space-y-2">
-                        {viewedPro.education.length > 0 ? (
-                          viewedPro.education.map((education, index) => (
-                            <div
-                              key={index}
-                              className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
-                            >
-                              <div>
-                                <div className="font-medium text-sm">
-                                  {education.institution || 'Institution'}
+                      <div>
+                        <h3 className="font-semibold mb-1 flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span>Education</span>
+                        </h3>
+                        <div className="space-y-2">
+                          {(pro.education || []).length ? (
+                            pro.education!.map((e, idx) => (
+                              <div key={idx} className="p-3 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                  <div className="font-medium text-sm">{e.institution || 'Institution'}</div>
+                                  <div className="text-xs text-muted-foreground">{e.degree || 'Degree'}{e.field ? ` • ${e.field}` : ''}{(e.start || e.end) && ` • ${e.start || ''}${e.start && e.end ? ' – ' : ''}${e.end || ''}`}</div>
                                 </div>
-
-                                <div className="text-xs text-muted-foreground">
-                                  {education.degree || 'Degree'}
-                                  {education.field
-                                    ? ` · ${education.field}`
-                                    : ''}
-                                  {(education.start || education.end) &&
-                                    ` · ${education.start || ''}${
-                                      education.start && education.end
-                                        ? ' – '
-                                        : ''
-                                    }${education.end || ''}`}
+                                <div className="flex items-center gap-2">
+                                  {e.verified && <Badge variant="outline" className="text-[10px]">Verified</Badge>}
+                                  {isOwnProfile && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[10px]"
+                                      onClick={async () => {
+                                        const list = [...(pro.education || [])];
+                                        list[idx] = { ...list[idx], verified: !list[idx].verified };
+                                        await saveProfessional({ ...pro, education: list });
+                                      }}
+                                    >
+                                      {e.verified ? 'Unverify' : 'Verify (dev)'}
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
-
-                              {education.verified && (
-                                <PremiumVerifiedBadge size="sm" />
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            No education added yet.
-                          </p>
-                        )}
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Add education you want to highlight.</p>
+                          )}
+                        </div>
                       </div>
 
-                      {canEditProfessional && (
+                      {isOwnProfile && (
                         <div className="space-y-2">
-                          <Input
-                            placeholder="Institution"
-                            value={eduInstitution}
-                            onChange={(event) =>
-                              setEduInstitution(event.target.value)
-                            }
-                          />
-
+                          <input className="w-full px-2 py-1 border rounded text-xs bg-transparent" placeholder="Institution" value={eduInstitution} onChange={(e) => setEduInstitution(e.target.value)} />
                           <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              placeholder="Degree"
-                              value={eduDegree}
-                              onChange={(event) =>
-                                setEduDegree(event.target.value)
-                              }
-                            />
-
-                            <Input
-                              placeholder="Field"
-                              value={eduField}
-                              onChange={(event) =>
-                                setEduField(event.target.value)
-                              }
-                            />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Degree" value={eduDegree} onChange={(e) => setEduDegree(e.target.value)} />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Field of study" value={eduField} onChange={(e) => setEduField(e.target.value)} />
                           </div>
-
                           <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              placeholder="Start"
-                              value={eduStart}
-                              onChange={(event) =>
-                                setEduStart(event.target.value)
-                              }
-                            />
-
-                            <Input
-                              placeholder="End"
-                              value={eduEnd}
-                              onChange={(event) => setEduEnd(event.target.value)}
-                            />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="Start (e.g. 2019)" value={eduStart} onChange={(e) => setEduStart(e.target.value)} />
+                            <input className="px-2 py-1 border rounded text-xs bg-transparent" placeholder="End (or Present)" value={eduEnd} onChange={(e) => setEduEnd(e.target.value)} />
                           </div>
-
                           <div className="flex justify-end">
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="rounded-full"
-                              onClick={addEducation}
+                              onClick={async () => {
+                                if (!eduInstitution.trim()) return;
+                                const next = {
+                                  institution: eduInstitution.trim(),
+                                  degree: eduDegree.trim() || undefined,
+                                  field: eduField.trim() || undefined,
+                                  start: eduStart.trim() || undefined,
+                                  end: eduEnd.trim() || undefined,
+                                  verified: false,
+                                };
+                                const list = [...(pro.education || []), next];
+                                await saveProfessional({ ...pro, education: list });
+                                setEduInstitution(''); setEduDegree(''); setEduField(''); setEduStart(''); setEduEnd('');
+                              }}
                             >
                               Add education
                             </Button>
@@ -2353,65 +838,43 @@ export default function ProfilePage() {
                         <Sparkles className="h-4 w-4 text-primary" />
                         <span>Skills & Endorsements</span>
                       </h3>
-
                       <div className="flex flex-wrap gap-2">
-                        {viewedPro.skills.length > 0 ? (
-                          viewedPro.skills.map((skill) => (
-                            <div
-                              key={skill}
-                              className="flex items-center gap-2 border rounded-full px-3 py-1 cursor-pointer hover:bg-muted/60"
-                              onClick={() => {
-                                setMode('professional');
-                                navigate(`/feed?skill=${encodeURIComponent(skill)}`);
-                              }}
-                            >
-                              <span className="text-sm">{skill}</span>
-
-                              {!isOwnProfile && (
-                                <button
-                                  className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    endorseSkill(skill);
-                                  }}
-                                >
-                                  Endorse
-                                </button>
-                              )}
-
-                              <span className="text-xs text-muted-foreground">
-                                {viewedPro.endorsements?.[skill] || 0}
-                              </span>
+                        {(pro.skills || []).length ? (
+                          pro.skills!.map((s) => (
+                            <div key={s} className="flex items-center gap-2 border rounded-full px-3 py-1 cursor-pointer hover:bg-muted/60" onClick={() => {
+                              setMode('professional');
+                              navigate(`/feed?skill=${encodeURIComponent(s)}`);
+                            }}>
+                              <span className="text-sm">{s}</span>
+                              <button
+                                className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  endorseSkill(s);
+                                }}
+                              >
+                                Endorse
+                              </button>
+                              <span className="text-xs text-muted-foreground">{pro.endorsements?.[s] || 0}</span>
                             </div>
                           ))
                         ) : (
-                          <p className="text-muted-foreground text-sm">
-                            No skills added yet.
-                          </p>
+                          <p className="text-muted-foreground text-sm">Add skills to get endorsements</p>
                         )}
                       </div>
-
-                      {canEditProfessional && (
+                      {isOwnProfile && (
                         <div className="mt-3 flex gap-2">
-                          <Input
-                            placeholder="Add a skill"
-                            value={newSkill}
-                            onChange={(event) => setNewSkill(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                addSkill();
-                              }
-                            }}
-                          />
-
+                          <input className="px-3 py-2 border rounded w-48 bg-transparent" placeholder="Add a skill" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} />
                           <Button
-                            onClick={addSkill}
+                            onClick={async () => {
+                              const skill = newSkill.trim();
+                              if (!skill) return;
+                              const nextSkills = Array.from(new Set([...(pro.skills || []), skill]));
+                              await saveProfessional({ ...pro, skills: nextSkills });
+                              setNewSkill('');
+                            }}
                             variant="outline"
-                            className="rounded-full"
-                          >
-                            Add
-                          </Button>
+                          >Add</Button>
                         </div>
                       )}
                     </div>
@@ -2420,165 +883,334 @@ export default function ProfilePage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <h3 className="font-semibold mb-1 flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-muted-foreground" />
-                            <span>Professional summary</span>
+                            <Sparkles className="h-4 w-4 text-primary" />
+                            <span>AI Resume &amp; Skill Builder</span>
                           </h3>
-
-                          <p className="text-xs text-muted-foreground">
-                            A short summary visitors can see on your profile.
-                          </p>
+                          <p className="text-xs text-muted-foreground">Create a short professional summary based on your headline, bio, and skills.</p>
                         </div>
-
-                        {viewedPro.resumeSummary && (
-                          <Badge variant="outline" className="text-[10px]">
-                            Saved
-                          </Badge>
+                        {pro.resumeSummary && (
+                          <Badge variant="outline" className="text-[10px]">Saved</Badge>
                         )}
                       </div>
-
-                      {canEditProfessional ? (
-                        <div className="space-y-2">
-                          <textarea
-                            className="w-full min-h-[90px] px-3 py-2 border rounded-xl text-sm bg-background"
-                            placeholder="Write a short professional summary..."
-                            value={resumeDraft}
-                            onChange={(event) => setResumeDraft(event.target.value)}
-                          />
-
-                          <div className="flex justify-between items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="rounded-full"
-                              onClick={() => {
-                                const parts: string[] = [];
-                                if (headlineDraft) parts.push(headlineDraft);
-                                if (professionalBioDraft) {
-                                  parts.push(professionalBioDraft);
-                                }
-                                if (viewedPro.skills.length > 0) {
-                                  parts.push(
-                                    `Key skills: ${viewedPro.skills.join(', ')}`
-                                  );
-                                }
-
-                                setResumeDraft(
-                                  parts.length
-                                    ? parts.join(' • ')
-                                    : 'Add your role, experience, projects and skills.'
-                                );
-                              }}
-                            >
-                              Generate from profile
-                            </Button>
-
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="rounded-full"
-                              onClick={() =>
-                                saveProfessionalLive({
-                                  ...viewedPro,
-                                  resumeSummary: resumeDraft,
-                                })
+                      <div className="space-y-2">
+                        <textarea
+                          className="w-full min-h-[80px] px-3 py-2 border rounded text-sm bg-transparent"
+                          placeholder="Use the generator or write a brief summary of your experience, focus areas, and skills."
+                          value={resumeDraft}
+                          onChange={(e) => setResumeDraft(e.target.value)}
+                        />
+                        <div className="flex justify-between items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const parts: string[] = [];
+                              if (pro.headline) parts.push(pro.headline);
+                              if (pro.bio) parts.push(pro.bio);
+                              if (pro.skills && pro.skills.length) {
+                                parts.push(`Key skills: ${pro.skills.join(', ')}`);
                               }
+                              const text = parts.length
+                                ? parts.join(' • ')
+                                : 'Professional summary generated from your profile. Add your role, key projects, and skills.';
+                              setResumeDraft(text);
+                            }}
+                          >
+                            Generate from profile
+                          </Button>
+                          {isOwnProfile && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={async () => {
+                                await saveProfessional({ ...pro, resumeSummary: resumeDraft });
+                              }}
                             >
                               Save summary
                             </Button>
-                          </div>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {viewedPro.resumeSummary || 'No summary added yet.'}
-                        </p>
-                      )}
-                    </div>
-
-                    <div
-                      ref={collabSectionRef}
-                      className="pt-2 border-t space-y-2"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <h3 className="font-semibold mb-1">
-                            Open to creative collabs
-                          </h3>
-
-                          <p className="text-xs text-muted-foreground">
-                            Signal interest in collaborations and projects.
-                          </p>
-                        </div>
-
-                        {canEditProfessional ? (
-                          <button
-                            className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                              viewedPro.openToCollab
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-background text-muted-foreground'
-                            }`}
-                            onClick={() =>
-                              saveProfessionalLive({
-                                ...viewedPro,
-                                openToCollab: !viewedPro.openToCollab,
-                              })
-                            }
-                          >
-                            {viewedPro.openToCollab ? 'Open' : 'Closed'}
-                          </button>
-                        ) : (
-                          <Badge
-                            variant={viewedPro.openToCollab ? 'default' : 'outline'}
-                          >
-                            {viewedPro.openToCollab ? 'Open' : 'Closed'}
-                          </Badge>
-                        )}
                       </div>
                     </div>
+
+                    <div ref={collabSectionRef} className="pt-2 border-t space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold mb-1">Open to creative collabs</h3>
+                          <p className="text-xs text-muted-foreground">Signal that you're interested in collaborating with creators and communities.</p>
+                        </div>
+                        <button
+                          className={`px-3 py-1 rounded-full text-xs font-medium border ${pro.openToCollab ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'}`}
+                          onClick={async () => {
+                            await saveProfessional({ ...pro, openToCollab: !pro.openToCollab });
+                          }}
+                        >
+                          {pro.openToCollab ? 'Open' : 'Closed'}
+                        </button>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Collab note (optional)</p>
+                        <textarea
+                          className="w-full min-h-[60px] px-3 py-2 border rounded text-sm bg-transparent"
+                          placeholder="E.g. short-form video, brand design, storytelling collabs..."
+                          value={collabNoteDraft}
+                          onChange={(e) => {
+                            setCollabNoteDraft(e.target.value);
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {isOwnProfile && (
+                      <div className="pt-2 border-t">
+                        <Button
+                          onClick={async () => {
+                            await saveProfessional(pro);
+                          }}
+                        >Save Professional Profile</Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
+          
+          <TabsContent value="about" className="mt-6">
+            <Card className="rounded-2xl border border-border/60 shadow-none">
+              <CardContent className="py-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">Smart Profile</div>
+                    <div className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                      A professional snapshot focused on skills, goals, and career direction.
+                    </div>
+                  </div>
+                  {isOwnProfile ? (
+                    <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={aiSmartBusy !== null}
+                        onClick={aiRewriteProfessionally}
+                        className="w-full sm:w-auto"
+                      >
+                        {aiSmartBusy === 'rewrite' ? 'Rewriting…' : 'Rewrite professionally'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={aiSmartBusy !== null}
+                        onClick={aiCareerPositioning}
+                        className="w-full sm:w-auto"
+                      >
+                        {aiSmartBusy === 'positioning' ? 'Working…' : 'Career positioning'}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
 
+                {smartPositioningDraft ? (
+                  <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
+                    <div className="text-muted-foreground">{smartPositioningDraft}</div>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Skills</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(pro.skills || []).length ? (
+                        pro.skills!.slice(0, 20).map((s) => (
+                          <Badge key={s} variant="secondary" className="cursor-pointer" onClick={() => {
+                            setMode('professional');
+                            navigate(`/feed?skill=${encodeURIComponent(s)}`);
+                          }}>
+                            {s}
+                          </Badge>
+                        ))
+                      ) : (
+                        <div className="text-sm text-muted-foreground">No skills added yet.</div>
+                      )}
+                    </div>
+
+                    {isOwnProfile ? (
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={aiSmartBusy !== null}
+                          onClick={aiSuggestMissingSkills}
+                          className="w-full sm:w-auto"
+                        >
+                          {aiSmartBusy === 'skills' ? 'Suggesting…' : 'Suggest missing skills'}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Career goals</div>
+                      {isOwnProfile ? (
+                        <textarea
+                          className="w-full min-h-[84px] px-3 py-2 border rounded-xl text-sm bg-transparent"
+                          placeholder="E.g. Move into junior data analyst roles in fintech; build strong SQL + dashboarding skills."
+                          value={careerGoalsDraft}
+                          onChange={(e) => setCareerGoalsDraft(e.target.value)}
+                          onBlur={async () => {
+                            await saveProfessional({ ...pro, careerGoals: careerGoalsDraft });
+                          }}
+                        />
+                      ) : (
+                        <div className="text-sm text-muted-foreground leading-relaxed">{pro.careerGoals || 'Not specified.'}</div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Industry interests</div>
+                      <div className="flex flex-wrap gap-2">
+                        {(pro.industryInterests || []).length ? (
+                          (pro.industryInterests || []).map((x) => (
+                            <Badge
+                              key={x}
+                              variant="outline"
+                              className={isOwnProfile ? 'cursor-pointer' : ''}
+                              onClick={async () => {
+                                if (!isOwnProfile) return;
+                                await removeIndustryInterest(x);
+                              }}
+                            >
+                              {x}{isOwnProfile ? ' ×' : ''}
+                            </Badge>
+                          ))
+                        ) : (
+                          <div className="text-sm text-muted-foreground">Not specified.</div>
+                        )}
+                      </div>
+                      {isOwnProfile ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <Input
+                            value={industryInterestDraft}
+                            onChange={(e) => setIndustryInterestDraft(e.target.value)}
+                            placeholder="Add an industry (e.g. fintech)"
+                            className="h-9"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addIndustryInterest();
+                              }
+                            }}
+                          />
+                          <Button type="button" size="sm" variant="outline" onClick={addIndustryInterest} className="w-full sm:w-auto">
+                            Add
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Experience level</div>
+                      {isOwnProfile ? (
+                        <select
+                          className="w-full h-10 px-3 border rounded-xl bg-transparent text-sm"
+                          value={experienceLevelDraft}
+                          onChange={async (e) => {
+                            const v = e.target.value;
+                            setExperienceLevelDraft(v);
+                            await saveProfessional({ ...pro, experienceLevel: v as any });
+                          }}
+                        >
+                          <option value="">Select…</option>
+                          <option value="student">Student</option>
+                          <option value="entry">Entry</option>
+                          <option value="junior">Junior</option>
+                          <option value="mid">Mid</option>
+                          <option value="senior">Senior</option>
+                          <option value="lead">Lead</option>
+                          <option value="executive">Executive</option>
+                          <option value="career_switcher">Career switcher</option>
+                        </select>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">{pro.experienceLevel || 'Not specified.'}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {isOwnProfile && smartSuggestedSkillsDraft.length ? (
+                  <div className="rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Suggested skills</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {smartSuggestedSkillsDraft.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          className="text-xs rounded-full border border-border/60 bg-background px-3 py-1 hover:bg-muted/30"
+                          onClick={async () => {
+                            const nextSkills = Array.from(new Set([...(pro.skills || []), s]));
+                            await saveProfessional({ ...pro, skills: nextSkills });
+                          }}
+                          title="Add to skills"
+                        >
+                          + {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {smartSummaryDraft ? (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Professional summary</div>
+                    {isOwnProfile ? (
+                      <textarea
+                        className="w-full min-h-[110px] px-3 py-2 border rounded-xl text-sm bg-transparent"
+                        value={smartSummaryDraft}
+                        onChange={(e) => setSmartSummaryDraft(e.target.value)}
+                        onBlur={async () => {
+                          await saveProfessional({ ...pro, smartSummary: smartSummaryDraft });
+                        }}
+                      />
+                    ) : (
+                      <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{smartSummaryDraft}</div>
+                    )}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
           <TabsContent value="photos" className="mt-6">
             <Card>
               <CardContent className="py-6">
                 <div className="grid grid-cols-3 gap-2">
                   {userPosts
-                    .flatMap((post: any) => {
-                      return getPostImages(post).map((src) => ({
-                        id: `${post.id}-${src}`,
-                        src,
-                      }));
-                    })
-                    .map((item: any) => (
-                      <div
-                        key={item.id}
-                        className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                      >
+                    .filter(post => post.image)
+                    .map((post) => (
+                      <div key={post.id} className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity">
                         <img
-                          src={item.src}
+                          src={post.image}
                           alt="Post"
                           className="w-full h-full object-cover"
-                          loading="lazy"
-                          decoding="async"
                         />
                       </div>
                     ))}
                 </div>
-
-                {userPosts.flatMap((post: any) => getPostImages(post)).length === 0 ? (
-                  <p className="text-center text-muted-foreground py-6">
-                    No photos yet
-                  </p>
-                ) : null}
+                {userPosts.filter(post => post.image).length === 0 && (
+                  <p className="text-center text-muted-foreground py-6">No photos yet</p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
 
+      {/* Edit Profile Modal */}
       <EditProfileModal
         open={isEditModalOpen}
         onOpenChange={setIsEditModalOpen}

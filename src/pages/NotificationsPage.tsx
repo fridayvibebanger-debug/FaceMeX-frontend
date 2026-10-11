@@ -1,98 +1,30 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bell } from 'lucide-react';
-
 import Navbar from '@/components/layout/Navbar';
 import { useNotificationStore } from '@/store/notificationStore';
-import { supabase } from '@/lib/supabase';
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { Bell } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
-
-  const {
-    notifications,
-    unreadCount,
-    load,
-    read,
-    markAllAsRead,
-    readAll,
-  } = useNotificationStore();
+  const { notifications, unreadCount, load, read, markAllAsRead, readAll } = useNotificationStore();
 
   useEffect(() => {
     load().catch(() => {});
   }, [load]);
 
-  const handleConnectionResponse = async (
-    notificationId: string,
-    status: 'accepted' | 'declined'
-  ) => {
-    const { data: authData } = await supabase.auth.getUser();
-    const myId = authData.user?.id;
-
-    if (!myId) {
-      alert('Please login again.');
-      return;
-    }
-
-    const { error: requestError } = await supabase
-      .from('connection_requests')
-      .update({ status })
-      .eq('id', notificationId)
-      .eq('receiver_id', myId);
-
-    if (requestError) {
-      alert(`Connection update failed: ${requestError.message}`);
-      return;
-    }
-
-    const nextTitle =
-      status === 'accepted'
-        ? 'Connection accepted'
-        : 'Connection declined';
-
-    const nextMessage =
-      status === 'accepted'
-        ? 'You accepted this connection request.'
-        : 'You declined this connection request.';
-
-    const { error: notificationError } = await supabase
-      .from('notifications')
-      .update({
-        type: 'event',
-        title: nextTitle,
-        message: nextMessage,
-        is_read: true,
-      })
-      .eq('id', notificationId)
-      .eq('user_id', myId);
-
-    if (notificationError) {
-      alert(`Notification update failed: ${notificationError.message}`);
-      return;
-    }
-
-    await read(notificationId).catch(() => {});
-    await load().catch(() => {});
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-background">
       <Navbar />
-
       <div className="max-w-5xl mx-auto pt-14 md:pt-16 pb-16 md:pb-6 px-3 sm:px-4">
         <Card className="overflow-hidden">
           <CardHeader className="flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <Bell className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base md:text-lg">
-                Notifications
-              </CardTitle>
+              <CardTitle className="text-base md:text-lg">Notifications</CardTitle>
             </div>
-
             {unreadCount > 0 && (
               <Button
                 type="button"
@@ -105,7 +37,6 @@ export default function NotificationsPage() {
               </Button>
             )}
           </CardHeader>
-
           <CardContent>
             <ScrollArea className="h-[70vh]">
               {notifications.length === 0 ? (
@@ -115,61 +46,20 @@ export default function NotificationsPage() {
               ) : (
                 <div className="divide-y">
                   {notifications.map((n) => (
-                    <div
+                    <button
                       key={n.id}
-                      role="button"
-                      tabIndex={0}
-                      className={`w-full text-left p-3 transition-colors cursor-pointer ${
-                        n.isRead
-                          ? 'hover:bg-muted/40'
-                          : 'bg-blue-50/60 hover:bg-blue-50 dark:bg-blue-950/20 dark:hover:bg-blue-950/30'
+                      type="button"
+                      className={`w-full text-left p-3 transition-colors ${
+                        n.isRead ? 'hover:bg-muted/40' : 'bg-blue-50/60 hover:bg-blue-50'
                       }`}
                       onClick={() => {
                         read(n.id).catch(() => {});
                         if (n.actionUrl) navigate(n.actionUrl);
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          read(n.id).catch(() => {});
-                          if (n.actionUrl) navigate(n.actionUrl);
-                        }
-                      }}
                     >
                       <div className="text-sm font-semibold">{n.title}</div>
-
-                      <div className="text-sm text-muted-foreground">
-                        {n.message}
-                      </div>
-
-                      {String(n.type) === 'connection_request' && (
-                        <div className="mt-3 flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleConnectionResponse(n.id, 'accepted');
-                            }}
-                          >
-                            Accept
-                          </Button>
-
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleConnectionResponse(n.id, 'declined');
-                            }}
-                          >
-                            Decline
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                      <div className="text-sm text-muted-foreground">{n.message}</div>
+                    </button>
                   ))}
                 </div>
               )}

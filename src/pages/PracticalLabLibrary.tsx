@@ -477,6 +477,39 @@ function DnaReplicationLab({ onComplete }: { onComplete?: (score: number) => voi
   );
 }
 
+function LearningPath({ activeLayer, onChange }: { activeLayer: LearningLayer; onChange: (layer: LearningLayer) => void }) {
+  const labels: Record<LearningLayer, string> = {
+    subject: 'Subject',
+    topic: 'Topic',
+    lesson: 'Lesson',
+    simulation: 'Simulation',
+    assessment: 'Assessment',
+  };
+
+  return (
+    <div className="mb-5 overflow-x-auto pb-1">
+      <div className="flex min-w-max items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 lg:border-white/10 lg:bg-white/[0.04]">
+        {learningLayers.map((layer, index) => {
+          const active = activeLayer === layer;
+          return (
+            <div key={layer} className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onChange(layer)}
+                className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-white hover:text-slate-900 lg:text-slate-400 lg:hover:bg-white/10 lg:hover:text-white'}`}
+              >
+                <span className="mr-1.5 text-[10px] opacity-70">{index + 1}</span>
+                {labels[layer]}
+              </button>
+              {index < learningLayers.length - 1 && <span className="text-slate-300 lg:text-white/20">→</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ThreeDModelVisual({ lab, subject }: { lab: Lab; subject: Subject }) {
   const subjectLabels: Record<Subject, string> = {
     biology: 'Molecular structure',
@@ -699,6 +732,7 @@ export default function PracticalLabLibrary() {
   const [filterDifficulty, setFilterDifficulty] = useState<'all' | Difficulty>('all');
   const [teachingMode, setTeachingMode] = useState<TeachingMode>('learner');
   const [presentationMode, setPresentationMode] = useState(false);
+  const [activeLayer, setActiveLayer] = useState<LearningLayer>('subject');
   const [learningProgress, setLearningProgress] = useState<LearningProgress>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(LEARNING_PROGRESS_KEY) || 'null');
@@ -781,6 +815,16 @@ export default function PracticalLabLibrary() {
   const totalCompleted = subjectCards.reduce((sum, subject) => sum + subject.labs.filter(isLabCompleted).length, 0);
   const totalLabs = subjectCards.reduce((sum, subject) => sum + subject.labs.length, 0);
   const progress = Math.round((totalCompleted / totalLabs) * 100);
+  const allLabs = subjectCards.flatMap((subject) => subject.labs);
+  const currentLab = allLabs.find((lab) => lab.id === learningProgress.lastLabId);
+  const recommendedLab = allLabs.find((lab) => !isLabCompleted(lab));
+  const bestScore = Object.values(learningProgress.scores).reduce((best, score) => Math.max(best, score), 0);
+
+  const openLab = (lab: Lab) => {
+    setSelectedSubject(lab.subject);
+    setSelectedLabId(lab.id);
+    setActiveLayer(isLabCompleted(lab) ? 'assessment' : 'topic');
+  };
 
   return (
     <div className="min-h-screen bg-white text-slate-950 lg:bg-[#050505] lg:text-white">
@@ -840,6 +884,35 @@ export default function PracticalLabLibrary() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {!selectedSubject ? (
           <section>
+            <div className="mb-8 rounded-3xl border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-[#111]">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 lg:text-slate-400">My learning</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">Keep moving forward</h2>
+                  <p className="mt-1 text-sm text-slate-600 lg:text-slate-400">
+                    {currentLab ? `Last explored: ${currentLab.name}` : 'Start with a guided practical lab.'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-white px-4 py-3 lg:bg-white/[0.06]">
+                    <p className="text-xl font-bold text-blue-600">{totalCompleted}/{totalLabs}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Completed</p>
+                  </div>
+                  <div className="rounded-2xl bg-white px-4 py-3 lg:bg-white/[0.06]">
+                    <p className="text-xl font-bold text-amber-600">{bestScore}%</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Best score</p>
+                  </div>
+                  {recommendedLab && (
+                    <button type="button" onClick={() => openLab(recommendedLab)} className="col-span-2 rounded-2xl bg-blue-600 px-4 py-3 text-left text-white transition hover:bg-blue-500 sm:col-span-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-100">Next lab</p>
+                      <p className="mt-1 truncate text-sm font-semibold">{recommendedLab.name}</p>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold sm:text-2xl">Discipline pathways</h2>
@@ -858,6 +931,7 @@ export default function PracticalLabLibrary() {
                     onClick={() => {
                       setSelectedSubject(subject.id);
                       setSelectedLabId(subject.labs[0]?.id ?? null);
+                      setActiveLayer('topic');
                     }}
                     className="group overflow-hidden rounded-3xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl lg:border-white/10 lg:bg-[#111]"
                   >
@@ -917,6 +991,8 @@ export default function PracticalLabLibrary() {
               </div>
             </div>
 
+            <LearningPath activeLayer={activeLayer} onChange={setActiveLayer} />
+
             <div className="flex flex-wrap gap-2">
               {Array.from(new Set(selectedSubjectData?.labs.map((lab) => lab.topic || lab.badge) || [])).map((topic) => (
                 <button
@@ -964,6 +1040,7 @@ export default function PracticalLabLibrary() {
 
               {activeLab ? (
                 <div className={`rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:border-white/10 lg:bg-[#111] ${presentationMode ? 'fixed inset-4 z-40 overflow-y-auto lg:inset-10' : ''}`}>
+                  <LearningPath activeLayer={activeLayer} onChange={setActiveLayer} />
                   <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
                     <div>
                       <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
@@ -978,7 +1055,45 @@ export default function PracticalLabLibrary() {
                     </button>
                   </div>
 
-                  {activeLab.id === 'dna-replication' ? (
+                  {activeLayer === 'subject' || activeLayer === 'topic' ? (
+                    <div className="mt-5 space-y-5">
+                      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-blue-950 lg:border-blue-400/20 lg:bg-blue-400/10 lg:text-blue-100">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 lg:text-blue-300">Orientation</p>
+                        <h4 className="mt-2 text-xl font-semibold">Prepare to enter the {activeLab.badge.toLowerCase()} lab</h4>
+                        <p className="mt-2 text-sm leading-6">Choose the lesson layer when you are ready to study the concept, then move into the simulation to test it.</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {['Learn the concept', 'Explore the model', 'Practice safely'].map((item) => (
+                          <button key={item} type="button" onClick={() => setActiveLayer(item === 'Learn the concept' ? 'lesson' : 'simulation')} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left text-sm font-semibold transition hover:border-blue-400 hover:bg-blue-50 lg:border-white/10 lg:bg-white/[0.04] lg:hover:bg-white/10">
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : activeLayer === 'lesson' ? (
+                    <div className="mt-5 grid gap-5 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-white/[0.04]">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Lesson</p>
+                        <h4 className="mt-2 text-xl font-semibold">{activeLab.name}</h4>
+                        <p className="mt-3 text-sm leading-6 text-slate-700 lg:text-slate-300">{activeLab.theory}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 lg:border-white/10 lg:bg-white/[0.04]">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Objective</p>
+                        <p className="mt-3 text-sm leading-6 text-slate-700 lg:text-slate-300">{activeLab.objective}</p>
+                        <button type="button" onClick={() => setActiveLayer('simulation')} className="mt-5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500">Enter simulation</button>
+                      </div>
+                    </div>
+                  ) : activeLayer === 'assessment' ? (
+                    <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 lg:border-amber-400/20 lg:bg-amber-400/10 lg:text-amber-100">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em]">Assessment</p>
+                      <h4 className="mt-2 text-xl font-semibold">Explain what the simulation demonstrated</h4>
+                      <p className="mt-3 text-sm leading-6">Use your experiment result, prediction, and observations to explain the scientific principle in your own words. Re-run the simulation if you need more evidence.</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-white/70 px-3 py-1.5 text-xs font-semibold lg:bg-black/20">Score: {learningProgress.scores[activeLab.id] || 0}%</span>
+                        <button type="button" onClick={() => setActiveLayer('simulation')} className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500">Retry experiment</button>
+                      </div>
+                    </div>
+                  ) : activeLab.id === 'dna-replication' ? (
                     <DnaReplicationLab onComplete={(score) => recordLabResult(activeLab.id, score)} />
                   ) : (
                   <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">

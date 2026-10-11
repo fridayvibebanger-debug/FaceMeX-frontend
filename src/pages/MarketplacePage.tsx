@@ -1,884 +1,299 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabaseClient';
 
-type SellerCta = 'contact' | 'website' | 'whatsapp' | 'call' | 'message';
-
-interface ShopItem {
+interface Product {
   id: string;
   title: string;
-  description: string;
-  image: string;
-  showPrice: boolean;
-  price?: number;
-  currency: 'ZAR';
-}
-
-interface Shop {
-  id: string;
-  shopName: string;
+  price: number;
+  currency: 'USD' | 'EUR' | 'ZAR';
   category: string;
-  tagline: string;
+  image: string;
   description: string;
-  coverImage: string;
-  sellerName: string;
-  phone?: string;
-  whatsapp?: string;
-  website?: string;
-  location?: string;
-  cta: SellerCta;
-  items: ShopItem[];
-  featured?: boolean;
+  nft?: boolean;
 }
-
-const exampleShops: Shop[] = [
-  {
-    id: 'shop-food-001',
-    shopName: 'Nkowankowa Kota House',
-    category: 'Food',
-    tagline: 'Fresh kota, chips, burgers and lunch combos.',
-    description:
-      'Local fast-food shop serving kota, chips, burgers and daily lunch specials. Perfect for students, workers and family orders.',
-    coverImage:
-      'https://images.unsplash.com/photo-1561758033-d89a9ad46330?auto=format&fit=crop&w=1200&q=80',
-    sellerName: 'Kota House Team',
-    whatsapp: '+27760000000',
-    phone: '+27760000000',
-    website: '',
-    location: 'Nkowankowa / Tzaneen',
-    cta: 'whatsapp',
-    featured: true,
-    items: [
-      {
-        id: 'item-kota-1',
-        title: 'Classic Kota',
-        description: 'Bread, chips, cheese, polony and sauce.',
-        image:
-          'https://images.unsplash.com/photo-1571091718767-18b5b1457add?auto=format&fit=crop&w=900&q=80',
-        showPrice: true,
-        price: 35,
-        currency: 'ZAR',
-      },
-      {
-        id: 'item-kota-2',
-        title: 'Family Chips Combo',
-        description: 'Large chips with sauces for sharing.',
-        image:
-          'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=900&q=80',
-        showPrice: true,
-        price: 65,
-        currency: 'ZAR',
-      },
-    ],
-  },
-  {
-    id: 'shop-fashion-001',
-    shopName: 'Limpopo Streetwear Hub',
-    category: 'Fashion',
-    tagline: 'Premium sneakers, caps, T-shirts and weekend outfits.',
-    description:
-      'A youth fashion seller offering clean streetwear looks, casual wear and selected sneaker drops.',
-    coverImage:
-      'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=1200&q=80',
-    sellerName: 'Streetwear Seller',
-    whatsapp: '+27710000000',
-    phone: '+27710000000',
-    website: 'https://example.com',
-    location: 'Tzaneen',
-    cta: 'website',
-    featured: true,
-    items: [
-      {
-        id: 'item-fashion-1',
-        title: 'Premium T-Shirt',
-        description: 'Clean everyday T-shirt for casual wear.',
-        image:
-          'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80',
-        showPrice: true,
-        price: 180,
-        currency: 'ZAR',
-      },
-      {
-        id: 'item-fashion-2',
-        title: 'Sneaker Drop',
-        description: 'Limited sneaker stock. Contact seller for sizes.',
-        image:
-          'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80',
-        showPrice: false,
-        currency: 'ZAR',
-      },
-    ],
-  },
-  {
-    id: 'shop-services-001',
-    shopName: 'Creator Media Studio',
-    category: 'Services',
-    tagline: 'Posters, ads, videos, logo design and content packages.',
-    description:
-      'Creative shop for small businesses that need posters, ad creatives, product videos and social media content.',
-    coverImage:
-      'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80',
-    sellerName: 'Creative Team',
-    whatsapp: '+27690000000',
-    phone: '+27690000000',
-    website: '',
-    location: 'Remote / South Africa',
-    cta: 'contact',
-    featured: false,
-    items: [
-      {
-        id: 'item-service-1',
-        title: 'Business Poster Design',
-        description: 'Clean advert poster for WhatsApp, Facebook and Instagram.',
-        image:
-          'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
-        showPrice: true,
-        price: 150,
-        currency: 'ZAR',
-      },
-      {
-        id: 'item-service-2',
-        title: 'Short Promo Video',
-        description: 'Short video advert for product or business launch.',
-        image:
-          'https://images.unsplash.com/photo-1492724441997-5dc865305da7?auto=format&fit=crop&w=900&q=80',
-        showPrice: true,
-        price: 350,
-        currency: 'ZAR',
-      },
-    ],
-  },
-];
 
 export default function MarketplacePage() {
   const [query, setQuery] = useState('');
+  const [processing, setProcessing] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'card'>('card');
-
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [creditsRand, setCreditsRand] = useState<number>(200);
+  const [quickSpend, setQuickSpend] = useState<boolean>(false);
+  const [quickSpendDraftIdx, setQuickSpendDraftIdx] = useState<number>(0);
+  const [quickSpendImpr, setQuickSpendImpr] = useState<number>(0);
   const [campaignName, setCampaignName] = useState('');
   const [campaignObjective, setCampaignObjective] = useState('Awareness');
   const [campaignBudget, setCampaignBudget] = useState('500');
 
-  const [shops, setShops] = useState<Shop[]>(exampleShops);
-  const [loadingShops, setLoadingShops] = useState(false);
+  const products: Product[] = useMemo(() => [], []);
 
-  const [shopOpen, setShopOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(false);
-  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
+  const filtered = useMemo(() => products.filter(p => p.title.toLowerCase().includes(query.toLowerCase()) || p.category.includes(query.toLowerCase())), [products, query]);
 
-  const [shopName, setShopName] = useState('');
-  const [sellerName, setSellerName] = useState('');
-  const [shopCategory, setShopCategory] = useState('Food');
-  const [shopTagline, setShopTagline] = useState('');
-  const [shopDescription, setShopDescription] = useState('');
-  const [shopCoverImage, setShopCoverImage] = useState('');
-  const [shopPhone, setShopPhone] = useState('');
-  const [shopWhatsapp, setShopWhatsapp] = useState('');
-  const [shopWebsite, setShopWebsite] = useState('');
-  const [shopLocation, setShopLocation] = useState('');
-  const [shopCta, setShopCta] = useState<SellerCta>('contact');
+  const saveLS = (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  const readLS = (k: string) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+  const readUsage = () => { const v = readLS('ads:usage'); return Array.isArray(v) ? v : []; };
+  const [usage, setUsage] = useState<Array<any>>(() => readUsage());
+  const pushUsage = (e: any) => { const arr = readUsage(); arr.unshift({ ts: new Date().toISOString(), ...e }); const next = arr.slice(0, 50); saveLS('ads:usage', next); setUsage(next); };
 
-  const [itemTitle, setItemTitle] = useState('');
-  const [itemDescription, setItemDescription] = useState('');
-  const [itemImage, setItemImage] = useState('');
-  const [itemPrice, setItemPrice] = useState('');
-  const [itemShowPrice, setItemShowPrice] = useState(true);
-  const [draftItems, setDraftItems] = useState<ShopItem[]>([]);
-
-  const saveLS = (key: string, value: any) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      // ignore
-    }
-  };
-
-  const readLS = (key: string) => {
-    try {
-      const value = localStorage.getItem(key);
-      return value ? JSON.parse(value) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const readLocalShops = (): Shop[] => {
-    const local = readLS('mall:shops');
-    return Array.isArray(local) ? local : [];
-  };
-
-  const [creditsBalance, setCreditsBalance] = useState<number>(
-    () => readLS('ads:credits') || 0
+  const [creditsBalance, setCreditsBalance] = useState<number>(() => readLS('ads:credits') || 0);
+  const [drafts, setDrafts] = useState<Array<{ name: string; objective: string; budget: string; ts: string; lastRun?: string }>>(
+    () => Array.isArray(readLS('ads:campaigns')) ? readLS('ads:campaigns') : []
   );
-
-  const [drafts, setDrafts] = useState<
-    Array<{
-      name: string;
-      objective: string;
-      budget: string;
-      ts: string;
-      lastRun?: string;
-    }>
-  >(() =>
-    Array.isArray(readLS('ads:campaigns')) ? readLS('ads:campaigns') : []
-  );
-
-  const [usage, setUsage] = useState<Array<any>>(() =>
-    Array.isArray(readLS('ads:usage')) ? readLS('ads:usage') : []
-  );
-
   const [showAllDrafts, setShowAllDrafts] = useState(false);
 
   const impressionsFor = (rands: number) => Math.max(0, (rands || 0) * 10);
 
-  useEffect(() => {
-    let mounted = true;
+  // Creator & Business Marketplace state
+  type Gig = { id: string; title: string; rate: number; currency: 'USD'|'EUR'|'ZAR'; category: string; desc: string; skills: string };
+  type Project = { id: string; title: string; budget: number; currency: 'USD'|'EUR'|'ZAR'; desc: string; skills: string; open: boolean };
+  type Escrow = { id: string; kind: 'gig'|'project'; title: string; partyA: string; partyB: string; amount: number; currency: 'USD'|'EUR'|'ZAR'; status: 'draft'|'funded'|'released'|'refunded' };
+  const readArr = (k: string) => Array.isArray(readLS(k)) ? readLS(k) as any[] : [];
+  const [gigs, setGigs] = useState<Gig[]>(() => readArr('mp:gigs'));
+  const [projects, setProjects] = useState<Project[]>(() => readArr('mp:projects'));
+  const [escrows, setEscrows] = useState<Escrow[]>(() => readArr('mp:escrows'));
+  const [escrowHist, setEscrowHist] = useState<Array<{ ts: string; id: string; action: string; title: string }>>(() => readArr('mp:escrows:hist'));
+  const saveGigs = (arr: Gig[]) => { setGigs(arr); saveLS('mp:gigs', arr); };
+  const saveProjects = (arr: Project[]) => { setProjects(arr); saveLS('mp:projects', arr); };
+  const saveEscrows = (arr: Escrow[]) => { setEscrows(arr); saveLS('mp:escrows', arr); };
+  const pushEscrowHist = (h: { id: string; action: string; title: string }) => {
+    const next = [{ ts: new Date().toISOString(), ...h }, ...escrowHist].slice(0, 50);
+    setEscrowHist(next); saveLS('mp:escrows:hist', next);
+  };
+  // Forms
+  const [gigOpen, setGigOpen] = useState(false);
+  const [gigTitle, setGigTitle] = useState('');
+  const [gigRate, setGigRate] = useState<number>(25);
+  const [gigCur, setGigCur] = useState<'USD'|'EUR'|'ZAR'>('ZAR');
+  const [gigCat, setGigCat] = useState('design');
+  const [gigDesc, setGigDesc] = useState('');
+  const [gigSkills, setGigSkills] = useState('Figma, Branding');
 
-    async function loadMarketplaceShops() {
-      const localShops = readLocalShops();
+  const [projOpen, setProjOpen] = useState(false);
+  const [projTitle, setProjTitle] = useState('');
+  const [projBudget, setProjBudget] = useState<number>(500);
+  const [projCur, setProjCur] = useState<'USD'|'EUR'|'ZAR'>('ZAR');
+  const [projDesc, setProjDesc] = useState('');
+  const [projSkills, setProjSkills] = useState('Video editing, Motion');
 
-      setShops([...localShops, ...exampleShops]);
-      setLoadingShops(false);
+  const [escrowOpen, setEscrowOpen] = useState(false);
+  const [escKind, setEscKind] = useState<'gig'|'project'>('gig');
+  const [escTitle, setEscTitle] = useState('');
+  const [escA, setEscA] = useState('Client');
+  const [escB, setEscB] = useState('Creator');
+  const [escAmt, setEscAmt] = useState<number>(200);
+  const [escCur, setEscCur] = useState<'USD'|'EUR'|'ZAR'>('ZAR');
 
-      const { data: dbShops, error: shopsError } = await supabase
-        .from('marketplace_shops')
-        .select('*')
-        .eq('is_active', true)
-        .order('featured', { ascending: false })
-        .order('created_at', { ascending: false });
+  // Offers/Proposals
+  type Note = { from: string; text: string; ts: string };
+  type Offer = { id: string; gigId: string; from: string; amount: number; currency: 'USD'|'EUR'|'ZAR'; message?: string; ts: string; status: 'pending'|'accepted'|'rejected'; notes?: Note[] };
+  type Proposal = { id: string; projectId: string; from: string; bid: number; currency: 'USD'|'EUR'|'ZAR'; message?: string; ts: string; status: 'pending'|'accepted'|'rejected'; notes?: Note[] };
+  const [offers, setOffers] = useState<Offer[]>(() => readArr('mp:offers'));
+  const [proposals, setProposals] = useState<Proposal[]>(() => readArr('mp:proposals'));
+  const saveOffers = (arr: Offer[]) => { setOffers(arr); saveLS('mp:offers', arr); };
+  const saveProposals = (arr: Proposal[]) => { setProposals(arr); saveLS('mp:proposals', arr); };
+  // Offer modal
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [offerGigId, setOfferGigId] = useState<string>('');
+  const [offerFrom, setOfferFrom] = useState('Business');
+  const [offerAmt, setOfferAmt] = useState<number>(200);
+  const [offerCur, setOfferCur] = useState<'USD'|'EUR'|'ZAR'>('ZAR');
+  const [offerMsg, setOfferMsg] = useState('');
+  // Offer thread modal (view offers for a gig)
+  const [offerThreadOpen, setOfferThreadOpen] = useState(false);
+  const [threadGigId, setThreadGigId] = useState<string>('');
+  const [threadNote, setThreadNote] = useState('');
+  // Proposal modal
+  const [propOpen, setPropOpen] = useState(false);
+  const [propProjectId, setPropProjectId] = useState<string>('');
+  const [propFrom, setPropFrom] = useState('Creator');
+  const [propBid, setPropBid] = useState<number>(300);
+  const [propCur, setPropCur] = useState<'USD'|'EUR'|'ZAR'>('ZAR');
+  const [propMsg, setPropMsg] = useState('');
+  // Proposal thread modal (view proposals for a project)
+  const [propThreadOpen, setPropThreadOpen] = useState(false);
+  const [threadProjectId, setThreadProjectId] = useState<string>('');
+  const [propThreadNote, setPropThreadNote] = useState('');
+  // Payments setup modal
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
 
-      if (shopsError) {
-        console.log('Marketplace shops load failed:', shopsError.message);
-        return;
-      }
+  // Filters
+  const [gigSkillFilter, setGigSkillFilter] = useState('');
+  const [gigCatFilter, setGigCatFilter] = useState('');
+  const [gigMinRate, setGigMinRate] = useState<number | ''>('');
+  const [gigMaxRate, setGigMaxRate] = useState<number | ''>('');
+  const [projSkillFilter, setProjSkillFilter] = useState('');
+  const [projMinBudget, setProjMinBudget] = useState<number | ''>('');
+  const [projMaxBudget, setProjMaxBudget] = useState<number | ''>('');
 
-      if (!dbShops || dbShops.length === 0) {
-        return;
-      }
-
-      const shopIds = dbShops.map((shop: any) => shop.id);
-
-      const { data: dbItems, error: itemsError } = await supabase
-        .from('marketplace_items')
-        .select('*')
-        .in('shop_id', shopIds)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (itemsError) {
-        console.log('Marketplace items load failed:', itemsError.message);
-      }
-
-      const itemsByShop = new Map<string, ShopItem[]>();
-
-      (dbItems || []).forEach((item: any) => {
-        const list = itemsByShop.get(item.shop_id) || [];
-
-        list.push({
-          id: item.id,
-          title: item.title || 'Untitled item',
-          description: item.description || 'Contact seller for details.',
-          image:
-            item.image ||
-            'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80',
-          showPrice: item.show_price !== false,
-          price: item.price ? Number(item.price) : undefined,
-          currency: 'ZAR',
-        });
-
-        itemsByShop.set(item.shop_id, list);
-      });
-
-      const mapped: Shop[] = dbShops.map((shop: any) => ({
-        id: shop.id,
-        shopName: shop.shop_name || 'Untitled shop',
-        category: shop.category || 'General',
-        tagline: shop.tagline || 'Premium shop on FaceMeX Marketplace.',
-        description:
-          shop.description ||
-          'This seller has listed products or services on FaceMeX Marketplace.',
-        coverImage:
-          shop.cover_image ||
-          'https://images.unsplash.com/photo-1481437156560-3205f6a55735?auto=format&fit=crop&w=1200&q=80',
-        sellerName: shop.seller_name || 'Seller',
-        phone: shop.phone || '',
-        whatsapp: shop.whatsapp || '',
-        website: shop.website || '',
-        location: shop.location || '',
-        cta: (shop.cta || 'contact') as SellerCta,
-        featured: !!shop.featured,
-        items: itemsByShop.get(shop.id) || [],
-      }));
-
-      if (mounted) {
-        setShops([...localShops, ...mapped, ...exampleShops]);
-        setLoadingShops(false);
-      }
-    }
-
-    loadMarketplaceShops();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
-
-    return shops.filter((shop) => {
-      if (!q) return true;
-
-      return (
-        shop.shopName.toLowerCase().includes(q) ||
-        shop.category.toLowerCase().includes(q) ||
-        shop.tagline.toLowerCase().includes(q) ||
-        shop.description.toLowerCase().includes(q) ||
-        shop.items.some(
-          (item) =>
-            item.title.toLowerCase().includes(q) ||
-            item.description.toLowerCase().includes(q)
-        )
-      );
+  const filteredGigs = useMemo(() => {
+    return gigs.filter(g => {
+      const skillOk = !gigSkillFilter || g.skills.toLowerCase().includes(gigSkillFilter.toLowerCase());
+      const catOk = !gigCatFilter || g.category.toLowerCase().includes(gigCatFilter.toLowerCase());
+      const minOk = gigMinRate === '' || g.rate >= Number(gigMinRate);
+      const maxOk = gigMaxRate === '' || g.rate <= Number(gigMaxRate);
+      return skillOk && catOk && minOk && maxOk;
     });
-  }, [shops, query]);
+  }, [gigs, gigSkillFilter, gigCatFilter, gigMinRate, gigMaxRate]);
 
-  const saveShopsToLocal = (next: Shop[]) => {
-    const onlyLocal = next.filter((shop) => shop.id.startsWith('local-shop-'));
-    saveLS('mall:shops', onlyLocal);
-    setShops(next);
-  };
-
-  const openShopItems = (shop: Shop) => {
-    setSelectedShop(shop);
-    setItemsOpen(true);
-  };
-
-  const contactSeller = (shop: Shop) => {
-    const text = encodeURIComponent(
-      `Hi ${shop.sellerName}, I saw your shop "${shop.shopName}" on FaceMeX Marketplace. I am interested in your items.`
-    );
-
-    if (shop.whatsapp) {
-      const cleanPhone = shop.whatsapp.replace(/\D/g, '');
-      window.open(
-        `https://wa.me/${cleanPhone}?text=${text}`,
-        '_blank',
-        'noopener,noreferrer'
-      );
-      return;
-    }
-
-    if (shop.phone) {
-      window.location.href = `tel:${shop.phone}`;
-      return;
-    }
-
-    if (shop.cta === 'message') {
-      window.location.href = '/messages';
-      return;
-    }
-
-    toast({
-      title: 'Seller contact',
-      description:
-        'This seller has not added WhatsApp or phone details yet. Try viewing their items or website.',
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => {
+      const skillOk = !projSkillFilter || p.skills.toLowerCase().includes(projSkillFilter.toLowerCase());
+      const minOk = projMinBudget === '' || p.budget >= Number(projMinBudget);
+      const maxOk = projMaxBudget === '' || p.budget <= Number(projMaxBudget);
+      return skillOk && minOk && maxOk;
     });
+  }, [projects, projSkillFilter, projMinBudget, projMaxBudget]);
+
+  const pay = (id: string) => {
+    setProcessing(id);
+    setTimeout(() => {
+      toast({ title: 'Purchase confirmed', description: `Paid via ${paymentMethod.toUpperCase()}.` });
+      setProcessing(null);
+    }, 700);
   };
 
-  const secondaryShopAction = (shop: Shop) => {
-    if (shop.website && shop.cta === 'website') {
-      window.open(shop.website, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    openShopItems(shop);
-  };
-
-  const buildDraftItem = (): ShopItem | null => {
-    if (!itemTitle.trim()) {
-      toast({
-        title: 'Item name required',
-        description: 'Add the item or product name before adding it to your shop.',
-      });
-      return null;
-    }
-
-    return {
-      id: `local-item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      title: itemTitle,
-      description: itemDescription || 'Contact seller for more details.',
-      image:
-        itemImage ||
-        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80',
-      showPrice: itemShowPrice,
-      price: itemShowPrice ? Number(itemPrice || 0) : undefined,
-      currency: 'ZAR',
-    };
-  };
-
-  const addDraftItem = () => {
-    const item = buildDraftItem();
-
-    if (!item) return;
-
-    setDraftItems((current) => [item, ...current]);
-    setItemTitle('');
-    setItemDescription('');
-    setItemImage('');
-    setItemPrice('');
-    setItemShowPrice(true);
-
-    toast({
-      title: 'Item added',
-      description: `${item.title} added to your shop display.`,
-    });
-  };
-
-  const addShop = () => {
-    if (!shopName.trim()) {
-      toast({
-        title: 'Shop name required',
-        description: 'Add your shop name before publishing.',
-      });
-      return;
-    }
-
-    if (!sellerName.trim()) {
-      toast({
-        title: 'Seller name required',
-        description: 'Add seller or business owner name.',
-      });
-      return;
-    }
-
-    let finalItems = [...draftItems];
-
-    if (itemTitle.trim()) {
-      const item = buildDraftItem();
-      if (item) finalItems = [item, ...finalItems];
-    }
-
-    if (finalItems.length === 0) {
-      toast({
-        title: 'Add at least one item',
-        description: 'Your shop must display what you sell before customers enter.',
-      });
-      return;
-    }
-
-    const newShop: Shop = {
-      id: `local-shop-${Date.now()}`,
-      shopName,
-      category: shopCategory,
-      tagline: shopTagline || 'Premium local shop on FaceMeX Marketplace.',
-      description:
-        shopDescription ||
-        'This shop sells products and services through FaceMeX Marketplace.',
-      coverImage:
-        shopCoverImage ||
-        'https://images.unsplash.com/photo-1481437156560-3205f6a55735?auto=format&fit=crop&w=1200&q=80',
-      sellerName,
-      phone: shopPhone,
-      whatsapp: shopWhatsapp,
-      website: shopWebsite,
-      location: shopLocation,
-      cta: shopCta,
-      featured: false,
-      items: finalItems,
-    };
-
-    saveShopsToLocal([newShop, ...shops]);
-
-    setShopOpen(false);
-    setShopName('');
-    setSellerName('');
-    setShopTagline('');
-    setShopDescription('');
-    setShopCoverImage('');
-    setShopPhone('');
-    setShopWhatsapp('');
-    setShopWebsite('');
-    setShopLocation('');
-    setItemTitle('');
-    setItemDescription('');
-    setItemImage('');
-    setItemPrice('');
-    setItemShowPrice(true);
-    setDraftItems([]);
-
-    toast({
-      title: 'Shop published',
-      description: `${newShop.shopName} is now displayed in the marketplace mall.`,
-    });
-  };
-
-  const saveDrafts = (next: typeof drafts) => {
-    setDrafts(next);
-    saveLS('ads:campaigns', next);
-  };
-
-  const pushUsage = (event: any) => {
-    const next = [{ ts: new Date().toISOString(), ...event }, ...usage].slice(
-      0,
-      50
-    );
-    setUsage(next);
-    saveLS('ads:usage', next);
+  const saveDrafts = (arr: typeof drafts) => {
+    setDrafts(arr);
+    saveLS('ads:campaigns', arr);
   };
 
   const runDraft = (index: number) => {
-    const draft = drafts[index];
-    const needed = impressionsFor(parseInt(draft.budget || '0', 10));
-
+    const d = drafts[index];
+    const needed = impressionsFor(parseInt(d.budget || '0', 10));
     if (!needed || needed <= 0) {
-      toast({
-        title: 'Invalid budget',
-        description: 'Set a positive budget to run this draft.',
-      });
+      toast({ title: 'Invalid budget', description: 'Set a positive budget to run this draft.' });
       return;
     }
-
     if (creditsBalance < needed) {
-      toast({
-        title: 'Not enough credits',
-        description: `Need ${needed.toLocaleString()} impressions, you have ${creditsBalance.toLocaleString()}. Buy more credits.`,
-      });
+      toast({ title: 'Not enough credits', description: `Need ${needed.toLocaleString()} impressions, you have ${creditsBalance.toLocaleString()}. Buy more credits.` });
       return;
     }
-
-    const newBalance = creditsBalance - needed;
-    setCreditsBalance(newBalance);
-    saveLS('ads:credits', newBalance);
-
+    const newBal = creditsBalance - needed;
+    setCreditsBalance(newBal);
+    saveLS('ads:credits', newBal);
+    try { window.dispatchEvent(new Event('ad-credits-updated')); } catch {}
     const updated = drafts.slice();
-    updated[index] = { ...draft, lastRun: new Date().toISOString() };
+    updated[index] = { ...d, lastRun: new Date().toISOString() };
     saveDrafts(updated);
-
-    pushUsage({
-      type: 'run_campaign',
-      name: draft.name,
-      spentImpressions: needed,
-      balance: newBalance,
-    });
-
-    toast({
-      title: 'Campaign running',
-      description: `${draft.name} launched · Spent ${needed.toLocaleString()} impressions · Remaining ${newBalance.toLocaleString()}`,
-    });
+    pushUsage({ type: 'run_campaign', name: d.name, budgetR: parseInt(d.budget||'0',10), spentImpressions: needed, balance: newBal });
+    toast({ title: 'Campaign running', description: `${d.name} launched · Spent ${needed.toLocaleString()} impressions · Remaining ${newBal.toLocaleString()}` });
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-0 pb-10 md:pt-1">
-        <div className="rounded-2xl border bg-card px-4 py-3">
-          <div className="text-sm font-semibold">FaceMeX Marketplace Mall</div>
-          <div className="text-xs text-muted-foreground">
-            Example shops are shown below so users can see how sellers display
-            products, prices, contact buttons and item previews.
-          </div>
-        </div>
-
+    <div className="min-h-screen bg-background pt-16">
+      <div className="max-w-6xl mx-auto p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <Input
-            className="min-w-[240px] flex-1"
-            placeholder="Search shops, products, services..."
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-
+          <Input placeholder="Search products..." value={query} onChange={(e) => setQuery(e.target.value)} />
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Pay with Card:</span>
-            <Button
-              variant="default"
-              className="rounded-full"
-              onClick={() => setPaymentMethod('card')}
-            >
-              {paymentMethod === 'card' ? 'Card active' : 'Card'}
-            </Button>
+            <span>Pay with Card (ZAR):</span>
+            <Button variant="default" onClick={() => setPaymentMethod('card')}>Card</Button>
           </div>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
             {creditsBalance > 0 && (
-              <Badge variant="secondary">
-                Ad Credits: {creditsBalance.toLocaleString()} impressions
-              </Badge>
+              <Badge variant="secondary">Ad Credits: {creditsBalance.toLocaleString()} impressions</Badge>
             )}
-
-            <Button
-              variant="secondary"
-              className="rounded-full"
-              onClick={() => setCreditsOpen(true)}
-            >
-              Buy Ad Credits
-            </Button>
-
-            <Button
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setShopOpen(true)}
-            >
-              Open Shop
-            </Button>
-
-            <Button
-              className="rounded-full"
-              onClick={() => setCampaignOpen(true)}
-            >
-              Create Campaign
-            </Button>
+            <Button variant="secondary" onClick={() => setCreditsOpen(true)}>Buy Ad Credits</Button>
+            <Button onClick={() => setCampaignOpen(true)}>Create Campaign</Button>
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="md:col-span-2">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {loadingShops ? (
-                <div className="text-sm text-muted-foreground">
-                  Loading marketplace shops...
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  No shops found. Try another search or open your own shop.
-                </div>
-              ) : (
-                filtered.map((shop) => (
-                  <Card
-                    key={shop.id}
-                    className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
-                  >
-                    <div className="relative aspect-video bg-black/5">
-                      <img
-                        src={shop.coverImage}
-                        alt={shop.shopName}
-                        className="h-full w-full object-cover"
-                      />
-
-                      <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-                        {shop.featured && (
-                          <Badge className="bg-black/80 text-white hover:bg-black/80">
-                            Premium display
-                          </Badge>
-                        )}
-
-                        <Badge variant="secondary">{shop.category}</Badge>
-                      </div>
-                    </div>
-
-                    <CardHeader className="space-y-1">
-                      <CardTitle className="truncate text-base">
-                        {shop.shopName}
-                      </CardTitle>
-
-                      <div className="h-9 overflow-hidden text-xs text-muted-foreground">
-                        {shop.tagline}
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="space-y-3">
-                      <div className="h-16 overflow-hidden text-sm text-muted-foreground">
-                        {shop.description}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {shop.items.slice(0, 2).map((item) => (
-                          <div
-                            key={item.id}
-                            className="overflow-hidden rounded-xl border bg-muted/20"
-                          >
-                            <div className="aspect-square bg-black/5">
-                              <img
-                                src={item.image}
-                                alt={item.title}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-
-                            <div className="space-y-1 p-2">
-                              <div className="truncate text-xs font-semibold">
-                                {item.title}
-                              </div>
-
-                              <div className="h-8 overflow-hidden text-[11px] text-muted-foreground">
-                                {item.description}
-                              </div>
-
-                              <div className="text-xs font-semibold">
-                                {item.showPrice && item.price
-                                  ? `R${Number(item.price).toFixed(2)}`
-                                  : 'Ask seller'}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="truncate text-xs text-muted-foreground">
-                        Seller: {shop.sellerName}
-                        {shop.location ? ` · ${shop.location}` : ''}
-                      </div>
-                    </CardContent>
-
-                    <CardFooter className="flex items-center justify-between gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full"
-                        onClick={() => contactSeller(shop)}
-                      >
-                        Contact seller
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        className="rounded-full"
-                        onClick={() => secondaryShopAction(shop)}
-                      >
-                        {shop.website && shop.cta === 'website'
-                          ? 'Visit website'
-                          : 'View items'}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                ))
-              )}
+              {filtered.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No products yet.</div>
+              ) : filtered.map(p => (
+                <Card key={p.id} className="overflow-hidden">
+                  <div className="aspect-video bg-black/5">
+                    {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+                    <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
+                  </div>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      {p.title}
+                      {p.nft && <Badge variant="secondary">NFT</Badge>}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="text-sm text-muted-foreground">{p.description}</div>
+                    <div className="font-semibold">R{p.price.toFixed(2)}</div>
+                  </CardContent>
+                  <CardFooter className="flex justify-between">
+                    <Badge>{p.category}</Badge>
+                    <Button onClick={() => pay(p.id)} disabled={processing === p.id}>{processing === p.id ? 'Processing...' : 'Buy'}</Button>
+                  </CardFooter>
+                </Card>
+              ))}
             </div>
           </div>
-
           <div className="md:col-span-1">
-            <div className="space-y-3 md:sticky md:top-20">
+            <div className="md:sticky md:top-28 space-y-3">
+              {/* Drafts Panel */}
               <div className="rounded-xl border bg-card p-4">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center justify-between mb-2">
                   <div className="text-sm font-semibold">Draft Campaigns</div>
-
                   <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="rounded-full"
-                      onClick={() => setCreditsOpen(true)}
-                    >
-                      Top up
-                    </Button>
-
-                    <div className="text-xs text-muted-foreground">
-                      Stored locally
-                    </div>
+                    <Button size="sm" variant="outline" onClick={()=> setCreditsOpen(true)}>Top up</Button>
+                    <div className="text-xs text-muted-foreground">Stored locally</div>
                   </div>
                 </div>
-
                 {drafts.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">
-                    No drafts yet. Create a campaign to save a draft.
-                  </div>
+                  <div className="text-xs text-muted-foreground">No drafts yet. Create a campaign to save a draft.</div>
                 ) : (
                   <div className="space-y-2">
-                    {drafts
-                      .slice(0, showAllDrafts ? 10 : 5)
-                      .map((draft, index) => (
-                        <div
-                          key={`${draft.ts}-${index}`}
-                          className="flex items-center justify-between gap-2 rounded border p-2"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
-                              {draft.name}
-                            </div>
-
-                            <div className="truncate text-xs text-muted-foreground">
-                              {draft.objective} · Budget R{draft.budget} · Est{' '}
-                              {impressionsFor(
-                                parseInt(draft.budget || '0', 10)
-                              ).toLocaleString()}{' '}
-                              impressions
-                            </div>
-
-                            {draft.lastRun && (
-                              <div className="text-[11px] text-muted-foreground">
-                                Last run:{' '}
-                                {new Date(draft.lastRun).toLocaleString()}
-                              </div>
-                            )}
-                          </div>
-
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="rounded-full"
-                            onClick={() => runDraft(index)}
-                          >
-                            Run
-                          </Button>
+                    {drafts.slice(0, showAllDrafts ? 10 : 5).map((d, i) => (
+                      <div key={`${d.ts}-${i}`} className="flex items-center justify-between gap-2 p-2 rounded border">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{d.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{d.objective} · Budget R{d.budget} · Est {impressionsFor(parseInt(d.budget||'0',10)).toLocaleString()} impressions</div>
+                          {d.lastRun && (
+                            <div className="text-[11px] text-muted-foreground">Last run: {new Date(d.lastRun).toLocaleString()}</div>
+                          )}
                         </div>
-                      ))}
-
+                        <div className="shrink-0 flex items-center gap-2">
+                          <Button size="sm" variant="secondary" onClick={()=> runDraft(i)}>Run</Button>
+                        </div>
+                      </div>
+                    ))}
                     {drafts.length > 5 && (
                       <div className="flex justify-center">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setShowAllDrafts(!showAllDrafts)}
-                        >
+                        <Button size="sm" variant="ghost" onClick={()=> setShowAllDrafts(!showAllDrafts)}>
                           {showAllDrafts ? 'Collapse' : 'View all'}
                         </Button>
                       </div>
                     )}
+                    <div className="flex justify-end">
+                      <a href="/ads/drafts" className="text-xs text-primary hover:underline">View all drafts →</a>
+                    </div>
                   </div>
                 )}
               </div>
-
+              {/* Usage Panel */}
               <div className="rounded-xl border bg-card p-4">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center justify-between mb-2">
                   <div className="text-sm font-semibold">Ad Usage</div>
                   <div className="text-xs text-muted-foreground">Recent</div>
                 </div>
-
-                {usage.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">
-                    No usage yet.
-                  </div>
+                {(!usage || usage.length === 0) ? (
+                  <div className="text-xs text-muted-foreground">No usage yet.</div>
                 ) : (
                   <div className="space-y-1">
-                    {usage.slice(0, 5).map((event, index) => (
-                      <div
-                        key={`${event.ts}-${index}`}
-                        className="flex items-center justify-between text-xs text-muted-foreground"
-                      >
+                    {usage.slice(0,5).map((e, i) => (
+                      <div key={`${e.ts}-${i}`} className="text-xs text-muted-foreground flex items-center justify-between">
                         <span>
-                          {event.type === 'buy_credits' &&
-                            `Bought ${
-                              event.impressions?.toLocaleString?.() ||
-                              event.impressions
-                            }`}
-                          {event.type === 'run_campaign' &&
-                            `Ran ${event.name} · Spent ${
-                              event.spentImpressions?.toLocaleString?.() ||
-                              event.spentImpressions
-                            }`}
+                          {e.type === 'buy_credits' && `Bought ${e.impressions?.toLocaleString?.() || e.impressions}`}
+                          {e.type === 'run_campaign' && `Ran ${e.name} · Spent ${e.spentImpressions?.toLocaleString?.() || e.spentImpressions}`}
+                          {e.type === 'quick_spend' && `Quick spend · ${e.spentImpressions?.toLocaleString?.() || e.spentImpressions}`}
                         </span>
-
-                        <span>{new Date(event.ts).toLocaleTimeString()}</span>
+                        <span>{new Date(e.ts).toLocaleTimeString()}</span>
                       </div>
                     ))}
                   </div>
@@ -889,438 +304,521 @@ export default function MarketplacePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card className="md:col-span-1">
             <CardHeader>
               <CardTitle>Creator Gigs</CardTitle>
             </CardHeader>
-
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <div className="text-muted-foreground">Offer services</div>
-                <Button size="sm" className="rounded-full">
-                  New Gig
-                </Button>
+                <Button size="sm" onClick={()=> setGigOpen(true)}>New Gig</Button>
               </div>
-
-              <div className="text-xs text-muted-foreground">
-                Gigs can be connected to creator profiles next. For now, use
-                Open Shop to display products or services.
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Filter skills" value={gigSkillFilter} onChange={e=> setGigSkillFilter(e.target.value)} />
+                <Input placeholder="Category" value={gigCatFilter} onChange={e=> setGigCatFilter(e.target.value)} />
+                <Input type="number" placeholder="Min rate" value={gigMinRate as any} onChange={e=> setGigMinRate(e.target.value===''? '': parseFloat(e.target.value))} />
+                <Input type="number" placeholder="Max rate" value={gigMaxRate as any} onChange={e=> setGigMaxRate(e.target.value===''? '': parseFloat(e.target.value))} />
               </div>
+              {filteredGigs.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No gigs yet.</div>
+              ) : (
+                <div className="grid gap-2">
+                  {filteredGigs.map(g => (
+                    <div key={g.id} className="p-2 border rounded">
+                      <div className="font-medium truncate">{g.title}</div>
+                      <div className="text-xs text-muted-foreground truncate">{g.category} · R{g.rate}/hr</div>
+                      <div className="text-xs truncate">{g.skills}</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button size="sm" variant="secondary" onClick={()=> { setOfferGigId(g.id); setOfferOpen(true); }}>Send Offer</Button>
+                        <Button size="sm" variant="ghost" onClick={()=> { setThreadGigId(g.id); setOfferThreadOpen(true); }}>Offers</Button>
+                        <Button size="sm" variant="outline" asChild><Link to="/messages">DM</Link></Button>
+                        <Badge variant="outline" className="ml-auto text-[11px]">{offers.filter(o=>o.gigId===g.id).length} offer(s)</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          <Card>
+          <Card className="md:col-span-1">
             <CardHeader>
               <CardTitle>Business Projects</CardTitle>
             </CardHeader>
-
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <div className="text-muted-foreground">Hire creators</div>
-                <Button size="sm" className="rounded-full">
-                  New Project
-                </Button>
+                <Button size="sm" onClick={()=> setProjOpen(true)}>New Project</Button>
               </div>
-
-              <div className="text-xs text-muted-foreground">
-                Businesses can post creator jobs and campaign projects here.
+              <div className="grid grid-cols-3 gap-2">
+                <Input className="col-span-2" placeholder="Filter skills" value={projSkillFilter} onChange={e=> setProjSkillFilter(e.target.value)} />
+                <div />
+                <Input type="number" placeholder="Min budget" value={projMinBudget as any} onChange={e=> setProjMinBudget(e.target.value===''? '': parseFloat(e.target.value))} />
+                <Input type="number" placeholder="Max budget" value={projMaxBudget as any} onChange={e=> setProjMaxBudget(e.target.value===''? '': parseFloat(e.target.value))} />
               </div>
+              {filteredProjects.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No projects yet.</div>
+              ) : (
+                <div className="grid gap-2">
+                  {filteredProjects.map(pj => (
+                    <div key={pj.id} className="p-2 border rounded">
+                      <div className="font-medium truncate">{pj.title}</div>
+                      <div className="text-xs text-muted-foreground truncate">Budget R{pj.budget.toLocaleString()} · {pj.open ? 'Open' : 'Closed'}</div>
+                      <div className="text-xs truncate">{pj.skills}</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button size="sm" variant="secondary" onClick={()=> { setPropProjectId(pj.id); setPropOpen(true); }}>Submit Proposal</Button>
+                        <Button size="sm" variant="ghost" onClick={()=> { setThreadProjectId(pj.id); setPropThreadOpen(true); }}>Proposals</Button>
+                        <Button size="sm" variant="outline" asChild><Link to="/messages">DM</Link></Button>
+                        <Badge variant="outline" className="ml-auto text-[11px]">{proposals.filter(p=>p.projectId===pj.id).length} proposal(s)</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          <Card>
+          <Card className="md:col-span-1">
             <CardHeader>
               <CardTitle>Escrow</CardTitle>
             </CardHeader>
-
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <div className="text-muted-foreground">
-                  Secure in-app payments
+                <div className="text-muted-foreground">Secure in-app payments</div>
+                <Button size="sm" onClick={()=> setEscrowOpen(true)}>New Escrow</Button>
+              </div>
+              {escrows.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No escrows yet.</div>
+              ) : (
+                <div className="grid gap-2">
+                  {escrows.map(es => (
+                    <div key={es.id} className="p-2 border rounded">
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium truncate">{es.title}</div>
+                        <Badge className="capitalize" variant={es.status==='funded'?'secondary':es.status==='released'?'default':'outline'}>{es.status}</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">{es.kind} · {es.partyA} → {es.partyB} · R{es.amount}</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button size="sm" variant="outline" disabled={es.status!=='draft'} onClick={()=> {
+                          const next = escrows.map(x=> x.id===es.id?{...x,status:'funded' as Escrow['status']}:x); saveEscrows(next); pushEscrowHist({ id: es.id, action: 'funded', title: es.title }); toast({ title: 'Escrow funded', description: es.title });
+                        }}>Fund</Button>
+                        <Button size="sm" variant="secondary" disabled={es.status!=='funded'} onClick={()=> {
+                          const next = escrows.map(x=> x.id===es.id?{...x,status:'released' as Escrow['status']}:x); saveEscrows(next); pushEscrowHist({ id: es.id, action: 'released', title: es.title }); toast({ title: 'Funds released', description: es.title });
+                        }}>Release</Button>
+                        <Button size="sm" variant="ghost" disabled={!(es.status==='funded' || es.status==='draft')} onClick={()=> {
+                          const next = escrows.map(x=> x.id===es.id?{...x,status:'refunded' as Escrow['status']}:x); saveEscrows(next); pushEscrowHist({ id: es.id, action: 'refunded', title: es.title }); toast({ title: 'Refunded', description: es.title });
+                        }}>Refund</Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <Button size="sm" className="rounded-full">
-                  New Escrow
-                </Button>
-              </div>
-
-              <div className="text-xs text-muted-foreground">
-                Secure payments can be connected after marketplace orders are
-                live.
-              </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="md:col-span-1">
+            <CardHeader>
+              <CardTitle>Escrow Ledger</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {escrowHist.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No activity yet.</div>
+              ) : (
+                <div className="space-y-1">
+                  {escrowHist.slice(0,10).map((h,i)=> (
+                    <div key={`${h.ts}-${i}`} className="flex items-center justify-between text-xs">
+                      <span className="truncate">{h.title} · {h.action}</span>
+                      <span className="text-muted-foreground">{new Date(h.ts).toLocaleTimeString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button size="sm" variant="outline" onClick={()=> setPaymentsOpen(true)}>Payments Setup</Button>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      <Dialog open={itemsOpen} onOpenChange={setItemsOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{selectedShop?.shopName || 'Shop items'}</DialogTitle>
-            <DialogDescription>
-              {selectedShop?.tagline || 'View what this seller offers.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedShop && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                {selectedShop.description}
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                {selectedShop.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="overflow-hidden rounded-2xl border bg-card"
-                  >
-                    <div className="aspect-square bg-black/5">
-                      <img
-                        src={item.image}
-                        alt={item.title}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-
-                    <div className="space-y-2 p-3">
-                      <div className="truncate text-sm font-semibold">
-                        {item.title}
-                      </div>
-
-                      <div className="h-12 overflow-hidden text-xs text-muted-foreground">
-                        {item.description}
-                      </div>
-
-                      <div className="text-sm font-bold">
-                        {item.showPrice && item.price
-                          ? `R${Number(item.price).toFixed(2)}`
-                          : 'Price on request'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setItemsOpen(false)}>
-              Close
-            </Button>
-
-            {selectedShop && (
-              <Button onClick={() => contactSeller(selectedShop)}>
-                Contact seller
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={shopOpen} onOpenChange={setShopOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Open your shop</DialogTitle>
-            <DialogDescription>
-              Create a premium shop display with items, prices, seller contact
-              and call-to-action.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <div className="grid gap-2 md:grid-cols-2">
-              <Input
-                placeholder="Shop name"
-                value={shopName}
-                onChange={(event) => setShopName(event.target.value)}
-              />
-
-              <Input
-                placeholder="Seller / business owner"
-                value={sellerName}
-                onChange={(event) => setSellerName(event.target.value)}
-              />
-            </div>
-
-            <div className="grid gap-2 md:grid-cols-3">
-              <Input
-                placeholder="Category"
-                value={shopCategory}
-                onChange={(event) => setShopCategory(event.target.value)}
-              />
-
-              <Input
-                placeholder="Location"
-                value={shopLocation}
-                onChange={(event) => setShopLocation(event.target.value)}
-              />
-
-              <select
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={shopCta}
-                onChange={(event) => setShopCta(event.target.value as SellerCta)}
-              >
-                <option value="contact">Contact seller</option>
-                <option value="whatsapp">WhatsApp seller</option>
-                <option value="call">Call seller</option>
-                <option value="website">Visit website</option>
-                <option value="message">Message seller</option>
-              </select>
-            </div>
-
-            <Input
-              placeholder="Shop tagline"
-              value={shopTagline}
-              onChange={(event) => setShopTagline(event.target.value)}
-            />
-
-            <Textarea
-              placeholder="Shop description"
-              value={shopDescription}
-              onChange={(event) => setShopDescription(event.target.value)}
-            />
-
-            <Input
-              placeholder="Cover image URL"
-              value={shopCoverImage}
-              onChange={(event) => setShopCoverImage(event.target.value)}
-            />
-
-            <div className="grid gap-2 md:grid-cols-3">
-              <Input
-                placeholder="Phone"
-                value={shopPhone}
-                onChange={(event) => setShopPhone(event.target.value)}
-              />
-
-              <Input
-                placeholder="WhatsApp number"
-                value={shopWhatsapp}
-                onChange={(event) => setShopWhatsapp(event.target.value)}
-              />
-
-              <Input
-                placeholder="Website URL"
-                value={shopWebsite}
-                onChange={(event) => setShopWebsite(event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold">Item display</div>
-                <div className="text-xs text-muted-foreground">
-                  {draftItems.length} item(s) added
-                </div>
-              </div>
-
-              <div className="grid gap-2 md:grid-cols-2">
-                <Input
-                  placeholder="Item name"
-                  value={itemTitle}
-                  onChange={(event) => setItemTitle(event.target.value)}
-                />
-
-                <Input
-                  placeholder="Item image URL"
-                  value={itemImage}
-                  onChange={(event) => setItemImage(event.target.value)}
-                />
-              </div>
-
-              <Textarea
-                placeholder="Item description"
-                value={itemDescription}
-                onChange={(event) => setItemDescription(event.target.value)}
-              />
-
-              <div className="grid gap-2 md:grid-cols-2">
-                <Input
-                  type="number"
-                  placeholder="Price in Rands"
-                  value={itemPrice}
-                  onChange={(event) => setItemPrice(event.target.value)}
-                  disabled={!itemShowPrice}
-                />
-
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={itemShowPrice}
-                    onChange={(event) => setItemShowPrice(event.target.checked)}
-                  />
-                  Show price to customers
-                </label>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addDraftItem}
-              >
-                Add item to shop
-              </Button>
-
-              {draftItems.length > 0 && (
-                <div className="grid gap-2">
-                  {draftItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between rounded-lg border bg-background p-2 text-xs"
-                    >
-                      <span className="truncate">{item.title}</span>
-                      <span className="text-muted-foreground">
-                        {item.showPrice && item.price
-                          ? `R${item.price}`
-                          : 'Price hidden'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShopOpen(false)}>
-              Cancel
-            </Button>
-
-            <Button onClick={addShop}>Publish shop</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      {/* Buy Ad Credits Modal */}
       <Dialog open={creditsOpen} onOpenChange={setCreditsOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Buy Ad Credits</DialogTitle>
-            <DialogDescription>
-              Ad credits are used for Sponsored Posts, Story Ads, Search Ads,
-              and Marketplace promotions.
-            </DialogDescription>
+            <DialogDescription>Ad credits are used for Sponsored Posts, Story Ads, Search Ads, and Virtual World Ads.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">
-              Pricing: R200 = 2,000 impressions
-            </div>
-
+            <div className="text-sm text-muted-foreground">Pricing: R200 = 2,000 impressions</div>
             <div className="grid grid-cols-3 gap-2">
-              {[200, 500, 1000].map((amount) => (
-                <Button
-                  key={amount}
-                  variant={creditsRand === amount ? 'default' : 'outline'}
-                  onClick={() => setCreditsRand(amount)}
-                >
-                  R{amount}
-                </Button>
+              {[200, 500, 1000].map(v => (
+                <Button key={v} variant={creditsRand===v?'default':'outline'} onClick={()=> setCreditsRand(v)}>R{v}</Button>
               ))}
             </div>
-
-            <Input
-              type="number"
-              value={creditsRand}
-              onChange={(event) =>
-                setCreditsRand(parseInt(event.target.value || '0', 10))
-              }
-            />
-
-            <div className="text-sm">
-              Estimated reach:{' '}
-              <span className="font-semibold">
-                {impressionsFor(creditsRand).toLocaleString()}
-              </span>{' '}
-              impressions
+            <div className="grid gap-2">
+              <label className="text-sm">Custom amount (R)</label>
+              <Input type="number" value={creditsRand} onChange={(e)=> setCreditsRand(parseInt(e.target.value || '0',10))} />
+            </div>
+            <div className="text-sm">Estimated reach: <span className="font-semibold">{impressionsFor(creditsRand).toLocaleString()}</span> impressions</div>
+            <div className="border-t pt-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={quickSpend} onChange={(e)=> setQuickSpend(e.target.checked)} />
+                Quick spend some of this purchase on a draft
+              </label>
+              {quickSpend && (
+                <div className="grid gap-2">
+                  <label className="text-sm">Select draft</label>
+                  <select className="h-9 rounded-md border bg-background px-2 text-sm" value={quickSpendDraftIdx} onChange={(e)=> setQuickSpendDraftIdx(parseInt(e.target.value,10))}>
+                    {drafts.map((d, i)=> (
+                      <option key={`${d.ts}-${i}`} value={i}>{d.name} · R{d.budget}</option>
+                    ))}
+                  </select>
+                  <label className="text-sm">Spend impressions now</label>
+                  <Input type="number" value={quickSpendImpr} onChange={(e)=> setQuickSpendImpr(parseInt(e.target.value||'0',10))} placeholder={`0 to ${impressionsFor(creditsRand)}`} />
+                  <div className="text-xs text-muted-foreground">Tip: 1 Rand = 10 impressions. You can leave this at 0 to skip quick spend.</div>
+                </div>
+              )}
             </div>
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreditsOpen(false)}>
-              Cancel
-            </Button>
-
-            <Button
-              onClick={() => {
-                const newBalance = creditsBalance + impressionsFor(creditsRand);
-                setCreditsBalance(newBalance);
-                saveLS('ads:credits', newBalance);
-                pushUsage({
-                  type: 'buy_credits',
-                  rands: creditsRand,
-                  impressions: impressionsFor(creditsRand),
-                  balance: newBalance,
-                });
-                setCreditsOpen(false);
-                toast({
-                  title: 'Ad credits added',
-                  description: `Balance: ${newBalance.toLocaleString()} impressions.`,
-                });
-              }}
-            >
-              Confirm Purchase
-            </Button>
+            <Button variant="outline" onClick={()=> setCreditsOpen(false)}>Cancel</Button>
+            <Button onClick={()=> { 
+              setCreditsOpen(false); 
+              let newBal = (creditsBalance || 0) + impressionsFor(creditsRand); 
+              setCreditsBalance(newBal);
+              saveLS('ads:credits', newBal);
+              pushUsage({ type: 'buy_credits', rands: creditsRand, impressions: impressionsFor(creditsRand), balance: newBal });
+              // optional quick spend
+              if (quickSpend && quickSpendImpr > 0 && drafts[quickSpendDraftIdx]) {
+                const spend = Math.min(quickSpendImpr, newBal);
+                newBal = newBal - spend;
+                setCreditsBalance(newBal);
+                saveLS('ads:credits', newBal);
+                try { window.dispatchEvent(new Event('ad-credits-updated')); } catch {}
+                const updated = drafts.slice();
+                const d = updated[quickSpendDraftIdx];
+                updated[quickSpendDraftIdx] = { ...d, lastRun: new Date().toISOString() };
+                saveDrafts(updated);
+                pushUsage({ type: 'quick_spend', name: d.name, spentImpressions: spend, balance: newBal });
+                toast({ title: 'Quick spend applied', description: `Spent ${spend.toLocaleString()} impressions on ${d.name}. New balance: ${newBal.toLocaleString()}` });
+              } else {
+                try { window.dispatchEvent(new Event('ad-credits-updated')); } catch {}
+              }
+              toast({ title: 'Ad credits added', description: `R${creditsRand} → ${impressionsFor(creditsRand).toLocaleString()} impressions. Balance: ${newBal.toLocaleString()}` });
+            }}>Confirm Purchase</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Create Campaign Modal */}
       <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create Campaign</DialogTitle>
-            <DialogDescription>
-              Set up a simple campaign to promote a shop, item, or post.
-            </DialogDescription>
+            <DialogDescription>Set up a simple campaign to run Sponsored Posts.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-3">
-            <Input
-              placeholder="Campaign name"
-              value={campaignName}
-              onChange={(event) => setCampaignName(event.target.value)}
-            />
-
-            <Input
-              placeholder="Objective"
-              value={campaignObjective}
-              onChange={(event) => setCampaignObjective(event.target.value)}
-            />
-
-            <Input
-              placeholder="Budget (R)"
-              value={campaignBudget}
-              onChange={(event) => setCampaignBudget(event.target.value)}
-            />
-
-            <Textarea placeholder="Creative notes, audience, location, product..." />
+            <div className="grid gap-2">
+              <label className="text-sm">Name</label>
+              <Input placeholder="e.g., Winter Awareness" value={campaignName} onChange={(e)=> setCampaignName(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm">Objective</label>
+              <Input placeholder="Awareness, Engagement, Conversions" value={campaignObjective} onChange={(e)=> setCampaignObjective(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm">Budget (R)</label>
+              <Input placeholder="500" value={campaignBudget} onChange={(e)=> setCampaignBudget(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm">Creative Notes</label>
+              <Textarea placeholder="Key message, audience, tone…" />
+            </div>
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCampaignOpen(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={()=> setCampaignOpen(false)}>Cancel</Button>
+            <Button onClick={()=> { 
+              setCampaignOpen(false); 
+              const draft = { name: campaignName || 'Untitled', objective: campaignObjective, budget: campaignBudget, ts: new Date().toISOString() };
+              const drafts = Array.isArray(readLS('ads:campaigns')) ? readLS('ads:campaigns') : [];
+              drafts.unshift(draft);
+              saveLS('ads:campaigns', drafts.slice(0,10));
+              toast({ title: 'Draft saved', description: `${draft.name} (${draft.objective}), budget R${draft.budget}` });
+            }}>Save Draft</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <Button
-              onClick={() => {
-                const draft = {
-                  name: campaignName || 'Untitled',
-                  objective: campaignObjective,
-                  budget: campaignBudget,
-                  ts: new Date().toISOString(),
-                };
+      {/* New Gig Modal */}
+      <Dialog open={gigOpen} onOpenChange={setGigOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Gig</DialogTitle>
+            <DialogDescription>Offer a service as a freelancer creator.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Title" value={gigTitle} onChange={e=> setGigTitle(e.target.value)} />
+            <div className="grid grid-cols-3 gap-2">
+              <Input type="number" placeholder="Rate" value={gigRate} onChange={e=> setGigRate(parseFloat(e.target.value||'0'))} />
+              <select className="h-9 rounded-md border bg-background px-2" value={gigCur} onChange={e=> setGigCur(e.target.value as any)}>
+                <option value="ZAR">ZAR</option>
+              </select>
+              <Input placeholder="Category" value={gigCat} onChange={e=> setGigCat(e.target.value)} />
+            </div>
+            <Textarea placeholder="Description" value={gigDesc} onChange={e=> setGigDesc(e.target.value)} />
+            <Input placeholder="Skills (comma separated)" value={gigSkills} onChange={e=> setGigSkills(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=> setGigOpen(false)}>Cancel</Button>
+            <Button onClick={()=> {
+              if (!gigTitle.trim()) { toast({ title: 'Title required' }); return; }
+              const next = [{ id: `g${Date.now()}`, title: gigTitle, rate: gigRate, currency: gigCur, category: gigCat, desc: gigDesc, skills: gigSkills }, ...gigs];
+              saveGigs(next); setGigOpen(false); setGigTitle(''); setGigDesc('');
+              toast({ title: 'Gig created', description: gigTitle });
+            }}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-                const next = [draft, ...drafts].slice(0, 10);
-                saveDrafts(next);
-                setCampaignOpen(false);
+      {/* New Project Modal */}
+      <Dialog open={projOpen} onOpenChange={setProjOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Project</DialogTitle>
+            <DialogDescription>Post a project to hire creators.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Title" value={projTitle} onChange={e=> setProjTitle(e.target.value)} />
+            <div className="grid grid-cols-3 gap-2">
+              <Input type="number" placeholder="Budget" value={projBudget} onChange={e=> setProjBudget(parseFloat(e.target.value||'0'))} />
+              <select className="h-9 rounded-md border bg-background px-2" value={projCur} onChange={e=> setProjCur(e.target.value as any)}>
+                <option value="ZAR">ZAR</option>
+              </select>
+              <div className="flex items-center text-xs text-muted-foreground">Fixed price</div>
+            </div>
+            <Textarea placeholder="Description" value={projDesc} onChange={e=> setProjDesc(e.target.value)} />
+            <Input placeholder="Skills (comma separated)" value={projSkills} onChange={e=> setProjSkills(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=> setProjOpen(false)}>Cancel</Button>
+            <Button onClick={()=> {
+              if (!projTitle.trim()) { toast({ title: 'Title required' }); return; }
+              const next = [{ id: `j${Date.now()}`, title: projTitle, budget: projBudget, currency: projCur, desc: projDesc, skills: projSkills, open: true }, ...projects];
+              saveProjects(next); setProjOpen(false); setProjTitle(''); setProjDesc('');
+              toast({ title: 'Project posted', description: projTitle });
+            }}>Post</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-                toast({
-                  title: 'Draft saved',
-                  description: `${draft.name}, budget R${draft.budget}`,
-                });
-              }}
-            >
-              Save Draft
-            </Button>
+      {/* New Escrow Modal */}
+      <Dialog open={escrowOpen} onOpenChange={setEscrowOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Escrow</DialogTitle>
+            <DialogDescription>Secure a payment between a client and a creator.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <select className="h-9 rounded-md border bg-background px-2" value={escKind} onChange={e=> setEscKind(e.target.value as any)}>
+                <option value="gig">Gig</option>
+                <option value="project">Project</option>
+              </select>
+              <Input placeholder="Title" value={escTitle} onChange={e=> setEscTitle(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input placeholder="Payer (Client)" value={escA} onChange={e=> setEscA(e.target.value)} />
+              <Input placeholder="Payee (Creator)" value={escB} onChange={e=> setEscB(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Input type="number" placeholder="Amount" value={escAmt} onChange={e=> setEscAmt(parseFloat(e.target.value||'0'))} />
+              <select className="h-9 rounded-md border bg-background px-2" value={escCur} onChange={e=> setEscCur(e.target.value as any)}>
+                <option value="ZAR">ZAR</option>
+              </select>
+              <div className="flex items-center text-xs text-muted-foreground">Held until release</div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=> setEscrowOpen(false)}>Cancel</Button>
+            <Button onClick={()=> {
+              if (!escTitle.trim()) { toast({ title: 'Title required' }); return; }
+              const next = [{ id: `e${Date.now()}`, kind: escKind, title: escTitle, partyA: escA, partyB: escB, amount: escAmt, currency: escCur, status: 'draft' as const }, ...escrows];
+              saveEscrows(next); setEscrowOpen(false); setEscTitle('');
+              toast({ title: 'Escrow created', description: escTitle });
+            }}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Offer Modal */}
+      <Dialog open={offerOpen} onOpenChange={setOfferOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send Offer</DialogTitle>
+            <DialogDescription>Send a custom offer to the creator for this gig.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="From (Business)" value={offerFrom} onChange={e=> setOfferFrom(e.target.value)} />
+            <div className="grid grid-cols-3 gap-2">
+              <Input type="number" placeholder="Amount" value={offerAmt} onChange={e=> setOfferAmt(parseFloat(e.target.value||'0'))} />
+              <select className="h-9 rounded-md border bg-background px-2" value={offerCur} onChange={e=> setOfferCur(e.target.value as any)}>
+                <option value="ZAR">ZAR</option>
+              </select>
+              <div className="flex items-center text-xs text-muted-foreground">One-time</div>
+            </div>
+            <Textarea placeholder="Message (optional)" value={offerMsg} onChange={e=> setOfferMsg(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=> setOfferOpen(false)}>Cancel</Button>
+            <Button onClick={()=> {
+              if (!offerGigId) { setOfferOpen(false); return; }
+              const next = [{ id: `o${Date.now()}`, gigId: offerGigId, from: offerFrom, amount: offerAmt, currency: offerCur, message: offerMsg, ts: new Date().toISOString(), status: 'pending' as const, notes: [] }, ...offers];
+              saveOffers(next);
+              setOfferOpen(false); setOfferMsg('');
+              toast({ title: 'Offer sent', description: `R${offerAmt}` });
+            }}>Send</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Submit Proposal Modal */}
+      <Dialog open={propOpen} onOpenChange={setPropOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Submit Proposal</DialogTitle>
+            <DialogDescription>Apply to this project with your bid and message.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="From (Creator)" value={propFrom} onChange={e=> setPropFrom(e.target.value)} />
+            <div className="grid grid-cols-3 gap-2">
+              <Input type="number" placeholder="Bid" value={propBid} onChange={e=> setPropBid(parseFloat(e.target.value||'0'))} />
+              <select className="h-9 rounded-md border bg-background px-2" value={propCur} onChange={e=> setPropCur(e.target.value as any)}>
+                <option value="ZAR">ZAR</option>
+              </select>
+              <div className="flex items-center text-xs text-muted-foreground">Fixed bid</div>
+            </div>
+            <Textarea placeholder="Message (optional)" value={propMsg} onChange={e=> setPropMsg(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=> setPropOpen(false)}>Cancel</Button>
+            <Button onClick={()=> {
+              if (!propProjectId) { setPropOpen(false); return; }
+              const next = [{ id: `p${Date.now()}`, projectId: propProjectId, from: propFrom, bid: propBid, currency: propCur, message: propMsg, ts: new Date().toISOString(), status: 'pending' as const, notes: [] }, ...proposals];
+              saveProposals(next);
+              setPropOpen(false); setPropMsg('');
+              toast({ title: 'Proposal submitted', description: `R${propBid}` });
+            }}>Submit</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Offers Thread Modal */}
+      <Dialog open={offerThreadOpen} onOpenChange={setOfferThreadOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Offers</DialogTitle>
+            <DialogDescription>Review and manage offers for this gig.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {offers.filter(o=> o.gigId===threadGigId).length === 0 ? (
+              <div className="text-xs text-muted-foreground">No offers yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {offers.filter(o=> o.gigId===threadGigId).map(o => (
+                  <div key={o.id} className="p-2 border rounded text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium truncate">{o.from} · R{o.amount}</div>
+                      <Badge variant={o.status==='accepted'?'default':o.status==='rejected'?'destructive':'secondary'} className="capitalize">{o.status}</Badge>
+                    </div>
+                    {o.message && <div className="text-xs text-muted-foreground mt-1">{o.message}</div>}
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button size="sm" variant="outline" asChild><Link to="/messages">DM</Link></Button>
+                      <Button size="sm" disabled={o.status!=='pending'} onClick={()=> { const next = offers.map(x=> x.id===o.id?{...x,status:'accepted' as const}:x); saveOffers(next); toast({ title: 'Offer accepted' }); }}>Accept</Button>
+                      <Button size="sm" variant="ghost" disabled={o.status!=='pending'} onClick={()=> { const next = offers.map(x=> x.id===o.id?{...x,status:'rejected' as const}:x); saveOffers(next); toast({ title: 'Offer rejected' }); }}>Reject</Button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-4 gap-2 items-start">
+                      <Input className="col-span-3" placeholder="Add note" value={threadNote} onChange={e=> setThreadNote(e.target.value)} />
+                      <Button size="sm" onClick={()=> {
+                        if (!threadNote.trim()) return;
+                        const note: Note = { from: 'You', text: threadNote, ts: new Date().toISOString() };
+                        const next = offers.map(x=> x.id===o.id?{...x, notes: [...(x.notes||[]), note]}:x);
+                        saveOffers(next); setThreadNote('');
+                      }}>Add</Button>
+                    </div>
+                    {o.notes && o.notes.length>0 && (
+                      <div className="mt-2 space-y-1">
+                        {o.notes.map((n,i)=> (
+                          <div key={`${n.ts}-${i}`} className="text-[11px] text-muted-foreground">{n.from}: {n.text}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Proposals Thread Modal */}
+      <Dialog open={propThreadOpen} onOpenChange={setPropThreadOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Proposals</DialogTitle>
+            <DialogDescription>Review and manage proposals for this project.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {proposals.filter(p=> p.projectId===threadProjectId).length === 0 ? (
+              <div className="text-xs text-muted-foreground">No proposals yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {proposals.filter(p=> p.projectId===threadProjectId).map(p => (
+                  <div key={p.id} className="p-2 border rounded text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium truncate">{p.from} · R{p.bid}</div>
+                      <Badge variant={p.status==='accepted'?'default':p.status==='rejected'?'destructive':'secondary'} className="capitalize">{p.status}</Badge>
+                    </div>
+                    {p.message && <div className="text-xs text-muted-foreground mt-1">{p.message}</div>}
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button size="sm" variant="outline" asChild><Link to="/messages">DM</Link></Button>
+                      <Button size="sm" disabled={p.status!=='pending'} onClick={()=> { const next = proposals.map(x=> x.id===p.id?{...x,status:'accepted' as const}:x); saveProposals(next); toast({ title: 'Proposal accepted' }); }}>Accept</Button>
+                      <Button size="sm" variant="ghost" disabled={p.status!=='pending'} onClick={()=> { const next = proposals.map(x=> x.id===p.id?{...x,status:'rejected' as const}:x); saveProposals(next); toast({ title: 'Proposal rejected' }); }}>Reject</Button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-4 gap-2 items-start">
+                      <Input className="col-span-3" placeholder="Add note" value={propThreadNote} onChange={e=> setPropThreadNote(e.target.value)} />
+                      <Button size="sm" onClick={()=> {
+                        if (!propThreadNote.trim()) return;
+                        const note: Note = { from: 'You', text: propThreadNote, ts: new Date().toISOString() };
+                        const next = proposals.map(x=> x.id===p.id?{...x, notes: [...(x.notes||[]), note]}:x);
+                        saveProposals(next); setPropThreadNote('');
+                      }}>Add</Button>
+                    </div>
+                    {p.notes && p.notes.length>0 && (
+                      <div className="mt-2 space-y-1">
+                        {p.notes.map((n,i)=> (
+                          <div key={`${n.ts}-${i}`} className="text-[11px] text-muted-foreground">{n.from}: {n.text}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payments Setup Modal (Stripe/Paystack stub) */}
+      <Dialog open={paymentsOpen} onOpenChange={setPaymentsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payments Setup</DialogTitle>
+            <DialogDescription>Connect to Stripe or Paystack. This is a UI stub.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={()=> toast({ title: 'Stripe connect', description: 'Redirect to Stripe Connect (stub).' })}>Connect Stripe</Button>
+              <Button variant="outline" onClick={()=> toast({ title: 'Paystack connect', description: 'Redirect to Paystack (stub).' })}>Connect Paystack</Button>
+            </div>
+            <div className="text-xs text-muted-foreground">Later, replace with your backend OAuth/Connect flow and secure webhooks.</div>
+          </div>
+          <DialogFooter>
+            <Button onClick={()=> setPaymentsOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

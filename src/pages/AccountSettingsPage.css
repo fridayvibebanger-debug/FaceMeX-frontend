@@ -1,0 +1,239 @@
+.account-settings-page {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #000;
+  color: #fff;
+  padding: calc(env(safe-area-inset-top) + 4px) 0 calc(env(safe-area-inset-bottom) + 16px);
+}
+
+.account-settings-content {
+  width: min(calc(100% - clamp(56px, 14.4vw, 60px)), 640px);
+  margin: 0 auto;
+}
+
+.account-settings-header {
+  position: relative;
+  display: flex;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-settings-header h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.account-settings-back {
+  position: absolute;
+  left: 0;
+  display: inline-flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: #242424;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.account-settings-back:hover,
+.account-settings-logout:hover,
+.account-settings-premium:hover {
+  background: #4a4a4a;
+}
+
+.account-settings-back:focus-visible,
+.account-settings-logout:focus-visible,
+.account-settings-premium:focus-visible {
+  outline: 2px solid #c084fc;
+  outline-offset: 3px;
+}
+
+.account-settings-back svg {
+  width: 25px;
+  height: 25px;
+  stroke-width: 2;
+}
+
+.account-settings-card {
+  margin-top: 20px;
+  overflow: hidden;
+  border-radius: 30px;
+  background: #3f3f3f;
+}
+
+.account-settings-row {
+  display: flex;
+  min-height: 78px;
+  width: 100%;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  color: #fff;
+  text-align: left;
+}
+
+.account-settings-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  stroke-width: 1.8;
+}
+
+.account-settings-row-copy {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+
+.account-settings-row-copy h2,
+.account-settings-row-title {
+  display: block;
+  margin: 0;
+  color: #fff;
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.account-settings-row-copy p,
+.account-settings-row-subtitle {
+  display: block;
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: #bdbdbd;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.account-settings-premium {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.account-settings-premium .account-settings-icon,
+.account-settings-premium .account-settings-row-title {
+  color: #c084fc;
+}
+
+.account-settings-premium .account-settings-row-subtitle {
+  color: #d0b1eb;
+}
+
+.account-settings-chevron {
+  color: #bdbdbd;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.account-settings-logout-wrap {
+  margin-top: 24px;
+}
+
+.account-settings-logout {
+  display: flex;
+  width: 100%;
+  min-height: 60px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border: 0;
+  border-radius: 20px;
+  background: #3f3f3f;
+  color: #f87171;
+  cursor: pointer;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 500;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.account-settings-logout svg {
+  width: 25px;
+  height: 25px;
+  stroke-width: 1.8;
+}
+
+.account-settings-logout:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.account-settings-error {
+  margin: 12px 4px 0;
+  color: #fca5a5;
+  font-size: 14px;
+}
+
+@media (max-width: 380px) {
+  .account-settings-row {
+    min-height: 72px;
+    gap: 12px;
+    padding: 10px 16px;
+  }
+
+  .account-settings-icon {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+
+  .account-settings-row-copy h2,
+  .account-settings-row-title {
+    font-size: 20px;
+  }
+
+  .account-settings-row-copy p,
+  .account-settings-row-subtitle {
+    font-size: 15px;
+  }
+
+  .account-settings-chevron {
+    font-size: 26px;
+  }
+}
+
+@media (min-width: 768px) {
+  .account-settings-page {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: max(48px, calc(env(safe-area-inset-top) + 32px));
+  }
+
+  .account-settings-content {
+    width: min(100% - 64px, 640px);
+  }
+
+  .account-settings-page {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 40px);
+  }
+
+  .account-settings-card {
+    margin-top: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-settings-back,
+  .account-settings-premium,
+  .account-settings-logout {
+    transition: none;
+  }
+}

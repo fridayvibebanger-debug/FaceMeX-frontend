@@ -1,175 +1,52 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { UserPlus } from 'lucide-react';
-
 import Navbar from '@/components/layout/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-
-import { supabase } from '@/lib/supabaseClient';
+import { UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useUserStore } from '@/store/userStore';
+import { supabase } from '@/lib/supabaseClient';
 
 type Profile = {
   id: string;
   email: string | null;
-  full_name?: string | null;
-  name?: string | null;
-  username?: string | null;
-  avatar_url?: string | null;
-  avatar?: string | null;
-  bio?: string | null;
-  is_active?: boolean;
-  created_at?: string;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  is_active: boolean;
+};
+
+type Suggestion = {
+  id: string;
+  name: string;
+  headline: string;
+  avatar: string | null;
 };
 
 export default function ConnectPage() {
-  const navigate = useNavigate();
-  const { user, isAuthenticated, isInitialized, restoreSession } =
-    useAuthStore();
+  const { user, followUser, unfollowUser } = useAuthStore();
+  const { professional } = useUserStore();
 
   const [followed, setFollowed] = useState<Record<string, boolean>>({});
-  const [connected, setConnected] = useState<Record<string, boolean>>({});
-  const [pendingRequests, setPendingRequests] = useState<Record<string, boolean>>(
-    {}
-  );
-
   const [realUsers, setRealUsers] = useState<Profile[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [errorText, setErrorText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const actionButton =
-    'rounded-xl bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200';
-
+  // 🔥 FETCH USERS FROM SUPABASE
   useEffect(() => {
-    restoreSession();
-  }, [restoreSession]);
-
-  useEffect(() => {
-    if (isInitialized && !isAuthenticated) {
-      navigate('/login', { replace: true });
-    }
-  }, [isInitialized, isAuthenticated, navigate]);
-
-  async function fetchUsers() {
-    if (!isAuthenticated || !user?.id) {
-      setLoadingUsers(false);
-      return;
-    }
-
-    setLoadingUsers(true);
-    setErrorText(null);
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(
-        'id, email, full_name, name, username, avatar_url, avatar, bio, is_active, created_at'
-      )
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      setErrorText(error.message);
-      setRealUsers([]);
-      setLoadingUsers(false);
-      return;
-    }
-
-    const users = (data || []).filter((item: Profile) => {
-      if (!item.id) return false;
-      if (item.id === user.id) return false;
-      return true;
-    });
-
-    setRealUsers(users);
-    setLoadingUsers(false);
-  }
-
-  async function fetchFollowing() {
-    if (!user?.id) return;
-
-    const { data, error } = await supabase
-      .from('follows')
-      .select('following_id')
-      .eq('follower_id', user.id);
-
-    if (error) {
-      console.log('Fetch following error:', error.message);
-      return;
-    }
-
-    const next: Record<string, boolean> = {};
-
-    (data || []).forEach((row: any) => {
-      if (row.following_id) {
-        next[row.following_id] = true;
-      }
-    });
-
-    setFollowed(next);
-  }
-
-  async function fetchConnections() {
-    if (!user?.id) return;
-
-    const { data, error } = await supabase
-      .from('connection_requests')
-      .select('id, sender_id, receiver_id, status, created_at')
-      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
-
-    if (error) {
-      console.log('Fetch connections error:', error.message);
-      return;
-    }
-
-    const nextConnected: Record<string, boolean> = {};
-    const nextPending: Record<string, boolean> = {};
-
-    (data || []).forEach((row: any) => {
-      const otherId = row.sender_id === user.id ? row.receiver_id : row.sender_id;
-
-      if (!otherId) return;
-
-      if (row.status === 'accepted') {
-        nextConnected[otherId] = true;
-      }
-
-      if (row.status === 'pending') {
-        nextPending[otherId] = true;
-      }
-    });
-
-    setConnected(nextConnected);
-    setPendingRequests(nextPending);
-  }
-
-  useEffect(() => {
-    if (!isInitialized || !isAuthenticated || !user?.id) return;
-
     fetchUsers();
-    fetchFollowing();
-    fetchConnections();
 
+    // 🔄 REALTIME LISTENER
     const channel = supabase
-      .channel(`connect-page-live-${user.id}`)
+      .channel('profiles-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles' },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+        },
         () => {
-          fetchUsers();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'follows' },
-        () => {
-          fetchFollowing();
-          fetchUsers();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'connection_requests' },
-        () => {
-          fetchConnections();
           fetchUsers();
         }
       )
@@ -178,249 +55,195 @@ export default function ConnectPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isInitialized, isAuthenticated, user?.id]);
+  }, []);
 
-  const suggestions = useMemo(() => {
-    return realUsers
-      .map((item) => ({
-        id: item.id,
-        name:
-          item.full_name ||
-          item.name ||
-          item.username ||
-          item.email?.split('@')[0] ||
-          `User ${item.id.slice(0, 6)}`,
-        headline: item.bio || 'FaceMeX member',
-        avatar: item.avatar_url || item.avatar || null,
-      }))
-      .filter((suggestion) => {
-        if (followed[suggestion.id]) return false;
+  // 🔥 GET USERS
+  async function fetchUsers() {
+    setLoading(true);
 
-        if (pendingRequests[suggestion.id]) return false;
+    try {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
 
-        return true;
-      });
-  }, [realUsers, followed, pendingRequests]);
-
-  const handleFollow = async (targetUserId: string) => {
-    if (!user?.id || targetUserId === user.id) return;
-
-    setErrorText(null);
-
-    const isFollowing = !!followed[targetUserId];
-
-    if (isFollowing) {
-      const { error } = await supabase
-        .from('follows')
-        .delete()
-        .eq('follower_id', user.id)
-        .eq('following_id', targetUserId);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          email,
+          full_name,
+          username,
+          avatar_url,
+          bio,
+          is_active
+        `)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
       if (error) {
-        setErrorText(error.message);
+        console.log('Supabase Error:', error.message);
         return;
       }
 
-      setFollowed((prev) => ({
-        ...prev,
-        [targetUserId]: false,
-      }));
+      // 🚫 REMOVE CURRENT USER
+      const filtered =
+        data?.filter((u) => u.id !== currentUser?.id) || [];
 
-      await fetchFollowing();
-      await fetchUsers();
-      return;
+      setRealUsers(filtered);
+    } catch (err) {
+      console.log('Fetch Error:', err);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    const { error } = await supabase.from('follows').upsert(
-      {
-        follower_id: user.id,
-        following_id: targetUserId,
-      },
-      {
-        onConflict: 'follower_id,following_id',
-      }
-    );
+  // 🔥 CONVERT USERS TO UI
+  const suggestions: Suggestion[] = useMemo(() => {
+    return realUsers.map((u) => ({
+      id: u.id,
 
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
+      // 👤 PRIORITY:
+      // full_name → username → email
+      name:
+        u.full_name ||
+        u.username ||
+        u.email?.split('@')[0] ||
+        'User',
 
-    await supabase.from('notifications').insert({
-      user_id: targetUserId,
-      actor_id: user.id,
-      type: 'follow',
-      title: 'New follower',
-      message: `${user.name || user.email?.split('@')[0] || 'Someone'} followed you.`,
-      action_url: `/profile/${user.id}`,
-      is_read: false,
-    });
+      headline:
+        u.bio ||
+        'FaceMeX Member',
+
+      avatar: u.avatar_url,
+    }));
+  }, [realUsers]);
+
+  // 🔥 FOLLOW SYSTEM
+  const toggleFollow = async (id: string) => {
+    const isFollowing = !!followed[id];
 
     setFollowed((prev) => ({
       ...prev,
-      [targetUserId]: true,
+      [id]: !isFollowing,
     }));
 
-    await fetchFollowing();
-    await fetchUsers();
-  };
-
-  const sendConnectionRequest = async (targetUserId: string) => {
-    if (!user?.id || targetUserId === user.id) return;
-
-    setErrorText(null);
-
-    const { data, error } = await supabase
-      .from('connection_requests')
-      .upsert(
-        {
-          sender_id: user.id,
-          receiver_id: targetUserId,
-          status: 'pending',
-        },
-        {
-          onConflict: 'sender_id,receiver_id',
-        }
-      )
-      .select()
-      .single();
-
-    if (error) {
-      setErrorText(error.message);
-      return;
+    try {
+      if (isFollowing) {
+        await unfollowUser(id);
+      } else {
+        await followUser(id);
+      }
+    } catch (err) {
+      console.log(err);
     }
-
-    await supabase.from('notifications').upsert({
-      id: data.id,
-      user_id: targetUserId,
-      actor_id: user.id,
-      type: 'connection_request',
-      title: 'New connection request',
-      message: `${
-        user.name || user.email?.split('@')[0] || 'Someone'
-      } wants to connect with you.`,
-      action_url: '/notifications',
-      is_read: false,
-    });
-
-    setPendingRequests((prev) => ({
-      ...prev,
-      [targetUserId]: true,
-    }));
-
-    await fetchConnections();
-    await fetchUsers();
   };
-
-  const startChat = async (targetUserId: string) => {
-    if (!user?.id || targetUserId === user.id) return;
-
-    navigate(`/messages/${targetUserId}?focus=1`);
-  };
-
-  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
 
       <div className="max-w-5xl mx-auto pt-14 md:pt-20 px-3 sm:px-4 pb-24">
+
+        {/* HEADER */}
         <div className="mb-5">
-          <h1 className="text-2xl font-bold">Connect</h1>
+          <h1 className="text-2xl font-bold">
+            Connect
+          </h1>
+
           <p className="text-sm text-muted-foreground">
             Discover real active users on FaceMeX
             {user?.name ? ` • Hi ${user.name}` : ''}
           </p>
         </div>
 
-        {errorText && (
-          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
-            {errorText}
-          </div>
-        )}
-
-        {loadingUsers ? (
+        {/* LOADING */}
+        {loading && (
           <div className="text-center py-10 text-muted-foreground">
             Loading users...
           </div>
-        ) : suggestions.length === 0 ? (
+        )}
+
+        {/* EMPTY STATE */}
+        {!loading && suggestions.length === 0 && (
           <div className="text-center py-10 text-muted-foreground">
             No active users found yet.
           </div>
-        ) : (
-          <div className="grid gap-3">
-            {suggestions.map((suggestion) => (
-              <Card key={suggestion.id} className="rounded-2xl border">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/profile/${suggestion.id}`)}
-                      className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center shrink-0"
-                    >
-                      {suggestion.avatar ? (
-                        <img
-                          src={suggestion.avatar}
-                          alt={suggestion.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <UserPlus className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </button>
-
-                    <div className="flex-1 min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/profile/${suggestion.id}`)}
-                        className="font-semibold truncate hover:underline block text-left"
-                      >
-                        {suggestion.name}
-                      </button>
-
-                      <div className="text-sm text-muted-foreground truncate">
-                        {suggestion.headline}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {connected[suggestion.id] ? (
-                          <Button
-                            type="button"
-                            onClick={() => startChat(suggestion.id)}
-                            className={actionButton}
-                          >
-                            Message
-                          </Button>
-                        ) : pendingRequests[suggestion.id] ? (
-                          <Button type="button" disabled className={actionButton}>
-                            Pending
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            onClick={() => sendConnectionRequest(suggestion.id)}
-                            className={actionButton}
-                          >
-                            Connect
-                          </Button>
-                        )}
-
-                        <Button
-                          type="button"
-                          onClick={() => handleFollow(suggestion.id)}
-                          variant={followed[suggestion.id] ? 'secondary' : 'outline'}
-                          className="rounded-xl"
-                        >
-                          {followed[suggestion.id] ? 'Following' : 'Follow'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         )}
+
+        {/* USERS */}
+        <div className="grid gap-3">
+
+          {suggestions.map((s) => (
+
+            <Card
+              key={s.id}
+              className="rounded-2xl border"
+            >
+              <CardContent className="p-4">
+
+                <div className="flex items-start gap-3">
+
+                  {/* AVATAR */}
+                  <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+
+                    {s.avatar ? (
+                      <img
+                        src={s.avatar}
+                        alt={s.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <UserPlus className="h-5 w-5 text-muted-foreground" />
+                    )}
+
+                  </div>
+
+                  {/* USER INFO */}
+                  <div className="flex-1 min-w-0">
+
+                    <div className="flex items-start justify-between gap-3">
+
+                      <div className="min-w-0">
+
+                        <div className="font-semibold truncate">
+                          {s.name}
+                        </div>
+
+                        <div className="text-sm text-muted-foreground truncate">
+                          {s.headline}
+                        </div>
+
+                      </div>
+
+                      {/* FOLLOW BUTTON */}
+                      <Button
+                        size="sm"
+                        variant={
+                          followed[s.id]
+                            ? 'default'
+                            : 'outline'
+                        }
+                        className="rounded-full"
+                        onClick={() => toggleFollow(s.id)}
+                      >
+                        {followed[s.id]
+                          ? 'Following'
+                          : 'Follow'}
+                      </Button>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </CardContent>
+            </Card>
+
+          ))}
+
+        </div>
+
       </div>
     </div>
   );
