@@ -362,6 +362,22 @@ export async function saveProjectMessage(message: ProjectMessage): Promise<void>
   throwIfError(error);
 }
 
+export async function deleteWorkspaceMessages(conversationId: string, messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
+
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to update this conversation.');
+
+  const { error } = await client
+    .from('workspace_messages')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .in('id', messageIds);
+  throwIfError(error);
+}
+
 export async function updateProjectConversationTitle(conversationId: string, title: string): Promise<void> {
   const client = requireSupabase();
   const { error } = await client

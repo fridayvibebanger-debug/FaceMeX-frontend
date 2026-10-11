@@ -61,6 +61,25 @@ export async function getDocument(documentKey: string): Promise<PersistedDocumen
   return data ? mapDocument(data) : null;
 }
 
+export async function listDocuments(projectId?: string | null): Promise<PersistedDocument[]> {
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  fail(authError);
+  if (!authData.user) throw new Error('Sign in to load your documents.');
+
+  let query = client
+    .from('documents')
+    .select('id,user_id,project_id,document_key,title,document_type,content,metadata,created_at,updated_at')
+    .eq('user_id', authData.user.id)
+    .order('updated_at', { ascending: false });
+
+  if (projectId) query = query.eq('project_id', projectId);
+
+  const { data, error } = await query;
+  fail(error);
+  return (data || []).map(mapDocument);
+}
+
 export async function saveDocument(documentKey: string, draft: DocumentDraft): Promise<PersistedDocument> {
   const client = requireSupabase();
   const { data: authData, error: authError } = await client.auth.getUser();
@@ -82,4 +101,18 @@ export async function saveDocument(documentKey: string, draft: DocumentDraft): P
     .single();
   fail(error);
   return mapDocument(data);
+}
+
+export async function deleteDocument(documentKey: string): Promise<void> {
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  fail(authError);
+  if (!authData.user) throw new Error('Sign in to delete this document.');
+
+  const { error } = await client
+    .from('documents')
+    .delete()
+    .eq('user_id', authData.user.id)
+    .eq('document_key', documentKey);
+  fail(error);
 }
