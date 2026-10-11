@@ -52,6 +52,7 @@ import {
   createProject as createProjectRecord,
   createProjectConversation,
   createWorkspaceConversation,
+  deleteWorkspaceMessages,
   deleteProject as deleteProjectRecord,
   ensureProjectStorageFolders,
   listProjectConversations,
@@ -2608,7 +2609,7 @@ function ChatGPTStyleText({
     );
   }
 
-  return <div className="space-y-3 text-[15px] leading-7 text-white/85">{blocks}</div>;
+  return <div className="fm-assistant-content space-y-3 text-[15px] leading-7 text-white/85">{blocks}</div>;
 }
 
 function isShortContextReply(text: string) {
@@ -3090,13 +3091,14 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [busy, setBusy] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth < 1024 : false));
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : false));
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(() => getAppearanceMode());
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(() => getPersonalizationProfile(userStore.id));
   const [screenShareActive, setScreenShareActive] = useState(false);
   const [screenShareError, setScreenShareError] = useState<string | null>(null);
+  const [screenShareFallbackAvailable, setScreenShareFallbackAvailable] = useState(false);
+  const [screenCaptureBusy, setScreenCaptureBusy] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [practicalLabOpen, setPracticalLabOpen] = useState(false);
   const [activeLibrarySection, setActiveLibrarySection] = useState<LibrarySectionKey>('students');
@@ -3170,6 +3172,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [jobVisibleCounts, setJobVisibleCounts] = useState<Record<string, number>>({});
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const [savedFilter, setSavedFilter] = useState<SavedCategory | 'all'>('all');
   const [nowTick, setNowTick] = useState(Date.now());
 
@@ -3221,7 +3224,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   }, [chatMessages]);
 
   const inputHasContent = prompt.trim().length > 0 || selectedImages.length > 0;
-  const showMobileBlankWorkspace = !isDesktopViewport && !focusMode && chatMessages.length === 0 && !busy && !selectedWatchVideo && !selectedProjectId;
+  const showMobileBlankWorkspace = !isDesktopViewport && chatMessages.length === 0 && !busy && !selectedWatchVideo && !selectedProjectId;
 
   const composerPlaceholder = practicalLabOpen
     ? 'Ask FaceMeX about this simulation...'
@@ -3353,6 +3356,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
   useEffect(() => () => {
     speechRecognitionRef.current?.stop?.();
+    screenShareStreamRef.current?.getTracks().forEach((track) => track.stop());
+    screenShareStreamRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -4297,14 +4302,16 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   };
 
   const startScreenShare = async () => {
-    if (!hasProAccess) {
-      setSubscriptionOpen(true);
-      setScreenShareError('Screen sharing is available on FaceMeX Pro. Upgrade to continue.');
-      return;
-    }
+    setScreenShareError(null);
+    setScreenShareFallbackAvailable(false);
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      setScreenShareError('Screen sharing is not supported in this browser.');
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+      setScreenShareError(
+        isMobileViewport
+          ? 'Live screen sharing is not supported by this mobile browser.'
+          : 'Live screen sharing is not supported by this browser.'
+      );
+      setScreenShareFallbackAvailable(true);
       return;
     }
 
@@ -4329,13 +4336,97 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
       stream.getVideoTracks().forEach((track) => {
         track.addEventListener('ended', () => {
-          stopScreenShare();
+          if (screenShareStreamRef.current === stream) {
+            screenShareStreamRef.current = null;
+            setScreenShareActive(false);
+            setScreenShareError(null);
+          }
         });
       });
     } catch (error: any) {
-      const message = error?.message || 'Screen sharing permission was denied.';
+      const unsupportedOnDevice =
+        isMobileViewport &&
+        (error?.name === 'NotSupportedError' ||
+          error?.name === 'AbortError' ||
+          error?.name === 'InvalidStateError');
+      const message =
+        unsupportedOnDevice || error?.name === 'NotSupportedError'
+          ? isMobileViewport
+            ? 'Live screen sharing is not supported by this mobile browser.'
+            : 'This browser environment does not support opening the screen-sharing picker.'
+          : error?.name === 'NotAllowedError'
+            ? isMobileViewport
+              ? 'Screen sharing could not start. The browser or device may not support it here, or permission was denied.'
+              : 'Screen sharing was cancelled or permission was denied. You can try again when ready.'
+            : error?.message || 'Screen-sharing permission could not be granted.';
       setScreenShareError(message);
+      setScreenShareFallbackAvailable(
+        unsupportedOnDevice || error?.name === 'NotSupportedError'
+      );
       setScreenShareActive(false);
+    }
+  };
+
+  const captureSharedScreenForAI = async () => {
+    const stream = screenShareStreamRef.current;
+    if (!stream || !screenShareActive) {
+      setScreenShareError('Start screen sharing before asking FaceMeX AI about the screen.');
+      return;
+    }
+
+    if (selectedImages.length >= MAX_WORKSPACE_IMAGES) {
+      setScreenShareError(`Remove an attachment first. FaceMeX supports up to ${MAX_WORKSPACE_IMAGES} images per message.`);
+      return;
+    }
+
+    setScreenCaptureBusy(true);
+    setScreenShareError(null);
+    let video: HTMLVideoElement | null = null;
+
+    try {
+      video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      const videoReady = new Promise<void>((resolve, reject) => {
+        video?.addEventListener('loadedmetadata', () => resolve(), { once: true });
+        video?.addEventListener('error', () => reject(new Error('Could not read the shared screen video.')), { once: true });
+        if (video) video.srcObject = stream;
+      });
+      await Promise.all([video.play(), videoReady]);
+
+      if (!video.videoWidth || !video.videoHeight) {
+        throw new Error('The shared screen is not ready to capture yet. Please try again.');
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Could not prepare a screenshot from the shared screen.');
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = await resizeImageDataUrl(canvas.toDataURL('image/jpeg', 0.85));
+      const image: WorkspaceImage = {
+        id: safeId(),
+        name: 'shared-screen.jpg',
+        type: 'image/jpeg',
+        size: Math.ceil(dataUrl.length * 0.75),
+        dataUrl,
+      };
+
+      setSelectedImages((previous) => [...previous, image]);
+      setPrompt((previous) => previous.trim() ? previous : 'Please analyze this shared screen and help me understand what I am seeing.');
+      window.setTimeout(() => composerTextareaRef.current?.focus(), 0);
+      toast({
+        title: 'Screen captured for AI',
+        description: 'Review your question in the composer, then send it to FaceMeX AI.',
+      });
+    } catch (error: any) {
+      setScreenShareError(error?.message || 'Could not capture the shared screen. Please try again.');
+    } finally {
+      video?.pause();
+      if (video) video.srcObject = null;
+      setScreenCaptureBusy(false);
     }
   };
 
@@ -4351,7 +4442,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     setApplySheetJob(null);
     setLastSelectedJob(null);
     setJobsOpen(false);
-    setFocusMode(false);
     setLibraryOpen(false);
     setScheduleOpen(false);
     setTrackerOpen(false);
@@ -4863,10 +4953,14 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     });
   };
 
-  const performPrompt = async (overridePrompt?: string): Promise<string | undefined> => {
-    const cleanPrompt = clean(overridePrompt || prompt);
-    const attachedImages = selectedImages;
+  const performPrompt = async (
+    overridePrompt?: string,
+    options?: { contextMessages?: ChatMessage[]; replaceMessageId?: string; images?: WorkspaceImage[] }
+  ): Promise<string | undefined> => {
+    const cleanPrompt = clean(overridePrompt !== undefined ? overridePrompt : prompt);
+    const attachedImages = options?.images ?? selectedImages;
     const hasImages = attachedImages.length > 0;
+    const promptHistory = options?.contextMessages ?? messages;
 
     if (!cleanPrompt && !hasImages) return;
 
@@ -4912,7 +5006,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       ? `${projectPromptPrefix}\n\n${finalPrompt}`
       : finalPrompt;
 
-    const conversationContext = buildConversationContext(messages);
+    const conversationContext = buildConversationContext(promptHistory);
     const shouldUseContext = Boolean(isShortContextReply(finalPrompt) && conversationContext);
 
     const intent = detectIntent(finalPrompt, hasImages);
@@ -4931,7 +5025,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       : aiPromptWithToolDirection;
 
     const userMessage: ChatMessage = {
-      id: safeId(),
+      id: options?.replaceMessageId || safeId(),
       role: 'user',
       content: finalPrompt,
       createdAt: new Date().toISOString(),
@@ -5024,7 +5118,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }
 
     try {
-      const workspaceMemoryContext = buildWorkspaceMemoryContext(messages, chatSessions);
+      const workspaceMemoryContext = buildWorkspaceMemoryContext(promptHistory, chatSessions);
       const projectHistoryContext = activeProject
         ? await searchProjectContext(activeProject.id, finalPrompt)
         : '';
@@ -5071,7 +5165,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
   personalizationContext: personalizationContext || null,
 
   // IMPORTANT FIX 👇 only last 6–8 messages
-  conversationMessages: messages
+  conversationMessages: promptHistory
     .filter((m) => !m.deletedFromChat)
     .slice(-6)
     .map((m) => ({
@@ -5114,7 +5208,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       try {
         console.log('Sending AI request to /api/ai/pro/job-assistant');
       
-        const res = await api.post('/api/ai/pro/job-assistant', payload);
+        const res = await api.postViaSameOriginProxy('/api/ai/pro/job-assistant', payload);
       
         console.log('AI Response:', res);
       
@@ -5125,7 +5219,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         try {
           console.log('Trying fallback endpoint /api/ai/workspace');
       
-          const res = await api.post('/api/ai/workspace', payload);
+          const res = await api.postViaSameOriginProxy('/api/ai/workspace', payload);
       
           console.log('Fallback AI Response:', res);
       
@@ -5191,12 +5285,15 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
     }
   };
 
-  const sendPrompt = async (overridePrompt?: string): Promise<string | undefined> => {
+  const sendPrompt = async (
+    overridePrompt?: string,
+    options?: { contextMessages?: ChatMessage[]; replaceMessageId?: string; images?: WorkspaceImage[] }
+  ): Promise<string | undefined> => {
     if (busy || promptSubmissionRef.current) return;
     promptSubmissionRef.current = true;
 
     try {
-      return await performPrompt(overridePrompt);
+      return await performPrompt(overridePrompt, options);
     } finally {
       promptSubmissionRef.current = false;
       setBusy(false);
@@ -5342,17 +5439,51 @@ Apply link: ${job.applyUrl}`;
   };
 
   const startEdit = (message: ChatMessage) => {
+    if (message.role !== 'user') return;
     setEditingMessageId(message.id);
     setEditText(message.content);
   };
 
-  const saveEdit = () => {
-    setMessages((prev) =>
-      prev.map((message) => (message.id === editingMessageId ? { ...message, content: editText } : message))
-    );
+  const submitEditedPrompt = async () => {
+    if (editSubmitting || busy || !editingMessageId) return;
 
-    setEditingMessageId(null);
-    setEditText('');
+    const messageIndex = messages.findIndex((message) => message.id === editingMessageId);
+    const editedMessage = messages[messageIndex];
+    if (messageIndex < 0 || !editedMessage || editedMessage.role !== 'user') return;
+
+    const revisedPrompt = clean(editText);
+    const attachedImages = editedMessage.images || [];
+    if (!revisedPrompt && attachedImages.length === 0) return;
+
+    const conversationId = activeProjectConversationId || activeWorkspaceConversationId;
+    const removedMessageIds = messages.slice(messageIndex + 1).map((message) => message.id);
+    const priorMessages = messages.slice(0, messageIndex);
+
+    setEditSubmitting(true);
+    try {
+      if (conversationId && removedMessageIds.length > 0) {
+        await deleteWorkspaceMessages(conversationId, removedMessageIds);
+      }
+
+      setMessages(priorMessages);
+      setEditingMessageId(null);
+      setEditText('');
+      setFollowUpExpanded(false);
+      await sendPrompt(revisedPrompt, {
+        contextMessages: priorMessages,
+        replaceMessageId: editedMessage.id,
+        images: attachedImages,
+      });
+    } catch (error) {
+      console.error('FaceMeX could not update the edited prompt', error);
+      toast({
+        title: 'Prompt could not be updated',
+        description: 'Check your connection. You may need to review the conversation and send the prompt again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const researchMessage = (message: ChatMessage) => {
@@ -5686,17 +5817,17 @@ Start with the most useful next action. Do not invent personal details, course r
     if (showCvButtons) {
       return (
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3">
-          <Button size="sm" variant="outline" onClick={openCvBuilder} className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
+          <Button size="sm" variant="outline" onClick={openCvBuilder} className="fm-response-action-button h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
             <FileText className="mr-2 h-3.5 w-3.5" />
             AI CV Builder
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
+          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="fm-response-action-button h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
             <Copy className="mr-2 h-3.5 w-3.5" />
             Copy Answer
           </Button>
 
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
+          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="fm-response-action-button h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
             <Save className="mr-2 h-3.5 w-3.5" />
             Save Tips
           </Button>
@@ -5851,7 +5982,7 @@ Start with the most useful next action. Do not invent personal details, course r
 
     return (
     <>
-      <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-white/10 pt-2 opacity-80 lg:hidden">
+      <div className="fm-message-actions mt-3 flex flex-wrap items-center gap-1 border-t border-white/10 pt-2 opacity-80 lg:hidden">
         <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
           <Copy className="h-3.5 w-3.5" />
         </Button>
@@ -5870,9 +6001,11 @@ Start with the most useful next action. Do not invent personal details, course r
           </Button>
         )}
 
-        <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Edit this message">
-          <Edit3 className="h-3.5 w-3.5" />
-        </Button>
+        {message.role === 'user' && (
+          <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Edit your prompt">
+            <Edit3 className="h-3.5 w-3.5" />
+          </Button>
+        )}
 
         <Button size="sm" variant="ghost" onClick={() => togglePin(message.id)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label={message.pinned ? 'Unpin message' : 'Pin message'}>
           {message.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
@@ -5948,16 +6081,18 @@ Start with the most useful next action. Do not invent personal details, course r
           </Button>
         )}
 
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => startEdit(message)}
-          title="Edit"
-          aria-label="Edit this message"
-          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
-        >
-          <Edit3 className="h-4 w-4" />
-        </Button>
+        {message.role === 'user' && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => startEdit(message)}
+            title="Edit prompt"
+            aria-label="Edit your prompt"
+            className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+          >
+            <Edit3 className="h-4 w-4" />
+          </Button>
+        )}
 
         <Button
           size="icon"
@@ -6478,8 +6613,7 @@ Start with the most useful next action. Do not invent personal details, course r
 
           .fm-theme-light .fm-composer-card textarea,
           .fm-theme-light .fm-ai-workspace footer textarea,
-          .fm-theme-light .fm-assistant-message,
-          .fm-theme-light .fm-assistant-message * {
+          .fm-theme-light .fm-assistant-message {
             color: #252525 !important;
           }
 
@@ -6838,14 +6972,26 @@ Start with the most useful next action. Do not invent personal details, course r
             line-height: 1.35;
           }
 
+          .fm-mobile-topbar {
+            background: rgba(12, 12, 12, 0.96) !important;
+            border-bottom: 0 !important;
+            box-shadow: none !important;
+            backdrop-filter: blur(18px);
+          }
+
+          .fm-mobile-header-button {
+            color: rgba(255, 255, 255, 0.8) !important;
+            background: transparent !important;
+          }
+
           .fm-composer-card {
-            background: #111111;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: none;
+            background: rgba(40, 40, 40, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
             width: 100%;
             min-height: 52px;
-            border-radius: 28px;
-            padding: 5px 8px;
+            border-radius: 20px;
+            padding: 5px 6px;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -6859,6 +7005,34 @@ Start with the most useful next action. Do not invent personal details, course r
             padding-bottom: 4px !important;
             font-size: 15px !important;
             line-height: 1.45 !important;
+            color: rgba(255, 255, 255, 0.9) !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card button[aria-label='Upload image or document'] {
+            background: transparent !important;
+            border: 0 !important;
+            color: rgba(255, 255, 255, 0.7) !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card button[aria-label='Send'] {
+            background: #10a37f !important;
+            border: 0 !important;
+            color: #fff !important;
+            width: 32px !important;
+            height: 32px !important;
+            min-width: 32px !important;
+            min-height: 32px !important;
+            box-shadow: 0 8px 18px rgba(16, 163, 127, 0.25);
+          }
+
+          .fm-ai-workspace footer .fm-composer-card button[aria-label='Send']:not(:disabled) {
+            opacity: 1 !important;
+          }
+
+          .fm-ai-workspace footer .fm-composer-card button[aria-label='Send']:disabled {
+            background: rgba(255, 255, 255, 0.08) !important;
+            color: rgba(255, 255, 255, 0.35) !important;
+            box-shadow: none !important;
           }
 
           .fm-mobile-chat-shell {
@@ -6869,13 +7043,23 @@ Start with the most useful next action. Do not invent personal details, course r
             padding-top: 56px;
           }
 
-          .fm-ai-workspace section {
+          .fm-ai-workspace.fm-theme-dark section {
             max-width: 760px;
             margin: 0 auto;
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 28px;
             background: linear-gradient(180deg, rgba(18, 18, 18, 0.96), rgba(12, 12, 12, 0.98));
             box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-mobile-chat-shell {
+            background: #fff !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message section {
+            border-color: #e5e5e5 !important;
+            background: #fff !important;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06) !important;
           }
 
           .fm-chat-scroll {
@@ -6916,33 +7100,33 @@ Start with the most useful next action. Do not invent personal details, course r
             color: rgba(255, 255, 255, 0.45) !important;
           }
 
-          .fm-ai-workspace .fm-assistant-message .bg-white,
-          .fm-ai-workspace .fm-assistant-message .bg-slate-50,
-          .fm-ai-workspace .fm-assistant-message .bg-slate-100 {
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .bg-white,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .bg-slate-50,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .bg-slate-100 {
             background: #171717 !important;
             color: rgba(255, 255, 255, 0.84) !important;
           }
 
-          .fm-ai-workspace .fm-assistant-message .text-slate-950,
-          .fm-ai-workspace .fm-assistant-message .text-slate-800,
-          .fm-ai-workspace .fm-assistant-message .text-slate-700,
-          .fm-ai-workspace .fm-assistant-message .text-slate-600,
-          .fm-ai-workspace .fm-assistant-message .text-slate-500 {
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .text-slate-950,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .text-slate-800,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .text-slate-700,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .text-slate-600,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .text-slate-500 {
             color: rgba(255, 255, 255, 0.84) !important;
           }
 
-          .fm-ai-workspace .fm-assistant-message button,
-          .fm-ai-workspace .fm-assistant-message [role='button'],
-          .fm-ai-workspace .fm-assistant-message .rounded-xl,
-          .fm-ai-workspace .fm-assistant-message .rounded-2xl,
-          .fm-ai-workspace .fm-assistant-message .rounded-full {
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message button,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message [role='button'],
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .rounded-xl,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .rounded-2xl,
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message .rounded-full {
             background: #171717 !important;
             border-color: rgba(255, 255, 255, 0.12) !important;
             color: rgba(255, 255, 255, 0.88) !important;
             box-shadow: none !important;
           }
 
-          .fm-ai-workspace .fm-assistant-message button * {
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-message button * {
             color: inherit !important;
           }
 
@@ -7098,6 +7282,14 @@ Start with the most useful next action. Do not invent personal details, course r
         .fm-ai-workspace.fm-theme-dark .fm-desktop-sidebar button:hover,
         .fm-ai-workspace.fm-theme-dark .fm-desktop-sidebar button[aria-expanded='true'] {
           background: #292929 !important;
+        }
+
+        .fm-ai-workspace.fm-theme-light .fm-sidebar-logo {
+          filter: brightness(0);
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-sidebar-logo {
+          filter: brightness(0) invert(1);
         }
 
         .fm-ai-workspace.fm-theme-dark .fm-workspace-topbar,
@@ -7277,9 +7469,101 @@ Start with the most useful next action. Do not invent personal details, course r
 
           .fm-ai-workspace.fm-theme-light .fm-composer-card textarea,
           .fm-ai-workspace.fm-theme-light footer textarea,
-          .fm-ai-workspace.fm-theme-light .fm-assistant-message,
-          .fm-ai-workspace.fm-theme-light .fm-assistant-message * {
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message {
             color: #252525 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message .bg-white,
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message .bg-slate-50,
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message .bg-slate-100,
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message [class*='dark:bg-'],
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message [class*='bg-[#'] {
+            border-color: #e5e5e5 !important;
+            background: #f7f7f6 !important;
+            color: #333 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content,
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content [class*='text-white'] {
+            color: #292929 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content [class*='bg-[#'] {
+            border-color: #e5e5e5 !important;
+            background: #f5f5f5 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content [class*='bg-white/'] {
+            background: #888 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-markdown-table {
+            background: #fff !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-markdown-table-head {
+            background: #f0f0f0 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-markdown-table th,
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-markdown-table td,
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-markdown-table tr {
+            border-color: #e5e5e5 !important;
+            color: #333 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-markdown-code {
+            background: #f5f5f5 !important;
+            color: #292929 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-markdown-quote {
+            border-color: #c9c9c9 !important;
+            color: #555 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content hr {
+            border-color: #dedede !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-message-actions {
+            border-color: #e5e5e5 !important;
+            opacity: 1 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message .fm-message-actions button:not(.text-red-500) {
+            background: transparent !important;
+            color: #4a4a4a !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message .fm-message-actions button:not(.text-red-500) * {
+            color: inherit !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message .fm-message-actions button:not(.text-red-500):hover {
+            background: #f0f0f0 !important;
+            color: #222 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message .text-white,
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message [class*='text-white/'] {
+            color: #333 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message button[class*='text-white'],
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message a[class*='text-white'] {
+            color: #fff !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message button.fm-response-action-button[class*='text-white'] {
+            border-color: #d6d6d6 !important;
+            background: #fff !important;
+            color: #202123 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-message button.fm-response-action-button[class*='text-white']:hover {
+            background: #f1f1f1 !important;
+            color: #111 !important;
           }
 
           .fm-ai-workspace.fm-theme-light .fm-composer-card textarea::placeholder,
@@ -7786,6 +8070,72 @@ Start with the most useful next action. Do not invent personal details, course r
             background: #262626 !important;
           }
 
+          .fm-ai-workspace.fm-theme-light .fm-mobile-topbar {
+            border-color: #e5e5e5 !important;
+            background: rgba(255, 255, 255, 0.96) !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-mobile-header-button {
+            color: #555 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-mobile-header-button:hover {
+            background: #f3f3f3 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light footer {
+            background: linear-gradient(to top, #fff 78%, rgba(255, 255, 255, 0)) !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-composer-card {
+            border-color: #d9d9d9 !important;
+            background: #fff !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light footer .fm-composer-card button[aria-label='Upload image or document'] {
+            color: #555 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light footer .fm-composer-card button[aria-label='Send'] {
+            background: #e7e7e7 !important;
+            color: #999 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light footer .fm-composer-card button[aria-label='Send']:not(:disabled) {
+            background: #202020 !important;
+            color: #fff !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-topbar {
+            border-color: #292929 !important;
+            background: rgba(13, 13, 13, 0.96) !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-header-button {
+            color: #f5f5f5 !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-composer-card {
+            border-color: #414141 !important;
+            background: #1d1d1d !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card button[aria-label='Upload image or document'] {
+            color: #aaa !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card button[aria-label='Send'] {
+            background: #383838 !important;
+            color: #aaa !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark footer .fm-composer-card button[aria-label='Send']:not(:disabled) {
+            background: #f1f1f1 !important;
+            color: #202020 !important;
+          }
+
           .fm-ai-workspace .fm-chat-scroll {
             padding: 16px 16px calc(112px + env(safe-area-inset-bottom)) !important;
             scrollbar-width: none;
@@ -7955,41 +8305,41 @@ Start with the most useful next action. Do not invent personal details, course r
           }
         }
 
-        @media (max-width: 767px) {
-          .fm-ai-workspace .fm-mobile-empty-heading {
-            display: none !important;
-          }
+        .fm-ai-workspace.fm-theme-light .fm-screen-share-status {
+          border-color: rgba(5, 150, 105, 0.28);
+          background: rgba(16, 185, 129, 0.08);
+          color: #166534;
+        }
 
-          .fm-ai-workspace footer {
-            position: fixed !important;
-            z-index: 60 !important;
-            display: block !important;
-            top: auto !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            visibility: visible !important;
-            transform: none !important;
-            opacity: 1 !important;
-            padding: 8px 12px calc(env(safe-area-inset-bottom) + 12px) !important;
-            background: linear-gradient(to top, #fff 78%, rgba(255, 255, 255, 0)) !important;
-          }
+        .fm-ai-workspace.fm-theme-light .fm-screen-share-status button {
+          border-color: rgba(5, 150, 105, 0.35);
+          background: rgba(16, 185, 129, 0.1);
+          color: #166534;
+        }
 
-          .fm-ai-workspace.fm-theme-dark footer {
-            background: linear-gradient(to top, #0d0d0d 78%, rgba(13, 13, 13, 0)) !important;
-          }
+        .fm-ai-workspace.fm-theme-light .fm-screen-share-error {
+          border-color: #fecaca;
+          background: #fef2f2;
+          color: #b91c1c;
+        }
 
-          .fm-ai-workspace section.fm-mobile-empty footer {
-            top: auto !important;
-            bottom: 0 !important;
-          }
+        .fm-ai-workspace.fm-theme-dark .fm-screen-share-status {
+          border-color: rgba(52, 211, 153, 0.3);
+          background: rgba(16, 185, 129, 0.1);
+          color: #a7f3d0;
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-screen-share-status button {
+          border-color: rgba(52, 211, 153, 0.4);
+          background: rgba(16, 185, 129, 0.2);
+          color: #d1fae5;
         }
       `}</style>
 
       <aside className="fm-desktop-sidebar hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-[#e8e8e8] bg-[#f7f7f6] text-[#282828] lg:flex lg:flex-col">
         <div className="shrink-0 px-4 pb-3 pt-5">
           <div className="mb-5 flex items-center gap-2 px-1">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-[#1d1d1d] text-xs font-black text-white">F</span>
+            <img src={FACE_MEX_AI_ICON_SRC} alt="FaceMeX logo" className="fm-sidebar-logo h-7 w-7 object-contain" />
             <span className="fm-sidebar-brand text-[15px] font-semibold leading-6 text-[#202020]">FaceMeX</span>
           </div>
           <button
@@ -8390,11 +8740,16 @@ Start with the most useful next action. Do not invent personal details, course r
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setFocusMode((value) => !value)}
-            aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
-            aria-pressed={focusMode}
-            title={focusMode ? 'Exit focus mode' : 'Focus mode'}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[#666] transition hover:bg-[#f3f3f3] hover:text-[#222]"
+            onClick={() => {
+              if (screenShareActive) stopScreenShare();
+              else void startScreenShare();
+            }}
+            aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+            title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+            aria-pressed={screenShareActive}
+            className={`flex h-10 w-10 items-center justify-center rounded-lg transition hover:bg-[#f3f3f3] ${
+              screenShareActive ? 'text-emerald-600' : 'text-[#666] hover:text-[#222]'
+            }`}
           >
             <MonitorUp className="h-[18px] w-[18px]" />
           </button>
@@ -8419,57 +8774,54 @@ Start with the most useful next action. Do not invent personal details, course r
         </div>
       </header>
 
-      <header className="fm-mobile-topbar fixed left-0 right-0 top-0 z-[65] flex h-[56px] items-center justify-between border-b border-white/10 bg-[#0d0d0d] px-3 lg:hidden">
-        <div className="flex min-w-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setJobsOpen(true)}
-            className="fm-mobile-header-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition active:scale-[0.98] hover:bg-white/10"
-            aria-label="Open sidebar"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+      <header className="fm-mobile-topbar fixed left-0 right-0 top-0 z-[65] flex h-[56px] items-center justify-between border-b border-white/10 bg-[#0d0d0d]/90 px-3 backdrop-blur-xl lg:hidden">
+       <div className="flex min-w-0 items-center gap-1">
+         <button
+           type="button"
+           onClick={() => setJobsOpen(true)}
+           className="fm-mobile-header-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 transition active:scale-[0.98] hover:bg-white/10"
+           aria-label="Open sidebar"
+         >
+           <Menu className="h-5 w-5" />
+         </button>
+         <button
+           type="button"
+           onClick={() => navigate('/facemex-plus')}
+           className="fm-mobile-header-button inline-flex h-10 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-medium transition active:scale-[0.98] hover:bg-white/10"
+           aria-label="Get Plus"
+           title="Get FaceMeX Plus"
+         >
+           <Plus className="h-4 w-4" />
+           <span>Get Plus</span>
+         </button>
+       </div>
 
-          <button
-            type="button"
-            onClick={() => navigate('/facemex-plus')}
-            className="fm-mobile-header-button inline-flex h-10 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-medium text-white transition active:scale-[0.98] hover:bg-white/10"
-            aria-label="Get Plus"
-            title="Get Plus"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Get Plus</span>
-          </button>
-        </div>
-
-        <div className="flex shrink-0 items-center">
-          <button
-            type="button"
-            onClick={() => navigate('/ai/settings', { state: { from: location.pathname } })}
-            className="fm-mobile-header-button hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition active:scale-[0.98] hover:bg-white/10 md:flex lg:hidden"
-            aria-label="Settings"
-            title="Settings"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (hasProAccess) {
-                if (screenShareActive) stopScreenShare();
-                else void startScreenShare();
-                return;
-              }
-              setSubscriptionOpen(true);
-              setScreenShareError('Screen sharing is available on FaceMeX Pro.');
-            }}
-            className="fm-mobile-header-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition active:scale-[0.98] hover:bg-white/10"
-            aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-            title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-          >
-            <MonitorUp className="h-5 w-5" />
-          </button>
-        </div>
+       <div className="flex shrink-0 items-center gap-2">
+         <button
+           type="button"
+           onClick={() => navigate('/ai/settings', { state: { from: location.pathname } })}
+           className="fm-mobile-header-button hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/80 transition active:scale-[0.98] hover:bg-white/10 md:flex lg:hidden"
+           aria-label="Settings"
+           title="Settings"
+         >
+           <Settings className="h-5 w-5" />
+         </button>
+         <button
+           type="button"
+           onClick={() => {
+             if (screenShareActive) stopScreenShare();
+             else void startScreenShare();
+           }}
+           className={`fm-mobile-header-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-[0.98] hover:bg-white/10 ${
+             screenShareActive ? 'text-emerald-400' : 'text-white/80'
+           }`}
+           aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+           title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
+           aria-pressed={screenShareActive}
+         >
+           <MonitorUp className="h-5 w-5" />
+         </button>
+       </div>
       </header>
       {isDeveloper && developerMode && (
         <div className="fixed right-3 top-[64px] z-[70] rounded-2xl border border-red-200 bg-white p-4 text-slate-900 shadow-lg lg:hidden">
@@ -8522,22 +8874,46 @@ Start with the most useful next action. Do not invent personal details, course r
                 <div className="min-h-[48vh] w-full" aria-hidden="true" />
               )}
 
-              {screenShareError && isMobileViewport && (
-                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-                  {screenShareError}
+              {screenShareError && (
+                <div className="fm-screen-share-error rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                  <p>{screenShareError}</p>
+                  {screenShareFallbackAvailable && (
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <span>Choose a screenshot instead to ask FaceMeX AI about what is on your screen.</span>
+                      <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        className="min-h-11 rounded-full border border-current/30 px-3 font-medium"
+                      >
+                        Choose screenshot
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {screenShareActive && isMobileViewport && (
-                <div className="flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
-                  <span>Screen sharing active</span>
-                  <button
-                    type="button"
-                    onClick={stopScreenShare}
-                    className="rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-1 font-medium text-emerald-100"
-                  >
-                    Stop sharing
-                  </button>
+              {screenShareActive && (
+                <div className="fm-screen-share-status flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                  <span className="min-w-0 flex-1">
+                    Sharing: {screenShareStreamRef.current?.getVideoTracks()[0]?.label || 'selected screen'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void captureSharedScreenForAI()}
+                      disabled={screenCaptureBusy || busy}
+                      className="min-h-11 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 font-medium text-emerald-100 disabled:opacity-60"
+                    >
+                      {screenCaptureBusy ? 'Capturing…' : 'Ask AI about screen'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopScreenShare}
+                      className="min-h-11 rounded-full border border-emerald-400/40 px-3 font-medium text-emerald-100"
+                    >
+                      Stop sharing
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -8592,20 +8968,41 @@ Start with the most useful next action. Do not invent personal details, course r
                       }`}
                     >
                       {editingMessageId === message.id ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2 rounded-2xl border border-white/10 bg-[#2b2b2b] p-3 text-white">
                           <Textarea
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            className="min-h-[120px] rounded-2xl bg-white text-slate-950 dark:bg-black/20 dark:text-white lg:bg-[#2f2f2f] lg:text-white"
+                            aria-label="Edit your prompt"
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' && !event.shiftKey) {
+                                event.preventDefault();
+                                void submitEditedPrompt();
+                              }
+                            }}
+                            className="min-h-[88px] resize-y border-0 bg-transparent px-1 text-[15px] leading-6 text-white shadow-none focus-visible:ring-0"
                           />
 
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => setEditingMessageId(null)}>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={editSubmitting || busy}
+                              onClick={() => {
+                                setEditingMessageId(null);
+                                setEditText('');
+                              }}
+                            >
                               Cancel
                             </Button>
 
-                            <Button size="sm" onClick={saveEdit}>
-                              Save
+                            <Button
+                              size="icon"
+                              disabled={editSubmitting || busy || (!editText.trim() && !(message.images?.length))}
+                              onClick={() => void submitEditedPrompt()}
+                              aria-label="Send edited prompt"
+                              className="h-9 w-9 rounded-full bg-white text-black hover:bg-white/90"
+                            >
+                              {editSubmitting || busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                             </Button>
                           </div>
                         </div>
@@ -8762,15 +9159,7 @@ Start with the most useful next action. Do not invent personal details, course r
                 />
               </div>
 
-              {remainingAIUses !== null && mexaPlan !== 'free' && (
-                <div className="mt-2 hidden text-center text-[11px] text-slate-400 lg:block">
-                  {mexaPlan === 'plus'
-                    ? 'FaceMeX Plus: unlimited AI, unlimited images, 50 docs/month, no scheduling, no model changes, limited video, Adzuna jobs.'
-                    : 'FaceMeX Pro: all Plus features plus scheduling, Google jobs, unlimited uploads & documents, unlimited everything.'}
-                </div>
-              )}
-
-            </div>
+           </div>
           </footer>
         </section>
       </main>
@@ -9536,20 +9925,9 @@ Start with the most useful next action. Do not invent personal details, course r
           >
             <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#171717] px-4">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-[#1d1d1d] text-xs font-black text-white">F</div>
+                <img src={FACE_MEX_AI_ICON_SRC} alt="FaceMeX logo" className="fm-sidebar-logo h-7 w-7 object-contain" />
                 <div className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-white">FaceMeX</div>
               </div>
-
-              <button
-                type="button"
-                aria-pressed={focusMode}
-                onClick={() => setFocusMode((value) => !value)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-[#1d1d1d] px-2.5 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-white/80 transition hover:bg-white/10"
-                aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Focus</span>
-              </button>
             </div>
 
             <div className="fm-mobile-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
@@ -9734,19 +10112,6 @@ Start with the most useful next action. Do not invent personal details, course r
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  navigate('/ai/settings', { state: { from: location.pathname } });
-                }}
-                aria-label="Open Settings"
-                className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white md:hidden"
-              >
-                <Settings className="h-4 w-4" />
-                <span className="min-w-0 flex-1">Settings</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setJobsOpen(false);
                   openPracticalLab();
                 }}
                 className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
@@ -9790,9 +10155,9 @@ Start with the most useful next action. Do not invent personal details, course r
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  navigate('/profile');
+                  navigate('/ai/settings', { state: { from: location.pathname } });
                 }}
-                aria-label="Open profile"
+                aria-label="Open Settings"
                 className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-2 ring-emerald-400/20">
@@ -9801,7 +10166,7 @@ Start with the most useful next action. Do not invent personal details, course r
 
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-white">{userDisplayName}</p>
-                  <p className="text-[12px] text-white/40">View profile</p>
+                  <p className="text-[12px] text-white/40">Settings</p>
                 </div>
               </button>
             </div>
@@ -10090,7 +10455,7 @@ Start with the most useful next action. Do not invent personal details, course r
           </Suspense>
         </div>
       )}
-      
+
     </div>
   );
 }
