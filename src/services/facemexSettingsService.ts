@@ -12,8 +12,9 @@ export const FACEMEX_SETTINGS_CHANGED_EVENT = 'facemex:settings-changed';
 export const FACEMEX_SETTINGS_DEFAULTS: FaceMeXSettings = {
   version: 1,
   general: {
-    appearance: 'dark',
+    appearance: 'system',
     primaryLanguage: 'en',
+    accentColor: 'blue',
   },
   personalization: {
     audience: 'individual',
@@ -21,6 +22,11 @@ export const FACEMEX_SETTINGS_DEFAULTS: FaceMeXSettings = {
     role: '',
     goals: '',
     preferences: '',
+    responseStyle: 'default',
+    warmth: 'balanced',
+    enthusiasm: 'balanced',
+    formatting: 'standard',
+    emojiUsage: 'sometimes',
   },
   notifications: {
     like: true,
@@ -30,6 +36,9 @@ export const FACEMEX_SETTINGS_DEFAULTS: FaceMeXSettings = {
     event: true,
     circle: true,
     endorsement: true,
+  },
+  memory: {
+    enabled: false,
   },
 };
 
@@ -45,6 +54,16 @@ function normalizePersonalization(value: unknown): FaceMeXPersonalizationSetting
     role: typeof raw.role === 'string' ? raw.role : '',
     goals: typeof raw.goals === 'string' ? raw.goals : '',
     preferences: typeof raw.preferences === 'string' ? raw.preferences : '',
+    responseStyle: raw.responseStyle === 'professional' || raw.responseStyle === 'friendly'
+      || raw.responseStyle === 'concise' || raw.responseStyle === 'detailed'
+      ? raw.responseStyle
+      : 'default',
+    warmth: raw.warmth === 'low' || raw.warmth === 'high' ? raw.warmth : 'balanced',
+    enthusiasm: raw.enthusiasm === 'low' || raw.enthusiasm === 'high' ? raw.enthusiasm : 'balanced',
+    formatting: raw.formatting === 'headers-and-lists' || raw.formatting === 'minimal'
+      ? raw.formatting
+      : 'standard',
+    emojiUsage: raw.emojiUsage === 'never' || raw.emojiUsage === 'often' ? raw.emojiUsage : 'sometimes',
   };
 }
 
@@ -70,19 +89,38 @@ export function normalizeFaceMeXSettings(value: unknown): FaceMeXSettings {
     : {};
   const appearance = general.appearance;
   const language = general.primaryLanguage;
+  const memory = raw.memory && typeof raw.memory === 'object'
+    ? raw.memory as Partial<FaceMeXSettings['memory']>
+    : {};
   return {
     version: 1,
     general: {
-      appearance: appearance === 'light' || appearance === 'dark'
+      appearance: appearance === 'system' || appearance === 'light' || appearance === 'dark'
         ? appearance
         : FACEMEX_SETTINGS_DEFAULTS.general.appearance,
       primaryLanguage: typeof language === 'string' && validLanguages.has(language)
         ? language
         : FACEMEX_SETTINGS_DEFAULTS.general.primaryLanguage,
+      accentColor: general.accentColor === 'violet' || general.accentColor === 'green' || general.accentColor === 'amber'
+        ? general.accentColor
+        : 'blue',
     },
     personalization: normalizePersonalization(raw.personalization),
     notifications: normalizeNotifications(raw.notifications),
+    memory: { enabled: memory.enabled === true },
   };
+}
+
+export function validateFaceMeXSettings(value: FaceMeXSettings): void {
+  const limits: Array<[string, string, number]> = [
+    ['Name', value.personalization.name, 80],
+    ['Role', value.personalization.role, 120],
+    ['Goals', value.personalization.goals, 1000],
+    ['Custom instructions', value.personalization.preferences, 2000],
+  ];
+  for (const [label, text, limit] of limits) {
+    if (text.length > limit) throw new Error(`${label} must be ${limit} characters or fewer.`);
+  }
 }
 
 function requireSupabase() {
@@ -102,6 +140,9 @@ async function requireSignedInUser() {
 
 export function cacheFaceMeXAccountSettings(userId: string, settings: FaceMeXSettings) {
   applyAppearanceMode(settings.general.appearance);
+  if (typeof document !== 'undefined') {
+    document.documentElement.dataset.accent = settings.general.accentColor;
+  }
   try {
     localStorage.setItem('settings:lang:primary', settings.general.primaryLanguage);
     localStorage.setItem(`facemex:settings:notifications:${userId}`, JSON.stringify(settings.notifications));
@@ -162,6 +203,7 @@ export async function loadFaceMeXSettings(): Promise<FaceMeXSettings> {
 export async function saveFaceMeXSettings(settingsValue: FaceMeXSettings): Promise<FaceMeXSettings> {
   const { client, user } = await requireSignedInUser();
   const settings = normalizeFaceMeXSettings(settingsValue);
+  validateFaceMeXSettings(settings);
   const { error } = await client
     .from('facemex_user_settings')
     .upsert(
