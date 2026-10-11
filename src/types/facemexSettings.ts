@@ -1,4 +1,4 @@
-import type { AppearanceMode } from '@/lib/appearance';
+import type { AppearancePreference } from '@/lib/appearance';
 
 export const FACEMEX_NOTIFICATION_TYPES = [
   'like',
@@ -18,6 +18,11 @@ export type FaceMeXPersonalizationSettings = {
   role: string;
   goals: string;
   preferences: string;
+  responseStyle: 'default' | 'professional' | 'friendly' | 'concise' | 'detailed';
+  warmth: 'low' | 'balanced' | 'high';
+  enthusiasm: 'low' | 'balanced' | 'high';
+  formatting: 'standard' | 'headers-and-lists' | 'minimal';
+  emojiUsage: 'never' | 'sometimes' | 'often';
 };
 
 export type FaceMeXNotificationSettings = Record<FaceMeXNotificationType, boolean>;
@@ -25,9 +30,13 @@ export type FaceMeXNotificationSettings = Record<FaceMeXNotificationType, boolea
 export type FaceMeXSettings = {
   version: 1;
   general: {
-    appearance: AppearanceMode;
+    appearance: AppearancePreference;
     primaryLanguage: string;
+    accentColor: 'blue' | 'violet' | 'green' | 'amber';
   };
   personalization: FaceMeXPersonalizationSettings;
   notifications: FaceMeXNotificationSettings;
+  memory: {
+    enabled: boolean;
+  };
 };
