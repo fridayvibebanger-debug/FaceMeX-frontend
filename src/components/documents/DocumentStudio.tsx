@@ -524,9 +524,66 @@ function buildLocalMeetingNotes(form: FormState) {
   ].join('\n');
 }
 
+class InvalidDocumentContentError extends Error {}
+
+function looksLikeHtml(value: string) {
+  return /<(?:!doctype|html|head|body|style|script|iframe|object|embed|p|div|h[1-6]|ul|ol|li|table|section|article|pre|blockquote)\b/i.test(value);
+}
+
+function isNotFoundHtmlPage(value: string) {
+  if (!looksLikeHtml(value)) return false;
+  const parsed = new DOMParser().parseFromString(value, 'text/html');
+  const bodyText = parsed.body.textContent || '';
+  return /page\s+not\s+found/i.test(parsed.title) ||
+    (/page\s+not\s+found/i.test(bodyText) && /<!doctype|<html\b|<head\b|<style\b/i.test(value));
+}
+
+function getSafeDocumentErrorMessage(error: unknown) {
+  if (error instanceof InvalidDocumentContentError) return error.message;
+  const message = error instanceof Error ? error.message : '';
+  if (looksLikeHtml(message) || /page\s+not\s+found/i.test(message)) {
+    return 'The document service returned an error page instead of document content. Your current document was kept unchanged.';
+  }
+  return message || 'Please check your connection and try again.';
+}
+
 function createEditorHtml(text: string, slides = false) {
+  const source = text.trim();
+  const decodedSource = (() => {
+    const decoder = document.createElement('textarea');
+    decoder.innerHTML = source;
+    return decoder.value.trim();
+  })();
+
+  if (!looksLikeHtml(source) && looksLikeHtml(decodedSource)) {
+    return createEditorHtml(decodedSource, slides);
+  }
+
+  if (looksLikeHtml(source)) {
+    const parsed = new DOMParser().parseFromString(source, 'text/html');
+    const bodyText = parsed.body.textContent || '';
+    if (isNotFoundHtmlPage(source)) {
+      throw new InvalidDocumentContentError('The document service returned a “Page not found” page instead of document content.');
+    }
+
+    const decodedBodyText = bodyText.trim();
+    if (
+      decodedBodyText !== source &&
+      looksLikeHtml(decodedBodyText) &&
+      parsed.body.children.length === 1
+    ) {
+      return createEditorHtml(decodedBodyText, slides);
+    }
+
+    parsed.querySelectorAll('script, style, iframe, object, embed, link, meta, base').forEach((element) => element.remove());
+    const bodyHtml = parsed.body.innerHTML.trim();
+    if (bodyHtml) return bodyHtml;
+    if (bodyText.trim()) return createEditorHtml(bodyText, slides);
+    throw new InvalidDocumentContentError('The saved document does not contain readable document content.');
+  }
+
   let slideStarted = false;
-  const lines = text.split(/\r?\n/);
+  const lines = source.split(/\r?\n/);
   const html = lines
     .map((line) => {
       const trimmed = line.trim();
@@ -847,6 +904,7 @@ export default function DocumentStudio({
   const [hasCoachSelection, setHasCoachSelection] = useState(false);
   const [coachBusy, setCoachBusy] = useState(false);
   const [advancedFormattingOpen, setAdvancedFormattingOpen] = useState(false);
+  const [documentLoadWarning, setDocumentLoadWarning] = useState('');
   const documentSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const coachTextareaRef = useRef<HTMLTextAreaElement>(null);
   const coachSelectionRef = useRef<{ from: number; to: number; original: string } | null>(null);
@@ -985,9 +1043,12 @@ export default function DocumentStudio({
 
     const loadDraft = async () => {
       let localDraft: any = null;
+      let invalidDocumentContent = false;
       const applyLocalDraft = () => {
         if (localDraft.form) setForm({ ...emptyForm, ...localDraft.form });
-        if (typeof localDraft.content === 'string' && localDraft.content.trim()) setContent(localDraft.content);
+        if (typeof localDraft.content === 'string' && localDraft.content.trim()) {
+          setContent(createEditorHtml(localDraft.content, kind === 'presentation'));
+        }
         if (localDraft.template) setTemplate(localDraft.template);
         if (localDraft.font) setFont(localDraft.font);
         if (localDraft.alignment) setAlignment(localDraft.alignment);
@@ -1013,7 +1074,7 @@ export default function DocumentStudio({
             setSyncStatus('saving');
           } else {
             if (metadata.form) setForm({ ...emptyForm, ...(metadata.form as Partial<FormState>) });
-            setContent(saved.content || '<p></p>');
+            setContent(createEditorHtml(saved.content || '<p></p>', kind === 'presentation'));
             if (metadata.template) setTemplate(metadata.template as TemplateKey);
             if (metadata.font) setFont(metadata.font as FontKey);
             if (metadata.alignment) setAlignment(metadata.alignment as 'left' | 'center' | 'right' | 'justify');
@@ -1031,12 +1092,31 @@ export default function DocumentStudio({
       } catch (error) {
         console.error('FaceMeX document load failed', error);
         if (cancelled) return;
-        if (localDraft) {
-          applyLocalDraft();
+        if (error instanceof InvalidDocumentContentError) {
+          invalidDocumentContent = true;
+          try {
+            if (!localDraft?.content) throw error;
+            applyLocalDraft();
+            setDocumentLoadWarning('The saved cloud copy contains an invalid page response. A local recovery copy is shown; it has not been synchronized. Save only after reviewing the document.');
+          } catch {
+            setDocumentLoadWarning('The saved document contains an invalid page response, so it was not loaded or changed. The original cloud copy has been left untouched.');
+          }
+          setSyncStatus('error');
+        } else if (localDraft) {
+          try {
+            applyLocalDraft();
+            setSyncStatus('saving');
+          } catch (draftError) {
+            console.error('FaceMeX local document recovery failed', draftError);
+            invalidDocumentContent = draftError instanceof InvalidDocumentContentError;
+            setDocumentLoadWarning('The saved document could not be rendered. The original cloud copy has been left untouched.');
+            setSyncStatus('error');
+          }
+        } else {
+          setSyncStatus('error');
         }
-        setSyncStatus('error');
       } finally {
-        if (!cancelled) setDraftHydrated(true);
+        if (!cancelled) setDraftHydrated(!invalidDocumentContent);
       }
     };
 
@@ -1271,10 +1351,9 @@ export default function DocumentStudio({
       toast({ title: 'Document ready', description: 'AI generation complete.' });
     } catch (error) {
       console.error('FaceMeX document generation failed', error);
-      setContent(createEditorHtml(localContent, kind === 'presentation'));
       toast({
         title: 'AI generation failed',
-        description: 'A local starter document is ready to edit. Check your connection and try AI generation again.',
+        description: getSafeDocumentErrorMessage(error),
         variant: 'destructive',
       });
     } finally {
@@ -1416,6 +1495,9 @@ export default function DocumentStudio({
       if (!answer) {
         throw new Error('The AI service returned an empty response.');
       }
+      if (isNotFoundHtmlPage(answer)) {
+        throw new InvalidDocumentContentError('The document service returned a “Page not found” page instead of an answer.');
+      }
       if (mode === 'edit') {
         const jsonText = answer.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
         try {
@@ -1457,7 +1539,7 @@ export default function DocumentStudio({
       console.error('FaceMeX document coach request failed', error);
       toast({
         title: 'FaceMeX could not complete that request',
-        description: error instanceof Error ? error.message : 'Please check your connection and try again.',
+        description: getSafeDocumentErrorMessage(error),
         variant: 'destructive',
       });
     } finally {
@@ -1689,6 +1771,11 @@ export default function DocumentStudio({
             )}
 
             <div className="fm-document-canvas mt-2 min-h-0 min-w-0 flex-1 overflow-auto rounded-xl bg-[#202124] p-3 sm:p-5 lg:mt-3 lg:p-8">
+              {documentLoadWarning && (
+                <p className="mx-auto mb-3 max-w-4xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100" role="alert">
+                  {documentLoadWarning}
+                </p>
+              )}
               <div className="mx-auto w-full" style={{ maxWidth: pageWidthPx }}>
                 <div
                   className="fm-document-page mx-auto bg-white text-slate-900 shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
