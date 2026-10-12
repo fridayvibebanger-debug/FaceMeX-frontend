@@ -223,14 +223,39 @@ async function buildAuthHeaders() {
   return headers;
 }
 
-async function parseResponse(res: Response) {
+async function parseResponse(res: Response, path: string) {
   const text = await res.text();
+  const isAIEndpoint = path.startsWith('/api/ai/');
+  const contentType = res.headers.get('content-type') || '';
+  const looksLikeHtml =
+    /text\/html/i.test(contentType) ||
+    /^\s*(?:<!doctype\s+html|<html\b)/i.test(text);
 
-  if (!text) return null;
+  const rejectUnexpectedResponse = () => {
+    console.error('FaceMeX API returned an unexpected non-JSON response', {
+      path: path.split('?')[0],
+      status: res.status,
+      contentType: contentType || 'unknown',
+    });
+
+    throw new Error(
+      isAIEndpoint
+        ? `The AI service returned an unexpected response (HTTP ${res.status}). Please try again later.`
+        : `The service returned an unexpected response (HTTP ${res.status}). Please try again.`
+    );
+  };
+
+  if (!text) {
+    if (isAIEndpoint && res.ok) rejectUnexpectedResponse();
+    return null;
+  }
 
   try {
     return JSON.parse(text);
   } catch {
+    if (looksLikeHtml || (isAIEndpoint && res.ok)) {
+      rejectUnexpectedResponse();
+    }
     return text;
   }
 }
@@ -259,7 +284,7 @@ async function request(path: string, options: RequestInit = {}, baseUrl = API_UR
     headers: mergedHeaders,
   });
 
-  const data = await parseResponse(res);
+  const data = await parseResponse(res, path);
 
   if (!res.ok) {
     const message =
