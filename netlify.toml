@@ -8,6 +8,12 @@
 
 # API redirects (must be before SPA redirect)
 [[redirects]]
+  from = "/api/ai/*"
+  to = "/.netlify/functions/ai-proxy/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/auth/*"
   to = "https://facemex-backend.onrender.com/api/auth/:splat"
   status = 200
