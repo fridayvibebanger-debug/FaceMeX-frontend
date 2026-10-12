@@ -83,9 +83,15 @@ export const handler = async (event) => {
     if (value) headers.set(name, value);
   });
 
-  const body = event.isBase64Encoded
+  const requestBody = event.isBase64Encoded
     ? Buffer.from(event.body || '', 'base64')
     : event.body || '';
+  let body;
+  try {
+    body = JSON.parse(requestBody.toString());
+  } catch {
+    return json(400, { error: 'invalid_json_body' });
+  }
 
   try {
     const response = await fetch(
@@ -93,7 +99,7 @@ export const handler = async (event) => {
       {
         method: 'POST',
         headers,
-        body,
+        body: JSON.stringify(body),
         redirect: 'manual',
       }
     );
@@ -102,18 +108,39 @@ export const handler = async (event) => {
     }
 
     const responseBody = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (!/^application\/(?:[\w.+-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
+      console.error('FaceMeX AI backend returned a non-JSON response', {
+        route,
+        status: response.status,
+        contentType: contentType || 'unknown',
+      });
+      return json(502, { error: 'ai_backend_invalid_response' });
+    }
+
+    try {
+      JSON.parse(responseBody);
+    } catch {
+      console.error('FaceMeX AI backend returned invalid JSON', {
+        route,
+        status: response.status,
+      });
+      return json(502, { error: 'ai_backend_invalid_response' });
+    }
 
     return {
       statusCode: response.status,
       headers: {
-        'Content-Type':
-          response.headers.get('content-type') || 'application/json',
+        'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
       },
       body: responseBody,
     };
   } catch (error) {
-    console.error('FaceMeX AI proxy request failed', error);
+    console.error('FaceMeX AI proxy request failed', {
+      route,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
     return json(502, { error: 'ai_backend_unavailable' });
   }
 };
