@@ -14,6 +14,7 @@ if (
 const AI_BACKEND_ORIGIN = AI_BACKEND_URL.origin;
 const FUNCTION_PATH = '/.netlify/functions/ai-proxy';
 const ALLOWED_AI_ROUTES = new Set([
+  '/reply',
   '/pro/job-assistant',
   '/pro/resume-builder',
   '/pro/cover-letter',
