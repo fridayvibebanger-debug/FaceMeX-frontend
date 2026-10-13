@@ -1,9 +1,8 @@
-/**
- * AI Reply utility using DeepSeek API
- * Only available for Creator+ or higher tiers
- */
+import { api } from './api';
 
- import { api } from './api';
+/**
+ * AI reply generation for users whose caller-side tier checks allow it.
+ */
 
 interface AIReplyOptions {
   context: Array<{ sender: string; content: string }>; // Recent messages in conversation
@@ -39,8 +38,11 @@ ${toneInstructions[tone]}
 Draft a brief, natural reply (max ${maxLength} characters). Be helpful but not overly formal. Don't ask questions unless it makes sense. Don't mention you're an AI.`;
 
   try {
-    const data = await api.post('/api/ai/deepseek', { prompt });
-    const reply = (data?.text || '').toString().trim();
+    const data = await api.postViaSameOriginProxy('/api/ai/reply', {
+      messages: [{ role: 'user', content: prompt }],
+      task: 'general_chat',
+    });
+    const reply = (data?.response || data?.content || data?.text || '').toString().trim();
     
     if (!reply) {
       throw new Error('No reply generated');
