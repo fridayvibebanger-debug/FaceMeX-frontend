@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { toSameOriginAIProxyPath } from './aiProxyPath.js';
 
 export const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -225,7 +226,9 @@ async function buildAuthHeaders() {
 
 async function parseResponse(res: Response, path: string) {
   const text = await res.text();
-  const isAIEndpoint = path.startsWith('/api/ai/');
+  const isAIEndpoint =
+    path.startsWith('/api/ai/') ||
+    path.startsWith('/.netlify/functions/ai-proxy/');
   const contentType = res.headers.get('content-type') || '';
   const looksLikeHtml =
     /text\/html/i.test(contentType) ||
@@ -320,7 +323,7 @@ export const api = {
 
   postViaSameOriginProxy: (path: string, body?: any) =>
     request(
-      path,
+      toSameOriginAIProxyPath(path, import.meta.env.PROD),
       {
         method: 'POST',
         body:
