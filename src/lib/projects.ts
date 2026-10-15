@@ -200,33 +200,43 @@ export async function listWorkspaceConversationSessions(): Promise<WorkspaceConv
   throwIfError(error);
   if (!conversations?.length) return [];
 
-  const ids = conversations.map((conversation) => conversation.id);
-  const { data: messages, error: messagesError } = await client
-    .from('workspace_messages')
-    .select('id,conversation_id,role,content,created_at,metadata')
-    .in('conversation_id', ids)
-    .order('created_at', { ascending: true })
-    .limit(1200);
-  throwIfError(messagesError);
+  const messagesByConversation = new Map(
+    await Promise.all(conversations.map(async (conversation) => {
+      const messages: ProjectMessage[] = [];
+      const pageSize = 1000;
 
-  const messagesByConversation = new Map<string, ProjectMessage[]>();
-  for (const row of messages || []) {
-    const mapped = mapMessage(row, null);
-    const images = Array.isArray(mapped.metadata?.images) ? mapped.metadata.images as Array<Record<string, any>> : [];
-    const signedImages = await Promise.all(images.map(async (image) => {
-      if (!image.storagePath) return image;
-      const { data: signed, error: signedError } = await client.storage
-        .from('facemex-files')
-        .createSignedUrl(image.storagePath, 60 * 60);
-      if (signedError) throw signedError;
-      return { ...image, dataUrl: signed.signedUrl };
-    }));
-    mapped.metadata = { ...mapped.metadata, images: signedImages };
-    messagesByConversation.set(row.conversation_id, [
-      ...(messagesByConversation.get(row.conversation_id) || []),
-      mapped,
-    ]);
-  }
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error: messagesError } = await client
+          .from('workspace_messages')
+          .select('id,conversation_id,role,content,created_at,metadata')
+          .eq('conversation_id', conversation.id)
+          .order('created_at', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        throwIfError(messagesError);
+
+        const page = await Promise.all((data || []).map(async (row) => {
+          const mapped = mapMessage(row, null);
+          const images = Array.isArray(mapped.metadata?.images)
+            ? mapped.metadata.images as Array<Record<string, any>>
+            : [];
+          const signedImages = await Promise.all(images.map(async (image) => {
+            if (!image.storagePath) return image;
+            const { data: signed, error: signedError } = await client.storage
+              .from('facemex-files')
+              .createSignedUrl(image.storagePath, 60 * 60);
+            if (signedError) throw signedError;
+            return { ...image, dataUrl: signed.signedUrl };
+          }));
+          mapped.metadata = { ...mapped.metadata, images: signedImages };
+          return mapped;
+        }));
+        messages.push(...page);
+        if (!data || data.length < pageSize) break;
+      }
+
+      return [conversation.id, messages] as const;
+    }))
+  );
 
   return conversations.map((row) => ({
     ...mapConversation(row),
