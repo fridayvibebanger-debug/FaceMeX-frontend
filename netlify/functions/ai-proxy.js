@@ -53,6 +53,13 @@ function resolveAIRoute(path = '') {
   return null;
 }
 
+function hasJSONContentType(value, allowStructuredSuffix = false) {
+  const mediaType = value.split(';', 1)[0].trim();
+  return allowStructuredSuffix
+    ? /^application\/(?:[\w.+-]+\+)?json$/i.test(mediaType)
+    : /^application\/json$/i.test(mediaType);
+}
+
 export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'method_not_allowed' });
@@ -69,11 +76,7 @@ export const handler = async (event) => {
       value,
     ])
   );
-  if (
-    !/^application\/json(?:\s*;|$)/i.test(
-      incomingHeaders['content-type'] || ''
-    )
-  ) {
+  if (!hasJSONContentType(incomingHeaders['content-type'] || '')) {
     return json(415, { error: 'unsupported_media_type' });
   }
 
@@ -93,6 +96,9 @@ export const handler = async (event) => {
   } catch {
     return json(400, { error: 'invalid_json_body' });
   }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json(400, { error: 'invalid_json_body' });
+  }
 
   try {
     const response = await fetch(
@@ -110,7 +116,7 @@ export const handler = async (event) => {
 
     const responseBody = await response.text();
     const contentType = response.headers.get('content-type') || '';
-    if (!/^application\/(?:[\w.+-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
+    if (!hasJSONContentType(contentType, true)) {
       console.error('FaceMeX AI backend returned a non-JSON response', {
         route,
         status: response.status,
