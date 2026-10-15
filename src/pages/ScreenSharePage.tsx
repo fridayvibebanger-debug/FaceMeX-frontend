@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import {
   ArrowLeft,
@@ -7,6 +7,7 @@ import {
   Copy,
   MonitorUp,
   Play,
+  Share2,
   ShieldCheck,
   Square,
   UserCheck,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/authStore';
+import { SEO_SITE_ORIGIN } from '@/lib/seo';
 import {
   screenShareRequest,
   type ShareParticipant,
@@ -35,8 +37,20 @@ function getScreenCaptureError(error: unknown) {
   return error instanceof Error ? error.message : 'Could not start screen sharing. Please try again.';
 }
 
+function getInvitationUrl() {
+  const currentUrl = new URL(window.location.href);
+  if (currentUrl.hostname === 'localhost' || currentUrl.hostname === '127.0.0.1') {
+    return new URL(
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+      SEO_SITE_ORIGIN
+    ).toString();
+  }
+  return currentUrl.toString();
+}
+
 export default function ScreenSharePage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, isInitialized } = useAuthStore();
   const [session, setSession] = useState<ShareSession | null>(null);
@@ -47,6 +61,7 @@ export default function ScreenSharePage() {
   const [remoteTrack, setRemoteTrack] = useState<Track | null>(null);
   const [connectionStatus, setConnectionStatus] = useState('Not connected');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [invitationShared, setInvitationShared] = useState(false);
   const [joinAttempt, setJoinAttempt] = useState(0);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -355,7 +370,7 @@ export default function ScreenSharePage() {
 
   const copyInvitation = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(getInvitationUrl());
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 2_000);
     } catch (error) {
@@ -364,9 +379,31 @@ export default function ScreenSharePage() {
     }
   };
 
+  const shareInvitation = async () => {
+    const invitation = {
+      title: 'FaceMeX private screen-sharing invitation',
+      text: 'Sign in to FaceMeX and request the host’s approval to view this live screen.',
+      url: getInvitationUrl(),
+    };
+    if (!navigator.share) {
+      await copyInvitation();
+      return;
+    }
+
+    try {
+      await navigator.share(invitation);
+      setInvitationShared(true);
+      window.setTimeout(() => setInvitationShared(false), 2_000);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      console.error('FaceMeX could not share the private invitation', error);
+      setActionError('Could not open the share menu. Copy the invitation link instead.');
+    }
+  };
+
   const leaveSession = async () => {
     await stopLocalMedia();
-    navigate('/mexa');
+    navigate('/ai/job-assistant');
   };
 
   const endSession = async () => {
@@ -386,25 +423,26 @@ export default function ScreenSharePage() {
     }
   };
 
-  const signInHref = `/login`;
+  const invitationPath = `${location.pathname}${location.search}${location.hash}`;
+  const signInHref = `/login?returnTo=${encodeURIComponent(invitationPath)}`;
   const liveCaptureSupported = typeof navigator !== 'undefined' &&
     window.isSecureContext &&
     Boolean(navigator.mediaDevices?.getDisplayMedia);
 
   if (!isInitialized) {
-    return <main className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-600">Checking FaceMeX sign-in…</main>;
+    return <main className="flex min-h-screen items-center justify-center bg-[#0d0d0d] text-sm text-white/60">Checking FaceMeX sign-in…</main>;
   }
 
   if (!isAuthenticated) {
     return (
-      <main className="flex min-h-[100dvh] items-center justify-center bg-slate-50 px-4 text-slate-900">
-        <section className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <ShieldCheck className="h-8 w-8 text-blue-600" />
+      <main className="flex min-h-[100dvh] items-center justify-center bg-[#0d0d0d] px-4 text-white">
+        <section className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#171717] p-6 shadow-2xl sm:p-8">
+          <ShieldCheck className="h-8 w-8 text-cyan-300" />
           <h1 className="mt-4 text-xl font-semibold">Sign in to join private screen sharing</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            The invitation link does not grant access by itself. Sign in to FaceMeX, then return to this tab to request the host’s approval.
+          <p className="mt-2 text-sm leading-6 text-white/60">
+            The invitation link does not grant access by itself. Sign in to FaceMeX, then request the host’s approval to join.
           </p>
-          <a href={signInHref} target="_blank" rel="noreferrer" className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-blue-600 px-5 text-sm font-medium text-white hover:bg-blue-700">
+          <a href={signInHref} className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-cyan-300 px-5 text-sm font-medium text-[#101010] hover:bg-cyan-200">
             Sign in to FaceMeX
           </a>
         </section>
@@ -414,28 +452,28 @@ export default function ScreenSharePage() {
 
   if (!sessionId) {
     return (
-      <main className="min-h-[100dvh] bg-slate-50 px-4 py-8 text-slate-900 sm:px-6">
+      <main className="min-h-[100dvh] bg-[#0d0d0d] px-4 py-8 text-white sm:px-6">
         <div className="mx-auto max-w-3xl">
-          <Link to="/mexa" className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
-            <ArrowLeft className="h-4 w-4" /> Back to MEXA
+          <Link to="/ai/job-assistant" className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white">
+            <ArrowLeft className="h-4 w-4" /> Back to FaceMeX workspace
           </Link>
-          <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+          <section className="mt-6 rounded-3xl border border-white/10 bg-[#171717] p-6 shadow-2xl sm:p-9">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-300">
               <MonitorUp className="h-6 w-6" />
             </div>
             <h1 className="mt-5 text-2xl font-semibold tracking-tight">Private screen sharing</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
               Create an invitation for registered FaceMeX users. They must sign in and wait for your approval before they can view your live screen.
             </p>
-            <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-white/45">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
               Screen capture starts only after you choose a screen in your browser’s native picker. The invitation link alone never authorizes a viewer.
             </p>
-            <Button type="button" onClick={() => void createSession()} disabled={busyAction === 'create'} className="mt-6 h-11 rounded-full bg-blue-600 px-5 text-white hover:bg-blue-700">
+            <Button type="button" onClick={() => void createSession()} disabled={busyAction === 'create'} className="mt-6 h-11 rounded-full bg-cyan-300 px-5 text-[#101010] hover:bg-cyan-200">
               <Users className="mr-2 h-4 w-4" />
               {busyAction === 'create' ? 'Creating private link…' : 'Create sharing link'}
             </Button>
-            {actionError && <p className="mt-4 text-sm text-red-600" role="alert">{actionError}</p>}
+            {actionError && <p className="mt-4 text-sm text-red-300" role="alert">{actionError}</p>}
           </section>
         </div>
       </main>
@@ -447,58 +485,64 @@ export default function ScreenSharePage() {
   const requestState = session?.participantStatus;
 
   return (
-    <main className="min-h-[100dvh] bg-slate-50 px-3 py-5 text-slate-900 sm:px-6 sm:py-8">
+    <main className="min-h-[100dvh] bg-[#0d0d0d] px-3 py-5 text-white sm:px-6 sm:py-8">
       <div className="mx-auto max-w-5xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link to="/mexa" className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
-            <ArrowLeft className="h-4 w-4" /> MEXA
+          <Link to="/ai/job-assistant" className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white">
+            <ArrowLeft className="h-4 w-4" /> FaceMeX workspace
           </Link>
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600" role="status">
-            <span className={`h-2 w-2 rounded-full ${session?.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60" role="status">
+            <span className={`h-2 w-2 rounded-full ${session?.status === 'active' ? 'bg-emerald-400' : 'bg-white/30'}`} />
             {session?.status === 'active' ? connectionStatus : session?.status === 'ended' ? 'Session ended' : session?.status || 'Loading session'}
           </span>
         </div>
 
         <header className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-blue-600">FaceMeX · private session</p>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-300">FaceMeX · private session</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
               {role === 'host' ? 'Your screen-sharing room' : 'Join a screen-sharing room'}
             </h1>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-white/55">
               {session?.hostName ? `Hosted by ${session.hostName}` : 'Checking session access…'}
               {session?.expiresAt ? ` · Expires ${new Date(session.expiresAt).toLocaleString()}` : ''}
             </p>
           </div>
           {role === 'host' && (
-            <Button type="button" variant="outline" onClick={() => void copyInvitation()} className="h-10 shrink-0 rounded-full border-slate-300 bg-white px-4">
-              {linkCopied ? <Check className="mr-2 h-4 w-4 text-emerald-600" /> : <Copy className="mr-2 h-4 w-4" />}
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => void copyInvitation()} className="h-10 rounded-full border-white/15 bg-white/5 px-4 text-white hover:bg-white/10 hover:text-white">
+              {linkCopied ? <Check className="mr-2 h-4 w-4 text-emerald-400" /> : <Copy className="mr-2 h-4 w-4" />}
               {linkCopied ? 'Link copied' : 'Copy invitation'}
-            </Button>
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void shareInvitation()} className="h-10 rounded-full border-cyan-300/30 bg-cyan-300/10 px-4 text-cyan-200 hover:bg-cyan-300/20 hover:text-cyan-100">
+                {invitationShared ? <Check className="mr-2 h-4 w-4" /> : <Share2 className="mr-2 h-4 w-4" />}
+                {invitationShared ? 'Invitation shared' : 'Share invitation'}
+              </Button>
+            </div>
           )}
         </header>
 
         {(sessionError || actionError) && (
-          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          <div className="mt-4 rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200" role="alert">
             {actionError || sessionError}
           </div>
         )}
 
         {!session && !sessionError && (
-          <p className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">Loading private session…</p>
+          <p className="mt-6 rounded-2xl border border-white/10 bg-[#171717] p-5 text-sm text-white/55">Loading private session…</p>
         )}
 
         {session && (
           <>
             {role === 'host' ? (
               <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
-                <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
+                <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
                     <div>
                       <h2 className="text-sm font-semibold">Live screen preview</h2>
-                      <p className="mt-0.5 text-xs text-slate-500">Only approved viewers can subscribe.</p>
+                      <p className="mt-0.5 text-xs text-white/45">Only approved viewers can subscribe.</p>
                     </div>
-                    <span className="text-xs text-slate-500">{connectionStatus}</span>
+                    <span className="text-xs text-white/45">{connectionStatus}</span>
                   </div>
                   <div className="aspect-video bg-slate-950">
                     {localStream ? (
@@ -519,13 +563,13 @@ export default function ScreenSharePage() {
                             <Square className="mr-2 h-4 w-4" /> Stop sharing
                           </Button>
                         ) : (
-                          <Button type="button" onClick={() => void startSharing()} disabled={Boolean(busyAction) || !liveCaptureSupported} className="rounded-full bg-blue-600 text-white hover:bg-blue-700">
+                          <Button type="button" onClick={() => void startSharing()} disabled={Boolean(busyAction) || !liveCaptureSupported} className="rounded-full bg-cyan-300 text-[#101010] hover:bg-cyan-200">
                             {session.status === 'active' ? <Play className="mr-2 h-4 w-4" /> : <MonitorUp className="mr-2 h-4 w-4" />}
                             {busyAction === 'start' ? 'Starting…' : session.status === 'active' ? 'Reconnect screen' : session.status === 'paused' ? 'Resume sharing' : 'Start sharing'}
                           </Button>
                         )}
                         {!liveCaptureSupported && (
-                          <p className="w-full text-xs text-amber-700">Live screen capture requires a supported browser in a secure context (HTTPS). Some mobile browsers do not offer device-screen capture.</p>
+                          <p className="w-full text-xs text-amber-200/80">Live screen capture requires a supported browser in a secure context (HTTPS). Some mobile browsers do not offer device-screen capture.</p>
                         )}
                         <Button type="button" variant="outline" onClick={() => void endSession()} disabled={Boolean(busyAction)} className="rounded-full">
                           End session
@@ -535,33 +579,33 @@ export default function ScreenSharePage() {
                   </div>
                 </section>
 
-                <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <section className="rounded-3xl border border-white/10 bg-[#171717] p-4 shadow-xl sm:p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h2 className="text-sm font-semibold">Viewer requests</h2>
-                      <p className="mt-1 text-xs text-slate-500">Approve each person before they can join.</p>
+                      <p className="mt-1 text-xs text-white/45">Approve each person before they can join.</p>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-xs text-white/55">
                       <Users className="h-3.5 w-3.5" /> {session.participants.length}/10
                     </span>
                   </div>
                   <div className="mt-4 space-y-2">
                     {session.participants.length === 0 ? (
-                      <p className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">No viewers have requested access.</p>
+                      <p className="rounded-xl bg-white/5 px-3 py-4 text-sm text-white/45">No viewers have requested access.</p>
                     ) : session.participants.map((participant: ShareParticipant) => (
-                      <div key={participant.id} className="rounded-2xl border border-slate-100 p-3">
+                      <div key={participant.id} className="rounded-2xl border border-white/10 p-3">
                         <div className="flex min-w-0 items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium">{participant.name}</p>
-                            <p className="mt-0.5 text-xs text-slate-500">
+                            <p className="mt-0.5 text-xs text-white/45">
                               {participant.status === 'waiting' ? 'Waiting for approval' : participant.connected ? 'Connected' : participant.status}
                             </p>
                           </div>
-                          {participant.connected && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-label="Connected" />}
+                          {participant.connected && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" aria-label="Connected" />}
                         </div>
                         {participant.status === 'waiting' && (
                           <div className="mt-3 flex gap-2">
-                            <Button type="button" size="sm" onClick={() => void runHostAction('approve', participant.id)} disabled={Boolean(busyAction)} className="h-8 rounded-full bg-emerald-600 px-3 text-white hover:bg-emerald-700">
+                            <Button type="button" size="sm" onClick={() => void runHostAction('approve', participant.id)} disabled={Boolean(busyAction)} className="h-8 rounded-full bg-emerald-500 px-3 text-[#101010] hover:bg-emerald-400">
                               <UserCheck className="mr-1.5 h-3.5 w-3.5" /> Approve
                             </Button>
                             <Button type="button" size="sm" variant="outline" onClick={() => void runHostAction('reject', participant.id)} disabled={Boolean(busyAction)} className="h-8 rounded-full px-3">
@@ -570,7 +614,7 @@ export default function ScreenSharePage() {
                           </div>
                         )}
                         {participant.status === 'approved' && (
-                          <Button type="button" size="sm" variant="outline" onClick={() => void runHostAction('remove', participant.id)} disabled={Boolean(busyAction)} className="mt-3 h-8 rounded-full px-3 text-red-700">
+                          <Button type="button" size="sm" variant="outline" onClick={() => void runHostAction('remove', participant.id)} disabled={Boolean(busyAction)} className="mt-3 h-8 rounded-full border-red-400/30 px-3 text-red-300 hover:bg-red-400/10 hover:text-red-200">
                             <UserRoundX className="mr-1.5 h-3.5 w-3.5" /> Remove viewer
                           </Button>
                         )}
@@ -580,13 +624,13 @@ export default function ScreenSharePage() {
                 </section>
               </div>
             ) : (
-              <section className="mt-5 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
+              <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-xl">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
                   <div>
                     <h2 className="text-sm font-semibold">Host screen</h2>
-                    <p className="mt-0.5 text-xs text-slate-500">The live screen appears only after the host approves your request.</p>
+                    <p className="mt-0.5 text-xs text-white/45">The live screen appears only after the host approves your request.</p>
                   </div>
-                  <span className="text-xs text-slate-500">{connectionStatus}</span>
+                  <span className="text-xs text-white/45">{connectionStatus}</span>
                 </div>
                 <div className="aspect-video bg-slate-950">
                   {remoteTrack ? (
@@ -605,20 +649,20 @@ export default function ScreenSharePage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 p-4 sm:px-5">
                   {canRequest && (
-                    <Button type="button" onClick={() => void requestAccess()} disabled={Boolean(busyAction)} className="rounded-full bg-blue-600 text-white hover:bg-blue-700">
+                    <Button type="button" onClick={() => void requestAccess()} disabled={Boolean(busyAction)} className="rounded-full bg-cyan-300 text-[#101010] hover:bg-cyan-200">
                       <UserCheck className="mr-2 h-4 w-4" />
                       {busyAction === 'request' ? 'Requesting…' : 'Request to join'}
                     </Button>
                   )}
-                  {requestState === 'waiting' && <p className="text-sm text-amber-700" role="status">Request sent. Waiting for the host to approve you.</p>}
-                  {requestState === 'rejected' && <p className="text-sm text-slate-600" role="status">The host declined this request.</p>}
-                  {requestState === 'removed' && <p className="text-sm text-red-700" role="alert">The host removed your access to this session.</p>}
+                  {requestState === 'waiting' && <p className="text-sm text-amber-200/80" role="status">Request sent. Waiting for the host to approve you.</p>}
+                  {requestState === 'rejected' && <p className="text-sm text-white/55" role="status">The host declined this request.</p>}
+                  {requestState === 'removed' && <p className="text-sm text-red-300" role="alert">The host removed your access to this session.</p>}
                   {requestState === 'approved' && session.status === 'active' && session.hostConnected && !remoteTrack && (connectionStatus === 'Connection failed' || connectionStatus === 'Disconnected') && (
                     <Button type="button" variant="outline" onClick={() => setJoinAttempt((attempt) => attempt + 1)} disabled={Boolean(busyAction)} className="rounded-full">
                       Retry connection
                     </Button>
                   )}
-                  {session.status === 'ended' && <p className="text-sm text-slate-600">This private session has ended.</p>}
+                  {session.status === 'ended' && <p className="text-sm text-white/55">This private session has ended.</p>}
                   {session.status !== 'ended' && (
                     <Button type="button" variant="outline" onClick={() => void leaveSession()} disabled={Boolean(busyAction)} className="rounded-full">
                       <ArrowLeft className="mr-2 h-4 w-4" /> Leave session
