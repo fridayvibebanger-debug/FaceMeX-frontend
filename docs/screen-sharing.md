@@ -20,7 +20,11 @@ environment variables** for the functions runtime:
 
 Never use `VITE_` prefixes for the service-role or LiveKit secret values. The
 frontend uses its existing Supabase Auth session and sends only its short-lived
-Supabase access token to `/.netlify/functions/screen-share`.
+Supabase access token in an authenticated `POST` to Netlify's canonical
+`/.netlify/functions/screen-share` route. The `/api/screen-share` rewrite
+remains as a compatibility alias for older clients. Netlify externalizes and
+packages the server-only Supabase and LiveKit SDK dependencies for the
+function runtime; deploy the updated `netlify.toml` and function together.
 Hosts can copy an invitation URL or use the browser's native share sheet. When
 the host runs on localhost, the shared URL uses the production FaceMeX origin
 (`https://facemexsocial.com`) so other users do not receive an unreachable
@@ -38,8 +42,8 @@ sharing tab remains open so the host can stop or end the session independently.
 
 For local end-to-end testing, run the app through Netlify Dev (with the values
 above in a local, untracked environment file) so Netlify Functions and the
-`/api/screen-share` rewrite are available. Vite alone does not execute Netlify
-Functions. Do not put real credentials in this repository.
+`/.netlify/functions/screen-share` route are available. Vite alone does not
+execute Netlify Functions. Do not put real credentials in this repository.
 
 ## Cost and operations
 
