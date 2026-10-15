@@ -6,6 +6,10 @@
 [build.environment]
   NODE_VERSION = "20"
 
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@supabase/supabase-js", "livekit-server-sdk"]
+
 # API redirects (must be before SPA redirect)
 [[redirects]]
   from = "/api/ai/*"
@@ -32,6 +36,12 @@
 [[redirects]]
   from = "/api/youtube/summarize"
   to = "/.netlify/functions/youtube-summarize"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/screen-share"
+  to = "/.netlify/functions/screen-share"
   status = 200
   force = true
 
