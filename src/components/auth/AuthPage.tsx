@@ -5,6 +5,7 @@ import { Eye, EyeOff, Loader2, MailCheck } from 'lucide-react';
 
 import { supabase } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/store/authStore';
+import { getAuthenticatedReturnTo } from '@/lib/authReturnTo';
 
 type AuthMode = 'login' | 'register';
 
@@ -43,7 +44,7 @@ function isValidEmail(value: string) {
 }
 
 export default function AuthPage() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [mode, setMode] = useState<AuthMode>(() => pathname === '/signup' ? 'register' : 'login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -73,9 +74,9 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/feed', { replace: true });
+      navigate(getAuthenticatedReturnTo(search), { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, search]);
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
