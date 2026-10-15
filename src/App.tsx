@@ -35,6 +35,7 @@ import ProGroupDetailPage from './pages/ProGroupDetailPage';
 import SavedPostsPage from './pages/SavedPostsPage';
 import AIResumePage from './pages/AIResumePage';
 import AIJobAssistantPage from './pages/AIJobAssistantPage';
+import ScreenSharePage from './pages/ScreenSharePage';
 import FaceMeXSettingsSync from './components/facemex-settings/FaceMeXSettingsSync';
 import AccountSettingsPage from './pages/AccountSettingsPage';
 import PersonalizationSettingsPage from './pages/PersonalizationSettingsPage';
@@ -668,6 +669,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route path="/screen-share/:sessionId?" element={<ScreenSharePage />} />
 
         <Route
           path="/projects/:projectId"
