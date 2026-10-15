@@ -3315,6 +3315,84 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   }, []);
 
   useEffect(() => {
+    const sessionId = new URLSearchParams(location.search).get('screenShareFrame');
+    if (!sessionId) return;
+
+    const storageKey = `facemex-screen-share-frame:${sessionId}`;
+    let rawFrame: string | null;
+    try {
+      rawFrame = localStorage.getItem(storageKey);
+      if (rawFrame) localStorage.removeItem(storageKey);
+    } catch (error) {
+      console.error('FaceMeX could not retrieve the selected screen frame', error);
+      toast({
+        title: 'Screen frame unavailable',
+        description: 'The selected screen frame could not be loaded in this browser.',
+        variant: 'destructive',
+      });
+      navigate(location.pathname, { replace: true });
+      return;
+    }
+
+    navigate(location.pathname, { replace: true });
+    if (!rawFrame) {
+      toast({
+        title: 'Screen frame unavailable',
+        description: 'Capture a new frame from the private sharing page and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const frame = JSON.parse(rawFrame) as Partial<WorkspaceImage> & { createdAt?: number };
+      const isRecent = typeof frame.createdAt === 'number' && Date.now() - frame.createdAt < 5 * 60 * 1000;
+      if (
+        !isRecent ||
+        typeof frame.id !== 'string' ||
+        typeof frame.dataUrl !== 'string' ||
+        !frame.dataUrl.startsWith('data:image/jpeg;base64,') ||
+        typeof frame.size !== 'number' ||
+        frame.size <= 0 ||
+        frame.size > MAX_IMAGE_SIZE_MB * 1024 * 1024
+      ) {
+        throw new Error('The selected screen frame was invalid or expired.');
+      }
+
+      const image: WorkspaceImage = {
+        id: frame.id,
+        name: 'shared-screen.jpg',
+        type: 'image/jpeg',
+        size: frame.size,
+        dataUrl: frame.dataUrl,
+      };
+      if (selectedImages.length >= MAX_WORKSPACE_IMAGES) {
+        toast({
+          title: 'Image limit reached',
+          description: `Remove an attachment first. FaceMeX supports up to ${MAX_WORKSPACE_IMAGES} images per message.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setSelectedImages((previous) => [...previous, image].slice(0, MAX_WORKSPACE_IMAGES));
+      setPrompt((previous) => previous.trim() ? previous : 'Please analyze this shared screen and help me understand what I am seeing.');
+      window.setTimeout(() => composerTextareaRef.current?.focus(), 0);
+      toast({
+        title: 'Screen frame added',
+        description: 'Review the image and your question in the composer, then send them to FaceMeX AI.',
+      });
+    } catch (error) {
+      console.error('FaceMeX rejected an invalid selected screen frame', error);
+      toast({
+        title: 'Screen frame unavailable',
+        description: error instanceof Error ? error.message : 'The selected screen frame was invalid.',
+        variant: 'destructive',
+      });
+    }
+  }, [location.pathname, location.search, navigate, selectedImages.length]);
+
+  useEffect(() => {
     let cancelled = false;
     listProjects()
       .then((projects) => {

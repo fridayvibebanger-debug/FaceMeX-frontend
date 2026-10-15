@@ -9,6 +9,7 @@ import {
   Play,
   Share2,
   ShieldCheck,
+  Sparkles,
   Square,
   UserCheck,
   UserRoundX,
@@ -62,6 +63,8 @@ export default function ScreenSharePage() {
   const [connectionStatus, setConnectionStatus] = useState('Not connected');
   const [linkCopied, setLinkCopied] = useState(false);
   const [invitationShared, setInvitationShared] = useState(false);
+  const [frameSentToWorkspace, setFrameSentToWorkspace] = useState(false);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
   const [joinAttempt, setJoinAttempt] = useState(0);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -206,6 +209,46 @@ export default function ScreenSharePage() {
     session?.participantStatus,
     session?.hostConnected,
     joinAttempt,
+  ]);
+
+  useEffect(() => {
+    const shouldReconnectHost =
+      session?.role === 'host' &&
+      session.status === 'active' &&
+      !session.hostConnected &&
+      Boolean(localStream);
+    if (!shouldReconnectHost || roomRef.current || connectingRef.current) return;
+
+    const screenTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (!screenTrack || screenTrack.readyState !== 'live') return;
+
+    let active = true;
+    connectingRef.current = true;
+    setConnectionStatus('Reconnecting host…');
+    void connectRoom(screenTrack)
+      .then(() => {
+        if (active) setConnectionStatus('Sharing live');
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setActionError(error instanceof Error ? error.message : 'Could not reconnect the shared screen.');
+          setConnectionStatus('Connection failed');
+        }
+      })
+      .finally(() => {
+        connectingRef.current = false;
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    session?.id,
+    session?.role,
+    session?.status,
+    session?.hostConnected,
+    connectionStatus,
+    localStream,
   ]);
 
   useEffect(() => {
@@ -401,6 +444,69 @@ export default function ScreenSharePage() {
     }
   };
 
+  const askAIAboutSharedFrame = () => {
+    const video = localVideoRef.current;
+    if (session?.role !== 'host' || !sessionId || !localStream || !video?.videoWidth || !video.videoHeight) {
+      setActionError('Start sharing and wait for the screen preview before capturing a frame for FaceMeX AI.');
+      return;
+    }
+
+    const storageKey = `facemex-screen-share-frame:${sessionId}`;
+    let workspaceWindow: Window | null = null;
+    setActionError('');
+    setFrameSentToWorkspace(false);
+
+    try {
+      const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Could not prepare a frame from the shared screen.');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      const imageSize = Math.ceil(dataUrl.length * 0.75);
+      if (imageSize > 12 * 1024 * 1024) {
+        throw new Error('This screen frame is too large to send to the workspace. Try capturing a different screen.');
+      }
+
+      localStorage.setItem(storageKey, JSON.stringify({
+        id: crypto.randomUUID(),
+        name: 'shared-screen.jpg',
+        type: 'image/jpeg',
+        size: imageSize,
+        dataUrl,
+        createdAt: Date.now(),
+      }));
+
+      workspaceWindow = window.open('about:blank', '_blank');
+      if (!workspaceWindow) {
+        localStorage.removeItem(storageKey);
+        throw new Error('Your browser blocked the workspace tab. Allow pop-ups for FaceMeX and try again.');
+      }
+
+      workspaceWindow.opener = null;
+      workspaceWindow.location.replace(`/ai/job-assistant?screenShareFrame=${encodeURIComponent(sessionId)}`);
+      window.setTimeout(() => {
+        try {
+          localStorage.removeItem(storageKey);
+        } catch (error) {
+          console.error('FaceMeX could not expire an unused screen frame', error);
+        }
+      }, 5 * 60 * 1000);
+      setFrameSentToWorkspace(true);
+    } catch (error) {
+      workspaceWindow?.close();
+      try {
+        localStorage.removeItem(storageKey);
+      } catch (cleanupError) {
+        console.error('FaceMeX could not clean up an untransferred screen frame', cleanupError);
+      }
+      setActionError(error instanceof Error ? error.message : 'Could not prepare a frame for FaceMeX AI.');
+    }
+  };
+
   const leaveSession = async () => {
     await stopLocalMedia();
     navigate('/ai/job-assistant');
@@ -491,10 +597,23 @@ export default function ScreenSharePage() {
           <Link to="/ai/job-assistant" className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white">
             <ArrowLeft className="h-4 w-4" /> FaceMeX workspace
           </Link>
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60" role="status">
-            <span className={`h-2 w-2 rounded-full ${session?.status === 'active' ? 'bg-emerald-400' : 'bg-white/30'}`} />
-            {session?.status === 'active' ? connectionStatus : session?.status === 'ended' ? 'Session ended' : session?.status || 'Loading session'}
-          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setParticipantsOpen((open) => !open)}
+              aria-expanded={participantsOpen}
+              aria-controls="screen-share-participants"
+              className="h-9 rounded-full border-white/15 bg-white/5 px-3 text-xs text-white hover:bg-white/10 hover:text-white"
+            >
+              <Users className="mr-2 h-4 w-4" />
+              Participants{role === 'host' ? ` (${session?.participants.length ?? 0})` : ''}
+            </Button>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60" role="status">
+              <span className={`h-2 w-2 rounded-full ${session?.status === 'active' ? 'bg-emerald-400' : 'bg-white/30'}`} />
+              {session?.status === 'active' ? connectionStatus : session?.status === 'ended' ? 'Session ended' : session?.status || 'Loading session'}
+            </span>
+          </div>
         </div>
 
         <header className="mt-5 flex flex-wrap items-start justify-between gap-4">
@@ -535,7 +654,7 @@ export default function ScreenSharePage() {
         {session && (
           <>
             {role === 'host' ? (
-              <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
+              <div className={`mt-5 grid gap-4 ${participantsOpen ? 'lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]' : 'lg:grid-cols-1'}`}>
                 <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-xl">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
                     <div>
@@ -568,6 +687,12 @@ export default function ScreenSharePage() {
                             {busyAction === 'start' ? 'Starting…' : session.status === 'active' ? 'Reconnect screen' : session.status === 'paused' ? 'Resume sharing' : 'Start sharing'}
                           </Button>
                         )}
+                        {localStream && (
+                          <Button type="button" variant="outline" onClick={askAIAboutSharedFrame} disabled={Boolean(busyAction)} className="rounded-full border-cyan-300/25 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20 hover:text-white">
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            {frameSentToWorkspace ? 'Frame opened in workspace' : 'Ask AI about screen'}
+                          </Button>
+                        )}
                         {!liveCaptureSupported && (
                           <p className="w-full text-xs text-amber-200/80">Live screen capture requires a supported browser in a secure context (HTTPS). Some mobile browsers do not offer device-screen capture.</p>
                         )}
@@ -579,17 +704,33 @@ export default function ScreenSharePage() {
                   </div>
                 </section>
 
-                <section className="rounded-3xl border border-white/10 bg-[#171717] p-4 shadow-xl sm:p-5">
+                <section
+                  id="screen-share-participants"
+                  className={`rounded-3xl border border-white/10 bg-[#171717] p-4 shadow-xl sm:p-5 ${
+                    participantsOpen
+                      ? 'fixed inset-y-0 right-0 z-[70] w-[min(90vw,380px)] overflow-y-auto rounded-none sm:inset-y-4 sm:right-4 sm:rounded-3xl lg:static lg:z-auto lg:w-auto lg:overflow-visible'
+                      : 'hidden'
+                  }`}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h2 className="text-sm font-semibold">Viewer requests</h2>
                       <p className="mt-1 text-xs text-white/45">Approve each person before they can join.</p>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-xs text-white/55">
-                      <Users className="h-3.5 w-3.5" /> {session.participants.length}/10
+                    <span className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-xs text-white/55">
+                        <Users className="h-3.5 w-3.5" /> {session.participants.length}/10
+                      </span>
+                      <button type="button" onClick={() => setParticipantsOpen(false)} aria-label="Close participants panel" className="rounded-full p-2 text-white/55 hover:bg-white/10 hover:text-white lg:hidden">
+                        <X className="h-4 w-4" />
+                      </button>
                     </span>
                   </div>
                   <div className="mt-4 space-y-2">
+                    <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/5 p-3">
+                      <p className="text-sm font-medium">{session.hostName} (you)</p>
+                      <p className="mt-0.5 text-xs text-white/45">{localStream ? 'Host · Sharing live' : 'Host · Not sharing'}</p>
+                    </div>
                     {session.participants.length === 0 ? (
                       <p className="rounded-xl bg-white/5 px-3 py-4 text-sm text-white/45">No viewers have requested access.</p>
                     ) : session.participants.map((participant: ShareParticipant) => (
@@ -624,52 +765,83 @@ export default function ScreenSharePage() {
                 </section>
               </div>
             ) : (
-              <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-xl">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
-                  <div>
-                    <h2 className="text-sm font-semibold">Host screen</h2>
-                    <p className="mt-0.5 text-xs text-white/45">The live screen appears only after the host approves your request.</p>
-                  </div>
-                  <span className="text-xs text-white/45">{connectionStatus}</span>
-                </div>
-                <div className="aspect-video bg-slate-950">
-                  {remoteTrack ? (
-                    <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-contain" />
-                  ) : (
-                    <div className="flex h-full min-h-48 flex-col items-center justify-center px-5 text-center text-white/75">
-                      <MonitorUp className="h-8 w-8 text-white/50" />
-                      <p className="mt-3 text-sm font-medium">
-                        {requestState === 'approved' && session.hostConnected ? 'Connecting to the live screen…' : 'No live screen yet'}
-                      </p>
-                      <p className="mt-1 max-w-md text-xs leading-5 text-white/50">
-                        {requestState === 'approved' ? 'Stay here while the host starts or resumes sharing.' : 'Request access and wait for the host to approve you.'}
-                      </p>
+              <>
+                <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+                    <div>
+                      <h2 className="text-sm font-semibold">Host screen</h2>
+                      <p className="mt-0.5 text-xs text-white/45">The live screen appears only after the host approves your request.</p>
                     </div>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 p-4 sm:px-5">
-                  {canRequest && (
-                    <Button type="button" onClick={() => void requestAccess()} disabled={Boolean(busyAction)} className="rounded-full bg-cyan-300 text-[#101010] hover:bg-cyan-200">
-                      <UserCheck className="mr-2 h-4 w-4" />
-                      {busyAction === 'request' ? 'Requesting…' : 'Request to join'}
-                    </Button>
-                  )}
-                  {requestState === 'waiting' && <p className="text-sm text-amber-200/80" role="status">Request sent. Waiting for the host to approve you.</p>}
-                  {requestState === 'rejected' && <p className="text-sm text-white/55" role="status">The host declined this request.</p>}
-                  {requestState === 'removed' && <p className="text-sm text-red-300" role="alert">The host removed your access to this session.</p>}
-                  {requestState === 'approved' && session.status === 'active' && session.hostConnected && !remoteTrack && (connectionStatus === 'Connection failed' || connectionStatus === 'Disconnected') && (
-                    <Button type="button" variant="outline" onClick={() => setJoinAttempt((attempt) => attempt + 1)} disabled={Boolean(busyAction)} className="rounded-full">
-                      Retry connection
-                    </Button>
-                  )}
-                  {session.status === 'ended' && <p className="text-sm text-white/55">This private session has ended.</p>}
-                  {session.status !== 'ended' && (
-                    <Button type="button" variant="outline" onClick={() => void leaveSession()} disabled={Boolean(busyAction)} className="rounded-full">
-                      <ArrowLeft className="mr-2 h-4 w-4" /> Leave session
-                    </Button>
-                  )}
-                </div>
-              </section>
+                    <span className="text-xs text-white/45">{connectionStatus}</span>
+                  </div>
+                  <div className="aspect-video bg-slate-950">
+                    {remoteTrack ? (
+                      <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-contain" />
+                    ) : (
+                      <div className="flex h-full min-h-48 flex-col items-center justify-center px-5 text-center text-white/75">
+                        <MonitorUp className="h-8 w-8 text-white/50" />
+                        <p className="mt-3 text-sm font-medium">
+                          {requestState === 'approved' && session.hostConnected ? 'Connecting to the live screen…' : 'No live screen yet'}
+                        </p>
+                        <p className="mt-1 max-w-md text-xs leading-5 text-white/50">
+                          {requestState === 'approved' ? 'Stay here while the host starts or resumes sharing.' : 'Request access and wait for the host to approve you.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 p-4 sm:px-5">
+                    {canRequest && (
+                      <Button type="button" onClick={() => void requestAccess()} disabled={Boolean(busyAction)} className="rounded-full bg-cyan-300 text-[#101010] hover:bg-cyan-200">
+                        <UserCheck className="mr-2 h-4 w-4" />
+                        {busyAction === 'request' ? 'Requesting…' : 'Request to join'}
+                      </Button>
+                    )}
+                    {requestState === 'waiting' && <p className="text-sm text-amber-200/80" role="status">Request sent. Waiting for the host to approve you.</p>}
+                    {requestState === 'rejected' && <p className="text-sm text-white/55" role="status">The host declined this request.</p>}
+                    {requestState === 'removed' && <p className="text-sm text-red-300" role="alert">The host removed your access to this session.</p>}
+                    {requestState === 'approved' && session.status === 'active' && session.hostConnected && !remoteTrack && (connectionStatus === 'Connection failed' || connectionStatus === 'Disconnected') && (
+                      <Button type="button" variant="outline" onClick={() => setJoinAttempt((attempt) => attempt + 1)} disabled={Boolean(busyAction)} className="rounded-full">
+                        Retry connection
+                      </Button>
+                    )}
+                    {session.status === 'ended' && <p className="text-sm text-white/55">This private session has ended.</p>}
+                    {session.status !== 'ended' && (
+                      <Button type="button" variant="outline" onClick={() => void leaveSession()} disabled={Boolean(busyAction)} className="rounded-full">
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Leave session
+                      </Button>
+                    )}
+                  </div>
+                </section>
+                {participantsOpen && (
+                  <>
+                    <button type="button" className="fixed inset-0 z-[60] bg-black/60 lg:hidden" onClick={() => setParticipantsOpen(false)} aria-label="Close participants panel" />
+                    <aside
+                      id="screen-share-participants"
+                      className="fixed inset-y-0 right-0 z-[70] w-[min(90vw,380px)] overflow-y-auto border-l border-white/10 bg-[#171717] p-4 shadow-2xl sm:inset-y-4 sm:right-4 sm:rounded-3xl lg:inset-y-5 lg:right-5"
+                      aria-label="Participants"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-sm font-semibold">Participants</h2>
+                        <button type="button" onClick={() => setParticipantsOpen(false)} aria-label="Close participants panel" className="rounded-full p-2 text-white/55 hover:bg-white/10 hover:text-white">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        <div className="rounded-2xl border border-white/10 p-3">
+                          <p className="text-sm font-medium">{session.hostName}</p>
+                          <p className="mt-1 text-xs text-white/45">Host{session.hostConnected ? ' · Sharing live' : ' · Not sharing'}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 p-3">
+                          <p className="text-sm font-medium">You</p>
+                          <p className="mt-1 text-xs text-white/45">
+                            {requestState === 'approved' ? connectionStatus : requestState || 'Not approved'}
+                          </p>
+                        </div>
+                      </div>
+                    </aside>
+                  </>
+                )}
+              </>
             )}
           </>
         )}
