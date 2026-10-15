@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import SubscriptionModal from "../components/SubscriptionModal";
 import type { ChangeEvent, ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -3379,6 +3379,22 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     window.addEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
     return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
   }, []);
+
+  useLayoutEffect(() => {
+    const backgroundColor = appearanceMode === 'dark' ? '#0d0d0d' : '#ffffff';
+    const surfaces = [document.documentElement, document.body, document.getElementById('root')];
+    const previousBackgrounds = surfaces.map((surface) => surface?.style.backgroundColor ?? '');
+
+    surfaces.forEach((surface) => {
+      if (surface) surface.style.backgroundColor = backgroundColor;
+    });
+
+    return () => {
+      surfaces.forEach((surface, index) => {
+        if (surface) surface.style.backgroundColor = previousBackgrounds[index];
+      });
+    };
+  }, [appearanceMode]);
 
   useEffect(() => {
     setPersonalizationProfile(getPersonalizationProfile(userStore.id));
@@ -8271,7 +8287,7 @@ Start with the most useful next action. Do not invent personal details, course r
 
           .fm-ai-workspace .fm-mobile-empty-heading {
             position: absolute;
-            top: 39%;
+            top: 35%;
             right: 16px;
             left: 16px;
             display: flex;
@@ -8740,16 +8756,10 @@ Start with the most useful next action. Do not invent personal details, course r
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => {
-              if (screenShareActive) stopScreenShare();
-              else void startScreenShare();
-            }}
-            aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-            title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-            aria-pressed={screenShareActive}
-            className={`flex h-10 w-10 items-center justify-center rounded-lg transition hover:bg-[#f3f3f3] ${
-              screenShareActive ? 'text-emerald-600' : 'text-[#666] hover:text-[#222]'
-            }`}
+            onClick={() => navigate('/screen-share')}
+            aria-label="Private screen sharing"
+            title="Private screen sharing"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-[#666] transition hover:bg-[#f3f3f3] hover:text-[#222]"
           >
             <MonitorUp className="h-[18px] w-[18px]" />
           </button>
@@ -8808,16 +8818,10 @@ Start with the most useful next action. Do not invent personal details, course r
          </button>
          <button
            type="button"
-           onClick={() => {
-             if (screenShareActive) stopScreenShare();
-             else void startScreenShare();
-           }}
-           className={`fm-mobile-header-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-[0.98] hover:bg-white/10 ${
-             screenShareActive ? 'text-emerald-400' : 'text-white/80'
-           }`}
-           aria-label={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-           title={screenShareActive ? 'Stop sharing screen' : 'Share screen'}
-           aria-pressed={screenShareActive}
+           onClick={() => navigate('/screen-share')}
+           className="fm-mobile-header-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 transition active:scale-[0.98] hover:bg-white/10"
+           aria-label="Private screen sharing"
+           title="Private screen sharing"
          >
            <MonitorUp className="h-5 w-5" />
          </button>
