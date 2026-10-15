@@ -67,6 +67,7 @@ import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
 import PublicSeoPage, { isPublicSeoPath } from './pages/PublicSeoPage';
 import { getSeoMetadata, SEO_SITE_ORIGIN } from './lib/seo';
+import { getAuthenticatedReturnTo } from './lib/authReturnTo';
 
 const PracticalLabLibrary = lazy(() => import('./pages/PracticalLabLibrary'));
 import NotificationsPage from './pages/NotificationsPage';
@@ -83,20 +84,24 @@ function PublicHomeRoute() {
 }
 
 function PublicSignupRoute() {
+  const location = useLocation();
   const { isAuthenticated } = useAuthStore();
   return isAuthenticated
-    ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />
+    ? <Navigate to={getAuthenticatedReturnTo(location.search)} replace />
     : <AuthPage />;
 }
 
 function PublicAuthRoute() {
+  const location = useLocation();
   const { isAuthenticated, isInitialized } = useAuthStore();
 
   if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
   }
 
-  return isAuthenticated ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <AuthPage />;
+  return isAuthenticated
+    ? <Navigate to={getAuthenticatedReturnTo(location.search)} replace />
+    : <AuthPage />;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
