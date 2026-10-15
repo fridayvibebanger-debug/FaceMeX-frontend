@@ -21,6 +21,20 @@ environment variables** for the functions runtime:
 Never use `VITE_` prefixes for the service-role or LiveKit secret values. The
 frontend uses its existing Supabase Auth session and sends only its short-lived
 Supabase access token to `/.netlify/functions/screen-share`.
+Hosts can copy an invitation URL or use the browser's native share sheet. When
+the host runs on localhost, the shared URL uses the production FaceMeX origin
+(`https://facemexsocial.com`) so other users do not receive an unreachable
+localhost link.
+
+## Selected-frame AI assistance
+
+While sharing, the host can capture one downscaled frame and open it in the
+existing FaceMeX workspace in a separate tab. The frame is passed through
+temporary browser-local storage, consumed once, and expires after five minutes
+if unused. No video frames are sent continuously, and capturing a frame does
+not submit it automatically: the host reviews the attachment and sends it
+through the existing workspace composer and AI request flow. The original
+sharing tab remains open so the host can stop or end the session independently.
 
 For local end-to-end testing, run the app through Netlify Dev (with the values
 above in a local, untracked environment file) so Netlify Functions and the
@@ -51,8 +65,11 @@ Deployments must support Netlify Scheduled Functions for expiry and abandoned
 room cleanup to run automatically. API requests also enforce expiry, but that
 alone cannot disconnect participants who are already connected to LiveKit.
 
-Removing one viewer disconnects their current LiveKit participant and prevents
-new tokens from being issued. A token already issued to that viewer remains
-valid until its five-minute expiry; this is the maximum window for that token
-to rejoin before it expires. Ending or pausing a session closes the room for
-all participants and uses a fresh room on the next start.
+Removing one viewer marks them removed, disconnects their current LiveKit
+participant, and rotates the active room so an already-issued token for the
+previous room cannot access the host's subsequently shared screen. Such a
+token remains valid for its original room until its five-minute expiry, but
+that room no longer carries the active session. If room rotation fails, the
+operation reports an error; the host should end the session before sharing
+again. Ending or pausing a session closes the room for all participants and
+uses a fresh room on the next start.
