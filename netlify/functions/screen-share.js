@@ -5,6 +5,7 @@ const SESSION_HOURS = 4;
 const TOKEN_TTL = '5m';
 const MAX_VIEWERS = 10;
 const HOST_DISCONNECT_GRACE_MS = 20_000;
+const LIVEKIT_MAX_PARTICIPANTS = MAX_VIEWERS + 1;
 
 class HttpError extends Error {
   constructor(statusCode, code, message) {
@@ -96,6 +97,29 @@ function assertNotExpired(session) {
   }
 }
 
+export async function createPrivateSession(admin, user, now = new Date()) {
+  const sessionId = crypto.randomUUID();
+  const roomName = `facemex-${crypto.randomUUID()}`;
+  const expiresAt = new Date(now.getTime() + SESSION_HOURS * 60 * 60 * 1000).toISOString();
+  const hostName = String(user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'FaceMeX user')
+    .trim()
+    .slice(0, 80) || 'FaceMeX user';
+  const { data, error } = await admin
+    .from('facemex_screen_share_sessions')
+    .insert({
+      id: sessionId,
+      room_name: roomName,
+      host_id: user.id,
+      host_name: hostName,
+      status: 'pending',
+      expires_at: expiresAt,
+    })
+    .select('id,room_name,host_id,host_name,status,invitation_revoked,started_at,expires_at,created_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 function makeClients(settings, accessToken) {
   const verifier = createClient(settings.supabaseUrl, settings.supabaseAnonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -146,6 +170,46 @@ export async function deleteLiveKitRoomIfPresent(roomService, roomName) {
   if (rooms.some((room) => room.name === roomName)) {
     await roomService.deleteRoom(roomName);
   }
+}
+
+export async function createLiveKitRoom(roomService, roomName) {
+  await roomService.createRoom({
+    name: roomName,
+    emptyTimeout: 60,
+    maxParticipants: LIVEKIT_MAX_PARTICIPANTS,
+  });
+}
+
+export async function rotateActiveSessionRoom(admin, roomService, session, now = new Date()) {
+  const nextRoomName = `facemex-${crypto.randomUUID()}`;
+  await createLiveKitRoom(roomService, nextRoomName);
+
+  let updatedSession;
+  try {
+    const { data, error } = await admin
+      .from('facemex_screen_share_sessions')
+      .update({ room_name: nextRoomName, started_at: now.toISOString() })
+      .eq('id', session.id)
+      .eq('room_name', session.room_name)
+      .eq('status', 'active')
+      .select('id,room_name,host_id,host_name,status,invitation_revoked,started_at,expires_at,created_at')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      throw new HttpError(409, 'session_state_changed', 'The sharing session changed before access could be revoked. Refresh and try again.');
+    }
+    updatedSession = data;
+  } catch (error) {
+    try {
+      await deleteLiveKitRoomIfPresent(roomService, nextRoomName);
+    } catch (cleanupError) {
+      console.error('FaceMeX could not clean up a rotated room after session update failed', cleanupError);
+    }
+    throw error;
+  }
+
+  await deleteLiveKitRoomIfPresent(roomService, session.room_name);
+  return updatedSession;
 }
 
 async function endExpiredHostlessSession(admin, roomService, session) {
@@ -249,27 +313,8 @@ async function mustBeHost(session, user) {
 
 async function handleAction(action, body, user, admin, roomService, settings) {
   if (action === 'create') {
-    const now = new Date();
-    const sessionId = crypto.randomUUID();
-    const roomName = `facemex-${crypto.randomUUID()}`;
-    const expiresAt = new Date(now.getTime() + SESSION_HOURS * 60 * 60 * 1000).toISOString();
-    const hostName = String(user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'FaceMeX user')
-      .trim()
-      .slice(0, 80) || 'FaceMeX user';
-    const { data, error } = await admin
-      .from('facemex_screen_share_sessions')
-      .insert({
-        id: sessionId,
-        room_name: roomName,
-        host_id: user.id,
-        host_name: hostName,
-        status: 'pending',
-        expires_at: expiresAt,
-      })
-      .select('id,room_name,host_id,host_name,status,invitation_revoked,started_at,expires_at,created_at')
-      .single();
-    if (error) throw error;
-    return sessionResponse(admin, roomService, data, user);
+    const session = await createPrivateSession(admin, user);
+    return sessionResponse(admin, roomService, session, user);
   }
 
   assertSessionId(body.sessionId);
@@ -395,11 +440,7 @@ async function handleAction(action, body, user, admin, roomService, settings) {
     const previousRoomName = session.room_name;
     await deleteLiveKitRoomIfPresent(roomService, previousRoomName);
     const roomName = `facemex-${crypto.randomUUID()}`;
-    await roomService.createRoom({
-      name: roomName,
-      emptyTimeout: 60,
-      maxParticipants: MAX_VIEWERS + 1,
-    });
+    await createLiveKitRoom(roomService, roomName);
     try {
       const { data, error } = await admin
         .from('facemex_screen_share_sessions')
@@ -458,9 +499,15 @@ async function handleAction(action, body, user, admin, roomService, settings) {
       throw new HttpError(404, 'participant_not_found', 'That participant is not part of this session.');
     }
     if (session.status === 'active') {
-      const liveParticipants = await roomService.listParticipants(session.room_name);
-      if (liveParticipants.some((participant) => participant.identity === body.participantId)) {
-        await roomService.removeParticipant(session.room_name, body.participantId);
+      try {
+        const liveParticipants = await roomService.listParticipants(session.room_name);
+        if (liveParticipants.some((participant) => participant.identity === body.participantId)) {
+          await roomService.removeParticipant(session.room_name, body.participantId);
+        }
+        session = await rotateActiveSessionRoom(admin, roomService, session);
+      } catch (error) {
+        console.error('FaceMeX could not rotate the media room after removing a viewer', error);
+        throw new HttpError(502, 'viewer_revocation_failed', 'The viewer was removed from the request list, but the live room could not be safely rotated. End the session before continuing.');
       }
     }
     return sessionResponse(admin, roomService, session, user);
@@ -486,30 +533,64 @@ async function handleAction(action, body, user, admin, roomService, settings) {
   throw new HttpError(400, 'unknown_action', 'This screen sharing action is not supported.');
 }
 
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: { 'Cache-Control': 'no-store' }, body: '' };
-  if (event.httpMethod !== 'POST') {
-    return json(405, { error: 'method_not_allowed', message: 'Use POST for screen sharing requests.' });
-  }
-
-  const bearer = getBearerToken(event.headers || {});
-  if (!bearer) {
-    return json(401, { error: 'unauthorized', message: 'Sign in to FaceMeX before using private screen sharing.' });
-  }
-
-  try {
-    const settings = config();
-    const { verifier, admin, roomService } = makeClients(settings, bearer);
-    const user = await requireUser(verifier, bearer);
-    const body = parseBody(event);
-    const action = String(body.action || '');
-    const result = await handleAction(action, body, user, admin, roomService, settings);
-    return json(200, result);
-  } catch (error) {
-    if (error instanceof HttpError) {
-      return json(error.statusCode, { error: error.code, message: error.message });
+export function createHandler({ readConfig = config, createClients = makeClients } = {}) {
+  return async (event) => {
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: { 'Cache-Control': 'no-store' }, body: '' };
+    if (event.httpMethod !== 'POST') {
+      return json(405, { error: 'method_not_allowed', message: 'Use POST for screen sharing requests.' });
     }
-    console.error('FaceMeX screen sharing request failed', error);
-    return json(500, { error: 'screen_share_request_failed', message: 'The screen sharing request failed. Please try again.' });
-  }
-};
+
+    const bearer = getBearerToken(event.headers || {});
+    if (!bearer) {
+      return json(401, { error: 'unauthorized', message: 'Sign in to FaceMeX before using private screen sharing.' });
+    }
+
+    let body;
+    let action = '';
+    try {
+      body = parseBody(event);
+      action = String(body.action || '');
+      if (action !== 'create') {
+        assertSessionId(body.sessionId);
+        if (['approve', 'reject', 'remove'].includes(action)) assertSessionId(body.participantId);
+      }
+    } catch (error) {
+      if (error instanceof HttpError) {
+        return json(error.statusCode, { error: error.code, message: error.message });
+      }
+      console.error('FaceMeX screen-share request validation failed', {
+        route: event.path || '/.netlify/functions/screen-share',
+        method: event.httpMethod,
+        errorCode: 'request_validation_failed',
+      });
+      return json(400, { error: 'request_validation_failed', message: 'The screen sharing request was invalid.' });
+    }
+
+    let upstreamService = 'configuration';
+    try {
+      const settings = readConfig();
+      const { verifier, admin, roomService } = createClients(settings, bearer);
+      upstreamService = 'supabase-auth';
+      const user = await requireUser(verifier, bearer);
+      upstreamService = action === 'create' ? 'supabase-session-store' : 'session-authorization';
+      const result = await handleAction(action, body, user, admin, roomService, settings);
+      return json(200, result);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        return json(error.statusCode, { error: error.code, message: error.message });
+      }
+      console.error('FaceMeX screen-share function request failed', {
+        route: event.path || '/.netlify/functions/screen-share',
+        method: event.httpMethod,
+        action: action || 'unknown',
+        service: upstreamService,
+        errorCode: typeof error?.code === 'string' && /^[a-z0-9_-]{1,64}$/i.test(error.code)
+          ? error.code
+          : 'screen_share_request_failed',
+      });
+      return json(500, { error: 'screen_share_request_failed', message: 'The screen sharing request failed. Please try again.' });
+    }
+  };
+}
+
+export const handler = createHandler();
