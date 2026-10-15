@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 
+const SCREEN_SHARE_FUNCTION_PATH = '/.netlify/functions/screen-share';
+
 export type ShareParticipant = {
   id: string;
   name: string;
@@ -38,7 +40,7 @@ export async function screenShareRequest<T>(
     throw new Error('Sign in to FaceMeX before using private screen sharing.');
   }
 
-  const response = await fetch('/api/screen-share', {
+  const response = await fetch(SCREEN_SHARE_FUNCTION_PATH, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -50,7 +52,14 @@ export async function screenShareRequest<T>(
 
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('application/json')) {
-    throw new Error(`Screen sharing service returned an unexpected response (HTTP ${response.status}).`);
+    console.error('FaceMeX screen-sharing function returned a non-JSON response', {
+      route: SCREEN_SHARE_FUNCTION_PATH,
+      method: 'POST',
+      status: response.status,
+      contentType: contentType || 'missing',
+      requestId: response.headers.get('x-nf-request-id') || undefined,
+    });
+    throw new Error(`Screen sharing endpoint ${SCREEN_SHARE_FUNCTION_PATH} returned an unexpected response (HTTP ${response.status}).`);
   }
 
   const payload = await response.json();
