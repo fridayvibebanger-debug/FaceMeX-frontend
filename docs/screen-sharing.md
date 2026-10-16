@@ -5,11 +5,21 @@ existing Supabase Auth project for identity and session metadata. Session
 approval is enforced by the Netlify function; the browser never receives
 LiveKit API secrets or Supabase service-role credentials.
 
+The sharing API runs as the Netlify Function
+`netlify/functions/screen-share.js`; it does not run on the separate Render
+backend. Set its secrets in the FaceMeX **Netlify site** environment variables
+for the deploy contexts used by the production site, then redeploy. Values set
+only in Render are not visible to this function.
+
 ## Deployment configuration
 
-Apply `supabase/migrations/202610150001_facemex_screen_share_sessions.sql` to
-the existing Supabase project. Configure these values as **server-side Netlify
-environment variables** for the functions runtime:
+Apply both
+`supabase/migrations/202610150001_facemex_screen_share_sessions.sql` and
+`supabase/migrations/202610160001_facemex_screen_share_guest_participants.sql`
+to the existing Supabase project. Enable **Anonymous Sign-Ins** in the
+Supabase Auth provider settings to allow guests to create a limited Supabase
+identity. Configure these values as **server-side Netlify environment
+variables** for the functions runtime:
 
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
@@ -56,11 +66,27 @@ enabling the feature for users. This implementation does not assume a free
 tier or provision a LiveKit project.
 
 Each invitation expires after four hours, each room is limited to one host and
-ten invited viewers, and viewer tokens are valid for five minutes. Viewers
-cannot publish media or data. The host must explicitly start sharing, and
-pausing or ending the session disconnects participants through LiveKit. Each
-start or resume uses a fresh LiveKit room name so a previously issued token
-cannot rejoin the active room.
+ten invited viewers, and participant tokens are valid for five minutes.
+Guests join with Supabase anonymous authentication, submit a display name, and
+remain pending until the host approves them. Only registered FaceMeX accounts
+can create or control sessions. Approved guests and registered viewers can
+publish microphone audio and in-room chat data, but cannot publish screen or
+camera video. The host can publish microphone audio and the screen share.
+These grants are issued only after the server verifies the authenticated
+participant's approval. The invitation URL alone never grants room access.
+Anonymous guest identities are normal Supabase Auth users; configure a suitable
+retention/cleanup policy for abandoned anonymous accounts.
+
+Meeting chat uses LiveKit data messages and is intentionally ephemeral; chat
+history is not stored after participants leave. Participants and speaking
+indicators reflect the connected LiveKit room. Screen-share quality defaults
+to Auto and can be changed to Standard or High; changing quality republishes
+the current capture with the selected encoding limits. Actual capture quality
+is still subject to the selected display, browser, hardware, and network.
+
+The host must explicitly start sharing, and pausing or ending the session
+disconnects participants through LiveKit. Each start or resume uses a fresh
+LiveKit room name so a previously issued token cannot rejoin the active room.
 
 The scheduled `screen-share-cleanup` function runs once per minute. It ends
 expired sessions, revokes their invitations, deletes their LiveKit rooms, and
