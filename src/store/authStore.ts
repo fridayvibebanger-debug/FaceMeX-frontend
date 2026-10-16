@@ -9,6 +9,7 @@ interface User {
   id: string;
   name: string;
   email: string;
+  isAnonymous?: boolean;
   phone?: string;
   avatar?: string;
   tier?: string;
@@ -70,6 +71,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       id: supaUser.id,
       email: supaUser.email || email,
       name: (supaUser.user_metadata as any)?.full_name || email.split('@')[0] || 'FaceMe User',
+      isAnonymous: Boolean(supaUser.is_anonymous),
       phone: (supaUser.user_metadata as any)?.phone,
       avatar: (supaUser.user_metadata as any)?.avatar_url,
       followers: 0,
@@ -128,6 +130,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       id: supaUser.id,
       email: supaUser.email || email,
       name,
+      isAnonymous: Boolean(supaUser.is_anonymous),
       avatar: (supaUser.user_metadata as any)?.avatar_url,
       followers: 0,
       following: 0,
@@ -201,6 +204,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           id: supaUser.id,
           email: supaUser.email || '',
           name: (supaUser.user_metadata as any)?.full_name || supaUser.email || 'FaceMe User',
+          isAnonymous: Boolean(supaUser.is_anonymous),
           phone: (supaUser.user_metadata as any)?.phone,
           avatar: (supaUser.user_metadata as any)?.avatar_url,
           followers: 0,
@@ -240,6 +244,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       id: supaUser.id,
       email: supaUser.email || '',
       name: (supaUser.user_metadata as any)?.full_name || supaUser.email || 'FaceMe User',
+      isAnonymous: Boolean(supaUser.is_anonymous),
       phone: (supaUser.user_metadata as any)?.phone,
       avatar: (supaUser.user_metadata as any)?.avatar_url,
       followers: 0,
