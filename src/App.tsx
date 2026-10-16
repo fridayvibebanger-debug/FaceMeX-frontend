@@ -79,36 +79,42 @@ import DepartmentDetailPage from './enterprise/pages/DepartmentDetailPage';
 const DEFAULT_AUTHENTICATED_ROUTE = '/ai/job-assistant';
 
 function PublicHomeRoute() {
-  const { isAuthenticated } = useAuthStore();
-  return isAuthenticated ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <PublicSeoPage />;
+  const { isAuthenticated, user } = useAuthStore();
+  return isAuthenticated && !user?.isAnonymous ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <PublicSeoPage />;
 }
 
 function PublicSignupRoute() {
   const location = useLocation();
-  const { isAuthenticated } = useAuthStore();
-  return isAuthenticated
+  const { isAuthenticated, user } = useAuthStore();
+  return isAuthenticated && !user?.isAnonymous
     ? <Navigate to={getAuthenticatedReturnTo(location.search)} replace />
     : <AuthPage />;
 }
 
 function PublicAuthRoute() {
   const location = useLocation();
-  const { isAuthenticated, isInitialized } = useAuthStore();
+  const { isAuthenticated, isInitialized, user } = useAuthStore();
 
   if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
   }
 
-  return isAuthenticated
+  return isAuthenticated && !user?.isAnonymous
     ? <Navigate to={getAuthenticatedReturnTo(location.search)} replace />
     : <AuthPage />;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isInitialized } = useAuthStore();
+  const location = useLocation();
+  const { isAuthenticated, isInitialized, user } = useAuthStore();
 
   if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
+  }
+
+  if (isAuthenticated && user?.isAnonymous) {
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
