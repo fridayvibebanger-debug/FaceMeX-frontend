@@ -5,6 +5,7 @@ const SCREEN_SHARE_FUNCTION_PATH = '/.netlify/functions/screen-share';
 export type ShareParticipant = {
   id: string;
   name: string;
+  isGuest: boolean;
   status: 'waiting' | 'approved' | 'rejected' | 'removed';
   requestedAt: string;
   connected: boolean;
@@ -17,7 +18,9 @@ export type ShareSession = {
   hostName: string;
   role: 'host' | 'visitor';
   participantStatus: ShareParticipant['status'] | null;
+  isGuest: boolean;
   hostConnected: boolean;
+  startedAt: string | null;
   participants: ShareParticipant[];
 };
 
