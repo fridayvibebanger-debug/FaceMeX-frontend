@@ -24,10 +24,12 @@ export function createParticipantGrant(isHost, roomName) {
   return {
     roomJoin: true,
     room: roomName,
-    canPublish: isHost,
-    canPublishSources: isHost ? [TrackSource.SCREEN_SHARE] : [],
+    canPublish: true,
+    canPublishSources: isHost
+      ? [TrackSource.MICROPHONE, TrackSource.SCREEN_SHARE]
+      : [TrackSource.MICROPHONE],
     canSubscribe: true,
-    canPublishData: false,
+    canPublishData: true,
   };
 }
 
@@ -35,6 +37,20 @@ export function getBearerToken(headers = {}) {
   const authorization = headers.authorization || headers.Authorization || '';
   const match = String(authorization).match(/^Bearer\s+(\S+)$/i);
   return match?.[1] || '';
+}
+
+export function getParticipantDisplayName(user, requestedName) {
+  const preferredName = user.is_anonymous
+    ? requestedName
+    : user.user_metadata?.full_name || user.user_metadata?.name || user.email;
+  const displayName = String(preferredName || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, 80);
+  if (user.is_anonymous && !displayName) {
+    throw new HttpError(400, 'guest_name_required', 'Enter a display name before requesting to join.');
+  }
+  return displayName || 'FaceMeX user';
 }
 
 function json(statusCode, body) {
@@ -49,16 +65,24 @@ function json(statusCode, body) {
   };
 }
 
-function config() {
+export function readScreenShareConfig(env = process.env) {
   const settings = {
-    supabaseUrl: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    livekitUrl: process.env.LIVEKIT_URL,
-    livekitApiKey: process.env.LIVEKIT_API_KEY,
-    livekitApiSecret: process.env.LIVEKIT_API_SECRET,
+    supabaseUrl: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+    supabaseAnonKey: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+    livekitUrl: env.LIVEKIT_URL,
+    livekitApiKey: env.LIVEKIT_API_KEY,
+    livekitApiSecret: env.LIVEKIT_API_SECRET,
   };
-  const missing = Object.entries(settings)
+  const requiredVariables = [
+    ['SUPABASE_URL', settings.supabaseUrl],
+    ['SUPABASE_ANON_KEY', settings.supabaseAnonKey],
+    ['SUPABASE_SERVICE_ROLE_KEY', settings.serviceRoleKey],
+    ['LIVEKIT_URL', settings.livekitUrl],
+    ['LIVEKIT_API_KEY', settings.livekitApiKey],
+    ['LIVEKIT_API_SECRET', settings.livekitApiSecret],
+  ];
+  const missing = requiredVariables
     .filter(([, value]) => !value)
     .map(([name]) => name);
 
@@ -72,6 +96,8 @@ function config() {
 
   return settings;
 }
+
+const config = () => readScreenShareConfig();
 
 function parseBody(event) {
   if (!event.body) return {};
@@ -255,7 +281,7 @@ async function sessionResponse(admin, roomService, session, user) {
   const { data: ownParticipant, error: participantError } = role === 'visitor'
     ? await admin
         .from('facemex_screen_share_participants')
-        .select('user_id,display_name,status,requested_at')
+        .select('user_id,display_name,status,requested_at,is_guest')
         .eq('session_id', session.id)
         .eq('user_id', user.id)
         .maybeSingle()
@@ -266,7 +292,7 @@ async function sessionResponse(admin, roomService, session, user) {
   if (role === 'host') {
     const { data, error } = await admin
       .from('facemex_screen_share_participants')
-      .select('user_id,display_name,status,requested_at')
+      .select('user_id,display_name,status,requested_at,is_guest')
       .eq('session_id', session.id)
       .order('requested_at', { ascending: true });
     if (error) throw error;
@@ -285,6 +311,7 @@ async function sessionResponse(admin, roomService, session, user) {
     participants = (data || []).map((participant) => ({
       id: participant.user_id,
       name: participant.display_name,
+      isGuest: Boolean(participant.is_guest),
       status: participant.status,
       requestedAt: participant.requested_at,
       connected: connectedIdentities.has(participant.user_id),
@@ -299,7 +326,9 @@ async function sessionResponse(admin, roomService, session, user) {
       hostName: session.host_name,
       role,
       participantStatus: ownParticipant?.status || null,
+      isGuest: Boolean(ownParticipant?.is_guest),
       hostConnected,
+      startedAt: session.started_at,
       participants,
     },
   };
@@ -313,6 +342,9 @@ async function mustBeHost(session, user) {
 
 async function handleAction(action, body, user, admin, roomService, settings) {
   if (action === 'create') {
+    if (user.is_anonymous) {
+      throw new HttpError(403, 'registered_host_required', 'Sign in to a registered FaceMeX account to host a private session.');
+    }
     const session = await createPrivateSession(admin, user);
     return sessionResponse(admin, roomService, session, user);
   }
@@ -355,15 +387,14 @@ async function handleAction(action, body, user, admin, roomService, settings) {
       if ((count || 0) >= MAX_VIEWERS) {
         throw new HttpError(409, 'session_full', 'This session has reached its viewer limit.');
       }
-      const displayName = String(user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'FaceMeX user')
-        .trim()
-        .slice(0, 80) || 'FaceMeX user';
+      const displayName = getParticipantDisplayName(user, body.displayName);
       const { error } = await admin
         .from('facemex_screen_share_participants')
         .upsert({
           session_id: session.id,
           user_id: user.id,
           display_name: displayName,
+          is_guest: Boolean(user.is_anonymous),
           status: 'waiting',
           requested_at: new Date().toISOString(),
           approved_at: null,
@@ -380,6 +411,7 @@ async function handleAction(action, body, user, admin, roomService, settings) {
     }
 
     const isHost = session.host_id === user.id;
+    let participantName = session.host_name;
     if (!isHost) {
       const { data: participant, error } = await admin
         .from('facemex_screen_share_participants')
@@ -391,19 +423,18 @@ async function handleAction(action, body, user, admin, roomService, settings) {
       if (participant?.status !== 'approved') {
         throw new HttpError(403, 'approval_required', 'The host must approve your request before you can join.');
       }
+      participantName = getParticipantDisplayName(user, participant.display_name);
     }
 
     if (!isHost && !(await hostParticipantIdentityConnected(roomService, session))) {
       throw new HttpError(409, 'host_not_connected', 'The host is not currently sharing. Wait for the host to start sharing.');
     }
 
-    const participantName = isHost
-      ? session.host_name
-      : String(user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'FaceMeX viewer').slice(0, 80);
     const accessToken = new AccessToken(settings.livekitApiKey, settings.livekitApiSecret, {
       identity: user.id,
       name: participantName,
       ttl: TOKEN_TTL,
+      attributes: { facemex_role: isHost ? 'host' : 'viewer' },
     });
     accessToken.addGrant(createParticipantGrant(isHost, session.room_name));
     return { url: settings.livekitUrl, token: await accessToken.toJwt() };
