@@ -1,23 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Room, RoomEvent, Track } from 'livekit-client';
+import { Participant, Room, RoomEvent, Track } from 'livekit-client';
 import {
   ArrowLeft,
   Check,
+  Clock3,
   Copy,
+  Maximize2,
+  MessageCircle,
+  Mic,
+  MicOff,
+  Minimize2,
   MonitorUp,
-  Play,
+  PhoneOff,
+  Send,
   Share2,
   ShieldCheck,
   Sparkles,
   Square,
+  Users,
   UserCheck,
   UserRoundX,
-  Users,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/authStore';
+import { supabase } from '@/lib/supabaseClient';
 import { SEO_SITE_ORIGIN } from '@/lib/seo';
 import {
   screenShareRequest,
@@ -25,6 +33,34 @@ import {
   type ShareSession,
   type ShareToken,
 } from '@/lib/screenShareApi';
+
+type MeetingMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  sentAt: number;
+};
+
+type MeetingParticipant = {
+  id: string;
+  name: string;
+  microphoneEnabled: boolean;
+  speaking: boolean;
+  presenting: boolean;
+  isHost: boolean;
+  local: boolean;
+};
+
+type ScreenQuality = 'auto' | 'standard' | 'high';
+const CHAT_TOPIC = 'facemex-meeting-chat';
+const MAX_CHAT_MESSAGE_LENGTH = 1000;
+
+function getScreenEncoding(quality: ScreenQuality) {
+  if (quality === 'standard') return { maxBitrate: 2_500_000, maxFramerate: 15 };
+  if (quality === 'high') return { maxBitrate: 8_000_000, maxFramerate: 30 };
+  return { maxBitrate: 5_000_000, maxFramerate: 30 };
+}
 
 function getScreenCaptureError(error: unknown) {
   if (error instanceof DOMException) {
@@ -36,6 +72,21 @@ function getScreenCaptureError(error: unknown) {
     }
   }
   return error instanceof Error ? error.message : 'Could not start screen sharing. Please try again.';
+}
+
+function getMicrophoneError(error: unknown) {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+      return 'Microphone permission was denied. Allow microphone access in your browser settings and try again.';
+    }
+    if (error.name === 'NotFoundError') {
+      return 'No microphone was found. Connect a microphone and try again.';
+    }
+    if (error.name === 'NotReadableError') {
+      return 'Your microphone could not be opened. Check that another app is not using it, then try again.';
+    }
+  }
+  return 'Could not change the microphone state. Check your microphone and browser permissions, then try again.';
 }
 
 function getInvitationUrl() {
@@ -58,6 +109,7 @@ export default function ScreenSharePage() {
   const [sessionError, setSessionError] = useState('');
   const [actionError, setActionError] = useState('');
   const [busyAction, setBusyAction] = useState('');
+  const [guestName, setGuestName] = useState('');
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteTrack, setRemoteTrack] = useState<Track | null>(null);
   const [connectionStatus, setConnectionStatus] = useState('Not connected');
@@ -65,15 +117,32 @@ export default function ScreenSharePage() {
   const [invitationShared, setInvitationShared] = useState(false);
   const [frameSentToWorkspace, setFrameSentToWorkspace] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
-  const [joinAttempt, setJoinAttempt] = useState(0);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatError, setChatError] = useState('');
+  const [chatMessages, setChatMessages] = useState<MeetingMessage[]>([]);
+  const [meetingParticipants, setMeetingParticipants] = useState<MeetingParticipant[]>([]);
+  const activeSpeakerIdsRef = useRef<string[]>([]);
+  const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
+  const [microphoneBusy, setMicrophoneBusy] = useState(false);
+  const [screenQuality, setScreenQuality] = useState<ScreenQuality>('auto');
+  const [fitToWindow, setFitToWindow] = useState(true);
+  const [meetingDuration, setMeetingDuration] = useState(0);
+  const [stageFullscreen, setStageFullscreen] = useState(false);
+  const panelCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const panelTriggerRef = useRef<HTMLElement | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const stageRef = useRef<HTMLElement>(null);
+  const audioContainerRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const roomRef = useRef<Room | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const connectingRef = useRef(false);
   const stoppingRef = useRef(false);
   const mountedRef = useRef(false);
   const hostStreamingRef = useRef(false);
+  const remoteAudioElementsRef = useRef(new Map<Track, HTMLMediaElement>());
 
   const refreshSession = useCallback(async () => {
     if (!sessionId) return;
@@ -145,71 +214,212 @@ export default function ScreenSharePage() {
     };
   }, [remoteTrack]);
 
+  useEffect(() => {
+    const updateDuration = () => {
+      const startedAt = session?.startedAt ? new Date(session.startedAt).getTime() : 0;
+      setMeetingDuration(startedAt && session?.status === 'active'
+        ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+        : 0);
+    };
+    updateDuration();
+    const interval = window.setInterval(updateDuration, 1000);
+    return () => window.clearInterval(interval);
+  }, [session?.startedAt, session?.status]);
+
+  useEffect(() => {
+    const updateFullscreen = () => setStageFullscreen(document.fullscreenElement === stageRef.current);
+    document.addEventListener('fullscreenchange', updateFullscreen);
+    return () => document.removeEventListener('fullscreenchange', updateFullscreen);
+  }, []);
+
+  useEffect(() => {
+    if (!participantsOpen && !chatOpen) {
+      panelTriggerRef.current?.focus();
+      return;
+    }
+    panelCloseButtonRef.current?.focus();
+
+    const handlePanelKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setParticipantsOpen(false);
+        setChatOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const panel = document.getElementById(chatOpen ? 'screen-share-chat' : 'screen-share-participants');
+      const focusable = panel?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handlePanelKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handlePanelKeyDown);
+    };
+  }, [participantsOpen, chatOpen]);
+
+  useEffect(() => {
+    chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [chatMessages.length, chatOpen]);
+
+  const updateRoomParticipants = (room: Room, speakingIds = activeSpeakerIdsRef.current) => {
+    const participants: Participant[] = [room.localParticipant, ...room.remoteParticipants.values()];
+    setMeetingParticipants(participants.map((participant) => ({
+      id: participant.identity,
+      name: participant.name?.trim() || 'FaceMeX participant',
+      microphoneEnabled: participant.isMicrophoneEnabled,
+      speaking: speakingIds.includes(participant.identity),
+      presenting: participant.isScreenShareEnabled,
+      isHost: participant.attributes.facemex_role === 'host',
+      local: participant.isLocal,
+    })));
+  };
+
+  const receiveMeetingMessage = (
+    payload: Uint8Array,
+    participant?: Participant,
+    topic?: string
+  ) => {
+    if (!mountedRef.current || topic !== CHAT_TOPIC || !participant || payload.byteLength > 8_000) return;
+    try {
+      const decoded: unknown = JSON.parse(new TextDecoder().decode(payload));
+      if (!decoded || typeof decoded !== 'object') return;
+      const message = decoded as { id?: unknown; content?: unknown; sentAt?: unknown };
+      if (
+        typeof message.id !== 'string' ||
+        typeof message.content !== 'string' ||
+        typeof message.sentAt !== 'number' ||
+        !Number.isFinite(message.sentAt) ||
+        message.sentAt < 0 ||
+        message.sentAt > Date.now() + 60_000 ||
+        message.id.length > 80
+      ) return;
+      const content = message.content.trim();
+      if (!content || content.length > MAX_CHAT_MESSAGE_LENGTH) return;
+      setChatMessages((previous) => {
+        if (previous.some((item) => item.id === message.id)) return previous;
+        return [...previous, {
+          id: message.id as string,
+          senderId: participant.identity,
+          senderName: participant.name?.trim() || 'FaceMeX participant',
+          content,
+          sentAt: message.sentAt as number,
+        }].slice(-200);
+      });
+      setChatError('');
+    } catch (error) {
+      console.error('FaceMeX ignored an invalid in-meeting message', error);
+    }
+  };
+
   const connectRoom = async (publishTrack?: MediaStreamTrack) => {
     if (!sessionId) throw new Error('This sharing link is missing its session ID.');
+    if (roomRef.current) {
+      if (publishTrack) {
+        await roomRef.current.localParticipant.publishTrack(publishTrack, {
+          source: Track.Source.ScreenShare,
+          screenShareEncoding: getScreenEncoding(screenQuality),
+          degradationPreference: 'maintain-resolution',
+          simulcast: false,
+        });
+      }
+      return roomRef.current;
+    }
     const { url, token } = await screenShareRequest<ShareToken>('token', { sessionId });
     const room = new Room({ adaptiveStream: true, dynacast: true });
     room.on(RoomEvent.TrackSubscribed, (track) => {
-      if (track.kind === Track.Kind.Video && mountedRef.current) setRemoteTrack(track);
+      if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare && mountedRef.current) {
+        setRemoteTrack(track);
+      }
+      if (track.kind === Track.Kind.Audio && audioContainerRef.current) {
+        const element = track.attach();
+        element.autoplay = true;
+        element.setAttribute('playsinline', '');
+        audioContainerRef.current.appendChild(element);
+        remoteAudioElementsRef.current.set(track, element);
+        void element.play().catch((error: unknown) => {
+          console.warn('FaceMeX could not autoplay meeting audio; user interaction may be required.', error);
+        });
+      }
+      updateRoomParticipants(room);
     });
     room.on(RoomEvent.TrackUnsubscribed, (track) => {
-      if (track.kind === Track.Kind.Video && mountedRef.current) setRemoteTrack(null);
+      if (track.kind === Track.Kind.Video && track.source === Track.Source.ScreenShare) setRemoteTrack(null);
+      const audioElement = remoteAudioElementsRef.current.get(track);
+      if (audioElement) {
+        track.detach(audioElement);
+        audioElement.remove();
+        remoteAudioElementsRef.current.delete(track);
+      }
+      updateRoomParticipants(room);
+    });
+    room.on(RoomEvent.TrackPublished, () => updateRoomParticipants(room));
+    room.on(RoomEvent.TrackUnpublished, () => updateRoomParticipants(room));
+    room.on(RoomEvent.TrackMuted, () => updateRoomParticipants(room));
+    room.on(RoomEvent.TrackUnmuted, () => updateRoomParticipants(room));
+    room.on(RoomEvent.ParticipantConnected, () => updateRoomParticipants(room));
+    room.on(RoomEvent.ParticipantDisconnected, () => updateRoomParticipants(room));
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      const ids = speakers.map((speaker) => speaker.identity);
+      activeSpeakerIdsRef.current = ids;
+      updateRoomParticipants(room, ids);
+    });
+    room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      receiveMeetingMessage(payload, participant, topic);
+    });
+    room.on(RoomEvent.Reconnecting, () => {
+      if (mountedRef.current) setConnectionStatus('Reconnecting…');
+    });
+    room.on(RoomEvent.Reconnected, () => {
+      if (mountedRef.current) setConnectionStatus('Connected');
+      updateRoomParticipants(room);
     });
     room.on(RoomEvent.Disconnected, () => {
-      if (roomRef.current === room) roomRef.current = null;
+      if (roomRef.current === room) {
+        roomRef.current = null;
+        activeSpeakerIdsRef.current = [];
+        setMicrophoneEnabled(false);
+        remoteAudioElementsRef.current.forEach((element) => element.remove());
+        remoteAudioElementsRef.current.clear();
+      }
       if (mountedRef.current) {
         setRemoteTrack(null);
+        setMeetingParticipants([]);
         setConnectionStatus('Disconnected');
       }
     });
 
     try {
       await room.connect(url, token);
-      if (publishTrack) {
-        await room.localParticipant.publishTrack(publishTrack, { source: Track.Source.ScreenShare });
-      }
       roomRef.current = room;
+      if (publishTrack) {
+        await room.localParticipant.publishTrack(publishTrack, {
+          source: Track.Source.ScreenShare,
+          screenShareEncoding: getScreenEncoding(screenQuality),
+          degradationPreference: 'maintain-resolution',
+          simulcast: false,
+        });
+      }
       setConnectionStatus('Connected');
+      updateRoomParticipants(room);
       return room;
     } catch (error) {
+      if (roomRef.current === room) roomRef.current = null;
       room.disconnect();
       throw error;
     }
   };
-
-  useEffect(() => {
-    const shouldJoin =
-      session?.role === 'visitor' &&
-      session.status === 'active' &&
-      session.participantStatus === 'approved' &&
-      session.hostConnected;
-    if (!shouldJoin || roomRef.current || connectingRef.current) return;
-
-    let active = true;
-    connectingRef.current = true;
-    setConnectionStatus('Connecting…');
-    void connectRoom()
-      .catch((error: unknown) => {
-        if (active) {
-          setActionError(error instanceof Error ? error.message : 'Could not connect to the live room.');
-          setConnectionStatus('Connection failed');
-        }
-      })
-      .finally(() => {
-        connectingRef.current = false;
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [
-    session?.id,
-    session?.role,
-    session?.status,
-    session?.participantStatus,
-    session?.hostConnected,
-    joinAttempt,
-  ]);
 
   useEffect(() => {
     const shouldReconnectHost =
@@ -285,6 +495,155 @@ export default function ScreenSharePage() {
     }
   };
 
+  const joinMeeting = async () => {
+    if (!sessionId || !session) return;
+    if (connectingRef.current) return;
+    connectingRef.current = true;
+    setBusyAction('join');
+    setActionError('');
+    setConnectionStatus('Connecting…');
+    let startedSession = false;
+    try {
+      if (session.role === 'host' && session.status !== 'active') {
+        const result = await screenShareRequest<{ session: ShareSession }>('start', { sessionId });
+        setSession(result.session);
+        startedSession = true;
+      }
+      await connectRoom();
+      setConnectionStatus('Connected');
+      if (session.role === 'host') hostStreamingRef.current = true;
+      try {
+        await refreshSession();
+      } catch (error) {
+        console.error('FaceMeX joined the meeting but could not refresh its session details', error);
+        setActionError('You joined the meeting, but some meeting details could not be refreshed.');
+      }
+    } catch (error) {
+      if (startedSession && !roomRef.current) {
+        try {
+          await screenShareRequest('pause', { sessionId });
+        } catch (pauseError) {
+          console.error('FaceMeX could not close a room after host connection failed', pauseError);
+        }
+      }
+      setConnectionStatus('Connection failed');
+      setActionError(error instanceof Error ? error.message : 'Could not join this meeting. Check your connection and try again.');
+    } finally {
+      connectingRef.current = false;
+      setBusyAction('');
+    }
+  };
+
+  const changeScreenQuality = async (quality: ScreenQuality) => {
+    if (quality === screenQuality) return;
+    const room = roomRef.current;
+    const screenTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (!room || !screenTrack || screenTrack.readyState !== 'live') {
+      setScreenQuality(quality);
+      return;
+    }
+
+    setBusyAction('quality');
+    setActionError('');
+    try {
+      await room.localParticipant.unpublishTrack(screenTrack, false);
+      try {
+        await room.localParticipant.publishTrack(screenTrack, {
+          source: Track.Source.ScreenShare,
+          screenShareEncoding: getScreenEncoding(quality),
+          degradationPreference: 'maintain-resolution',
+          simulcast: false,
+        });
+        setScreenQuality(quality);
+      } catch (publishError) {
+        try {
+          await room.localParticipant.publishTrack(screenTrack, {
+            source: Track.Source.ScreenShare,
+            screenShareEncoding: getScreenEncoding(screenQuality),
+            degradationPreference: 'maintain-resolution',
+            simulcast: false,
+          });
+        } catch (restoreError) {
+          console.error('FaceMeX could not restore the previous screen-share encoding', restoreError);
+          await stopSharing();
+        }
+        throw publishError;
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? `Could not apply screen quality: ${error.message}` : 'Could not apply screen quality.');
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const toggleMicrophone = async () => {
+    const room = roomRef.current;
+    if (!room) {
+      setActionError('Join the meeting before turning on your microphone.');
+      return;
+    }
+    setMicrophoneBusy(true);
+    setActionError('');
+    try {
+      const enabled = !room.localParticipant.isMicrophoneEnabled;
+      await room.localParticipant.setMicrophoneEnabled(enabled, {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      });
+      setMicrophoneEnabled(enabled);
+      updateRoomParticipants(room);
+    } catch (error) {
+      setActionError(getMicrophoneError(error));
+    } finally {
+      setMicrophoneBusy(false);
+    }
+  };
+
+  const sendMeetingMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const room = roomRef.current;
+    const content = chatDraft.trim().slice(0, MAX_CHAT_MESSAGE_LENGTH);
+    if (!room || !content) {
+      if (!room) setChatError('Join the meeting before sending a message.');
+      return;
+    }
+
+    const message = {
+      id: crypto.randomUUID(),
+      content,
+      sentAt: Date.now(),
+    };
+    setChatError('');
+    try {
+      await room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(message)),
+        { reliable: true, topic: CHAT_TOPIC }
+      );
+      setChatMessages((previous) => [...previous, {
+        ...message,
+        senderId: room.localParticipant.identity,
+        senderName: room.localParticipant.name?.trim() || 'You',
+      }].slice(-200));
+      setChatDraft('');
+    } catch (error) {
+      console.error('FaceMeX could not send a meeting chat message', error);
+      setChatError('Message could not be sent. Check your connection and try again.');
+    }
+  };
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await stageRef.current?.requestFullscreen();
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Fullscreen mode is unavailable in this browser.');
+    }
+  };
+
   const runHostAction = async (action: 'approve' | 'reject' | 'remove' | 'start' | 'pause' | 'end', participantId?: string) => {
     if (!sessionId) return;
     setBusyAction(participantId ? `${action}:${participantId}` : action);
@@ -306,32 +665,68 @@ export default function ScreenSharePage() {
   const stopLocalMedia = async () => {
     const room = roomRef.current;
     roomRef.current = null;
-    if (room) await room.disconnect();
     const stream = localStreamRef.current;
     localStreamRef.current = null;
-    stream?.getTracks().forEach((track) => track.stop());
+    let disconnectError: unknown;
+    try {
+      if (room) await room.disconnect();
+    } catch (error) {
+      disconnectError = error;
+    } finally {
+      remoteAudioElementsRef.current.forEach((element) => element.remove());
+      remoteAudioElementsRef.current.clear();
+      stream?.getTracks().forEach((track) => track.stop());
+    }
     if (mountedRef.current) {
       setLocalStream(null);
       setRemoteTrack(null);
+      setMeetingParticipants([]);
+      activeSpeakerIdsRef.current = [];
+      setMicrophoneEnabled(false);
     }
+    if (disconnectError) throw disconnectError;
   };
 
   const stopSharing = async () => {
-    if (!sessionId || stoppingRef.current) return;
+    if (stoppingRef.current) return;
     stoppingRef.current = true;
-    setBusyAction('pause');
     setActionError('');
+    let unpublishError: unknown;
     try {
-      await stopLocalMedia();
-      const result = await screenShareRequest<{ session: ShareSession }>('pause', { sessionId });
-      hostStreamingRef.current = false;
-      setSession(result.session);
-      setConnectionStatus('Paused');
+      const stream = localStreamRef.current;
+      const screenTrack = stream?.getVideoTracks()[0];
+      if (screenTrack && roomRef.current) {
+        try {
+          await roomRef.current.localParticipant.unpublishTrack(screenTrack);
+        } catch (error) {
+          unpublishError = error;
+          const room = roomRef.current;
+          roomRef.current = null;
+          try {
+            await room?.disconnect();
+          } catch (disconnectError) {
+            console.error('FaceMeX could not disconnect after screen unpublish failed', disconnectError);
+          }
+        }
+      }
+      stream?.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+      setLocalStream(null);
+      hostStreamingRef.current = Boolean(roomRef.current);
+      setConnectionStatus(roomRef.current ? 'Connected' : 'Not connected');
+      if (unpublishError) {
+        try {
+          await screenShareRequest('pause', { sessionId });
+          hostStreamingRef.current = false;
+        } catch (pauseError) {
+          console.error('FaceMeX stopped local capture but could not pause the server session', pauseError);
+        }
+        setActionError('Screen capture stopped, but the live track could not be cleanly unpublished. The meeting was disconnected as a safety measure.');
+      }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Could not safely stop sharing.');
     } finally {
       stoppingRef.current = false;
-      setBusyAction('');
     }
   };
 
@@ -341,6 +736,10 @@ export default function ScreenSharePage() {
       setActionError('Live screen capture is unavailable in this browser or context. Use a supported desktop browser over HTTPS.');
       return;
     }
+    if (localStreamRef.current?.getVideoTracks().some((track) => track.readyState === 'live')) {
+      setActionError('A screen is already being shared. Stop the current share before starting another.');
+      return;
+    }
 
     setBusyAction('start');
     setActionError('');
@@ -348,7 +747,11 @@ export default function ScreenSharePage() {
     let sessionStarted = false;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 12, max: 15 } },
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30, max: 30 },
+        },
         audio: false,
       });
       if (!mountedRef.current) {
@@ -357,14 +760,15 @@ export default function ScreenSharePage() {
       }
       const videoTrack = stream.getVideoTracks()[0];
       if (!videoTrack) throw new Error('The browser did not provide a screen video track.');
+      videoTrack.contentHint = 'text';
       localStreamRef.current = stream;
       setLocalStream(stream);
 
-      if (session?.status === 'active') {
-        await screenShareRequest('pause', { sessionId });
+      if (session?.status !== 'active') {
+        const started = await screenShareRequest<{ session: ShareSession }>('start', { sessionId });
+        setSession(started.session);
+        sessionStarted = true;
       }
-      await screenShareRequest('start', { sessionId });
-      sessionStarted = true;
       await connectRoom(videoTrack);
       if (videoTrack.readyState === 'ended') {
         await stopSharing();
@@ -383,7 +787,7 @@ export default function ScreenSharePage() {
       roomRef.current = null;
       setLocalStream(null);
       setConnectionStatus('Not connected');
-      if (sessionStarted) {
+      if (sessionStarted && !roomRef.current) {
         try {
           await screenShareRequest('pause', { sessionId });
         } catch (pauseError) {
@@ -411,9 +815,56 @@ export default function ScreenSharePage() {
     }
   };
 
+  const joinAsGuest = async () => {
+    if (!sessionId) return;
+    const displayName = guestName.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80);
+    if (!displayName) {
+      setActionError('Enter the name you want other meeting participants to see.');
+      return;
+    }
+    setBusyAction('guest-request');
+    setActionError('');
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously({
+        options: { data: { full_name: displayName } },
+      });
+      if (error) {
+        console.error('FaceMeX could not create an authenticated guest identity', { code: error.code || 'guest_sign_in_failed' });
+        throw new Error('Guest sign-in is not enabled for this FaceMeX deployment. Sign in with a FaceMeX account or contact support.');
+      }
+      if (!data.session) {
+        throw new Error('FaceMeX could not establish a secure guest sign-in. Try again or sign in to FaceMeX.');
+      }
+      const result = await screenShareRequest<{ session: ShareSession }>('request', {
+        sessionId,
+        displayName,
+      });
+      setSession(result.session);
+      setSessionError('');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not request guest access.');
+    } finally {
+      setBusyAction('');
+    }
+  };
+
   const copyInvitation = async () => {
     try {
-      await navigator.clipboard.writeText(getInvitationUrl());
+      const invitationUrl = getInvitationUrl();
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(invitationUrl);
+      } else {
+        const temporaryInput = document.createElement('textarea');
+        temporaryInput.value = invitationUrl;
+        temporaryInput.setAttribute('readonly', '');
+        temporaryInput.style.position = 'fixed';
+        temporaryInput.style.opacity = '0';
+        document.body.appendChild(temporaryInput);
+        temporaryInput.select();
+        const copied = document.execCommand('copy');
+        temporaryInput.remove();
+        if (!copied) throw new Error('Clipboard access is unavailable.');
+      }
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 2_000);
     } catch (error) {
@@ -425,7 +876,7 @@ export default function ScreenSharePage() {
   const shareInvitation = async () => {
     const invitation = {
       title: 'FaceMeX private screen-sharing invitation',
-      text: 'Sign in to FaceMeX and request the host’s approval to view this live screen.',
+      text: 'Sign in to FaceMeX or continue as a guest, then request the host’s approval to join.',
       url: getInvitationUrl(),
     };
     if (!navigator.share) {
@@ -508,8 +959,12 @@ export default function ScreenSharePage() {
   };
 
   const leaveSession = async () => {
-    await stopLocalMedia();
-    navigate('/ai/job-assistant');
+    try {
+      await stopLocalMedia();
+      navigate('/ai/job-assistant');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Meeting media stopped, but the room could not close cleanly.');
+    }
   };
 
   const endSession = async () => {
@@ -544,13 +999,23 @@ export default function ScreenSharePage() {
       <main className="flex min-h-[100dvh] items-center justify-center bg-[#0d0d0d] px-4 text-white">
         <section className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#171717] p-6 shadow-2xl sm:p-8">
           <ShieldCheck className="h-8 w-8 text-cyan-300" />
-          <h1 className="mt-4 text-xl font-semibold">Sign in to join private screen sharing</h1>
+          <h1 className="mt-4 text-xl font-semibold">{sessionId ? 'Join private screen sharing' : 'Sign in to use private screen sharing'}</h1>
           <p className="mt-2 text-sm leading-6 text-white/60">
-            The invitation link does not grant access by itself. Sign in to FaceMeX, then request the host’s approval to join.
+            The invitation link does not grant viewing access by itself. Sign in to FaceMeX, or continue as a guest and wait for the host’s approval.
           </p>
-          <a href={signInHref} className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-cyan-300 px-5 text-sm font-medium text-[#101010] hover:bg-cyan-200">
+          {sessionId && (
+            <div className="mt-5">
+              <label htmlFor="screen-share-guest-name" className="mb-2 block text-sm font-medium text-white/75">Your display name</label>
+              <input id="screen-share-guest-name" value={guestName} onChange={(event) => setGuestName(event.target.value.slice(0, 80))} maxLength={80} autoComplete="name" className="h-11 w-full rounded-xl border border-white/10 bg-[#0e0f10] px-3 text-sm text-white outline-none placeholder:text-white/35 focus-visible:ring-2 focus-visible:ring-cyan-300" placeholder="Enter your name" />
+              <button type="button" onClick={() => void joinAsGuest()} disabled={!guestName.trim() || Boolean(busyAction)} className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full bg-cyan-300 px-5 text-sm font-medium text-[#101010] hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50">
+                {busyAction === 'guest-request' ? 'Requesting host approval…' : 'Continue as guest'}
+              </button>
+            </div>
+          )}
+          <a href={signInHref} className="mt-4 inline-flex h-10 items-center justify-center rounded-full border border-white/15 px-5 text-sm font-medium text-white/85 hover:bg-white/5">
             Sign in to FaceMeX
           </a>
+          {actionError && <p className="mt-4 text-sm text-red-300" role="alert">{actionError}</p>}
         </section>
       </main>
     );
@@ -569,7 +1034,7 @@ export default function ScreenSharePage() {
             </div>
             <h1 className="mt-5 text-2xl font-semibold tracking-tight">Private screen sharing</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-              Create an invitation for registered FaceMeX users. They must sign in and wait for your approval before they can view your live screen.
+              Create a private meeting as a registered FaceMeX user. Invitees can sign in or continue as guests, but must wait for your approval before joining.
             </p>
             <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-white/45">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
@@ -589,263 +1054,333 @@ export default function ScreenSharePage() {
   const role = session?.role;
   const canRequest = role === 'visitor' && !session?.participantStatus;
   const requestState = session?.participantStatus;
+  const connectedCount = meetingParticipants.length;
+  const connectedToMeeting = Boolean(roomRef.current);
+  const durationLabel = `${String(Math.floor(meetingDuration / 3600)).padStart(2, '0')}:${String(Math.floor((meetingDuration % 3600) / 60)).padStart(2, '0')}:${String(meetingDuration % 60).padStart(2, '0')}`;
+  const canJoinAsVisitor = role === 'visitor' &&
+    requestState === 'approved' &&
+    session?.status === 'active' &&
+    session.hostConnected;
 
   return (
-    <main className="min-h-[100dvh] bg-[#0d0d0d] px-3 py-5 text-white sm:px-6 sm:py-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link to="/ai/job-assistant" className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white">
-            <ArrowLeft className="h-4 w-4" /> FaceMeX workspace
+    <main className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-[#0d0e10] text-white">
+      <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#101113]/95 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link to="/ai/job-assistant" aria-label="Back to FaceMeX workspace" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-sm font-bold tracking-tight text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+            FM
           </Link>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setParticipantsOpen((open) => !open)}
-              aria-expanded={participantsOpen}
-              aria-controls="screen-share-participants"
-              className="h-9 rounded-full border-white/15 bg-white/5 px-3 text-xs text-white hover:bg-white/10 hover:text-white"
-            >
-              <Users className="mr-2 h-4 w-4" />
-              Participants{role === 'host' ? ` (${session?.participants.length ?? 0})` : ''}
-            </Button>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60" role="status">
-              <span className={`h-2 w-2 rounded-full ${session?.status === 'active' ? 'bg-emerald-400' : 'bg-white/30'}`} />
-              {session?.status === 'active' ? connectionStatus : session?.status === 'ended' ? 'Session ended' : session?.status || 'Loading session'}
-            </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold sm:text-base">Private meeting</h1>
+            <p className="truncate text-xs text-white/45">{session?.hostName ? `Hosted by ${session.hostName}` : 'Loading meeting details'}</p>
           </div>
         </div>
-
-        <header className="mt-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-300">FaceMeX · private session</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-              {role === 'host' ? 'Your screen-sharing room' : 'Join a screen-sharing room'}
-            </h1>
-            <p className="mt-2 text-sm text-white/55">
-              {session?.hostName ? `Hosted by ${session.hostName}` : 'Checking session access…'}
-              {session?.expiresAt ? ` · Expires ${new Date(session.expiresAt).toLocaleString()}` : ''}
-            </p>
-          </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-white/70" role="status">
+            <span className={`h-2 w-2 rounded-full ${session?.status === 'ended' ? 'bg-red-400' : connectedToMeeting ? 'bg-emerald-400' : 'bg-amber-300'}`} />
+            <span className="max-w-28 truncate sm:max-w-none">{session?.status === 'ended' ? 'Meeting ended' : connectionStatus}</span>
+          </span>
+          {session?.status === 'active' && (
+            <span className="hidden items-center gap-1.5 text-xs tabular-nums text-white/50 sm:inline-flex" aria-label={`Meeting duration ${durationLabel}`}>
+              <Clock3 className="h-3.5 w-3.5" /> {durationLabel}
+            </span>
+          )}
+          <span className="hidden items-center gap-1.5 text-xs text-white/50 sm:inline-flex" aria-label={`${connectedCount} connected participants`}>
+            <Users className="h-4 w-4" /> {connectedCount}
+          </span>
           {role === 'host' && (
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => void copyInvitation()} className="h-10 rounded-full border-white/15 bg-white/5 px-4 text-white hover:bg-white/10 hover:text-white">
-              {linkCopied ? <Check className="mr-2 h-4 w-4 text-emerald-400" /> : <Copy className="mr-2 h-4 w-4" />}
-              {linkCopied ? 'Link copied' : 'Copy invitation'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => void shareInvitation()} className="h-10 rounded-full border-cyan-300/30 bg-cyan-300/10 px-4 text-cyan-200 hover:bg-cyan-300/20 hover:text-cyan-100">
-                {invitationShared ? <Check className="mr-2 h-4 w-4" /> : <Share2 className="mr-2 h-4 w-4" />}
-                {invitationShared ? 'Invitation shared' : 'Share invitation'}
-              </Button>
+            <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => void copyInvitation()} className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs font-medium text-white/80 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Copy meeting invitation link">
+              {linkCopied ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
+              <span className="hidden sm:inline">{linkCopied ? 'Copied' : 'Copy link'}</span>
+            </button>
+            <button type="button" onClick={() => void shareInvitation()} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={invitationShared ? 'Invitation shared' : 'Share invitation'} title={invitationShared ? 'Invitation shared' : 'Share invitation'}>
+              {invitationShared ? <Check className="h-4 w-4 text-emerald-300" /> : <Share2 className="h-4 w-4" />}
+            </button>
             </div>
           )}
-        </header>
+        </div>
+      </header>
 
-        {(sessionError || actionError) && (
-          <div className="mt-4 rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200" role="alert">
-            {actionError || sessionError}
+      {(sessionError || actionError) && (
+        <div className="mx-3 mt-3 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200 sm:mx-5" role="alert">
+          {actionError || sessionError}
+        </div>
+      )}
+
+      {!session && (
+        <div className="flex flex-1 items-center justify-center px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151618] p-6 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-white/70">
+              <MonitorUp className="h-5 w-5" />
+            </div>
+            <h2 className="mt-4 text-lg font-semibold">{sessionError ? 'This meeting is unavailable' : 'Loading private meeting'}</h2>
+            <p className="mt-2 text-sm leading-6 text-white/55">{sessionError || 'Checking the invitation and your access…'}</p>
+            <Link to="/ai/job-assistant" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 px-4 text-sm text-white/80 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+              <ArrowLeft className="h-4 w-4" /> Back to workspace
+            </Link>
           </div>
-        )}
+        </div>
+      )}
 
-        {!session && !sessionError && (
-          <p className="mt-6 rounded-2xl border border-white/10 bg-[#171717] p-5 text-sm text-white/55">Loading private session…</p>
-        )}
-
-        {session && (
-          <>
-            {role === 'host' ? (
-              <div className={`mt-5 grid gap-4 ${participantsOpen ? 'lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]' : 'lg:grid-cols-1'}`}>
-                <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-xl">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
-                    <div>
-                      <h2 className="text-sm font-semibold">Live screen preview</h2>
-                      <p className="mt-0.5 text-xs text-white/45">Only approved viewers can subscribe.</p>
-                    </div>
-                    <span className="text-xs text-white/45">{connectionStatus}</span>
-                  </div>
-                  <div className="aspect-video bg-slate-950">
-                    {localStream ? (
-                      <video ref={localVideoRef} autoPlay muted playsInline className="h-full w-full object-contain" />
-                    ) : (
-                      <div className="flex h-full min-h-48 flex-col items-center justify-center px-5 text-center text-white/75">
-                        <MonitorUp className="h-8 w-8 text-white/50" />
-                        <p className="mt-3 text-sm font-medium">{session.status === 'active' ? 'Reconnect your screen to continue' : 'Your screen is not being shared'}</p>
-                        <p className="mt-1 max-w-md text-xs leading-5 text-white/50">The browser will show a screen picker. FaceMeX will share only after you choose a screen.</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 p-4 sm:px-5">
-                    {session.status !== 'ended' && (
-                      <>
-                        {localStream ? (
-                          <Button type="button" variant="destructive" onClick={() => void stopSharing()} disabled={Boolean(busyAction)} className="rounded-full">
-                            <Square className="mr-2 h-4 w-4" /> Stop sharing
-                          </Button>
-                        ) : (
-                          <Button type="button" onClick={() => void startSharing()} disabled={Boolean(busyAction) || !liveCaptureSupported} className="rounded-full bg-cyan-300 text-[#101010] hover:bg-cyan-200">
-                            {session.status === 'active' ? <Play className="mr-2 h-4 w-4" /> : <MonitorUp className="mr-2 h-4 w-4" />}
-                            {busyAction === 'start' ? 'Starting…' : session.status === 'active' ? 'Reconnect screen' : session.status === 'paused' ? 'Resume sharing' : 'Start sharing'}
-                          </Button>
-                        )}
-                        {localStream && (
-                          <Button type="button" variant="outline" onClick={askAIAboutSharedFrame} disabled={Boolean(busyAction)} className="rounded-full border-cyan-300/25 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20 hover:text-white">
-                            <Sparkles className="mr-2 h-4 w-4" />
-                            {frameSentToWorkspace ? 'Frame opened in workspace' : 'Ask AI about screen'}
-                          </Button>
-                        )}
-                        {!liveCaptureSupported && (
-                          <p className="w-full text-xs text-amber-200/80">Live screen capture requires a supported browser in a secure context (HTTPS). Some mobile browsers do not offer device-screen capture.</p>
-                        )}
-                        <Button type="button" variant="outline" onClick={() => void endSession()} disabled={Boolean(busyAction)} className="rounded-full">
-                          End session
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </section>
-
-                <section
-                  id="screen-share-participants"
-                  className={`rounded-3xl border border-white/10 bg-[#171717] p-4 shadow-xl sm:p-5 ${
-                    participantsOpen
-                      ? 'fixed inset-y-0 right-0 z-[70] w-[min(90vw,380px)] overflow-y-auto rounded-none sm:inset-y-4 sm:right-4 sm:rounded-3xl lg:static lg:z-auto lg:w-auto lg:overflow-visible'
-                      : 'hidden'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-sm font-semibold">Viewer requests</h2>
-                      <p className="mt-1 text-xs text-white/45">Approve each person before they can join.</p>
-                    </div>
-                    <span className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-xs text-white/55">
-                        <Users className="h-3.5 w-3.5" /> {session.participants.length}/10
-                      </span>
-                      <button type="button" onClick={() => setParticipantsOpen(false)} aria-label="Close participants panel" className="rounded-full p-2 text-white/55 hover:bg-white/10 hover:text-white lg:hidden">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </span>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/5 p-3">
-                      <p className="text-sm font-medium">{session.hostName} (you)</p>
-                      <p className="mt-0.5 text-xs text-white/45">{localStream ? 'Host · Sharing live' : 'Host · Not sharing'}</p>
-                    </div>
-                    {session.participants.length === 0 ? (
-                      <p className="rounded-xl bg-white/5 px-3 py-4 text-sm text-white/45">No viewers have requested access.</p>
-                    ) : session.participants.map((participant: ShareParticipant) => (
-                      <div key={participant.id} className="rounded-2xl border border-white/10 p-3">
-                        <div className="flex min-w-0 items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{participant.name}</p>
-                            <p className="mt-0.5 text-xs text-white/45">
-                              {participant.status === 'waiting' ? 'Waiting for approval' : participant.connected ? 'Connected' : participant.status}
-                            </p>
-                          </div>
-                          {participant.connected && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" aria-label="Connected" />}
-                        </div>
-                        {participant.status === 'waiting' && (
-                          <div className="mt-3 flex gap-2">
-                            <Button type="button" size="sm" onClick={() => void runHostAction('approve', participant.id)} disabled={Boolean(busyAction)} className="h-8 rounded-full bg-emerald-500 px-3 text-[#101010] hover:bg-emerald-400">
-                              <UserCheck className="mr-1.5 h-3.5 w-3.5" /> Approve
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => void runHostAction('reject', participant.id)} disabled={Boolean(busyAction)} className="h-8 rounded-full px-3">
-                              <X className="mr-1.5 h-3.5 w-3.5" /> Reject
-                            </Button>
-                          </div>
-                        )}
-                        {participant.status === 'approved' && (
-                          <Button type="button" size="sm" variant="outline" onClick={() => void runHostAction('remove', participant.id)} disabled={Boolean(busyAction)} className="mt-3 h-8 rounded-full border-red-400/30 px-3 text-red-300 hover:bg-red-400/10 hover:text-red-200">
-                            <UserRoundX className="mr-1.5 h-3.5 w-3.5" /> Remove viewer
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
+      {session && (
+        <>
+          <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-2 pb-3 pt-3 sm:px-5 sm:pt-5">
+            <section ref={stageRef} className="flex min-h-[48vh] flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#090a0b] shadow-2xl sm:min-h-[56vh]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2.5 sm:px-4">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${localStream || remoteTrack ? 'animate-pulse bg-red-400' : 'bg-white/25'}`} />
+                  <p className="truncate text-xs font-medium text-white/75">{localStream ? 'You are presenting' : remoteTrack ? 'Live presentation' : 'Meeting stage'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {role === 'host' && session.status !== 'ended' && (
+                    <label className="flex items-center gap-1.5 text-xs text-white/50">
+                      <span className="hidden sm:inline">Quality</span>
+                      <select value={screenQuality} onChange={(event) => void changeScreenQuality(event.target.value as ScreenQuality)} disabled={Boolean(busyAction)} className="h-8 rounded-lg border border-white/10 bg-[#151618] px-2 text-xs text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:opacity-50" aria-label="Screen sharing quality">
+                        <option value="auto">Auto</option>
+                        <option value="standard">Standard</option>
+                        <option value="high">High quality</option>
+                      </select>
+                    </label>
+                  )}
+                  <button type="button" onClick={() => void toggleFullscreen()} className="flex h-9 w-9 items-center justify-center rounded-lg text-white/65 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={stageFullscreen ? 'Exit full screen' : 'View presentation full screen'}>
+                    {stageFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                  <button type="button" onClick={() => setFitToWindow((fit) => !fit)} className="h-9 rounded-lg border border-white/10 px-2.5 text-xs text-white/65 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={fitToWindow ? 'View presentation at original size' : 'Fit presentation to window'}>
+                    {fitToWindow ? 'Fit' : 'Original size'}
+                  </button>
+                </div>
               </div>
-            ) : (
-              <>
-                <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-xl">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
-                    <div>
-                      <h2 className="text-sm font-semibold">Host screen</h2>
-                      <p className="mt-0.5 text-xs text-white/45">The live screen appears only after the host approves your request.</p>
+
+              <div className="relative flex min-h-[38vh] flex-1 items-center justify-center overflow-hidden bg-[#08090a] sm:min-h-[50vh]">
+                {role === 'host' && localStream ? (
+                  <video ref={localVideoRef} autoPlay muted playsInline className={fitToWindow ? 'h-full max-h-[calc(100dvh-13rem)] w-full object-contain' : 'h-auto w-auto max-w-none max-h-none object-none'} aria-label="Your live shared-screen preview" />
+                ) : remoteTrack ? (
+                  <video ref={remoteVideoRef} autoPlay playsInline className={fitToWindow ? 'h-full max-h-[calc(100dvh-13rem)] w-full object-contain' : 'h-auto w-auto max-w-none max-h-none object-none'} aria-label="Live shared screen" />
+                ) : (
+                  <div className="mx-auto max-w-lg px-5 py-12 text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-white/45">
+                      {connectionStatus === 'Connecting…' || connectionStatus === 'Reconnecting…' ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-cyan-300" /> : <MonitorUp className="h-6 w-6" />}
                     </div>
-                    <span className="text-xs text-white/45">{connectionStatus}</span>
-                  </div>
-                  <div className="aspect-video bg-slate-950">
-                    {remoteTrack ? (
-                      <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-contain" />
-                    ) : (
-                      <div className="flex h-full min-h-48 flex-col items-center justify-center px-5 text-center text-white/75">
-                        <MonitorUp className="h-8 w-8 text-white/50" />
-                        <p className="mt-3 text-sm font-medium">
-                          {requestState === 'approved' && session.hostConnected ? 'Connecting to the live screen…' : 'No live screen yet'}
-                        </p>
-                        <p className="mt-1 max-w-md text-xs leading-5 text-white/50">
-                          {requestState === 'approved' ? 'Stay here while the host starts or resumes sharing.' : 'Request access and wait for the host to approve you.'}
-                        </p>
-                      </div>
+                    <h2 className="mt-5 text-base font-semibold text-white/90">
+                      {session.status === 'ended' ? 'This meeting has ended'
+                        : role === 'visitor' && requestState === 'waiting' ? 'Waiting for host approval'
+                          : role === 'visitor' && requestState === 'rejected' ? 'Your request was declined'
+                            : role === 'visitor' && requestState === 'removed' ? 'Access was removed'
+                              : connectedToMeeting ? 'Waiting for a presentation'
+                                : role === 'visitor' && requestState === 'approved' && !session.hostConnected ? 'Waiting for the host to join'
+                                  : 'Your meeting is ready' }
+                    </h2>
+                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/50">
+                      {session.status === 'ended' ? 'The host ended this private meeting. You can safely close this page.'
+                        : role === 'visitor' && requestState === 'waiting' ? 'Your request has been sent. The host must approve you before you can join.'
+                          : role === 'visitor' && requestState === 'rejected' ? 'The host declined this request. Contact them if you think this was a mistake.'
+                            : role === 'visitor' && requestState === 'removed' ? 'The host removed your access to this meeting.'
+                              : connectedToMeeting ? 'The room is connected. The presenter can start sharing their screen at any time.'
+                                : role === 'host' && !liveCaptureSupported ? 'Screen capture is unavailable in this browser or page context. Try a supported browser over a secure HTTPS connection.' : role === 'host' ? 'Choose Share screen to open your browser’s native screen picker. You select exactly what to share; FaceMeX cannot capture without your permission.' : 'Join the meeting when you are ready. Microphone permission is requested only if you choose to turn it on.'}
+                    </p>
+                    {role === 'host' && session.status !== 'ended' && !connectedToMeeting && (
+                      <button type="button" onClick={() => void joinMeeting()} disabled={Boolean(busyAction)} className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#111] hover:bg-white/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090a0b]">
+                        {busyAction === 'join' ? 'Joining…' : 'Join meeting'}
+                      </button>
+                    )}
+                    {role === 'visitor' && canRequest && session.status !== 'ended' && (
+                      <button type="button" onClick={() => void requestAccess()} disabled={Boolean(busyAction)} className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#111] hover:bg-white/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+                        <UserCheck className="h-4 w-4" /> {busyAction === 'request' ? 'Sending request…' : 'Request to join'}
+                      </button>
+                    )}
+                    {role === 'visitor' && canJoinAsVisitor && !connectedToMeeting && (
+                      <button type="button" onClick={() => void joinMeeting()} disabled={Boolean(busyAction)} className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#111] hover:bg-white/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+                        {busyAction === 'join' ? 'Joining…' : 'Join meeting'}
+                      </button>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 p-4 sm:px-5">
-                    {canRequest && (
-                      <Button type="button" onClick={() => void requestAccess()} disabled={Boolean(busyAction)} className="rounded-full bg-cyan-300 text-[#101010] hover:bg-cyan-200">
-                        <UserCheck className="mr-2 h-4 w-4" />
-                        {busyAction === 'request' ? 'Requesting…' : 'Request to join'}
-                      </Button>
-                    )}
-                    {requestState === 'waiting' && <p className="text-sm text-amber-200/80" role="status">Request sent. Waiting for the host to approve you.</p>}
-                    {requestState === 'rejected' && <p className="text-sm text-white/55" role="status">The host declined this request.</p>}
-                    {requestState === 'removed' && <p className="text-sm text-red-300" role="alert">The host removed your access to this session.</p>}
-                    {requestState === 'approved' && session.status === 'active' && session.hostConnected && !remoteTrack && (connectionStatus === 'Connection failed' || connectionStatus === 'Disconnected') && (
-                      <Button type="button" variant="outline" onClick={() => setJoinAttempt((attempt) => attempt + 1)} disabled={Boolean(busyAction)} className="rounded-full">
-                        Retry connection
-                      </Button>
-                    )}
-                    {session.status === 'ended' && <p className="text-sm text-white/55">This private session has ended.</p>}
-                    {session.status !== 'ended' && (
-                      <Button type="button" variant="outline" onClick={() => void leaveSession()} disabled={Boolean(busyAction)} className="rounded-full">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Leave session
-                      </Button>
-                    )}
+                )}
+                <div ref={audioContainerRef} className="hidden" aria-hidden="true" />
+              </div>
+            </section>
+
+            <div className="sticky bottom-0 z-20 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#151618]/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl backdrop-blur sm:mt-4 sm:px-4">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span className="hidden text-xs tabular-nums text-white/45 sm:inline">{durationLabel}</span>
+                <p className="truncate text-xs text-white/55">
+                  {connectionStatus}{session.hostName ? ` · ${session.hostName}'s meeting` : ''}
+                  {localStream ? ' · Screen is being shared' : ''}
+                </p>
+              </div>
+              <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-end">
+                {connectedToMeeting && (
+                  <button type="button" onClick={() => void toggleMicrophone()} disabled={microphoneBusy} className={`inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:opacity-50 ${microphoneEnabled ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-red-500/90 text-white hover:bg-red-500'}`} aria-label={microphoneEnabled ? 'Mute microphone' : 'Unmute microphone'} aria-pressed={microphoneEnabled} title={microphoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>
+                    {microphoneEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                    <span className="hidden sm:inline">{microphoneEnabled ? 'Mute' : 'Unmute'}</span>
+                  </button>
+                )}
+                {role === 'host' && session.status !== 'ended' && (
+                  localStream ? (
+                    <button type="button" onClick={() => void stopSharing()} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-red-500/90 px-4 text-sm font-medium text-white hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Stop screen sharing">
+                      <Square className="h-4 w-4" /> <span className="hidden sm:inline">Stop sharing</span>
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => void startSharing()} disabled={Boolean(busyAction) || !liveCaptureSupported} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-[#111] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Start screen sharing" title={liveCaptureSupported ? 'Choose a screen to share' : 'Live screen sharing is not supported in this browser'}>
+                      <MonitorUp className="h-4 w-4" /> <span className="hidden sm:inline">{busyAction === 'start' ? 'Starting…' : 'Share screen'}</span>
+                    </button>
+                  )
+                )}
+                {role === 'host' && localStream && (
+                  <button type="button" onClick={askAIAboutSharedFrame} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={frameSentToWorkspace ? 'Frame opened in FaceMeX workspace' : 'Ask FaceMeX AI about this screen'} title={frameSentToWorkspace ? 'Frame opened in workspace' : 'Ask AI about screen'}>
+                    <Sparkles className="h-4 w-4" />
+                  </button>
+                )}
+                <button type="button" onClick={(event) => { panelTriggerRef.current = event.currentTarget; setParticipantsOpen((open) => !open); setChatOpen(false); }} aria-expanded={participantsOpen} aria-controls="screen-share-participants" className={`inline-flex h-11 items-center justify-center gap-2 rounded-full px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${participantsOpen ? 'bg-white/15 text-white' : 'border border-white/10 text-white/70 hover:bg-white/10'}`} aria-label="Toggle participants and requests" title="Participants">
+                  <Users className="h-4 w-4" /><span className="hidden sm:inline">{connectedCount}</span>
+                </button>
+                {connectedToMeeting && (
+                  <button type="button" onClick={(event) => { panelTriggerRef.current = event.currentTarget; setChatOpen((open) => !open); setParticipantsOpen(false); }} aria-expanded={chatOpen} aria-controls="screen-share-chat" className={`inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${chatOpen ? 'bg-white/15 text-white' : 'border border-white/10 text-white/70 hover:bg-white/10'}`} aria-label="Toggle in-meeting chat" title="Meeting chat">
+                    <MessageCircle className="h-4 w-4" />
+                  </button>
+                )}
+                {role === 'host' && session.status !== 'ended' && (
+                  <button type="button" onClick={() => { if (window.confirm('End this meeting for everyone? The invitation will stop working.')) void endSession(); }} disabled={Boolean(busyAction)} className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-red-400/30 px-3 text-sm text-red-200 hover:bg-red-400/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300" aria-label="End meeting for everyone" title="End meeting for everyone">
+                    <PhoneOff className="h-4 w-4" /><span className="hidden sm:inline">End</span>
+                  </button>
+                )}
+                {session.status !== 'ended' && (
+                  <button type="button" onClick={() => void leaveSession()} className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 px-3 text-sm text-white/70 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Leave meeting" title="Leave meeting">
+                    <ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Leave</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {(participantsOpen || chatOpen) && (
+            <>
+              <button type="button" className="fixed inset-0 z-40 bg-black/55" onClick={() => { setParticipantsOpen(false); setChatOpen(false); }} aria-label="Close meeting panel" />
+              <aside
+                id={chatOpen ? 'screen-share-chat' : 'screen-share-participants'}
+                className="fixed inset-y-0 right-0 z-50 flex w-[min(92vw,390px)] flex-col border-l border-white/10 bg-[#151618] shadow-2xl sm:inset-y-3 sm:right-3 sm:rounded-2xl sm:border"
+                aria-label={chatOpen ? 'Meeting chat' : 'Meeting participants'}
+                aria-labelledby="screen-share-panel-title"
+                aria-modal="true"
+                role="dialog"
+              >
+                <div className="flex min-h-16 items-center justify-between border-b border-white/10 px-4">
+                  <div>
+                    <h2 id="screen-share-panel-title" className="text-sm font-semibold">{chatOpen ? 'In-meeting chat' : 'People'}</h2>
+                    <p className="mt-0.5 text-xs text-white/45">{chatOpen ? 'Live messages for this meeting' : `${connectedCount} connected`}</p>
                   </div>
-                </section>
-                {participantsOpen && (
+                  <button ref={panelCloseButtonRef} type="button" onClick={() => { setParticipantsOpen(false); setChatOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Close panel">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {chatOpen ? (
                   <>
-                    <button type="button" className="fixed inset-0 z-[60] bg-black/60 lg:hidden" onClick={() => setParticipantsOpen(false)} aria-label="Close participants panel" />
-                    <aside
-                      id="screen-share-participants"
-                      className="fixed inset-y-0 right-0 z-[70] w-[min(90vw,380px)] overflow-y-auto border-l border-white/10 bg-[#171717] p-4 shadow-2xl sm:inset-y-4 sm:right-4 sm:rounded-3xl lg:inset-y-5 lg:right-5"
-                      aria-label="Participants"
-                    >
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-sm font-semibold">Participants</h2>
-                        <button type="button" onClick={() => setParticipantsOpen(false)} aria-label="Close participants panel" className="rounded-full p-2 text-white/55 hover:bg-white/10 hover:text-white">
-                          <X className="h-4 w-4" />
+                    <div ref={chatScrollRef} className="flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
+                      {chatMessages.length === 0 ? (
+                        <div className="py-10 text-center">
+                          <MessageCircle className="mx-auto h-6 w-6 text-white/35" />
+                          <p className="mt-3 text-sm text-white/70">No messages yet</p>
+                          <p className="mt-1 text-xs text-white/40">Messages are shared live and are not saved after this meeting.</p>
+                        </div>
+                      ) : chatMessages.map((message) => (
+                        <article key={message.id} className="min-w-0">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <p className="truncate text-xs font-semibold text-white/80">{message.senderName}</p>
+                            <time className="shrink-0 text-[11px] text-white/35" dateTime={new Date(message.sentAt).toISOString()}>
+                              {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(message.sentAt)}
+                            </time>
+                          </div>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-white/70">{message.content}</p>
+                        </article>
+                      ))}
+                    </div>
+                    <form onSubmit={(event) => void sendMeetingMessage(event)} className="border-t border-white/10 p-3">
+                      {chatError && <p className="mb-2 text-xs text-red-300" role="alert">{chatError}</p>}
+                      <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-[#0e0f10] p-2 focus-within:border-white/25">
+                        <textarea value={chatDraft} onChange={(event) => setChatDraft(event.target.value.slice(0, MAX_CHAT_MESSAGE_LENGTH))} onKeyDown={(event) => {
+                          if (event.key === 'Enter' && !event.shiftKey) {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                          }
+                        }} rows={1} maxLength={MAX_CHAT_MESSAGE_LENGTH} placeholder="Send a message" aria-label="Meeting message" className="max-h-28 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-white outline-none placeholder:text-white/35" />
+                        <button type="submit" disabled={!chatDraft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#111] hover:bg-white/90 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Send message">
+                          <Send className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="mt-4 space-y-2">
-                        <div className="rounded-2xl border border-white/10 p-3">
-                          <p className="text-sm font-medium">{session.hostName}</p>
-                          <p className="mt-1 text-xs text-white/45">Host{session.hostConnected ? ' · Sharing live' : ' · Not sharing'}</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 p-3">
-                          <p className="text-sm font-medium">You</p>
-                          <p className="mt-1 text-xs text-white/45">
-                            {requestState === 'approved' ? connectionStatus : requestState || 'Not approved'}
-                          </p>
-                        </div>
-                      </div>
-                    </aside>
+                      <p className="mt-1.5 text-right text-[10px] text-white/30">{chatDraft.length}/{MAX_CHAT_MESSAGE_LENGTH}</p>
+                    </form>
                   </>
+                ) : (
+                  <div className="flex-1 space-y-5 overflow-y-auto p-4">
+                    <section>
+                      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-white/40">In the meeting</h3>
+                      {meetingParticipants.length === 0 ? (
+                        <p className="rounded-xl border border-white/[0.07] px-3 py-4 text-sm text-white/45">Join the meeting to see connected participants.</p>
+                      ) : meetingParticipants.map((participant) => (
+                        <div key={participant.id} className={`mb-2 flex items-center gap-3 rounded-xl border px-3 py-3 ${participant.speaking ? 'border-emerald-300/35 bg-emerald-300/[0.06]' : 'border-white/[0.07] bg-white/[0.02]'}`}>
+                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${participant.speaking ? 'bg-emerald-300/20 text-emerald-100' : 'bg-white/10 text-white/70'}`}>
+                            {participant.name.slice(0, 1).toUpperCase()}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-white/85">{participant.name}{participant.local ? ' (you)' : ''}</p>
+                            <p className="mt-0.5 text-xs text-white/40">{participant.isHost ? `Host${participant.presenting ? ' · Presenting' : ''}` : participant.presenting ? 'Presenting' : participant.speaking ? 'Speaking' : 'Connected'}</p>
+                          </div>
+                          {participant.microphoneEnabled ? <Mic className={`h-4 w-4 ${participant.speaking ? 'text-emerald-200' : 'text-white/55'}`} aria-label="Microphone on" /> : <MicOff className="h-4 w-4 text-white/35" aria-label="Microphone off" />}
+                        </div>
+                      ))}
+                    </section>
+                    {role === 'host' && (
+                      <section>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <h3 className="text-xs font-medium uppercase tracking-wide text-white/40">Requests to join</h3>
+                          <span className="text-xs text-white/35">{session.participants.filter((item) => item.status === 'waiting').length} waiting</span>
+                        </div>
+                        {session.participants.filter((item) => item.status === 'waiting').length === 0 ? (
+                          <p className="rounded-xl border border-white/[0.07] px-3 py-4 text-sm text-white/45">No pending requests.</p>
+                        ) : session.participants.filter((item) => item.status === 'waiting').map((participant: ShareParticipant) => (
+                          <div key={participant.id} className="mb-2 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+                            <p className="truncate text-sm font-medium text-white/85">{participant.name || 'FaceMeX user'}</p>
+                            <p className="mt-1 text-xs text-white/40">{participant.isGuest ? 'Guest · Awaiting approval' : 'Signed-in user · Awaiting approval'}</p>
+                            <div className="mt-3 flex gap-2">
+                              <button type="button" onClick={() => void runHostAction('approve', participant.id)} disabled={Boolean(busyAction)} className="min-h-9 rounded-full bg-white px-3 text-xs font-semibold text-[#111] hover:bg-white/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+                                <UserCheck className="mr-1 inline h-3.5 w-3.5" /> Approve
+                              </button>
+                              <button type="button" onClick={() => void runHostAction('reject', participant.id)} disabled={Boolean(busyAction)} className="min-h-9 rounded-full border border-white/10 px-3 text-xs text-white/70 hover:bg-white/5 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+                                Reject
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </section>
+                    )}
+                    {role === 'host' && session.participants.some((item) => item.status === 'approved') && (
+                      <section>
+                        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-white/40">Approved viewers</h3>
+                        {session.participants.filter((item) => item.status === 'approved').map((participant) => (
+                          <div key={participant.id} className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-white/[0.07] px-3 py-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm text-white/80">{participant.name || 'FaceMeX user'}</p>
+                              <p className="mt-0.5 text-xs text-white/40">{participant.isGuest ? 'Guest · ' : ''}{participant.connected ? 'Connected' : 'Approved · Not joined'}</p>
+                            </div>
+                            <button type="button" onClick={() => void runHostAction('remove', participant.id)} disabled={Boolean(busyAction)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/40 hover:bg-red-400/10 hover:text-red-200 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300" aria-label={`Remove ${participant.name || 'viewer'}`} title="Remove viewer">
+                              <UserRoundX className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </section>
+                    )}
+                    {role === 'visitor' && (
+                      <div className="rounded-xl border border-white/[0.07] px-3 py-3 text-xs leading-5 text-white/45">
+                        {session.isGuest ? 'You joined with a guest account. The host must approve every viewer before they can join this private meeting.' : 'You joined as an authenticated FaceMeX user. The host must approve every viewer before they can join this private meeting.'}
+                      </div>
+                    )}
+                  </div>
                 )}
-              </>
-            )}
-          </>
-        )}
-      </div>
+              </aside>
+            </>
+          )}
+        </>
+      )}
     </main>
   );
 }
