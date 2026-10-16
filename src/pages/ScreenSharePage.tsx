@@ -170,6 +170,33 @@ export default function ScreenSharePage() {
   }, [sessionId]);
 
   useEffect(() => {
+    if (!sessionId) return;
+    const elements = [document.documentElement, document.body, document.getElementById('root')].filter(
+      (element): element is HTMLElement => element instanceof HTMLElement
+    );
+    const originalStyles = elements.map((element) => ({
+      element,
+      overflow: element.style.overflow,
+      height: element.style.height,
+      minHeight: element.style.minHeight,
+    }));
+
+    elements.forEach((element) => {
+      element.style.overflow = 'hidden';
+      element.style.height = '100dvh';
+      element.style.minHeight = '0';
+    });
+
+    return () => {
+      originalStyles.forEach(({ element, overflow, height, minHeight }) => {
+        element.style.overflow = overflow;
+        element.style.height = height;
+        element.style.minHeight = minHeight;
+      });
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
     if (!sessionId || !isInitialized || !isAuthenticated) {
       setSession(null);
       setSessionError('');
@@ -829,8 +856,11 @@ export default function ScreenSharePage() {
         options: { data: { full_name: displayName } },
       });
       if (error) {
-        console.error('FaceMeX could not create an authenticated guest identity', { code: error.code || 'guest_sign_in_failed' });
-        throw new Error('Guest sign-in is not enabled for this FaceMeX deployment. Sign in with a FaceMeX account or contact support.');
+        const errorCode = error.code || 'guest_sign_in_failed';
+        console.error('FaceMeX could not create an authenticated guest identity', { code: errorCode });
+        throw new Error(errorCode === 'anonymous_provider_disabled'
+          ? 'Guest sign-in is disabled. Enable Anonymous Sign-Ins in the Supabase Auth settings, or sign in to FaceMeX.'
+          : 'Could not start a guest session. Please try again or sign in to FaceMeX.');
       }
       if (!data.session) {
         throw new Error('FaceMeX could not establish a secure guest sign-in. Try again or sign in to FaceMeX.');
@@ -961,6 +991,12 @@ export default function ScreenSharePage() {
   const leaveSession = async () => {
     try {
       await stopLocalMedia();
+      if (session?.isGuest) {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        navigate('/', { replace: true });
+        return;
+      }
       navigate('/ai/job-assistant');
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Meeting media stopped, but the room could not close cleanly.');
@@ -1063,21 +1099,21 @@ export default function ScreenSharePage() {
     session.hostConnected;
 
   return (
-    <main className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-[#0d0e10] text-white">
-      <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#101113]/95 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link to="/ai/job-assistant" aria-label="Back to FaceMeX workspace" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-sm font-bold tracking-tight text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-            FM
+    <main className="relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-[#0d0d0d] text-white">
+      <header className="z-30 flex min-h-14 shrink-0 flex-nowrap items-center justify-between gap-2 border-b border-white/10 bg-[#101010] px-3 pb-1 pt-[max(0.25rem,env(safe-area-inset-top))] sm:min-h-16 sm:px-5 sm:py-2">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <Link to={session?.isGuest ? '/' : '/ai/job-assistant'} onClick={session?.isGuest ? (event) => { event.preventDefault(); void leaveSession(); } : undefined} aria-label={session?.isGuest ? 'Leave guest meeting and return to FaceMeX' : 'Back to FaceMeX workspace'} className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:h-10 sm:w-10">
+            <img src="/facemex-logo.png" alt="FaceMeX" className="h-full w-full object-contain" />
           </Link>
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold sm:text-base">Private meeting</h1>
-            <p className="truncate text-xs text-white/45">{session?.hostName ? `Hosted by ${session.hostName}` : 'Loading meeting details'}</p>
+            <p className="hidden truncate text-xs text-white/45 sm:block">{session?.hostName ? `Hosted by ${session.hostName}` : 'Loading meeting details'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-white/70" role="status">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2 text-xs text-white/70 sm:px-2.5" role="status" aria-label={session?.status === 'ended' ? 'Meeting ended' : connectionStatus}>
             <span className={`h-2 w-2 rounded-full ${session?.status === 'ended' ? 'bg-red-400' : connectedToMeeting ? 'bg-emerald-400' : 'bg-amber-300'}`} />
-            <span className="max-w-28 truncate sm:max-w-none">{session?.status === 'ended' ? 'Meeting ended' : connectionStatus}</span>
+            <span className="hidden max-w-28 truncate sm:inline">{session?.status === 'ended' ? 'Meeting ended' : connectionStatus}</span>
           </span>
           {session?.status === 'active' && (
             <span className="hidden items-center gap-1.5 text-xs tabular-nums text-white/50 sm:inline-flex" aria-label={`Meeting duration ${durationLabel}`}>
@@ -1089,26 +1125,26 @@ export default function ScreenSharePage() {
           </span>
           {role === 'host' && (
             <div className="flex items-center gap-1.5">
-            <button type="button" onClick={() => void copyInvitation()} className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs font-medium text-white/80 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Copy meeting invitation link">
-              {linkCopied ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
-              <span className="hidden sm:inline">{linkCopied ? 'Copied' : 'Copy link'}</span>
-            </button>
-            <button type="button" onClick={() => void shareInvitation()} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={invitationShared ? 'Invitation shared' : 'Share invitation'} title={invitationShared ? 'Invitation shared' : 'Share invitation'}>
-              {invitationShared ? <Check className="h-4 w-4 text-emerald-300" /> : <Share2 className="h-4 w-4" />}
-            </button>
+              <button type="button" onClick={() => void copyInvitation()} className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-white/10 px-2.5 text-xs font-medium text-white/80 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:px-3" aria-label={linkCopied ? 'Invitation link copied' : 'Copy meeting invitation link'}>
+                {linkCopied ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
+                <span className="hidden sm:inline">{linkCopied ? 'Copied' : 'Copy link'}</span>
+              </button>
+              <button type="button" onClick={() => void shareInvitation()} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={invitationShared ? 'Invitation shared' : 'Share invitation'} title={invitationShared ? 'Invitation shared' : 'Share invitation'}>
+                {invitationShared ? <Check className="h-4 w-4 text-emerald-300" /> : <Share2 className="h-4 w-4" />}
+              </button>
             </div>
           )}
         </div>
       </header>
 
       {(sessionError || actionError) && (
-        <div className="mx-3 mt-3 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200 sm:mx-5" role="alert">
+        <div className="absolute left-3 right-3 top-16 z-20 rounded-xl border border-red-400/25 bg-[#351d1d]/95 px-4 py-3 text-sm text-red-200 shadow-xl sm:left-5 sm:right-5 sm:top-[4.75rem]" role="alert">
           {actionError || sessionError}
         </div>
       )}
 
       {!session && (
-        <div className="flex flex-1 items-center justify-center px-4">
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151618] p-6 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-white/70">
               <MonitorUp className="h-5 w-5" />
@@ -1124,9 +1160,9 @@ export default function ScreenSharePage() {
 
       {session && (
         <>
-          <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-2 pb-3 pt-3 sm:px-5 sm:pt-5">
-            <section ref={stageRef} className="flex min-h-[48vh] flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#090a0b] shadow-2xl sm:min-h-[56vh]">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2.5 sm:px-4">
+          <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col overflow-hidden px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 sm:px-5 sm:pb-3 sm:pt-4">
+            <section ref={stageRef} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#090a0b] shadow-2xl">
+              <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-1.5 sm:px-4 sm:py-2.5">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className={`h-2 w-2 shrink-0 rounded-full ${localStream || remoteTrack ? 'animate-pulse bg-red-400' : 'bg-white/25'}`} />
                   <p className="truncate text-xs font-medium text-white/75">{localStream ? 'You are presenting' : remoteTrack ? 'Live presentation' : 'Meeting stage'}</p>
@@ -1134,7 +1170,7 @@ export default function ScreenSharePage() {
                 <div className="flex items-center gap-2">
                   {role === 'host' && session.status !== 'ended' && (
                     <label className="flex items-center gap-1.5 text-xs text-white/50">
-                      <span className="hidden sm:inline">Quality</span>
+                      <span className="sr-only sm:not-sr-only">Quality</span>
                       <select value={screenQuality} onChange={(event) => void changeScreenQuality(event.target.value as ScreenQuality)} disabled={Boolean(busyAction)} className="h-8 rounded-lg border border-white/10 bg-[#151618] px-2 text-xs text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:opacity-50" aria-label="Screen sharing quality">
                         <option value="auto">Auto</option>
                         <option value="standard">Standard</option>
@@ -1145,17 +1181,17 @@ export default function ScreenSharePage() {
                   <button type="button" onClick={() => void toggleFullscreen()} className="flex h-9 w-9 items-center justify-center rounded-lg text-white/65 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={stageFullscreen ? 'Exit full screen' : 'View presentation full screen'}>
                     {stageFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                   </button>
-                  <button type="button" onClick={() => setFitToWindow((fit) => !fit)} className="h-9 rounded-lg border border-white/10 px-2.5 text-xs text-white/65 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={fitToWindow ? 'View presentation at original size' : 'Fit presentation to window'}>
-                    {fitToWindow ? 'Fit' : 'Original size'}
+                  <button type="button" onClick={() => setFitToWindow((fit) => !fit)} className="h-9 rounded-lg border border-white/10 px-2.5 text-xs text-white/65 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={fitToWindow ? 'Fill presentation window' : 'Fit presentation to window'}>
+                    {fitToWindow ? 'Fit' : 'Fill'}
                   </button>
                 </div>
               </div>
 
-              <div className="relative flex min-h-[38vh] flex-1 items-center justify-center overflow-hidden bg-[#08090a] sm:min-h-[50vh]">
+              <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#08090a]">
                 {role === 'host' && localStream ? (
-                  <video ref={localVideoRef} autoPlay muted playsInline className={fitToWindow ? 'h-full max-h-[calc(100dvh-13rem)] w-full object-contain' : 'h-auto w-auto max-w-none max-h-none object-none'} aria-label="Your live shared-screen preview" />
+                  <video ref={localVideoRef} autoPlay muted playsInline className={`h-full w-full ${fitToWindow ? 'object-contain' : 'object-cover'}`} aria-label="Your live shared-screen preview" />
                 ) : remoteTrack ? (
-                  <video ref={remoteVideoRef} autoPlay playsInline className={fitToWindow ? 'h-full max-h-[calc(100dvh-13rem)] w-full object-contain' : 'h-auto w-auto max-w-none max-h-none object-none'} aria-label="Live shared screen" />
+                  <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full ${fitToWindow ? 'object-contain' : 'object-cover'}`} aria-label="Live shared screen" />
                 ) : (
                   <div className="mx-auto max-w-lg px-5 py-12 text-center">
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-white/45">
@@ -1199,15 +1235,15 @@ export default function ScreenSharePage() {
               </div>
             </section>
 
-            <div className="sticky bottom-0 z-20 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#151618]/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl backdrop-blur sm:mt-4 sm:px-4">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="z-20 mt-2 flex shrink-0 flex-col items-center gap-2 rounded-2xl border border-white/10 bg-[#171717] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-2xl sm:mt-4 sm:flex-row sm:justify-between sm:gap-3 sm:px-4 sm:py-3">
+              <div className="flex min-h-4 w-full min-w-0 items-center justify-center gap-3 sm:w-auto sm:flex-1 sm:justify-start">
                 <span className="hidden text-xs tabular-nums text-white/45 sm:inline">{durationLabel}</span>
-                <p className="truncate text-xs text-white/55">
+                <p className="max-w-full truncate text-[11px] text-white/55 sm:text-xs">
                   {connectionStatus}{session.hostName ? ` · ${session.hostName}'s meeting` : ''}
                   {localStream ? ' · Screen is being shared' : ''}
                 </p>
               </div>
-              <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-end">
+              <div className="flex w-full shrink-0 flex-nowrap items-center justify-center gap-1 sm:w-auto sm:justify-end sm:gap-2">
                 {connectedToMeeting && (
                   <button type="button" onClick={() => void toggleMicrophone()} disabled={microphoneBusy} className={`inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:opacity-50 ${microphoneEnabled ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-red-500/90 text-white hover:bg-red-500'}`} aria-label={microphoneEnabled ? 'Mute microphone' : 'Unmute microphone'} aria-pressed={microphoneEnabled} title={microphoneEnabled ? 'Mute microphone' : 'Unmute microphone'}>
                     {microphoneEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
@@ -1216,17 +1252,17 @@ export default function ScreenSharePage() {
                 )}
                 {role === 'host' && session.status !== 'ended' && (
                   localStream ? (
-                    <button type="button" onClick={() => void stopSharing()} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-red-500/90 px-4 text-sm font-medium text-white hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Stop screen sharing">
+                    <button type="button" onClick={() => void stopSharing()} className="inline-flex h-11 w-10 items-center justify-center gap-2 rounded-full bg-red-500/90 px-0 text-sm font-medium text-white hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:w-auto sm:px-4" aria-label="Stop screen sharing">
                       <Square className="h-4 w-4" /> <span className="hidden sm:inline">Stop sharing</span>
                     </button>
                   ) : (
-                    <button type="button" onClick={() => void startSharing()} disabled={Boolean(busyAction) || !liveCaptureSupported} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-[#111] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Start screen sharing" title={liveCaptureSupported ? 'Choose a screen to share' : 'Live screen sharing is not supported in this browser'}>
+                    <button type="button" onClick={() => void startSharing()} disabled={Boolean(busyAction) || !liveCaptureSupported} className="inline-flex h-11 w-10 items-center justify-center gap-2 rounded-full bg-white px-0 text-sm font-semibold text-[#111] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:w-auto sm:px-4" aria-label="Start screen sharing" title={liveCaptureSupported ? 'Choose a screen to share' : 'Live screen sharing is not supported in this browser'}>
                       <MonitorUp className="h-4 w-4" /> <span className="hidden sm:inline">{busyAction === 'start' ? 'Starting…' : 'Share screen'}</span>
                     </button>
                   )
                 )}
                 {role === 'host' && localStream && (
-                  <button type="button" onClick={askAIAboutSharedFrame} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label={frameSentToWorkspace ? 'Frame opened in FaceMeX workspace' : 'Ask FaceMeX AI about this screen'} title={frameSentToWorkspace ? 'Frame opened in workspace' : 'Ask AI about screen'}>
+                  <button type="button" onClick={askAIAboutSharedFrame} className="hidden h-11 w-11 items-center justify-center rounded-full border border-white/10 text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:inline-flex" aria-label={frameSentToWorkspace ? 'Frame opened in FaceMeX workspace' : 'Ask FaceMeX AI about this screen'} title={frameSentToWorkspace ? 'Frame opened in workspace' : 'Ask AI about screen'}>
                     <Sparkles className="h-4 w-4" />
                   </button>
                 )}
@@ -1239,15 +1275,13 @@ export default function ScreenSharePage() {
                   </button>
                 )}
                 {role === 'host' && session.status !== 'ended' && (
-                  <button type="button" onClick={() => { if (window.confirm('End this meeting for everyone? The invitation will stop working.')) void endSession(); }} disabled={Boolean(busyAction)} className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-red-400/30 px-3 text-sm text-red-200 hover:bg-red-400/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300" aria-label="End meeting for everyone" title="End meeting for everyone">
+                  <button type="button" onClick={() => { if (window.confirm('End this meeting for everyone? The invitation will stop working.')) void endSession(); }} disabled={Boolean(busyAction)} className="inline-flex h-11 w-10 items-center justify-center gap-2 rounded-full border border-red-400/30 px-0 text-sm text-red-200 hover:bg-red-400/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 sm:w-auto sm:px-3" aria-label="End meeting for everyone" title="End meeting for everyone">
                     <PhoneOff className="h-4 w-4" /><span className="hidden sm:inline">End</span>
                   </button>
                 )}
-                {session.status !== 'ended' && (
-                  <button type="button" onClick={() => void leaveSession()} className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 px-3 text-sm text-white/70 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Leave meeting" title="Leave meeting">
-                    <ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Leave</span>
-                  </button>
-                )}
+                <button type="button" onClick={() => void leaveSession()} className="inline-flex h-11 w-10 items-center justify-center gap-2 rounded-full border border-white/10 px-0 text-sm text-white/70 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:w-auto sm:px-3" aria-label="Leave meeting" title="Leave meeting">
+                  <ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Leave</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1257,7 +1291,7 @@ export default function ScreenSharePage() {
               <button type="button" className="fixed inset-0 z-40 bg-black/55" onClick={() => { setParticipantsOpen(false); setChatOpen(false); }} aria-label="Close meeting panel" />
               <aside
                 id={chatOpen ? 'screen-share-chat' : 'screen-share-participants'}
-                className="fixed inset-y-0 right-0 z-50 flex w-[min(92vw,390px)] flex-col border-l border-white/10 bg-[#151618] shadow-2xl sm:inset-y-3 sm:right-3 sm:rounded-2xl sm:border"
+                className="fixed inset-y-0 right-0 z-50 flex w-[min(92vw,390px)] flex-col border-l border-white/10 bg-[#151618] pt-[env(safe-area-inset-top)] shadow-2xl sm:inset-y-3 sm:right-3 sm:rounded-2xl sm:border sm:pt-0"
                 aria-label={chatOpen ? 'Meeting chat' : 'Meeting participants'}
                 aria-labelledby="screen-share-panel-title"
                 aria-modal="true"
