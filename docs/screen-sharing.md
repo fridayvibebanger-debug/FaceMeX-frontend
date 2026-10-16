@@ -17,9 +17,10 @@ Apply both
 `supabase/migrations/202610150001_facemex_screen_share_sessions.sql` and
 `supabase/migrations/202610160001_facemex_screen_share_guest_participants.sql`
 to the existing Supabase project. Enable **Anonymous Sign-Ins** in the
-Supabase Auth provider settings to allow guests to create a limited Supabase
-identity. Configure these values as **server-side Netlify environment
-variables** for the functions runtime:
+Supabase Dashboard under **Authentication → Sign In / Providers → Anonymous
+Sign-Ins** to allow guests to create a limited Supabase identity. Configure
+these values as **server-side Netlify environment variables** for the functions
+runtime:
 
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
@@ -75,7 +76,9 @@ camera video. The host can publish microphone audio and the screen share.
 These grants are issued only after the server verifies the authenticated
 participant's approval. The invitation URL alone never grants room access.
 Anonymous guest identities are normal Supabase Auth users; configure a suitable
-retention/cleanup policy for abandoned anonymous accounts.
+retention/cleanup policy for abandoned anonymous accounts. In the FaceMeX
+frontend, anonymous identities are restricted to the invited meeting route;
+other protected workspace routes send them to sign-in.
 
 Meeting chat uses LiveKit data messages and is intentionally ephemeral; chat
 history is not stored after participants leave. Participants and speaking
