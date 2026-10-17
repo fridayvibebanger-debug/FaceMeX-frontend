@@ -1,4 +1,4 @@
-import { Home, User, MessageCircle, Settings, Users, Briefcase } from 'lucide-react';
+import { Home, User, MessageCircle, Users, Briefcase, BookOpen } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
@@ -9,10 +9,10 @@ const menuItems = [
   { icon: MessageCircle, label: 'Messages', path: '/messages' },
   { icon: Briefcase, label: 'Jobs', path: '/jobs' },
   // Professional AI tools
-  { icon: Briefcase, label: 'AI CV Builder', path: '/ai/resume' },
+  { icon: BookOpen, label: 'PracticalLabLibrary', path: '/practical-lab' },
+  { icon: Briefcase, label: 'CV & Documents', path: '/ai/resume' },
   { icon: Briefcase, label: 'AI Cover Letter', path: '/ai/cover-letter' },
   { icon: Briefcase, label: 'AI Job Assistant', path: '/ai/job-assistant' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
 export default function LeftSidebar() {

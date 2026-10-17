@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { api, API_URL } from '@/lib/api';
 import { io, Socket } from 'socket.io-client';
+import { getCachedFaceMeXNotificationPreference } from '@/services/facemexSettingsService';
+import { useAuthStore } from '@/store/authStore';
 
 export interface Notification {
   id: string;
@@ -15,12 +17,14 @@ export interface Notification {
 
 interface NotificationState {
   notifications: Notification[];
+  allNotifications: Notification[];
   unreadCount: number;
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>) => void;
   markAsRead: (notificationId: string) => void;
   markAllAsRead: () => void;
   clearNotification: (notificationId: string) => void;
   initRealtime: (userId: string) => void;
+  applySettingsFilters: () => void;
   load: () => Promise<void>;
   read: (id: string) => Promise<void>;
   readAll: () => Promise<void>;
@@ -37,9 +41,21 @@ function upsert(list: Notification[], item: Notification) {
   return next;
 }
 
+function notificationIsEnabled(notification: Notification) {
+  return getCachedFaceMeXNotificationPreference(
+    useAuthStore.getState().user?.id,
+    notification.type,
+  );
+}
+
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
+  allNotifications: [],
   unreadCount: 0,
+  applySettingsFilters: () => set((state) => {
+    const notifications = state.allNotifications.filter(notificationIsEnabled);
+    return { notifications, unreadCount: notifications.filter((item) => !item.isRead).length };
+  }),
 
   addNotification: (notification) => {
     const newNotification: Notification = {
@@ -48,16 +64,23 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       timestamp: new Date(),
       isRead: false,
     };
-
-    set((state) => ({
-      notifications: [newNotification, ...state.notifications],
-      unreadCount: state.unreadCount + 1,
-    }));
+    set((state) => {
+      const allNotifications = [newNotification, ...state.allNotifications];
+      const notifications = allNotifications.filter(notificationIsEnabled);
+      return {
+        allNotifications,
+        notifications,
+        unreadCount: notifications.filter((item) => !item.isRead).length,
+      };
+    });
   },
 
   markAsRead: (notificationId) =>
     set((state) => ({
       notifications: state.notifications.map((n) =>
+        n.id === notificationId ? { ...n, isRead: true } : n
+      ),
+      allNotifications: state.allNotifications.map((n) =>
         n.id === notificationId ? { ...n, isRead: true } : n
       ),
       unreadCount: Math.max(0, state.unreadCount - 1),
@@ -66,6 +89,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   markAllAsRead: () =>
     set((state) => ({
       notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
+      allNotifications: state.allNotifications.map((n) => ({ ...n, isRead: true })),
       unreadCount: 0,
     })),
 
@@ -74,6 +98,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       const notification = state.notifications.find((n) => n.id === notificationId);
       return {
         notifications: state.notifications.filter((n) => n.id !== notificationId),
+        allNotifications: state.allNotifications.filter((n) => n.id !== notificationId),
         unreadCount: notification && !notification.isRead 
           ? Math.max(0, state.unreadCount - 1) 
           : state.unreadCount,
@@ -113,8 +138,9 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         actionUrl: typeof n.actionUrl === 'string' ? n.actionUrl : undefined,
       };
       set((state) => {
-        const next = upsert(state.notifications, item);
-        return { notifications: next, unreadCount: next.filter((x) => !x.isRead).length };
+        const allNotifications = upsert(state.allNotifications, item);
+        const notifications = allNotifications.filter(notificationIsEnabled);
+        return { allNotifications, notifications, unreadCount: notifications.filter((x) => !x.isRead).length };
       });
     });
   },
@@ -131,7 +157,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       isRead: !!n.isRead,
       actionUrl: n.actionUrl || undefined,
     }));
-    set({ notifications: list, unreadCount: list.filter(n => !n.isRead).length })
+    const visibleNotifications = list.filter(notificationIsEnabled);
+    set({
+      allNotifications: list,
+      notifications: visibleNotifications,
+      unreadCount: visibleNotifications.filter(n => !n.isRead).length,
+    })
   },
   read: async (id: string) => {
     await api.post(`/api/notifications/${id}/read`)

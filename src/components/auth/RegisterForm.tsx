@@ -40,7 +40,7 @@ export default function RegisterForm() {
     setIsLoading(true);
     try {
       await register(trimmedName, email.trim(), password);
-      navigate('/feed');
+      navigate('/ai/job-assistant', { replace: true });
     } catch (error) {
       const code = (error as Error).message;
       if (code === 'supabase_not_configured') {

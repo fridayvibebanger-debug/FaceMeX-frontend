@@ -27,7 +27,7 @@ export default function LoginForm() {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate('/feed');
+      navigate('/ai/job-assistant', { replace: true });
     } catch (error) {
       const code = (error as Error).message;
       if (code === 'supabase_not_configured') {

@@ -269,6 +269,7 @@ export default function MessagesPage() {
   const [isRinging, setIsRinging] = useState(false);
   const [incomingCall, setIncomingCall] = useState<boolean>(false);
   const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
+  const [pendingVoiceUrl, setPendingVoiceUrl] = useState<string | null>(null);
   const ringingTimeoutRef = useRef<number | null>(null);
 
   const activeConversationRef = useRef<string | null>(null);
@@ -618,33 +619,6 @@ export default function MessagesPage() {
     }
 
     return pc;
-  };
-
-  const endCallInternal = () => {
-    setIsCallModalOpen(false);
-    setIsCaller(false);
-    setIsRinging(false);
-    setIncomingCall(false);
-    setPendingOffer(null);
-    if (ringingTimeoutRef.current) {
-      clearTimeout(ringingTimeoutRef.current);
-      ringingTimeoutRef.current = null;
-    }
-    if (pcRef.current) {
-      pcRef.current.getSenders().forEach((sender) => {
-        try { sender.track?.stop(); } catch {}
-      });
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-    if (localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
-    }
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((t) => t.stop());
-      setRemoteStream(null);
-    }
   };
 
   const handleSendMessage = async () => {

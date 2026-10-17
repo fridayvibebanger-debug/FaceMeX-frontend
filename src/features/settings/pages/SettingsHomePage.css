@@ -1,0 +1,166 @@
+.settings-home {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background: #000;
+  color: #fff;
+  padding: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 32px);
+}
+
+.settings-home-content {
+  width: min(calc(100% - 40px), 680px);
+  margin: 0 auto;
+}
+
+.settings-home-header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  align-items: center;
+  min-height: 56px;
+}
+
+.settings-home-header h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.settings-home-back,
+.settings-home-header-spacer {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: #242424;
+  color: #fff;
+}
+
+.settings-home-back {
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.settings-home-back:hover {
+  background: #3f3f3f;
+}
+
+.settings-home-back svg {
+  width: 21px;
+  height: 21px;
+}
+
+.settings-home-intro {
+  margin: 14px 0 28px;
+  color: #bdbdbd;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.settings-home-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 27px;
+}
+
+.settings-home-group h2 {
+  margin: 0 0 11px 2px;
+  color: #f5f5f5;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.settings-home-card {
+  overflow: hidden;
+  border-radius: 22px;
+  background: #3f3f3f;
+}
+
+.settings-home-row {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid #555;
+  color: #fff;
+  padding: 12px 16px;
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.settings-home-row:hover {
+  background: #484848;
+}
+
+.settings-home-row-last {
+  border-bottom: 0;
+}
+
+.settings-home-icon {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  color: #d0c4ff;
+  stroke-width: 1.8;
+}
+
+.settings-home-row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-home-row-title {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.settings-home-row-description {
+  color: #c2c2c2;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.settings-home-chevron {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: #c2c2c2;
+}
+
+.settings-home :focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+  .settings-home-content {
+    width: min(calc(100% - 64px), 680px);
+  }
+
+  .settings-home-intro {
+    margin-top: 18px;
+    margin-bottom: 34px;
+  }
+
+  .settings-home-groups {
+    gap: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-home-back,
+  .settings-home-row {
+    transition: none;
+  }
+}

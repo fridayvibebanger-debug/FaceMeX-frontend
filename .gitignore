@@ -1,1 +1,24 @@
 ﻿node_modules/
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Local backups and diagnostic files
+facemex-source-backup.zip
+facemex-current-changes.patch
+_debug_backups/
+tmp_*
+balance.txt
+build.log
+tsdiag.txt
+npm
+
+# Generated build output
+dist/
+
+# Local editor files
+.vscode/
+
+# Separate backend repository and local data
+/server/

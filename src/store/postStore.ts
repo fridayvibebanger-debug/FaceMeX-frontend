@@ -298,8 +298,10 @@ export const usePostStore = create<PostState>((set, get) => ({
       await api.post(`/api/posts/${postId}/like`, reaction ? { reaction } : undefined);
     } catch (e) {
       // rollback on error
+      set({ posts: prev });
+    }
   },
-  
+
   addComment: async (postId: string, content: string) => {
     const c = await api.post(`/api/posts/${postId}/comment`, { text: content });
     const newComment: Comment = {

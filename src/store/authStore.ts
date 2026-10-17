@@ -9,6 +9,7 @@ interface User {
   id: string;
   name: string;
   email: string;
+  isAnonymous?: boolean;
   phone?: string;
   avatar?: string;
   tier?: string;
@@ -34,7 +35,7 @@ interface AuthState {
   isInitialized: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => void;
   followUser: (userId: string) => void;
@@ -70,6 +71,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       id: supaUser.id,
       email: supaUser.email || email,
       name: (supaUser.user_metadata as any)?.full_name || email.split('@')[0] || 'FaceMe User',
+      isAnonymous: Boolean(supaUser.is_anonymous),
       phone: (supaUser.user_metadata as any)?.phone,
       avatar: (supaUser.user_metadata as any)?.avatar_url,
       followers: 0,
@@ -77,7 +79,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       joinedDate: new Date(supaUser.created_at),
     };
 
-    set({ user: profile, isAuthenticated: true });
+    set({ user: profile, isAuthenticated: true, isInitialized: true });
 
     try {
       localStorage.setItem('faceme_user_id', String(profile.id));
@@ -128,13 +130,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       id: supaUser.id,
       email: supaUser.email || email,
       name,
+      isAnonymous: Boolean(supaUser.is_anonymous),
       avatar: (supaUser.user_metadata as any)?.avatar_url,
       followers: 0,
       following: 0,
       joinedDate: new Date(supaUser.created_at),
     };
 
-    set({ user: profile, isAuthenticated: true });
+    set({ user: profile, isAuthenticated: true, isInitialized: true });
 
     try {
       localStorage.setItem('faceme_user_id', String(profile.id));
@@ -152,8 +155,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await useUserStore.getState().loadMe();
     } catch {}
   },
-  logout: () => {
-    supabase.auth.signOut();
+  logout: async () => {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    }
     set({ user: null, isAuthenticated: false });
     try {
       const nextMode =
@@ -198,6 +204,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           id: supaUser.id,
           email: supaUser.email || '',
           name: (supaUser.user_metadata as any)?.full_name || supaUser.email || 'FaceMe User',
+          isAnonymous: Boolean(supaUser.is_anonymous),
           phone: (supaUser.user_metadata as any)?.phone,
           avatar: (supaUser.user_metadata as any)?.avatar_url,
           followers: 0,
@@ -237,6 +244,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       id: supaUser.id,
       email: supaUser.email || '',
       name: (supaUser.user_metadata as any)?.full_name || supaUser.email || 'FaceMe User',
+      isAnonymous: Boolean(supaUser.is_anonymous),
       phone: (supaUser.user_metadata as any)?.phone,
       avatar: (supaUser.user_metadata as any)?.avatar_url,
       followers: 0,

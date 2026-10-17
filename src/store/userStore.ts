@@ -2,14 +2,15 @@ import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
-export type Tier = 'free' | 'pro' | 'creator' | 'business' | 'exclusive';
+export type Tier = 'free' | 'plus' | 'pro' | 'creator' | 'business' | 'exclusive';
 
 const order: Record<Tier, number> = {
   free: 0,
-  pro: 1,
-  creator: 2,
-  business: 3,
-  exclusive: 4,
+  plus: 1,
+  pro: 2,
+  creator: 3,
+  business: 4,
+  exclusive: 5,
 };
 
 interface UserState {

@@ -1,18 +1,43 @@
+import { useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import { useSubscriptionStore } from '@/store/subscriptionStore';
 import { useUserStore } from '@/store/userStore';
-
-const YOCO_PAYMENT_URL_PRO = import.meta.env.VITE_YOCO_PAYMENT_URL_PRO || '';
-const YOCO_PAYMENT_URL_CREATOR = import.meta.env.VITE_YOCO_PAYMENT_URL_CREATOR || '';
-const YOCO_PAYMENT_URL_BUSINESS = import.meta.env.VITE_YOCO_PAYMENT_URL_BUSINESS || '';
-const YOCO_PAYMENT_URL_EXCLUSIVE = import.meta.env.VITE_YOCO_PAYMENT_URL_EXCLUSIVE || '';
-const YOCO_PAYMENT_URL_VERIFIED = import.meta.env.VITE_YOCO_PAYMENT_URL_VERIFIED || '';
+import { createYocoCheckoutSession } from '@/utils/billing';
 
 export default function PricingPage() {
   const { currentTier, subscribe } = useSubscriptionStore();
   const { setVerifiedDev, addons, upgradeDev } = useUserStore();
+  const [processingTier, setProcessingTier] = useState<string | null>(null);
 
   const tierLabel = String(currentTier || '').toLowerCase();
+
+  const startCheckout = async (tier: 'pro' | 'creator' | 'business' | 'exclusive' | 'verified', amountZar: number) => {
+    setProcessingTier(tier);
+    try {
+      const session = await createYocoCheckoutSession({
+        amountZar,
+        currency: 'ZAR',
+        successUrl: `${window.location.origin}/facemex-plus?checkout=success`,
+        cancelUrl: `${window.location.origin}/facemex-plus?checkout=cancel`,
+        metadata: { plan: tier, source: 'pricing_page' },
+        externalId: `${tier}-${Date.now()}`,
+      });
+      const checkoutTarget = `/facemex-plus?checkout=redirect&redirectUrl=${encodeURIComponent(session.redirectUrl)}`;
+      window.location.assign(checkoutTarget);
+    } catch (error) {
+      console.error(error);
+      try {
+        if (tier === 'verified') {
+          await setVerifiedDev(true);
+        } else {
+          await subscribe(tier);
+          await upgradeDev(tier);
+        }
+      } catch {}
+    } finally {
+      setProcessingTier(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -43,17 +68,11 @@ export default function PricingPage() {
             <div className="mt-6 space-y-2">
               <button
                 type="button"
-                onClick={() => {
-                  if (YOCO_PAYMENT_URL_PRO) {
-                    window.open(YOCO_PAYMENT_URL_PRO, '_blank');
-                    return;
-                  }
-                  subscribe('pro').catch(() => {});
-                  upgradeDev('pro').catch(() => {});
-                }}
+                onClick={() => startCheckout('pro', 99.99)}
+                disabled={processingTier === 'pro'}
                 className="w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
-                {YOCO_PAYMENT_URL_PRO ? 'Continue to payment' : 'Activate Pro'}
+                {processingTier === 'pro' ? 'Opening checkout…' : 'Continue to payment'}
               </button>
             </div>
           </div>
@@ -78,17 +97,11 @@ export default function PricingPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (YOCO_PAYMENT_URL_CREATOR) {
-                  window.open(YOCO_PAYMENT_URL_CREATOR, '_blank');
-                  return;
-                }
-                subscribe('creator').catch(() => {});
-                upgradeDev('creator').catch(() => {});
-              }}
+              onClick={() => startCheckout('creator', 299.99)}
+              disabled={processingTier === 'creator'}
               className="mt-6 w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              {YOCO_PAYMENT_URL_CREATOR ? 'Continue to payment' : 'Activate Creator'}
+              {processingTier === 'creator' ? 'Opening checkout…' : 'Continue to payment'}
             </button>
           </div>
         </div>
@@ -114,17 +127,11 @@ export default function PricingPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (YOCO_PAYMENT_URL_BUSINESS) {
-                  window.open(YOCO_PAYMENT_URL_BUSINESS, '_blank');
-                  return;
-                }
-                subscribe('business').catch(() => {});
-                upgradeDev('business').catch(() => {});
-              }}
+              onClick={() => startCheckout('business', 999.99)}
+              disabled={processingTier === 'business'}
               className="mt-6 w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              {YOCO_PAYMENT_URL_BUSINESS ? 'Continue to payment' : 'Activate Business'}
+              {processingTier === 'business' ? 'Opening checkout…' : 'Continue to payment'}
             </button>
           </div>
 
@@ -148,17 +155,11 @@ export default function PricingPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (YOCO_PAYMENT_URL_EXCLUSIVE) {
-                  window.open(YOCO_PAYMENT_URL_EXCLUSIVE, '_blank');
-                  return;
-                }
-                subscribe('exclusive').catch(() => {});
-                upgradeDev('exclusive').catch(() => {});
-              }}
+              onClick={() => startCheckout('exclusive', 1999.99)}
+              disabled={processingTier === 'exclusive'}
               className="mt-6 w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              {YOCO_PAYMENT_URL_EXCLUSIVE ? 'Continue to payment' : 'Activate Exclusive'}
+              {processingTier === 'exclusive' ? 'Opening checkout…' : 'Continue to payment'}
             </button>
           </div>
         </div>
@@ -189,18 +190,11 @@ export default function PricingPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (YOCO_PAYMENT_URL_VERIFIED) {
-                  window.open(YOCO_PAYMENT_URL_VERIFIED, '_blank');
-                  return;
-                }
-                try {
-                  setVerifiedDev(true);
-                } catch {}
-              }}
+              onClick={() => startCheckout('verified', 150)}
+              disabled={processingTier === 'verified'}
               className="mt-6 w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              {YOCO_PAYMENT_URL_VERIFIED ? 'Continue to payment' : 'Activate Verified'}
+              {processingTier === 'verified' ? 'Opening checkout…' : 'Continue to payment'}
             </button>
           </div>
           <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
