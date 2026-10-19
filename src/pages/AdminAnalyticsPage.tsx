@@ -49,18 +49,18 @@ function metric(value: number | null | undefined) {
 
 function MetricCard({ label, value, help }: { label: string; value: number | null | undefined; help: string }) {
   return (
-    <article className="rounded-xl border border-border bg-card p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight">{metric(value)}</p>
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">{help}</p>
+    <article className="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-4">
+      <p className="break-words text-xs text-muted-foreground sm:text-sm">{label}</p>
+      <p className="mt-2 break-words text-xl font-semibold tabular-nums tracking-tight sm:text-2xl">{metric(value)}</p>
+      <p className="mt-1 break-words text-xs leading-4 text-muted-foreground sm:leading-5">{help}</p>
     </article>
   );
 }
 
 function DataTable({ headers, children }: { headers: string[]; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[540px] text-left text-sm">
+    <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border [touch-action:pan-x]">
+      <table className="w-full min-w-[500px] text-left text-sm sm:min-w-[540px]">
         <thead className="bg-muted/60 text-muted-foreground">
           <tr>{headers.map((header) => <th key={header} className="px-3 py-2.5 font-medium">{header}</th>)}</tr>
         </thead>
@@ -71,7 +71,7 @@ function DataTable({ headers, children }: { headers: string[]; children: React.R
 }
 
 function Cell({ children }: { children: React.ReactNode }) {
-  return <td className="max-w-[280px] break-words px-3 py-2.5 align-top">{children}</td>;
+  return <td className="max-w-[280px] break-words px-2 py-2 align-top sm:px-3 sm:py-2.5">{children}</td>;
 }
 
 export default function AdminAnalyticsPage() {
@@ -144,7 +144,7 @@ export default function AdminAnalyticsPage() {
   const maxEvents = Math.max(1, ...(report?.daily.map((item) => item.events) || []));
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl space-y-6 px-4 py-6 text-foreground sm:px-6 lg:px-8">
+    <main className="mx-auto min-h-screen w-full min-w-0 max-w-7xl space-y-4 overflow-x-hidden px-3 py-4 text-foreground sm:space-y-6 sm:px-6 sm:py-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Private · owner access</p>
@@ -158,23 +158,23 @@ export default function AdminAnalyticsPage() {
         </button>
       </header>
 
-      <section aria-label="Analytics filters" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end">
-        <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+      <section aria-label="Analytics filters" className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border bg-card p-3 sm:flex sm:items-end sm:p-4">
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
           From
-          <input type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground" />
+          <input type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} className="h-10 min-w-0 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground sm:px-3" />
         </label>
-        <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
           Through
-          <input type="date" value={endDate} min={startDate} max={today} onChange={(event) => setEndDate(event.target.value)} className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground" />
+          <input type="date" value={endDate} min={startDate} max={today} onChange={(event) => setEndDate(event.target.value)} className="h-10 min-w-0 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground sm:px-3" />
         </label>
-        <label className="grid gap-1 text-xs font-medium text-muted-foreground sm:min-w-56">
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground sm:min-w-56">
           Feature
-          <select value={feature} onChange={(event) => setFeature(event.target.value)} className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground">
+          <select value={feature} onChange={(event) => setFeature(event.target.value)} className="h-10 min-w-0 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground">
             <option value="">All features</option>
             {report?.features.map((item) => <option key={item.feature} value={item.feature}>{item.feature}</option>)}
           </select>
         </label>
-        <p className="text-xs text-muted-foreground sm:ml-auto">Showing {startDate} through {endDate}</p>
+        <p className="min-w-0 break-words text-xs text-muted-foreground sm:ml-auto">Showing {startDate} through {endDate}</p>
       </section>
 
       {error && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>}
@@ -185,7 +185,7 @@ export default function AdminAnalyticsPage() {
 
       {report && (
         <>
-          <section aria-label="Overview metrics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section aria-label="Overview metrics" className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
             <MetricCard label="Registered users" value={overview?.registered_users} help="Accounts currently registered; not limited to the selected dates." />
             <MetricCard label="Daily active users" value={overview?.daily_active_users} help={`Unique users active on ${endDate}.`} />
             <MetricCard label="Weekly active users" value={overview?.weekly_active_users} help="Unique users active in the 7 days ending on the selected end date." />
@@ -202,27 +202,27 @@ export default function AdminAnalyticsPage() {
               : `${report.retention.day_1 ?? '—'}% / ${report.retention.day_7 ?? '—'}% / ${report.retention.day_30 ?? '—'}%` } />
           </section>
 
-          <section className="grid gap-5 xl:grid-cols-2">
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <section className="grid min-w-0 gap-4 xl:grid-cols-2 xl:gap-5">
+            <div className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
               <div>
                 <h2 className="font-semibold">Events and sign-ups over time</h2>
                 <p className="text-xs text-muted-foreground">Bars show total event counts per day; labels show unique users and sign-ups.</p>
               </div>
               {report.daily.length ? (
-                <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                <div className="max-h-80 min-w-0 space-y-2 overflow-y-auto pr-1">
                   {report.daily.map((item) => (
-                    <div key={item.date} className="grid grid-cols-[5.5rem_1fr_5rem] items-center gap-2 text-xs">
+                    <div key={item.date} className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-xs sm:grid-cols-[5.5rem_minmax(0,1fr)_7rem]">
                       <span className="text-muted-foreground">{item.date}</span>
                       <div className="h-2 overflow-hidden rounded bg-muted">
                         <div className="h-full rounded bg-primary" style={{ width: `${(item.events / maxEvents) * 100}%` }} />
                       </div>
-                      <span className="text-right tabular-nums">{item.events} · {item.unique_users} users · +{item.signups}</span>
+                      <span className="col-start-2 min-w-0 break-words text-[11px] leading-4 text-muted-foreground tabular-nums sm:col-start-3 sm:text-right sm:text-xs sm:leading-normal">{item.events} events · {item.unique_users} users · +{item.signups} sign-ups</span>
                     </div>
                   ))}
                 </div>
               ) : <p className="text-sm text-muted-foreground">No daily data available.</p>}
             </div>
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <div className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
               <div>
                 <h2 className="font-semibold">Feature usage</h2>
                 <p className="text-xs text-muted-foreground">Events are total actions; unique users count each account once per feature.</p>
@@ -234,15 +234,15 @@ export default function AdminAnalyticsPage() {
             </div>
           </section>
 
-          <section className="grid gap-5 xl:grid-cols-2">
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <section className="grid min-w-0 gap-4 xl:grid-cols-2 xl:gap-5">
+            <div className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
               <h2 className="font-semibold">Button and action activity</h2>
               <DataTable headers={['Button / action', 'Events', 'Unique users']}>
                 {report.buttons.map((item) => <tr key={item.button_id}><Cell>{item.button_id}</Cell><Cell>{metric(item.events)}</Cell><Cell>{metric(item.unique_users)}</Cell></tr>)}
                 {!report.buttons.length && <tr><Cell>No button identifiers recorded yet.</Cell><Cell>—</Cell><Cell>—</Cell></tr>}
               </DataTable>
             </div>
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <div className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
               <h2 className="font-semibold">Errors and failed actions</h2>
               <DataTable headers={['Event', 'Feature', 'Category', 'Events']}>
                 {report.errors.map((item, index) => <tr key={`${item.event_name}-${item.error_category}-${index}`}><Cell>{item.event_name}</Cell><Cell>{item.feature || '—'}</Cell><Cell>{item.error_category || 'Unclassified'}</Cell><Cell>{metric(item.events)}</Cell></tr>)}
@@ -251,15 +251,15 @@ export default function AdminAnalyticsPage() {
             </div>
           </section>
 
-          <section className="grid gap-5 xl:grid-cols-2">
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <section className="grid min-w-0 gap-4 xl:grid-cols-2 xl:gap-5">
+            <div className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
               <h2 className="font-semibold">Device usage</h2>
               <DataTable headers={['Device', 'Events', 'Unique users']}>
                 {report.devices.map((item) => <tr key={item.device}><Cell>{item.device}</Cell><Cell>{metric(item.events)}</Cell><Cell>{metric(item.unique_users)}</Cell></tr>)}
                 {!report.devices.length && <tr><Cell>No device events recorded.</Cell><Cell>—</Cell><Cell>—</Cell></tr>}
               </DataTable>
             </div>
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <div className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
               <h2 className="font-semibold">User activity</h2>
               <p className="text-xs text-muted-foreground">User IDs are pseudonymous account identifiers. No email or content is shown.</p>
               <DataTable headers={['User ID', 'Events', 'Features', 'Last active']}>
@@ -269,7 +269,7 @@ export default function AdminAnalyticsPage() {
             </div>
           </section>
 
-          <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <section className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
             <h2 className="font-semibold">Recent activity</h2>
             <DataTable headers={['Time', 'User ID', 'Event', 'Feature / button', 'Route', 'Result']}>
               {report.recent_activity.map((item, index) => <tr key={`${item.user_id}-${item.event_name}-${item.occurred_at}-${index}`}>
