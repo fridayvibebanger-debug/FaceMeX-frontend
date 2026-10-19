@@ -70,6 +70,8 @@ import { toast } from '@/components/ui/use-toast';
 import { useUserStore } from '@/store/userStore';
 import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 import { buildPersonalizationContext, getPersonalizationProfile, PERSONALIZATION_CHANGE_EVENT, type PersonalizationProfile } from '@/lib/personalization';
+import { supabase } from '@/lib/supabaseClient';
+import { extractYouTubeUrlFromText, isYouTubeSummaryRequest } from '@/lib/workspaceResponse';
 
 const PracticalLabLibrary = lazy(() => import('./PracticalLabLibrary'));
 
@@ -2191,12 +2193,33 @@ async function imageFileToWorkspaceImage(file: File): Promise<WorkspaceImage> {
   };
 }
 
-function createUnavailableAnswer(hasImages: boolean) {
-  if (hasImages) {
-    return 'FaceMeX AI image analysis is temporarily unavailable. Please try again shortly. If this continues, check that your backend image-analysis route and vision API key are configured correctly.';
-  }
+function createUsageLimitAnswer(hasImages: boolean) {
+  return hasImages
+    ? 'You’ve reached today’s AI usage limit for image analysis. Upgrade to FaceMeX Plus to continue now, or come back tomorrow when your usage resets.'
+    : 'You’ve reached today’s AI usage limit. Upgrade to FaceMeX Plus to continue now, or come back tomorrow when your usage resets.';
+}
 
-  return 'FaceMeX AI is temporarily unavailable. Please try again shortly.';
+function isAIUsageLimitError(error: unknown) {
+  const details =
+    error && typeof error === 'object'
+      ? [
+          (error as { message?: unknown }).message,
+          (error as { error?: unknown }).error,
+          (error as { details?: unknown }).details,
+          (error as { code?: unknown }).code,
+          (error as { status?: unknown }).status,
+        ]
+          .filter((value) => typeof value === 'string' || typeof value === 'number')
+          .join(' ')
+      : String(error ?? '');
+
+  return /\b(?:429|quota|usage[\s_-]*limit|usage.{0,24}(?:reached|exceeded|exhausted|finished)|rate[\s_-]*limit|daily[\s_-]*limit|limit\s+(?:reached|exceeded)|(?:reached|exceeded|exhausted).{0,24}(?:daily|AI|usage)?\s*limit|too many requests|resource exhausted)\b/i.test(
+    details
+  );
+}
+
+function isUnavailableAIAnswer(answer: string) {
+  return /FaceMeX AI(?: image analysis)? is temporarily unavailable/i.test(answer);
 }
 
 function normalizeAnswerText(raw: any, fallback: string) {
@@ -3081,6 +3104,7 @@ const [developerPlan, setDeveloperPlan] = useState<
   };
 
   const [deepSeekUsage, setDeepSeekUsage] = useState(0);
+  const [aiUsageLimitReached, setAiUsageLimitReached] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [selectedImages, setSelectedImages] = useState<WorkspaceImage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -5112,7 +5136,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       suggestedSavedCategory === 'institution_applications';
 
     // `shouldUsePreviousContext` helper is not present; keep initial context decision
-    
+
     const aiPromptWithToolDirection = addFaceMeXCareerToolInstruction(aiPromptWithProjectContext, intent);
     const promptWithConversationContext = shouldUseContext
       ? `Continue the current task using the conversation below. Interpret the user's short reply as referring to the immediately preceding discussion, preserve their stated goals and details, and do not restart or ask them to repeat information. If one important detail is still missing, ask one focused question.\n\nRecent conversation:\n${conversationContext}\n\nUser's latest request:\n${aiPromptWithToolDirection}`
@@ -5188,26 +5212,81 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       }
     }
 
-    if (!canUseAI) {
-      const answer =
-        currentTier === 'free'
-          ? 'You have used all 5 free AI uses for today. Upgrade to keep going until the next day.'
-          : 'Your AI limit is finished for today. Try again tomorrow or upgrade when you are ready.';
+    if (!canUseAI || aiUsageLimitReached) {
+      setBusy(false);
+      return;
+    }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: safeId(),
-          role: 'assistant',
-          content: answer,
-          createdAt: new Date().toISOString(),
-          saved: shouldAutoSaveEducation,
-          savedCategory: suggestedSavedCategory,
-          intent,
-        },
-      ]);
-      setBusy(false);
-      setBusy(false);
+    const youtubeVideoUrl = extractYouTubeUrlFromText(finalPrompt);
+    if (youtubeVideoUrl && isYouTubeSummaryRequest(finalPrompt) && !hasImages) {
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!data.session?.access_token) {
+          throw new Error('Sign in to summarize a YouTube video.');
+        }
+
+        const response = await fetch('/api/youtube/summarize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${data.session.access_token}`,
+          },
+          body: JSON.stringify({ url: youtubeVideoUrl }),
+        });
+        const responseBody = await response.text();
+        let result: { summary?: string; watchUrl?: string; message?: string } = {};
+        if (responseBody) {
+          try {
+            result = JSON.parse(responseBody) as typeof result;
+          } catch {
+            if (response.ok) throw new Error('Gemini returned an invalid video summary response.');
+          }
+        }
+        if (!response.ok) {
+          throw new Error(result.message || `Gemini could not summarize this video (HTTP ${response.status}).`);
+        }
+        if (typeof result.summary !== 'string' || !result.summary.trim()) {
+          throw new Error('Gemini did not return a video summary. Please try again.');
+        }
+
+        const answer = `## YouTube video summary\n\n[Open the video on YouTube](${result.watchUrl || youtubeVideoUrl})\n\n${result.summary.trim()}`;
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: safeId(),
+            role: 'assistant',
+            content: answer,
+            createdAt: new Date().toISOString(),
+            saved: shouldAutoSaveEducation,
+            savedCategory: 'youtube_lessons',
+            intent: 'general-question',
+          },
+        ]);
+        recordAIUse();
+
+        trackWorkspaceResponse({
+          intent: 'youtube_video_summary',
+          source: 'gemini_youtube',
+          answer_length: answer.length,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'The YouTube video could not be summarized.';
+        setPrompt((current) => current || finalPrompt);
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: safeId(),
+            role: 'assistant',
+            content: `I couldn’t summarize that YouTube video. ${message}`,
+            createdAt: new Date().toISOString(),
+            intent: 'general-question',
+          },
+        ]);
+        trackError('workspace_youtube_summary_failed', message, {
+          intent: 'youtube_video_summary',
+        });
+      }
       return;
     }
 
@@ -5266,7 +5345,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       role: m.role,
       content: m.content,
     })),
-       
+
         tier: currentTier,
         creatorPlus,
         intent,
@@ -5301,31 +5380,41 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
 
       try {
         console.log('Sending AI request to /api/ai/pro/job-assistant');
-      
+
         const res = await api.postViaSameOriginProxy('/api/ai/pro/job-assistant', payload);
-      
+
         console.log('AI Response:', res);
-      
+
         data = unwrapApiResponse(res);
       } catch (err: any) {
         console.error('Primary AI endpoint failed:', err);
-      
+
         try {
           console.log('Trying fallback endpoint /api/ai/workspace');
-      
+
           const res = await api.postViaSameOriginProxy('/api/ai/workspace', payload);
-      
+
           console.log('Fallback AI Response:', res);
-      
+
           data = unwrapApiResponse(res);
         } catch (fallbackErr: any) {
           console.error('Fallback endpoint also failed:', fallbackErr);
-      
+
           throw fallbackErr;
         }
       }
 
-      const answer = normalizeAnswerText(data, createUnavailableAnswer(hasImages));
+      if (isAIUsageLimitError(data)) {
+        throw new Error('The AI usage limit has been reached.');
+      }
+
+      const normalizedAnswer = normalizeAnswerText(data, createUsageLimitAnswer(hasImages));
+      const usageLimitReached =
+        isAIUsageLimitError(data) || isAIUsageLimitError(normalizedAnswer) || isUnavailableAIAnswer(normalizedAnswer);
+      if (usageLimitReached) setAiUsageLimitReached(true);
+      const answer = usageLimitReached
+        ? createUsageLimitAnswer(hasImages)
+        : normalizedAnswer;
 
       setMessages((prev) => [
         ...prev,
@@ -5340,7 +5429,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         },
       ]);
 
-      recordAIUse();
+      if (!usageLimitReached) recordAIUse();
 
       trackWorkspaceResponse({
         intent,
@@ -5355,7 +5444,8 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       if (attachedImages.length > 0) {
         setSelectedImages((current) => current.length > 0 ? current : attachedImages);
       }
-      const answer = createUnavailableAnswer(hasImages);
+      setAiUsageLimitReached(true);
+      const answer = createUsageLimitAnswer(hasImages);
 
       setMessages((prev) => [
         ...prev,
@@ -8428,6 +8518,50 @@ Start with the most useful next action. Do not invent personal details, course r
           background: rgba(16, 185, 129, 0.2);
           color: #d1fae5;
         }
+
+        .fm-ai-workspace.fm-theme-dark {
+          background: #050505 !important;
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-desktop-sidebar,
+        .fm-ai-workspace.fm-theme-dark .fm-desktop-sidebar > div {
+          border-color: #1b1b1b !important;
+          background: #090909 !important;
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-workspace-topbar,
+        .fm-ai-workspace.fm-theme-dark .fm-workspace-main,
+        .fm-ai-workspace.fm-theme-dark .fm-conversation-panel,
+        .fm-ai-workspace.fm-theme-dark .fm-chat-scroll,
+        .fm-ai-workspace.fm-theme-dark footer {
+          border-color: #1b1b1b !important;
+          background-color: #050505 !important;
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-desktop-sidebar button:hover,
+        .fm-ai-workspace.fm-theme-dark .fm-desktop-sidebar button[aria-expanded='true'],
+        .fm-ai-workspace.fm-theme-dark .fm-workspace-topbar button:hover {
+          background: #181818 !important;
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-assistant-message [class*='bg-white'],
+        .fm-ai-workspace.fm-theme-dark .fm-assistant-message [class*='bg-slate-'],
+        .fm-ai-workspace.fm-theme-dark .fm-assistant-message [class*='bg-[#'],
+        .fm-ai-workspace.fm-theme-dark .fm-assistant-message [class*='dark:bg-'] {
+          border-color: #292929 !important;
+          background-color: #101010 !important;
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-composer-card,
+        .fm-ai-workspace.fm-theme-dark footer .fm-composer-card {
+          border-color: #292929 !important;
+          background: #101010 !important;
+        }
+
+        .fm-ai-workspace.fm-theme-dark .fm-user-prompt-bubble {
+          border-color: #292929 !important;
+          background: #1b1b1b !important;
+        }
       `}</style>
 
       <aside className="fm-desktop-sidebar hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-[#e8e8e8] bg-[#f7f7f6] text-[#282828] lg:flex lg:flex-col">
@@ -9114,6 +9248,28 @@ Start with the most useful next action. Do not invent personal details, course r
                   </div>
                 );
               })}
+
+              {(!canUseAI || aiUsageLimitReached) && (
+                <div
+                  role="status"
+                  className="mx-auto flex w-full max-w-2xl flex-col gap-3 rounded-2xl border border-white/[0.07] bg-[#101010] p-4 text-white shadow-[0_12px_32px_rgba(0,0,0,0.28)] sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold">You’ve used all your AI uses for today</p>
+                    <p className="mt-1 text-sm leading-6 text-white/70">
+                      Your daily allowance refreshes tomorrow. Upgrade to FaceMeX Plus to continue with more AI access.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => navigate('/facemex-plus')}
+                    className="shrink-0 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Upgrade to FaceMeX Plus
+                  </Button>
+                </div>
+              )}
 
               {busy && (
                 <div className="flex items-start">
