@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+﻿import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { initializeAnalytics, trackAppOpen, trackEvent } from '@/lib/analytics';
 
@@ -35,7 +35,6 @@ import ProGroupDetailPage from './pages/ProGroupDetailPage';
 import SavedPostsPage from './pages/SavedPostsPage';
 import AIResumePage from './pages/AIResumePage';
 import AIJobAssistantPage from './pages/AIJobAssistantPage';
-import ScreenSharePage from './pages/ScreenSharePage';
 import FaceMeXSettingsSync from './components/facemex-settings/FaceMeXSettingsSync';
 import AccountSettingsPage from './pages/AccountSettingsPage';
 import PersonalizationSettingsPage from './pages/PersonalizationSettingsPage';
@@ -67,7 +66,6 @@ import AiUtilsTest from './pages/AiUtilsTest';
 import CareerAIPage from './pages/CareerAIPage';
 import PublicSeoPage, { isPublicSeoPath } from './pages/PublicSeoPage';
 import { getSeoMetadata, SEO_SITE_ORIGIN } from './lib/seo';
-import { getAuthenticatedReturnTo } from './lib/authReturnTo';
 
 const PracticalLabLibrary = lazy(() => import('./pages/PracticalLabLibrary'));
 import NotificationsPage from './pages/NotificationsPage';
@@ -79,42 +77,32 @@ import DepartmentDetailPage from './enterprise/pages/DepartmentDetailPage';
 const DEFAULT_AUTHENTICATED_ROUTE = '/ai/job-assistant';
 
 function PublicHomeRoute() {
-  const { isAuthenticated, user } = useAuthStore();
-  return isAuthenticated && !user?.isAnonymous ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <PublicSeoPage />;
+  const { isAuthenticated } = useAuthStore();
+  return isAuthenticated ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <PublicSeoPage />;
 }
 
 function PublicSignupRoute() {
-  const location = useLocation();
-  const { isAuthenticated, user } = useAuthStore();
-  return isAuthenticated && !user?.isAnonymous
-    ? <Navigate to={getAuthenticatedReturnTo(location.search)} replace />
+  const { isAuthenticated } = useAuthStore();
+  return isAuthenticated
+    ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />
     : <AuthPage />;
 }
 
 function PublicAuthRoute() {
-  const location = useLocation();
-  const { isAuthenticated, isInitialized, user } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
 
   if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
   }
 
-  return isAuthenticated && !user?.isAnonymous
-    ? <Navigate to={getAuthenticatedReturnTo(location.search)} replace />
-    : <AuthPage />;
+  return isAuthenticated ? <Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace /> : <AuthPage />;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const location = useLocation();
-  const { isAuthenticated, isInitialized, user } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
 
   if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
-  }
-
-  if (isAuthenticated && user?.isAnonymous) {
-    const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
@@ -130,6 +118,22 @@ function AppAnalyticsTracker() {
     trackAppOpen();
   }, [isInitialized, isAuthenticated]);
 
+  const trackCurrentPage = () => {
+    const featureByRoute: Array<[RegExp, string]> = [
+      [/^\/ai\/job-assistant/, 'ai_workspace'],
+      [/^\/documents?/, 'documents'],
+      [/^\/ai\/resume/, 'cv_tools'],
+      [/^\/ai\/interview/, 'interview_prep'],
+      [/^\/watch/, 'watch'],
+      [/^\/jobs?/, 'job_search'],
+      [/^\/projects/, 'projects'],
+      [/^\/screen-share/, 'screen_sharing'],
+      [/^\/ai\/settings/, 'settings'],
+    ];
+    const feature = featureByRoute.find(([pattern]) => pattern.test(location.pathname))?.[1] || 'workspace';
+    trackEvent('feature_opened', undefined, { feature });
+  };
+
   useEffect(() => {
     if (!isInitialized || (!isAuthenticated && !isPublicSeoPath(location.pathname))) return;
 
@@ -140,6 +144,19 @@ function AppAnalyticsTracker() {
       .replace(/\/watch\/[^/]+/g, '/watch/:id')
       .replace(/\/world\/event\/[^/]+/g, '/world/event/:id');
     trackEvent('page_view', undefined, { page_path: safePath });
+    if (isAuthenticated) trackCurrentPage();
+  }, [isInitialized, isAuthenticated, location.pathname]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    const trackAfterConsent = () => {
+      if (!isAuthenticated) return;
+      trackAppOpen();
+      trackEvent('page_view', undefined, { page_path: location.pathname });
+      trackCurrentPage();
+    };
+    window.addEventListener('facemex:analytics-consent-changed', trackAfterConsent);
+    return () => window.removeEventListener('facemex:analytics-consent-changed', trackAfterConsent);
   }, [isInitialized, isAuthenticated, location.pathname]);
 
   return null;
@@ -680,8 +697,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-        <Route path="/screen-share/:sessionId?" element={<ScreenSharePage />} />
 
         <Route
           path="/projects/:projectId"
