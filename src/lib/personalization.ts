@@ -9,6 +9,7 @@ export type PersonalizationProfile = {
   enthusiasm?: 'low' | 'balanced' | 'high';
   formatting?: 'standard' | 'headers-and-lists' | 'minimal';
   emojiUsage?: 'never' | 'sometimes' | 'often';
+  memoryEnabled?: boolean;
 };
 
 export const PERSONALIZATION_CHANGE_EVENT = 'facemex:personalization-change';
@@ -24,6 +25,7 @@ const emptyProfile: PersonalizationProfile = {
   enthusiasm: 'balanced',
   formatting: 'standard',
   emojiUsage: 'sometimes',
+  memoryEnabled: false,
 };
 
 function storageKey(userId?: string | null) {
@@ -46,15 +48,20 @@ export function getPersonalizationProfile(userId?: string | null): Personalizati
       enthusiasm: value.enthusiasm ?? 'balanced',
       formatting: value.formatting ?? 'standard',
       emojiUsage: value.emojiUsage ?? 'sometimes',
+      memoryEnabled: value.memoryEnabled === true,
     };
   } catch {
     return { ...emptyProfile };
   }
 }
 
-export function savePersonalizationProfile(userId: string | null | undefined, profile: PersonalizationProfile) {
+export function savePersonalizationProfile(
+  userId: string | null | undefined,
+  profile: PersonalizationProfile,
+  memoryEnabled = profile.memoryEnabled === true,
+) {
   try {
-    localStorage.setItem(storageKey(userId), JSON.stringify(profile));
+    localStorage.setItem(storageKey(userId), JSON.stringify({ ...profile, memoryEnabled }));
   } catch (error) {
     console.warn('FaceMeX personalization could not be cached in this browser.', error);
   }
@@ -75,7 +82,7 @@ export function buildPersonalizationContext(profile: PersonalizationProfile) {
     `Context type: ${profile.audience === 'organization' ? 'organization or company' : 'individual'}`,
     profile.name && `Name: ${profile.name}`,
     profile.role && `Role: ${profile.role}`,
-    profile.goals && `Goals: ${profile.goals}`,
+    profile.memoryEnabled && profile.goals && `Goals: ${profile.goals}`,
     profile.preferences && `Response preferences: ${profile.preferences}`,
   ].filter(Boolean);
 
