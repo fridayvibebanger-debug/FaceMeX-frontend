@@ -149,7 +149,7 @@ export function cacheFaceMeXAccountSettings(userId: string, settings: FaceMeXSet
   } catch (error) {
     console.warn('FaceMeX settings cache could not be updated; cloud settings are still saved.', error);
   }
-  savePersonalizationProfile(userId, settings.personalization);
+  savePersonalizationProfile(userId, settings.personalization, settings.memory.enabled);
   window.dispatchEvent(new CustomEvent(FACEMEX_SETTINGS_CHANGED_EVENT, { detail: { userId, settings } }));
 }
 

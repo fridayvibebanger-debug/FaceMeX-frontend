@@ -9,10 +9,13 @@ const SAFE_PROPERTIES = new Set([
   'batch_size',
   'total_jobs',
   'category',
+  'source',
+  'answer_length',
 ]);
 const EVENT_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
 const SAFE_VALUE_PATTERN = /^[\w:/ -]{0,64}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const OWNER_EMAIL = 'luckymawasha72@gmail.com';
 
 function json(statusCode, body) {
   return {
@@ -188,13 +191,7 @@ export function createAnalyticsHandler({
         return json(202, { accepted: true });
       }
 
-      const { data: adminRecord, error: adminError } = await admin
-        .from('facemex_analytics_admins')
-        .select('user_id')
-        .eq('user_id', authData.user.id)
-        .maybeSingle();
-      if (adminError) throw adminError;
-      if (!adminRecord) {
+      if (String(authData.user.email || '').toLowerCase() !== OWNER_EMAIL) {
         return json(403, { error: 'founder_only', message: 'Founder access is required to view analytics.' });
       }
 

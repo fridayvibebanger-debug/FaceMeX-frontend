@@ -16,12 +16,15 @@ const validEvent = {
   },
 };
 
-function mockClients({ isFounder = false } = {}) {
+function mockClients({ isFounder = false, captureEvent, authenticated = true } = {}) {
   return (url, key) => ({
     auth: {
       getUser: async () => ({
-        data: { user: key === 'anon' ? { id: 'registered-user-id' } : null },
-        error: key === 'anon' ? null : new Error('invalid token'),
+        data: { user: key === 'anon' && authenticated ? {
+          id: 'registered-user-id',
+          email: isFounder ? 'luckymawasha72@gmail.com' : 'other@example.com',
+        } : null },
+        error: key === 'anon' && authenticated ? null : new Error('invalid token'),
       }),
     },
     from: () => ({
@@ -30,7 +33,10 @@ function mockClients({ isFounder = false } = {}) {
           maybeSingle: async () => ({ data: isFounder ? { user_id: 'registered-user-id' } : null, error: null }),
         }),
       }),
-      upsert: async () => ({ error: null }),
+      upsert: async (value) => {
+        captureEvent?.(value);
+        return { error: null };
+      },
     }),
     rpc: async () => ({ data: { overview: { active_users: 1 } }, error: null }),
   });
@@ -54,7 +60,7 @@ test('rejects malformed event ids, event names, and device categories', () => {
 test('requires an authenticated FaceMeX user', async () => {
   const handler = createAnalyticsHandler({
     env: { SUPABASE_URL: 'url', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service' },
-    createClient: mockClients(),
+    createClient: mockClients({ authenticated: false }),
   });
   const response = await handler({
     path: '/.netlify/functions/analytics',
@@ -64,7 +70,25 @@ test('requires an authenticated FaceMeX user', async () => {
   assert.equal(response.statusCode, 401);
 });
 
-test('restricts reports to configured analytics admins', async () => {
+test('records only sanitized events for the verified signed-in user', async () => {
+  let stored;
+  const handler = createAnalyticsHandler({
+    env: { SUPABASE_URL: 'url', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service' },
+    createClient: mockClients({ captureEvent: (event) => { stored = event; } }),
+  });
+  const response = await handler({
+    path: '/.netlify/functions/analytics',
+    headers: { authorization: 'Bearer test-token' },
+    body: JSON.stringify({ action: 'track', event: validEvent }),
+  });
+  assert.equal(response.statusCode, 202);
+  assert.equal(stored.user_id, 'registered-user-id');
+  assert.equal(stored.event_name, 'ai_request_failed');
+  assert.deepEqual(stored.properties, { intent: 'career_help' });
+  assert.equal('prompt' in stored.properties, false);
+});
+
+test('restricts reports to the verified owner account', async () => {
   const handler = createAnalyticsHandler({
     env: { SUPABASE_URL: 'url', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service' },
     createClient: mockClients(),
@@ -78,7 +102,7 @@ test('restricts reports to configured analytics admins', async () => {
   assert.equal(JSON.parse(response.body).error, 'founder_only');
 });
 
-test('returns aggregate reports to explicitly authorized admins', async () => {
+test('returns aggregate reports to the verified owner account', async () => {
   const handler = createAnalyticsHandler({
     env: { SUPABASE_URL: 'url', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service' },
     createClient: mockClients({ isFounder: true }),

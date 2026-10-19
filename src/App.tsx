@@ -118,6 +118,22 @@ function AppAnalyticsTracker() {
     trackAppOpen();
   }, [isInitialized, isAuthenticated]);
 
+  const trackCurrentPage = () => {
+    const featureByRoute: Array<[RegExp, string]> = [
+      [/^\/ai\/job-assistant/, 'ai_workspace'],
+      [/^\/documents?/, 'documents'],
+      [/^\/ai\/resume/, 'cv_tools'],
+      [/^\/ai\/interview/, 'interview_prep'],
+      [/^\/watch/, 'watch'],
+      [/^\/jobs?/, 'job_search'],
+      [/^\/projects/, 'projects'],
+      [/^\/screen-share/, 'screen_sharing'],
+      [/^\/ai\/settings/, 'settings'],
+    ];
+    const feature = featureByRoute.find(([pattern]) => pattern.test(location.pathname))?.[1] || 'workspace';
+    trackEvent('feature_opened', undefined, { feature });
+  };
+
   useEffect(() => {
     if (!isInitialized || (!isAuthenticated && !isPublicSeoPath(location.pathname))) return;
 
@@ -128,6 +144,19 @@ function AppAnalyticsTracker() {
       .replace(/\/watch\/[^/]+/g, '/watch/:id')
       .replace(/\/world\/event\/[^/]+/g, '/world/event/:id');
     trackEvent('page_view', undefined, { page_path: safePath });
+    if (isAuthenticated) trackCurrentPage();
+  }, [isInitialized, isAuthenticated, location.pathname]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    const trackAfterConsent = () => {
+      if (!isAuthenticated) return;
+      trackAppOpen();
+      trackEvent('page_view', undefined, { page_path: location.pathname });
+      trackCurrentPage();
+    };
+    window.addEventListener('facemex:analytics-consent-changed', trackAfterConsent);
+    return () => window.removeEventListener('facemex:analytics-consent-changed', trackAfterConsent);
   }, [isInitialized, isAuthenticated, location.pathname]);
 
   return null;

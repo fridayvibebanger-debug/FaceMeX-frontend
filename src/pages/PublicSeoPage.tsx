@@ -132,8 +132,8 @@ function SeoSiteFrame({ children }: { children: ReactNode }) {
           <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-2xl text-xs leading-5">
               {isAnalyticsConfigured()
-                ? 'Optional Google Analytics is off unless you choose to allow it. No prompt text or personal identifiers are sent as analytics events.'
-                : 'Google Analytics is not configured. No Google Analytics events are sent.'}
+                ? `Optional FaceMeX product analytics are ${analyticsConsent === 'granted' ? 'on' : 'off unless you choose to allow them'}. AI prompts, documents, and private content are never recorded.`
+                : 'FaceMeX product analytics are unavailable. No usage events are sent.'}
             </p>
             {isAnalyticsConfigured() && (
               <div className="flex shrink-0 flex-wrap gap-2">

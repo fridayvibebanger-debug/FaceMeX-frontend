@@ -29,14 +29,31 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
 import { api } from '@/lib/api';
+import { trackEvent } from '@/lib/analytics';
 import { getDocument, saveDocument, type PersistedDocument } from '@/lib/documents';
+import { parseMarkdownTable, renderMarkdownToEditorHtml } from '@/lib/documentMarkdown';
 import { useUserStore } from '@/store/userStore';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import EditorToolbar from './EditorToolbar';
 import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const DOCUMENT_AI_DAILY_LIMIT = 3;
 const DOCUMENT_AI_USAGE_EVENT = 'facemex:document-ai-usage';
+type DocumentAnalyticsAction = 'generation' | 'edit' | 'save' | 'export';
+type DocumentAnalyticsOutcome = 'started' | 'succeeded' | 'failed';
+
+function trackDocumentEvent(action: DocumentAnalyticsAction, outcome: DocumentAnalyticsOutcome) {
+  void trackEvent(`document_${action}_${outcome}`, undefined, { intent: `document_${action}` });
+}
 
 function getDocumentAIUsageKey(userId: string | null | undefined, date = new Date()) {
   const day = date.toLocaleDateString('en-CA');
@@ -119,17 +136,9 @@ const emptyForm: FormState = {
   extras: '',
 };
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function renderDocumentInlineMarkdown(text: string) {
   const parts: ReactNode[] = [];
-  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*/g;
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|==([^=]+)==|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -146,9 +155,15 @@ function renderDocumentInlineMarkdown(text: string) {
     } else if (match[3]) {
       parts.push(<strong key={`bold-${key++}`} className="font-semibold">{match[3]}</strong>);
     } else if (match[4]) {
-      parts.push(<code key={`code-${key++}`} className="rounded bg-black/10 px-1.5 py-0.5 font-mono text-[0.9em] lg:bg-white/10">{match[4]}</code>);
+      parts.push(<strong key={`bold-${key++}`} className="font-semibold">{match[4]}</strong>);
     } else if (match[5]) {
-      parts.push(<em key={`italic-${key++}`}>{match[5]}</em>);
+      parts.push(<s key={`strike-${key++}`}>{match[5]}</s>);
+    } else if (match[6]) {
+      parts.push(<mark key={`highlight-${key++}`} className="rounded bg-amber-200/80 px-0.5 text-slate-900">{match[6]}</mark>);
+    } else if (match[7]) {
+      parts.push(<code key={`code-${key++}`} className="rounded bg-black/10 px-1.5 py-0.5 font-mono text-[0.9em] lg:bg-white/10">{match[7]}</code>);
+    } else if (match[8] || match[9]) {
+      parts.push(<em key={`italic-${key++}`}>{match[8] || match[9]}</em>);
     }
 
     lastIndex = pattern.lastIndex;
@@ -167,6 +182,49 @@ function renderDocumentMarkdown(text: string) {
 
     if (!line) continue;
 
+    if (index + 1 < lines.length) {
+      const table = parseMarkdownTable(line, lines[index + 1].trim());
+      if (table) {
+        const rows = [...table.rows];
+        index += 2;
+        while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+          const parsed = parseMarkdownTable(line, lines[index + 1]?.trim() || '');
+          if (!parsed) {
+            rows.push(...parseMarkdownTable(line, lines[index + 1]?.trim() || '')?.rows || []);
+            break;
+          }
+          index += 1;
+        }
+        blocks.push(
+          <div key={`table-${index}`} className="my-3 max-w-full overflow-x-auto rounded-xl border border-current/15">
+            <table className="min-w-[420px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr>
+                  {table.headers.map((header, cellIndex) => (
+                    <th key={cellIndex} scope="col" style={{ textAlign: table.alignments[cellIndex] }} className="border-b border-current/15 bg-black/[0.04] px-3 py-2 font-semibold lg:bg-white/[0.06]">
+                      {renderDocumentInlineMarkdown(header)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, rowIndex) => (
+                  <tr key={rowIndex} className="border-b border-current/10 last:border-0">
+                    {row.map((cell, cellIndex) => (
+                      <td key={cellIndex} style={{ textAlign: table.alignments[cellIndex] }} className="px-3 py-2 align-top">
+                        {renderDocumentInlineMarkdown(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
+    }
+
     if (line.startsWith('```')) {
       const codeLines: string[] = [];
       index += 1;
@@ -182,11 +240,16 @@ function renderDocumentMarkdown(text: string) {
       continue;
     }
 
-    const heading = line.match(/^#{1,4}\s+(.+)$/);
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
+      const headingClass = heading[1].length === 1
+        ? 'text-xl'
+        : heading[1].length === 2
+          ? 'text-lg'
+          : 'text-base';
       blocks.push(
-        <h3 key={`heading-${index}`} className="mt-4 text-base font-semibold tracking-tight first:mt-0">
-          {renderDocumentInlineMarkdown(heading[1])}
+        <h3 key={`heading-${index}`} className={`mt-4 ${headingClass} font-semibold tracking-tight first:mt-0`}>
+          {renderDocumentInlineMarkdown(heading[2])}
         </h3>
       );
       continue;
@@ -546,8 +609,9 @@ function getSafeDocumentErrorMessage(error: unknown) {
   return message || 'Please check your connection and try again.';
 }
 
-function createEditorHtml(text: string, slides = false) {
+function createEditorHtml(text: string, slides = false, parseMarkdown = false) {
   const source = text.trim();
+  if (parseMarkdown) return renderMarkdownToEditorHtml(source, slides);
   const decodedSource = (() => {
     const decoder = document.createElement('textarea');
     decoder.innerHTML = source;
@@ -977,7 +1041,7 @@ export default function DocumentStudio({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [1, 2, 3, 4] },
+        heading: { levels: [1, 2, 3, 4, 5, 6] },
         link: false,
         underline: false,
         horizontalRule: false,
@@ -1146,13 +1210,16 @@ export default function DocumentStudio({
         metadata: { form, template, font, alignment, highlightColor, orientation },
         projectId,
       };
+      trackDocumentEvent('save', 'started');
       void saveDocumentWithRetry(documentId || kind, draft)
         .then((saved) => {
           setDraftSaved(true);
           setSyncStatus('saved');
           onDocumentSaved?.(saved);
+          trackDocumentEvent('save', 'succeeded');
         })
         .catch((error) => {
+          trackDocumentEvent('save', 'failed');
           console.error('FaceMeX document autosave failed', error);
           setDraftSaved(false);
           setSyncStatus('error');
@@ -1311,6 +1378,7 @@ export default function DocumentStudio({
       return;
     }
 
+    trackDocumentEvent('generation', 'started');
     setBusy(true);
     try {
       let nextContent = createEditorHtml(localContent);
@@ -1341,13 +1409,15 @@ export default function DocumentStudio({
             : response?.letter || response?.answer || response?.reply || response?.content || response?.response || response?.text || ''
         ).trim();
         if (!generated) throw new Error('The AI service returned an empty document.');
-        nextContent = createEditorHtml(generated, kind === 'presentation');
+        nextContent = createEditorHtml(generated, kind === 'presentation', true);
         recordDocumentAIUsage();
       }
 
       setContent(nextContent);
+      trackDocumentEvent('generation', 'succeeded');
       toast({ title: 'Document ready', description: 'AI generation complete.' });
     } catch (error) {
+      trackDocumentEvent('generation', 'failed');
       console.error('FaceMeX document generation failed', error);
       toast({
         title: 'AI generation failed',
@@ -1360,19 +1430,29 @@ export default function DocumentStudio({
   };
 
   const printDocument = () => {
-    const win = window.open('', '_blank');
-    if (!win) {
-      toast({ title: 'PDF window was blocked', description: 'Allow pop-ups for FaceMeX, then try printing again.', variant: 'destructive' });
-      return;
-    }
+    trackDocumentEvent('export', 'started');
+    try {
+      const win = window.open('', '_blank');
+      if (!win) {
+        trackDocumentEvent('export', 'failed');
+        toast({ title: 'PDF window was blocked', description: 'Allow pop-ups for FaceMeX, then try printing again.', variant: 'destructive' });
+        return;
+      }
 
-    win.document.write(documentHtml(kind, form, content, template, font, alignment, highlightColor, orientation));
-    win.document.close();
-    win.focus();
-    win.print();
+      win.document.write(documentHtml(kind, form, content, template, font, alignment, highlightColor, orientation));
+      win.document.close();
+      win.focus();
+      win.print();
+      trackDocumentEvent('export', 'succeeded');
+    } catch (error) {
+      trackDocumentEvent('export', 'failed');
+      console.error('FaceMeX PDF export failed', error);
+      toast({ title: 'PDF export failed', description: 'Please try again. Your document remains available in the editor.', variant: 'destructive' });
+    }
   };
 
   const downloadDocx = async () => {
+    trackDocumentEvent('export', 'started');
     try {
       const doc = new Document({
         sections: [{
@@ -1398,7 +1478,9 @@ export default function DocumentStudio({
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      trackDocumentEvent('export', 'succeeded');
     } catch (error) {
+      trackDocumentEvent('export', 'failed');
       console.error('FaceMeX DOCX export failed', error);
       toast({ title: 'DOCX export failed', description: 'Please try again. Your document remains available in the editor.', variant: 'destructive' });
     }
@@ -1410,6 +1492,7 @@ export default function DocumentStudio({
   };
 
   const handleSave = async () => {
+    trackDocumentEvent('save', 'started');
     let localCopySaved = false;
     try {
       localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, font, alignment, highlightColor, orientation, savedAt: new Date().toISOString() }));
@@ -1430,8 +1513,10 @@ export default function DocumentStudio({
       setDraftSaved(true);
       setSyncStatus('saved');
       onDocumentSaved?.(saved);
+      trackDocumentEvent('save', 'succeeded');
       toast({ title: 'Saved', description: 'Your draft has been saved.' });
     } catch (error) {
+      trackDocumentEvent('save', 'failed');
       console.error('FaceMeX document save failed', error);
       setSyncStatus('error');
       toast({
@@ -1466,14 +1551,22 @@ export default function DocumentStudio({
       return;
     }
 
+    const draftDocumentText = editor?.getText() || '';
+    const blankDocument = !draftDocumentText.trim();
+    const explicitFullRewrite = /\b(?:whole|entire|complete|full)\s+(?:document|cv|cover letter|report|proposal|plan|presentation)\b|\b(?:rewrite|replace|redraft)\b.{0,40}\b(?:whole|entire|complete|full)\s+(?:document|cv|cover letter|report|proposal|plan|presentation|thing)\b|\b(?:rewrite|replace|redraft)\b.{0,30}\beverything\b|\bstart\s+(?:over|from scratch)\b/i.test(userQuestion);
     const instruction = mode === 'review'
       ? `Review this document for clarity, spelling, grammar, structure, repetition, and professionalism. Reply like a helpful writing assistant: start with a brief overall assessment, then use clear Markdown headings and concise bullets for specific strengths, recommended improvements, and missing information. Give actionable examples where useful. Focus on: ${userQuestion || 'the overall document quality'}. Never invent qualifications, skills, experience, or dates.`
       : mode === 'edit'
         ? `Improve only the selected text according to this request: ${userQuestion}. Keep all facts unchanged. Return a JSON object with string properties suggested and explanation. Selected text: ${JSON.stringify(original)}`
         : mode === 'draft'
-          ? `Apply the user's requested changes to the complete ${kind} below. Return only the complete updated document text, with clear section headings and concise bullet points where useful. Preserve every relevant existing fact and user-provided detail unless the user explicitly asks to remove or change it. If the document is blank or contains placeholders, fill only what the user has provided and leave obvious placeholders or omit missing information. Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
+          ? blankDocument
+            ? `Create the complete ${kind} document from the user's request and available details. Return only a JSON object with string property replacementBody containing the complete document in Markdown and boolean wholeDocument set to true. Use clear headings and concise bullets. Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
+            : explicitFullRewrite
+              ? `The user explicitly requested a whole-document rewrite. Rewrite the complete ${kind} document using the existing facts and available details. Return only a JSON object with string property replacementBody containing the complete replacement document in Markdown and boolean wholeDocument set to true. Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
+              : `Apply the user's requested changes to one existing section of this ${kind}. Return only a JSON object with string properties targetHeading (the exact text of one existing section heading, copied exactly) and replacementBody (only that section's new body in Markdown, without repeating its heading). Do not return the whole document and do not change other sections. If no single relevant existing heading can be identified, return an empty targetHeading. Preserve all facts and never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
           : `Answer the user's document-writing question in a clear, conversational, helpful style. Use short paragraphs and Markdown headings or bullets when they improve readability. Never invent personal facts. Question: ${userQuestion}`;
 
+    if (mode === 'edit' || mode === 'draft') trackDocumentEvent('edit', 'started');
     setCoachBusy(true);
     setCoachResponse('');
     setCoachSuggestion(null);
@@ -1523,8 +1616,10 @@ export default function DocumentStudio({
           setCoachPrompt('');
           if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
         }
+        trackDocumentEvent('edit', 'succeeded');
       } else if (mode === 'draft') {
-        applyAiDraft(answer);
+        applyAiDraft(answer, blankDocument, explicitFullRewrite);
+        trackDocumentEvent('edit', 'succeeded');
         setCoachPrompt('');
         if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
       } else {
@@ -1534,6 +1629,7 @@ export default function DocumentStudio({
       }
       recordDocumentAIUsage();
     } catch (error) {
+      if (mode === 'edit' || mode === 'draft') trackDocumentEvent('edit', 'failed');
       console.error('FaceMeX document coach request failed', error);
       toast({
         title: 'FaceMeX could not complete that request',
@@ -1563,12 +1659,74 @@ export default function DocumentStudio({
     toast({ title: 'Suggestion applied', description: 'You can undo this change from the editor toolbar.' });
   };
 
-  const applyAiDraft = (responseText: string) => {
-    if (!editor || !responseText.trim()) return;
-    const draft = responseText.replace(/^```(?:text|markdown)?\s*/i, '').replace(/\s*```$/, '');
-    const html = createEditorHtml(draft, kind === 'presentation');
-    editor.commands.setContent(html);
-    setContent(html);
+  const applyAiDraft = (responseText: string, blankDocument: boolean, explicitFullRewrite: boolean) => {
+    if (!editor || !responseText.trim()) throw new Error('The AI service returned an empty document update.');
+    const cleanedResponse = responseText.replace(/^```(?:json|text|markdown)?\s*/i, '').replace(/\s*```$/, '').trim();
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      const value = JSON.parse(cleanedResponse);
+      if (value && typeof value === 'object' && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+    } catch {
+      if ((!blankDocument && !explicitFullRewrite) || cleanedResponse.startsWith('{')) {
+        throw new Error('The AI response was not valid section-edit JSON. Your document was not changed.');
+      }
+    }
+
+    const wholeDocument = parsed?.wholeDocument === true;
+    if (wholeDocument) {
+      if (!blankDocument && !explicitFullRewrite) {
+        throw new Error('A full-document replacement is allowed only when you explicitly request a whole-document rewrite. Your document was not changed.');
+      }
+      const replacementBody = typeof parsed?.replacementBody === 'string' ? parsed.replacementBody.trim() : '';
+      if (!replacementBody) throw new Error('The AI response did not include replacement document content. Your document was not changed.');
+      const html = createEditorHtml(replacementBody, kind === 'presentation', true);
+      editor.commands.setContent(html);
+      setContent(html);
+    } else if (!parsed && (blankDocument || explicitFullRewrite)) {
+      const html = createEditorHtml(cleanedResponse, kind === 'presentation', true);
+      editor.commands.setContent(html);
+      setContent(html);
+    } else {
+      const targetHeading = typeof parsed?.targetHeading === 'string' ? parsed.targetHeading.trim() : '';
+      const replacementBody = typeof parsed?.replacementBody === 'string' ? parsed.replacementBody.trim() : '';
+      if (!targetHeading || !replacementBody) {
+        throw new Error('FaceMeX could not identify one existing section to update. Ask for a specific section heading; your document was not changed.');
+      }
+
+      const documentNodes: Array<{ node: typeof editor.state.doc; pos: number }> = [];
+      editor.state.doc.forEach((node, pos) => documentNodes.push({ node: node as typeof editor.state.doc, pos }));
+      const normalizeHeading = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+      const matches = documentNodes.filter(({ node }) =>
+        node.type.name === 'heading' && normalizeHeading(node.textContent) === normalizeHeading(targetHeading)
+      );
+      if (matches.length !== 1) {
+        throw new Error(matches.length === 0
+          ? 'FaceMeX could not find that section heading in the document. Ask for an exact existing heading; your document was not changed.'
+          : 'That section heading appears more than once. Ask for a unique existing heading; your document was not changed.');
+      }
+
+      const target = matches[0];
+      const targetIndex = documentNodes.indexOf(target);
+      const headingLevel = Number(target.node.attrs.level || 1);
+      let end = editor.state.doc.content.size;
+      let nextHeadingIndex = -1;
+      for (let index = targetIndex + 1; index < documentNodes.length; index += 1) {
+        const candidate = documentNodes[index];
+        if (candidate.node.type.name === 'heading' && Number(candidate.node.attrs.level || 1) <= headingLevel) {
+          end = candidate.pos;
+          nextHeadingIndex = index;
+          break;
+        }
+      }
+      if (nextHeadingIndex > 0 && documentNodes[nextHeadingIndex - 1].node.type.name === 'horizontalRule') {
+        end = documentNodes[nextHeadingIndex - 1].pos;
+      }
+
+      const start = target.pos + target.node.nodeSize;
+      const html = createEditorHtml(replacementBody, kind === 'presentation', true);
+      editor.chain().focus().insertContentAt({ from: start, to: end }, html).run();
+    }
+
     setCoachResponse('');
     toast({ title: 'Document updated', description: 'FaceMeX applied your requested changes. Review the result and undo if needed.' });
   };
