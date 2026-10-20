@@ -183,7 +183,7 @@ function ProductFeatureShowcase() {
   );
 }
 
-function ProductMockup({ kind }: { kind: 'assistant' | 'documents' | 'jobs' }) {
+function ProductMockup({ kind }: { kind: 'assistant' | 'documents' | 'jobs' | 'lessons' }) {
   if (kind === 'assistant') {
     return (
       <div className="seo-product-window seo-product-window-chat" role="img" aria-label="Illustration of the FaceMeX AI workspace">
@@ -223,6 +223,29 @@ function ProductMockup({ kind }: { kind: 'assistant' | 'documents' | 'jobs' }) {
             <span className="seo-document-line seo-document-line-short" />
           </div>
           <div className="seo-document-assistant"><Sparkles aria-hidden="true" /><span>Refine your draft with AI</span></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === 'lessons') {
+    return (
+      <div className="seo-product-window seo-product-window-lessons" role="img" aria-label="Illustration of FaceMeX video lessons in the learning workspace">
+        <div className="seo-product-window-bar">
+          <span className="seo-product-brand"><img src="/facemex-logo.png" alt="" /> FaceMeX</span>
+          <span className="seo-product-window-label">Watch lessons</span>
+        </div>
+        <div className="seo-product-lesson">
+          <div className="seo-lesson-screen">
+            <span className="seo-lesson-halo" aria-hidden="true" />
+            <span className="seo-lesson-play"><Play aria-hidden="true" fill="currentColor" /></span>
+            <span className="seo-lesson-caption">Learn at your pace</span>
+          </div>
+          <div className="seo-lesson-copy">
+            <span>LEARNING WORKSPACE</span>
+            <strong>Explore a lesson, then ask a follow-up.</strong>
+            <small>Keep the video and your questions together.</small>
+          </div>
         </div>
       </div>
     );
@@ -276,6 +299,15 @@ function HomeProductShowcase() {
       href: '/jobs',
       link: 'Explore job discovery',
       kind: 'jobs' as const,
+    },
+    {
+      id: 'lessons',
+      eyebrow: 'Learn with more context',
+      title: 'Pair a lesson with the questions it brings up.',
+      description: 'Open Watch lessons from the FaceMeX workspace and continue exploring a topic through follow-up questions.',
+      href: '/ai/job-assistant',
+      link: 'Explore Watch lessons',
+      kind: 'lessons' as const,
     },
   ];
 
