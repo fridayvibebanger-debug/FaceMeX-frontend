@@ -1767,10 +1767,10 @@ export default function DocumentStudio({
     <div className={`fm-document-workspace fm-theme-${appearance} ${embeddedWorkspace ? 'h-full min-h-0' : 'h-screen h-[100dvh]'} overflow-hidden bg-slate-50 text-slate-900 lg:bg-[#0b0b0b] lg:text-white`}>
       <SensitiveContentShield
         context={kind === 'cv' ? 'cv' : 'cover-letter'}
-        className="mx-auto flex h-full min-h-0 max-w-[1500px] flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-5 lg:px-8 lg:pt-5"
+        className={`mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1500px] flex-col overflow-hidden ${embeddedWorkspace ? 'px-2 pb-0 pt-2 sm:px-5 lg:px-8 lg:pt-5' : 'px-3 pb-3 pt-3 sm:px-5 lg:px-8 lg:pt-5'}`}
         contentClassName="flex h-full min-h-0 flex-col"
       >
-        <div className="fm-document-editor-header mb-3 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 lg:gap-4">
+        <div className="fm-document-editor-header mb-2 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:mb-3 sm:gap-3 lg:gap-4">
           <div className="min-w-0">
             <p className="text-xs font-medium text-slate-500 lg:text-white/55">FaceMeX · {kind === 'cv' ? 'CV editor' : 'Document editor'}</p>
             <h1 className="mt-0.5 truncate text-xl font-semibold tracking-tight text-slate-900 lg:text-white lg:text-2xl">{title}</h1>
@@ -1844,7 +1844,7 @@ export default function DocumentStudio({
             </>
           )}
 
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <main className="fm-document-editor-main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200 pb-2 lg:gap-3 lg:border-white/10">
               <p className="min-w-0 truncate whitespace-nowrap text-[11px] text-slate-500 lg:text-xs lg:text-white/50">
                 A4 {orientation} · {wordCount} words
@@ -1875,7 +1875,7 @@ export default function DocumentStudio({
             </div>
 
             {advancedFormattingOpen && (
-              <div className="fm-document-format-panel mt-2 rounded-xl border border-slate-200 bg-white p-2 lg:border-white/10 lg:bg-[#171717]">
+              <div className="fm-document-format-panel mt-2 max-h-[30dvh] shrink-0 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white p-2 lg:max-h-none lg:overflow-visible lg:border-white/10 lg:bg-[#171717]">
                 <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 lg:border-white/10">
                   <select
                     value={orientation}
@@ -1927,7 +1927,7 @@ export default function DocumentStudio({
               </div>
             )}
 
-            <div className="fm-document-canvas mt-2 min-h-0 min-w-0 flex-1 overflow-auto rounded-xl bg-[#202124] p-3 sm:p-5 lg:mt-3 lg:p-8">
+            <div className="fm-document-canvas mt-2 min-h-0 min-w-0 flex-1 overflow-auto rounded-xl bg-[#202124] p-2 sm:p-5 lg:mt-3 lg:p-8">
               {documentLoadWarning && (
                 <p className="mx-auto mb-3 max-w-4xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100" role="alert">
                   {documentLoadWarning}
@@ -1946,9 +1946,6 @@ export default function DocumentStudio({
                     maxWidth: pageWidthPx,
                     minHeight: 0,
                     aspectRatio: orientation === 'portrait' ? '210 / 297' : '297 / 210',
-                    overflowY: 'auto',
-                    overscrollBehaviorY: 'contain',
-                    WebkitOverflowScrolling: 'touch',
                     zoom: zoom / 100,
                   }}
                 >
