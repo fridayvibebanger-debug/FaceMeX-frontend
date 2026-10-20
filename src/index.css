@@ -175,19 +175,20 @@
     isolation: isolate;
     border: 0 !important;
     background:
-      radial-gradient(ellipse at 76% 42%, rgba(221, 231, 255, 0.55), transparent 31rem),
-      radial-gradient(ellipse at 44% 100%, rgba(253, 226, 239, 0.42), transparent 30rem),
+      radial-gradient(ellipse at 76% 45%, rgba(201, 219, 255, 0.48), transparent 34rem),
+      radial-gradient(ellipse at 58% 82%, rgba(240, 211, 255, 0.34), transparent 30rem),
+      radial-gradient(ellipse at 96% 76%, rgba(255, 215, 230, 0.31), transparent 25rem),
       #fff !important;
   }
 
   .seo-home-hero-inner {
     display: grid;
-    min-height: min(690px, calc(100svh - 4.5rem));
+    min-height: min(720px, calc(100svh - 4rem));
     grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
     align-items: center;
-    gap: clamp(2rem, 5vw, 5rem);
-    padding-top: clamp(4rem, 8vw, 7rem);
-    padding-bottom: clamp(4rem, 8vw, 7rem);
+    gap: clamp(2.5rem, 5vw, 5.5rem);
+    padding-top: clamp(4rem, 7vw, 6.5rem);
+    padding-bottom: clamp(4rem, 7vw, 6.5rem);
   }
 
   .seo-home-hero-copy {
@@ -293,7 +294,7 @@
   }
 
   .seo-home-hero-visual {
-    min-height: 28rem;
+    min-height: 32rem;
     animation: seo-rise-in 850ms 120ms cubic-bezier(.2,.7,.2,1) both;
   }
 
@@ -325,27 +326,56 @@
     animation: seo-breathe 8s 1s ease-in-out infinite reverse;
   }
 
+  .seo-home-visual::before,
+  .seo-home-visual::after {
+    position: absolute;
+    z-index: -1;
+    width: 45%;
+    height: 68%;
+    border-radius: 46% 54% 60% 40%;
+    content: '';
+    filter: blur(34px);
+    opacity: 0.44;
+    pointer-events: none;
+    animation: seo-echo-drift 8s ease-in-out infinite;
+  }
+
+  .seo-home-visual::before {
+    top: 12%;
+    right: 10%;
+    background: radial-gradient(ellipse, rgba(145, 179, 255, 0.42), rgba(184, 160, 255, 0.2) 55%, transparent 75%);
+    transform: rotate(20deg);
+  }
+
+  .seo-home-visual::after {
+    bottom: 8%;
+    left: 11%;
+    background: radial-gradient(ellipse, rgba(255, 176, 214, 0.35), rgba(153, 219, 250, 0.22) 56%, transparent 75%);
+    animation-delay: -3s;
+    transform: rotate(-20deg);
+  }
+
   .seo-product-window {
     position: relative;
-    width: min(100%, 39rem);
+    width: min(108%, 43rem);
     overflow: hidden;
-    border: 1px solid rgba(73, 84, 114, 0.12);
-    border-radius: 1.35rem;
-    background: rgba(255, 255, 255, 0.93);
-    box-shadow: 0 35px 90px rgba(49, 61, 101, 0.13), 0 4px 18px rgba(49, 61, 101, 0.05);
+    border: 1px solid rgba(73, 84, 114, 0.075);
+    border-radius: 0.8rem;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 40px 100px rgba(67, 80, 134, 0.1), 0 10px 28px rgba(83, 90, 130, 0.045);
     color: #20232c;
-    animation: seo-product-float 8s ease-in-out infinite;
-    backdrop-filter: blur(16px);
+    animation: seo-product-float 9s ease-in-out infinite;
+    backdrop-filter: blur(22px);
   }
 
   .seo-product-window-bar {
     display: flex;
-    min-height: 3.25rem;
+    min-height: 2.85rem;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    border-bottom: 1px solid #eff0f4;
-    padding: 0.65rem 1rem;
+    border-bottom: 1px solid rgba(225, 228, 237, 0.68);
+    padding: 0.5rem 1.1rem;
   }
 
   .seo-product-brand {
@@ -371,8 +401,10 @@
 
   .seo-product-chat {
     display: grid;
-    gap: 1.2rem;
-    padding: clamp(1.15rem, 3vw, 2rem);
+    min-height: 19.5rem;
+    align-content: center;
+    gap: 1.35rem;
+    padding: clamp(1.35rem, 3.2vw, 2.5rem);
   }
 
   .seo-product-question {
@@ -468,11 +500,11 @@
     display: flex;
     align-items: center;
     gap: 0.65rem;
-    border: 1px solid rgba(73, 84, 114, 0.1);
+    border: 1px solid rgba(73, 84, 114, 0.07);
     border-radius: 1rem;
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.82);
     padding: 0.75rem 0.9rem;
-    box-shadow: 0 12px 34px rgba(49, 61, 101, 0.1);
+    box-shadow: 0 16px 42px rgba(49, 61, 101, 0.075);
     color: #525866;
     font-size: 0.72rem;
     animation: seo-product-float 7s 1s ease-in-out infinite;
@@ -500,12 +532,12 @@
 
   .seo-home-story {
     display: grid;
-    min-height: 31rem;
+    min-height: 35rem;
     grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
     align-items: center;
-    gap: clamp(2rem, 8vw, 8rem);
-    padding-top: 4rem;
-    padding-bottom: 4rem;
+    gap: clamp(2.5rem, 8vw, 8rem);
+    padding-top: 4.5rem;
+    padding-bottom: 4.5rem;
     view-timeline-name: --seo-story;
     view-timeline-axis: block;
   }
@@ -559,13 +591,13 @@
   }
 
   .seo-home-visual {
-    min-height: 24rem;
-    padding: 1.5rem;
+    min-height: 29rem;
+    padding: 1.2rem;
   }
 
   .seo-home-glow {
-    inset: 5% 4%;
-    filter: blur(48px);
+    inset: -2% -2%;
+    filter: blur(58px);
   }
 
   .seo-home-visual-assistant .seo-home-glow {
@@ -580,8 +612,12 @@
     background: radial-gradient(ellipse, rgba(252, 224, 236, 0.58), rgba(220, 231, 255, 0.42) 58%, transparent 73%);
   }
 
+  .seo-home-visual-lessons .seo-home-glow {
+    background: radial-gradient(ellipse, rgba(208, 230, 255, 0.62), rgba(245, 218, 245, 0.38) 58%, transparent 73%);
+  }
+
   .seo-home-visual .seo-product-window {
-    width: min(100%, 35rem);
+    width: min(108%, 40rem);
   }
 
   .seo-product-document {
@@ -717,6 +753,90 @@
     color: #9ca2ae;
   }
 
+  .seo-product-lesson {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(9rem, 0.75fr);
+    align-items: center;
+    gap: 1.15rem;
+    padding: clamp(1rem, 2.5vw, 1.6rem);
+  }
+
+  .seo-lesson-screen {
+    position: relative;
+    display: grid;
+    min-height: 14rem;
+    overflow: hidden;
+    place-items: center;
+    border-radius: 0.55rem;
+    background:
+      radial-gradient(ellipse at 50% 45%, rgba(226, 218, 255, 0.75), transparent 40%),
+      linear-gradient(135deg, #dcecff, #f5e7f4 62%, #e4f7fa);
+  }
+
+  .seo-lesson-halo {
+    position: absolute;
+    width: 9rem;
+    height: 9rem;
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    border-radius: 50%;
+    box-shadow: 0 0 60px rgba(255, 255, 255, 0.8), inset 0 0 45px rgba(255, 255, 255, 0.56);
+  }
+
+  .seo-lesson-play {
+    z-index: 1;
+    display: grid;
+    width: 3rem;
+    height: 3rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.64);
+    color: #596ac4;
+    box-shadow: 0 10px 30px rgba(55, 69, 116, 0.12);
+    backdrop-filter: blur(12px);
+  }
+
+  .seo-lesson-play svg {
+    width: 1rem;
+    height: 1rem;
+    margin-left: 0.15rem;
+  }
+
+  .seo-lesson-caption {
+    position: absolute;
+    bottom: 0.8rem;
+    left: 0.9rem;
+    color: rgba(54, 62, 87, 0.7);
+    font-size: 0.61rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .seo-lesson-copy {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .seo-lesson-copy > span {
+    color: #8188ad;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+
+  .seo-lesson-copy strong {
+    color: #353844;
+    font-size: 0.86rem;
+    font-weight: 620;
+    line-height: 1.45;
+  }
+
+  .seo-lesson-copy small {
+    color: #818693;
+    font-size: 0.67rem;
+    line-height: 1.55;
+  }
+
   @keyframes seo-rise-in {
     from { opacity: 0; transform: translateY(18px); }
     to { opacity: 1; transform: translateY(0); }
@@ -730,6 +850,11 @@
   @keyframes seo-breathe {
     0%, 100% { opacity: 0.75; transform: scale(0.97); }
     50% { opacity: 1; transform: scale(1.04); }
+  }
+
+  @keyframes seo-echo-drift {
+    0%, 100% { opacity: 0.34; transform: translate3d(0, 0, 0) scale(0.96) rotate(16deg); }
+    50% { opacity: 0.56; transform: translate3d(12px, -8px, 0) scale(1.05) rotate(22deg); }
   }
 
   @supports (animation-timeline: view()) {
@@ -762,6 +887,17 @@
 
     .seo-product-window {
       border-radius: 1rem;
+    }
+
+    .seo-home-visual::before,
+    .seo-home-visual::after {
+      width: 55%;
+      height: 58%;
+      filter: blur(28px);
+    }
+
+    .seo-home-visual .seo-product-window {
+      width: 100%;
     }
 
     .seo-home-float-note {
@@ -807,6 +943,19 @@
       align-items: center;
       line-height: 1.35;
     }
+
+    .seo-product-lesson {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.9rem;
+    }
+
+    .seo-lesson-screen {
+      min-height: 10rem;
+    }
+
+    .seo-lesson-copy {
+      gap: 0.4rem;
+    }
   }
 
   .facemex-public-seo a:focus-visible,
@@ -823,6 +972,8 @@
     .seo-home-orb,
     .seo-home-float-note,
     .seo-product-window,
+    .seo-home-visual::before,
+    .seo-home-visual::after,
     .facemex-public-seo .seo-feature-card {
       animation: none !important;
       transition: none;
