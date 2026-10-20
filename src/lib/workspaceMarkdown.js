@@ -170,7 +170,7 @@ export function formatWorkspaceMath(source) {
 export function tokenizeWorkspaceInline(source) {
   const text = String(source || '');
   const tokens = [];
-  const pattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\$)[^$\n]+\$|`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\s][^_\n]*?_|!\[([^\]]*)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|(https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<>]*)?)/g);
+  const pattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\$)[^$\n]+\$|`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\s][^_\n]*?_|!\[([^\]]*)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|(https?:\/\/[^\s<>]+|www\.[^)\s<>]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<>]*)?))/g);
   let lastIndex = 0;
   let match;
 
