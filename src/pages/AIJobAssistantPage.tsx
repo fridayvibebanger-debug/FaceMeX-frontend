@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import SubscriptionModal from "../components/SubscriptionModal";
 import type { ChangeEvent, ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -72,6 +72,7 @@ import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from 
 import { buildPersonalizationContext, getPersonalizationProfile, PERSONALIZATION_CHANGE_EVENT, type PersonalizationProfile } from '@/lib/personalization';
 import { supabase } from '@/lib/supabaseClient';
 import { extractYouTubeUrlFromText, isYouTubeSummaryRequest } from '@/lib/workspaceResponse';
+import { formatWorkspaceMath, tokenizeWorkspaceInline } from '@/lib/workspaceMarkdown';
 
 const PracticalLabLibrary = lazy(() => import('./PracticalLabLibrary'));
 
@@ -137,6 +138,11 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  retry?: {
+    prompt: string;
+    userMessageId: string;
+    images?: WorkspaceImage[];
+  };
   pinned?: boolean;
   saved?: boolean;
   savedCategory?: SavedCategory;
@@ -620,6 +626,13 @@ Style:
 - Do not over-explain.
 - Give the direct answer first.
 - When useful, give steps or examples.
+- Use plain English by default and explain necessary technical terms.
+- Match the answer length to the question; for complex requests, include the essential steps, examples, limitations, and a practical next action.
+- If information is uncertain or missing, say what is unknown and ask one focused question only when it blocks a useful answer.
+- For coding help, provide complete, usable code when requested and state where it belongs; do not omit required setup or error handling.
+- For educational help, teach the method with a clear example instead of only giving the final answer.
+- Do not use vague filler such as "it depends" or "do more research" without explaining the exact factors and next steps.
+- Before responding, check that the answer addresses the request, is understandable, and does not claim unsupported facts or tool results.
 - Never invent jobs.
 - Never invent closing dates.
 - Only say a job is verified if it comes from FaceMeX verified records, official company source, government/public institution, or a directly confirmed employer.
@@ -2213,7 +2226,7 @@ function isAIUsageLimitError(error: unknown) {
           .join(' ')
       : String(error ?? '');
 
-  return /\b(?:429|quota|usage[\s_-]*limit|usage.{0,24}(?:reached|exceeded|exhausted|finished)|rate[\s_-]*limit|daily[\s_-]*limit|limit\s+(?:reached|exceeded)|(?:reached|exceeded|exhausted).{0,24}(?:daily|AI|usage)?\s*limit|too many requests|resource exhausted)\b/i.test(
+  return /\b(?:quota|usage[\s_-]*limit|usage.{0,24}(?:reached|exceeded|exhausted|finished)|daily[\s_-]*limit|limit\s+(?:reached|exceeded)|(?:reached|exceeded|exhausted).{0,24}(?:daily|AI|usage)?\s*limit)\b/i.test(
     details
   );
 }
@@ -2349,19 +2362,6 @@ function getLinkHref(rawUrl: string) {
   return `https://${cleanValue}`;
 }
 
-function getLinkLabel(rawUrl: string) {
-  const { cleanValue } = stripTrailingPunctuation(rawUrl);
-
-  try {
-    const href = getLinkHref(cleanValue);
-    const host = new URL(href).hostname.replace(/^www\./, '');
-
-    return host;
-  } catch {
-    return cleanValue;
-  }
-}
-
 function SourceChip({
   label,
   url,
@@ -2385,49 +2385,37 @@ function SourceChip({
 }
 
 function renderInlineText(text: string, onLinkClick?: (url: string, label?: string) => void) {
-  const nodes: ReactNode[] = [];
   const safeText = normalizeBrokenMarkdownLinks(text);
-
-  const regex =
-    /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+|(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s)]*)?)\)|((?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}(?:\/[^\s]*)?)/gi;
-
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = regex.exec(safeText)) !== null) {
-    if (match.index > lastIndex) nodes.push(safeText.slice(lastIndex, match.index));
-
-    if (match[2]) {
-      nodes.push(
-        <strong key={`bold-${key++}`} className="font-semibold text-white">
-          {match[2]}
-        </strong>
-      );
-    } else if (match[3] && match[4]) {
-      const label = match[3];
-      const rawUrl = match[4];
-      const href = getLinkHref(rawUrl);
-      const { trailing } = stripTrailingPunctuation(rawUrl);
-
-      nodes.push(<SourceChip key={`md-link-${key++}`} label={label} url={href} onClick={onLinkClick} />);
-      if (trailing) nodes.push(trailing);
-    } else if (match[5]) {
-      const rawUrl = match[5];
-      const href = getLinkHref(rawUrl);
-      const label = getLinkLabel(rawUrl);
-      const { trailing } = stripTrailingPunctuation(rawUrl);
-
-      nodes.push(<SourceChip key={`domain-link-${key++}`} label={label} url={href} onClick={onLinkClick} />);
-      if (trailing) nodes.push(trailing);
+  return tokenizeWorkspaceInline(safeText).map((token, index) => {
+    if (token.type === 'strong') {
+      return <strong key={`strong-${index}`} className="font-semibold text-white">{token.text}</strong>;
     }
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < safeText.length) nodes.push(safeText.slice(lastIndex));
-
-  return nodes.length ? nodes : safeText;
+    if (token.type === 'emphasis') {
+      return <em key={`emphasis-${index}`}>{token.text}</em>;
+    }
+    if (token.type === 'code') {
+      return <code key={`code-${index}`} className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.92em]">{token.text}</code>;
+    }
+    if (token.type === 'math') {
+      return (
+        <span key={`math-${index}`} role="math" aria-label={`Mathematical expression: ${token.text}`} className="font-serif tracking-wide text-white">
+          {token.text}
+        </span>
+      );
+    }
+    if (token.type === 'link' || token.type === 'image') {
+      const { cleanValue, trailing } = stripTrailingPunctuation(token.href);
+      const url = getLinkHref(cleanValue);
+      const label = token.type === 'image' ? token.text || 'Image link' : token.text;
+      return (
+        <Fragment key={`link-${index}`}>
+          <SourceChip label={label} url={url} onClick={onLinkClick} />
+          {trailing}
+        </Fragment>
+      );
+    }
+    return token.text;
+  });
 }
 
 function isTableSeparator(line: string) {
@@ -2518,6 +2506,39 @@ function renderMarkdownTable(
   );
 }
 
+function MarkdownCodeBlock({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyCode = async () => {
+    if (!navigator.clipboard?.writeText) {
+      toast({ title: 'Copy unavailable', description: 'Your browser does not allow clipboard access on this page.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+    } catch {
+      toast({ title: 'Could not copy code', description: 'Select the code and copy it manually.', variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="my-3 max-w-full overflow-hidden rounded-xl border border-white/10 bg-[#171717]">
+      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-xs text-white/60">
+        <span>{language || 'Code'}</span>
+        <Button type="button" size="sm" variant="ghost" onClick={() => void copyCode()} className="h-8 gap-2 px-2 text-white/70 hover:bg-white/10 hover:text-white">
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+          {copied ? 'Copied' : 'Copy code'}
+        </Button>
+      </div>
+      <pre className="fm-markdown-code max-w-full overflow-x-auto p-4 font-mono text-[13px] leading-6 text-white/90">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
 function ChatGPTStyleText({
   text,
   onLinkClick,
@@ -2532,7 +2553,30 @@ function ChatGPTStyleText({
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].trim();
 
+    if (line === '$$' || line === '\\[') {
+      const closingDelimiter = line === '$$' ? '$$' : '\\]';
+      const closingIndex = lines.findIndex(
+        (candidate, candidateIndex) => candidateIndex > index && candidate.trim() === closingDelimiter
+      );
+      if (closingIndex > index) {
+        const expression = formatWorkspaceMath(lines.slice(index + 1, closingIndex).join(' '));
+        blocks.push(
+          <div
+            key={`math-block-${index}`}
+            role="math"
+            aria-label={`Mathematical expression: ${expression}`}
+            className="my-3 overflow-x-auto rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 font-serif text-base tracking-wide text-white"
+          >
+            {expression}
+          </div>
+        );
+        index = closingIndex;
+        continue;
+      }
+    }
+
     if (line.startsWith('```')) {
+      const language = line.slice(3).trim().split(/\s+/)[0] || '';
       const codeLines: string[] = [];
       index += 1;
 
@@ -2541,14 +2585,7 @@ function ChatGPTStyleText({
         index += 1;
       }
 
-      blocks.push(
-        <pre
-          key={`code-${index}`}
-          className="fm-markdown-code max-w-full overflow-x-auto rounded-xl border border-white/10 bg-[#171717] p-4 font-mono text-[13px] leading-6 text-white/90"
-        >
-          <code>{codeLines.join('\n')}</code>
-        </pre>
-      );
+      blocks.push(<MarkdownCodeBlock key={`code-${index}`} code={codeLines.join('\n')} language={language} />);
       continue;
     }
 
@@ -5281,11 +5318,18 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
             content: `I couldn’t summarize that YouTube video. ${message}`,
             createdAt: new Date().toISOString(),
             intent: 'general-question',
+            retry: {
+              prompt: finalPrompt,
+              userMessageId: userMessage.id,
+              images: attachedImages,
+            },
           },
         ]);
         trackError('workspace_youtube_summary_failed', message, {
           intent: 'youtube_video_summary',
         });
+      } finally {
+        setBusy(false);
       }
       return;
     }
@@ -5408,9 +5452,20 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         throw new Error('The AI usage limit has been reached.');
       }
 
-      const normalizedAnswer = normalizeAnswerText(data, createUsageLimitAnswer(hasImages));
-      const usageLimitReached =
-        isAIUsageLimitError(data) || isAIUsageLimitError(normalizedAnswer) || isUnavailableAIAnswer(normalizedAnswer);
+      if (data?.success === false || data?.error) {
+        const errorMessage = typeof data.error === 'string'
+          ? data.error
+          : typeof data.message === 'string'
+            ? data.message
+            : 'The AI service could not complete the request.';
+        throw new Error(errorMessage);
+      }
+
+      const normalizedAnswer = normalizeAnswerText(data, '');
+      if (!normalizedAnswer.trim() || isUnavailableAIAnswer(normalizedAnswer)) {
+        throw new Error('The AI service returned an empty or unavailable response.');
+      }
+      const usageLimitReached = isAIUsageLimitError(normalizedAnswer);
       if (usageLimitReached) setAiUsageLimitReached(true);
       const answer = usageLimitReached
         ? createUsageLimitAnswer(hasImages)
@@ -5444,8 +5499,11 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       if (attachedImages.length > 0) {
         setSelectedImages((current) => current.length > 0 ? current : attachedImages);
       }
-      setAiUsageLimitReached(true);
-      const answer = createUsageLimitAnswer(hasImages);
+      const usageLimitReached = isAIUsageLimitError(error);
+      if (usageLimitReached) setAiUsageLimitReached(true);
+      const answer = usageLimitReached
+        ? createUsageLimitAnswer(hasImages)
+        : 'I couldn’t complete that response because the AI service is temporarily unavailable. Your request is still here—please try again.';
 
       setMessages((prev) => [
         ...prev,
@@ -5457,6 +5515,13 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
           saved: shouldAutoSaveEducation,
           savedCategory: suggestedSavedCategory,
           intent,
+          retry: usageLimitReached
+            ? undefined
+            : {
+                prompt: finalPrompt,
+                userMessageId: userMessage.id,
+                images: attachedImages,
+              },
         },
       ]);
 
@@ -9242,6 +9307,30 @@ Start with the most useful next action. Do not invent personal details, course r
                         </div>
                       )}
 
+                      {message.retry && !isJobResultsMessage && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            const retry = message.retry;
+                            if (!retry) return;
+                            const contextMessages = messages.filter(
+                              (item) => item.id !== retry.userMessageId && item.id !== message.id
+                            );
+                            setMessages(contextMessages);
+                            void sendPrompt(retry.prompt, {
+                              contextMessages,
+                              images: retry.images,
+                            });
+                          }}
+                          className="mt-2 min-h-9 gap-2 rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+                        >
+                          <ArrowLeft className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
+                          Retry
+                        </Button>
+                      )}
                       {!isJobResultsMessage && editingMessageId !== message.id && assistantSmartActions(message, previousUserText)}
                       {!isJobResultsMessage && editingMessageId !== message.id && messageActions(message, previousUserText)}
                     </div>
