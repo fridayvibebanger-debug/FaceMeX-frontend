@@ -102,7 +102,7 @@ function WebPageSchema({ title, description, path }: { title: string; descriptio
 
 function SeoSiteFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="facemex-public-seo min-h-screen bg-slate-950 text-slate-100">
+    <div className="facemex-public-seo seo-site-frame">
       <a href="#main-content" className="sr-only z-50 rounded-md bg-white p-3 text-slate-900 focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
         Skip to content
       </a>
@@ -179,6 +179,122 @@ function ProductFeatureShowcase() {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function ProductMockup({ kind }: { kind: 'assistant' | 'documents' | 'jobs' }) {
+  if (kind === 'assistant') {
+    return (
+      <div className="seo-product-window seo-product-window-chat" role="img" aria-label="Illustration of the FaceMeX AI workspace">
+        <div className="seo-product-window-bar">
+          <span className="seo-product-brand"><img src="/facemex-logo.png" alt="" /> FaceMeX</span>
+          <span className="seo-product-window-label">AI workspace</span>
+        </div>
+        <div className="seo-product-chat">
+          <div className="seo-product-question">Can you explain this step by step?</div>
+          <div className="seo-product-answer">
+            <span className="seo-product-avatar"><Sparkles aria-hidden="true" /></span>
+            <div><strong>Let’s work through it together.</strong><span>Start with the main idea, then break it into smaller steps you can check.</span></div>
+          </div>
+          <div className="seo-product-input"><span>Ask a follow-up question…</span><span className="seo-product-send"><ArrowRight aria-hidden="true" /></span></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === 'documents') {
+    return (
+      <div className="seo-product-window seo-product-window-document" role="img" aria-label="Illustration of the FaceMeX CV and document editor">
+        <div className="seo-product-window-bar">
+          <span className="seo-product-brand"><img src="/facemex-logo.png" alt="" /> FaceMeX</span>
+          <span className="seo-product-window-label">CV &amp; documents</span>
+        </div>
+        <div className="seo-product-document">
+          <div className="seo-product-document-sheet">
+            <span className="seo-document-rule" />
+            <strong>YOUR NEXT CHAPTER</strong>
+            <span className="seo-document-line seo-document-line-short" />
+            <span className="seo-document-subhead">PROFILE</span>
+            <span className="seo-document-line" />
+            <span className="seo-document-line" />
+            <span className="seo-document-subhead">EXPERIENCE</span>
+            <span className="seo-document-line" />
+            <span className="seo-document-line seo-document-line-short" />
+          </div>
+          <div className="seo-document-assistant"><Sparkles aria-hidden="true" /><span>Refine your draft with AI</span></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="seo-product-window seo-product-window-jobs" role="img" aria-label="Illustration of FaceMeX job discovery">
+      <div className="seo-product-window-bar">
+        <span className="seo-product-brand"><img src="/facemex-logo.png" alt="" /> FaceMeX</span>
+        <span className="seo-product-window-label">Job discovery</span>
+      </div>
+      <div className="seo-product-jobs">
+        <div className="seo-jobs-heading"><strong>Find your next opportunity</strong><span>Explore listings and check details at the original source.</span></div>
+        {['New opportunities', 'Early career roles', 'Skills to highlight'].map((label, index) => (
+          <div className="seo-job-row" key={label}>
+            <span className={`seo-job-mark seo-job-mark-${index + 1}`} aria-hidden="true" />
+            <span><strong>{label}</strong><span>{['Explore available roles', 'Find a place to start', 'Prepare your application'][index]}</span></span>
+            <ArrowRight aria-hidden="true" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HomeProductShowcase() {
+  const stories = [
+    {
+      id: 'assistant',
+      eyebrow: 'Ask, learn, continue',
+      title: 'A workspace for the questions you’re working through.',
+      description: 'Explore a topic with FaceMeX AI, ask follow-up questions and take the conversation at your own pace.',
+      href: '/ai/job-assistant',
+      link: 'Explore the AI workspace',
+      kind: 'assistant' as const,
+    },
+    {
+      id: 'documents',
+      eyebrow: 'Make your next step tangible',
+      title: 'Bring your ideas into a document you can shape.',
+      description: 'Draft and refine a CV, cover letter or other professional document using your own details.',
+      href: '/ai/resume',
+      link: 'Explore CV & documents',
+      kind: 'documents' as const,
+    },
+    {
+      id: 'jobs',
+      eyebrow: 'Explore opportunities',
+      title: 'Move from looking to taking a practical next step.',
+      description: 'Discover job opportunities and verify listing details and application destinations with their original sources.',
+      href: '/jobs',
+      link: 'Explore job discovery',
+      kind: 'jobs' as const,
+    },
+  ];
+
+  return (
+    <section id="facemex-tools" className="seo-home-showcase mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8" aria-label="Explore FaceMeX">
+      {stories.map((story, index) => (
+        <article className={`seo-home-story ${index % 2 ? 'seo-home-story-reverse' : ''}`} key={story.id}>
+          <div className="seo-home-story-copy">
+            <p className="seo-home-eyebrow"><Sparkles aria-hidden="true" /> {story.eyebrow}</p>
+            <h2>{story.title}</h2>
+            <p className="seo-home-story-description">{story.description}</p>
+            <Link to={story.href}>{story.link}<ArrowRight aria-hidden="true" /></Link>
+          </div>
+          <div className={`seo-home-visual seo-home-visual-${story.kind}`}>
+            <span className="seo-home-glow" aria-hidden="true" />
+            <ProductMockup kind={story.kind} />
+          </div>
+        </article>
+      ))}
     </section>
   );
 }
@@ -534,18 +650,28 @@ export default function PublicSeoPage() {
     <SeoSiteFrame>
       <main id="main-content">
         {isHome ? (
-          <section className="seo-hero border-b border-slate-200 bg-slate-50">
-            <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
-              <div className="max-w-3xl">
-                <p className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600"><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Learning and career workspace</p>
-                <h1 className="mt-5 text-4xl font-semibold tracking-tight sm:text-5xl">{page.heading}</h1>
-                <p className="mt-5 text-lg leading-8 text-slate-600">{page.introduction}</p>
-                <PageCta label="Try FaceMeX AI" />
+          <section className="seo-hero seo-home-hero">
+            <div className="seo-home-hero-inner mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+              <div className="seo-home-hero-copy">
+                <p className="seo-home-eyebrow"><Sparkles aria-hidden="true" /> Learning and career workspace</p>
+                <h1>{page.heading}</h1>
+                <p className="seo-home-hero-description">{page.introduction}</p>
+                <div className="seo-home-hero-actions">
+                  <Link to="/signup" className="seo-primary-action">Try FaceMeX AI <ArrowRight aria-hidden="true" /></Link>
+                  <a href="#facemex-tools" className="seo-secondary-action">Explore the workspace</a>
+                </div>
+                <p className="seo-home-note">Workspace tools require an account and sign-in.</p>
+              </div>
+              <div className="seo-home-hero-visual">
+                <span className="seo-home-orb seo-home-orb-blue" aria-hidden="true" />
+                <span className="seo-home-orb seo-home-orb-pink" aria-hidden="true" />
+                <ProductMockup kind="assistant" />
+                <div className="seo-home-float-note"><span><FileText aria-hidden="true" /></span> From questions to next steps</div>
               </div>
             </div>
           </section>
         ) : null}
-        {isHome ? <ProductFeatureShowcase /> : null}
+        {isHome ? <HomeProductShowcase /> : null}
         <div className={`mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8 ${isHome ? '' : ''}`}>
           {!isHome && (
             <>

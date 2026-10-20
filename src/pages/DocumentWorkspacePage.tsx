@@ -111,6 +111,29 @@ export default function DocumentWorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [appearance, setAppearance] = useState<AppearanceMode>(() => getAppearanceMode());
+  const [visualViewport, setVisualViewport] = useState<{ height: number; offsetTop: number }>();
+
+  useEffect(() => {
+    const updateViewport = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      const offsetTop = window.visualViewport?.offsetTop ?? 0;
+      if (height > 0) setVisualViewport((current) =>
+        current?.height === height && current.offsetTop === offsetTop
+          ? current
+          : { height, offsetTop }
+      );
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    window.visualViewport?.addEventListener('resize', updateViewport);
+    window.visualViewport?.addEventListener('scroll', updateViewport);
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+      window.visualViewport?.removeEventListener('resize', updateViewport);
+      window.visualViewport?.removeEventListener('scroll', updateViewport);
+    };
+  }, []);
 
   useEffect(() => {
     const handleAppearanceChange = (event: Event) => {
@@ -477,7 +500,16 @@ export default function DocumentWorkspacePage() {
   );
 
   return (
-    <div className={`fm-document-workspace-root fm-theme-${appearance} flex h-screen h-[100dvh] flex-col overflow-hidden bg-[#0b0b0b] text-white`}>
+    <div
+      className={`fm-document-workspace-root fm-theme-${appearance} fixed inset-x-0 top-0 z-40 flex h-screen h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-[#0b0b0b] text-white`}
+      style={visualViewport
+        ? {
+            top: `${visualViewport.offsetTop}px`,
+            height: `${visualViewport.height}px`,
+            maxHeight: `${visualViewport.height}px`,
+          }
+        : undefined}
+    >
       <header className="fm-documents-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#111111] px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2">
           <Button
@@ -505,7 +537,7 @@ export default function DocumentWorkspacePage() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="fm-document-workspace-stage flex min-h-0 min-w-0 flex-1">
         <aside className="fm-documents-sidebar hidden w-[260px] shrink-0 flex-col border-r border-white/10 bg-[#171717] lg:flex" aria-label="Documents workspace">
           {documentList}
         </aside>
