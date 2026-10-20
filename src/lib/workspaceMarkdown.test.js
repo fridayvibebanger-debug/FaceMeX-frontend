@@ -105,3 +105,33 @@ test('renders inline emphasis, code, links, images, and mathematical notation as
 test('preserves unsupported LaTeX as readable plain text rather than delimiters', () => {
   assert.equal(formatWorkspaceMath('$\\frac{a}{b} \\approx \\sqrt{x}$'), '(a)/(b) ≈ √(x)');
 });
+
+test('preserves escaped table pipes and escaped inline math delimiters', () => {
+  const [table] = parseWorkspaceMarkdown([
+    '| Item | Note |',
+    '| --- | --- |',
+    '| A | value\\|extra |',
+  ].join('\n'));
+  assert.deepEqual(table, {
+    type: 'table',
+    headers: ['Item', 'Note'],
+    rows: [['A', 'value|extra']],
+  });
+
+  const escapedMath = tokenizeWorkspaceInline(String.raw`escaped \$not math$`);
+  assert.ok(escapedMath.every((token) => token.type === 'text'));
+  assert.equal(escapedMath.map((token) => token.text).join(''), String.raw`escaped \$not math$`);
+});
+
+test('formats inline math and keeps unsafe link schemes as ordinary text', () => {
+  assert.deepEqual(tokenizeWorkspaceInline('Use \\(x^2 + y^2 = z^2\\), then read example.org/guide.'), [
+    { type: 'text', text: 'Use ' },
+    { type: 'math', text: 'x² + y² = z²' },
+    { type: 'text', text: ', then read ' },
+    { type: 'link', text: 'example.org/guide', href: 'https://example.org/guide' },
+    { type: 'text', text: '.' },
+  ]);
+  assert.deepEqual(tokenizeWorkspaceInline('[unsafe](javascript:alert(1))'), [
+    { type: 'text', text: '[unsafe](javascript:alert(1))' },
+  ]);
+});

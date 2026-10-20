@@ -2,7 +2,25 @@ const SUBSCRIPT_DIGITS = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': 
 const SUPERSCRIPT_DIGITS = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺', '-': '⁻' };
 
 function splitTableRow(line) {
-  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((cell) => cell.trim().replace(/\\\|/g, '|'));
+  const cells = [];
+  let cell = '';
+  let escaped = false;
+
+  for (const character of line.trim()) {
+    if (character === '|' && !escaped) {
+      cells.push(cell.trim());
+      cell = '';
+      continue;
+    }
+
+    cell += character;
+    escaped = character === '\\' && !escaped;
+  }
+  cells.push(cell.trim());
+
+  if (cells[0] === '') cells.shift();
+  if (cells.at(-1) === '') cells.pop();
+  return cells.map((value) => value.replace(/\\\|/g, '|'));
 }
 
 function isTableSeparator(line) {
@@ -118,8 +136,8 @@ function unicodeScript(value, mapping) {
 
 export function formatWorkspaceMath(source) {
   let value = String(source || '')
-    .replace(/^\s*(?:\$\$|\\\[|\\\()/, '')
-    .replace(/(?:\$\$|\\\]|\\\))\s*$/, '')
+    .replace(/^\s*(?:\$\$|\$|\\\[|\\\()/, '')
+    .replace(/(?:\$\$|\$|\\\]|\\\))\s*$/, '')
     .replace(/\\(?:mathrm|mathbf|mathit|text|operatorname)\s*\{([^{}]*)\}/g, '$1')
     .replace(/\\(?:ce|pu)\s*\{([^{}]*)\}/g, '$1')
     .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
@@ -152,14 +170,17 @@ export function formatWorkspaceMath(source) {
 export function tokenizeWorkspaceInline(source) {
   const text = String(source || '');
   const tokens = [];
-  const pattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<!\\)\$[^$\n]+\$|`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\s][^_\n]*?_|!\[([^\]]*)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|(https?:\/\/[^\s<>]+|www\.[^\s<>]+)/g);
+  const pattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\$)[^$\n]+\$|`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\s][^_\n]*?_|!\[([^\]]*)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s]+|www\.[^)\s]+)\)|(https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<>]*)?)/g);
   let lastIndex = 0;
   let match;
 
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > lastIndex) tokens.push({ type: 'text', text: text.slice(lastIndex, match.index) });
     const value = match[0];
-    if (/^(?:\$\$|\\\[|\\\()/.test(value)) {
+    if (
+      /^(?:\$\$|\\\[|\\\()/.test(value) ||
+      (/^\$(?!\$)/.test(value) && text[match.index - 1] !== '\\')
+    ) {
       tokens.push({ type: 'math', text: formatWorkspaceMath(value) });
     } else if (value.startsWith('`')) {
       tokens.push({ type: 'code', text: value.slice(1, -1) });
@@ -175,9 +196,15 @@ export function tokenizeWorkspaceInline(source) {
       const rawHref = match[5];
       const href = rawHref.startsWith('www.') ? `https://${rawHref}` : rawHref;
       tokens.push({ type: 'link', text: match[4], href });
+    } else if (value.startsWith('$')) {
+      tokens.push({ type: 'text', text: value });
     } else {
-      const href = value.startsWith('www.') ? `https://${value}` : value;
-      tokens.push({ type: 'link', text: value, href });
+      const linkValue = value.replace(/[),.;:!?]+$/, '');
+      const href = linkValue.startsWith('http') ? linkValue : `https://${linkValue}`;
+      tokens.push({ type: 'link', text: linkValue, href });
+      if (linkValue.length < value.length) {
+        tokens.push({ type: 'text', text: value.slice(linkValue.length) });
+      }
     }
     lastIndex = pattern.lastIndex;
   }
