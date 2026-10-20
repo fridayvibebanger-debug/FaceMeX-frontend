@@ -2,6 +2,186 @@
   @tailwind components;
   @tailwind utilities;
 
+  .facemex-public-seo {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --border: 217.2 32.6% 24%;
+    --ring: 212.7 26.8% 83.9%;
+    --seo-bg: #0b0c0f;
+    --seo-surface: #17181c;
+    --seo-surface-muted: #111216;
+    --seo-border: #2b2d33;
+    --seo-text: #f1f5f9;
+    --seo-text-secondary: #c2cedd;
+    --seo-text-muted: #98a9bd;
+    color-scheme: dark;
+    min-height: 100vh;
+    isolation: isolate;
+    background:
+      radial-gradient(ellipse at 50% -18rem, rgba(37, 99, 235, 0.12), transparent 38rem),
+      var(--seo-bg);
+    color: var(--seo-text);
+  }
+
+  .facemex-public-seo .seo-header {
+    position: sticky;
+    z-index: 20;
+    top: 0;
+    border-color: rgba(148, 163, 184, 0.14) !important;
+    background: rgba(15, 16, 19, 0.86) !important;
+    backdrop-filter: blur(16px);
+  }
+
+  .facemex-public-seo .seo-logo-mark {
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  }
+
+  .facemex-public-seo .seo-hero {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(148, 163, 184, 0.14) !important;
+    background:
+      radial-gradient(ellipse at 78% 18%, rgba(59, 130, 246, 0.14), transparent 28rem),
+      linear-gradient(180deg, #111318 0%, #0b0c0f 100%) !important;
+  }
+
+  .facemex-public-seo .seo-student-page {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 50% 0, rgba(37, 99, 235, 0.055), transparent 48rem),
+      var(--seo-bg);
+  }
+
+  .facemex-public-seo .seo-student-page .seo-student-hero {
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+    background:
+      radial-gradient(ellipse at 76% 14%, rgba(59, 130, 246, 0.17), transparent 26rem),
+      radial-gradient(ellipse at 5% 100%, rgba(37, 99, 235, 0.08), transparent 30rem),
+      linear-gradient(180deg, #111318 0%, #0b0c0f 100%) !important;
+  }
+
+  .facemex-public-seo .seo-student-page article {
+    border-color: var(--seo-border);
+    background: linear-gradient(145deg, rgba(24, 26, 32, 0.78), rgba(17, 18, 22, 0.78));
+  }
+
+  .facemex-public-seo .seo-student-quickstart {
+    border-color: rgba(148, 163, 184, 0.2);
+    background: linear-gradient(145deg, rgba(24, 26, 32, 0.96), rgba(17, 18, 22, 0.96));
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+  }
+
+  .facemex-public-seo .seo-student-quickstart-link {
+    transition: color 150ms ease, padding 150ms ease;
+  }
+
+  .facemex-public-seo .seo-student-quickstart-link:hover {
+    color: #bfdbfe;
+    padding-left: 0.25rem;
+  }
+
+  .facemex-public-seo .seo-feature-showcase {
+    scroll-margin-top: 6rem;
+  }
+
+  .facemex-public-seo .seo-feature-card[class~="bg-white"] {
+    min-height: 13rem;
+    border-color: var(--seo-border) !important;
+    background: linear-gradient(145deg, #181a20, #121317) !important;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
+  }
+
+  .facemex-public-seo .seo-feature-card[class~="bg-white"]:hover {
+    border-color: #46536b !important;
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.25);
+    transform: translateY(-2px);
+  }
+
+  .facemex-public-seo .seo-feature-icon {
+    border-color: rgba(96, 165, 250, 0.22) !important;
+    background: rgba(37, 99, 235, 0.12) !important;
+    color: #93c5fd !important;
+  }
+
+  .facemex-public-seo [class~="bg-white"] {
+    background-color: var(--seo-surface) !important;
+  }
+
+  .facemex-public-seo [class~="bg-slate-50"] {
+    background-color: var(--seo-surface-muted) !important;
+  }
+
+  .facemex-public-seo [class~="bg-slate-900"] {
+    background-color: #2563eb !important;
+  }
+
+  .facemex-public-seo [class~="hover:bg-slate-700"]:hover {
+    background-color: #1d4ed8 !important;
+  }
+
+  .facemex-public-seo [class~="hover:bg-slate-100"]:hover,
+  .facemex-public-seo [class~="hover:bg-slate-200"]:hover {
+    background-color: #1d293a !important;
+  }
+
+  .facemex-public-seo [class~="text-slate-950"],
+  .facemex-public-seo [class~="text-slate-900"] {
+    color: var(--seo-text) !important;
+  }
+
+  .facemex-public-seo [class~="text-slate-800"],
+  .facemex-public-seo [class~="text-slate-700"] {
+    color: var(--seo-text-secondary) !important;
+  }
+
+  .facemex-public-seo [class~="text-slate-600"],
+  .facemex-public-seo [class~="text-slate-500"] {
+    color: var(--seo-text-muted) !important;
+  }
+
+  .facemex-public-seo [class~="text-slate-400"] {
+    color: #a8b3c2 !important;
+  }
+
+  .facemex-public-seo [class~="hover:text-slate-950"]:hover,
+  .facemex-public-seo [class~="hover:text-slate-600"]:hover {
+    color: #fff !important;
+  }
+
+  .facemex-public-seo [class~="border-slate-200"],
+  .facemex-public-seo [class~="border-slate-300"] {
+    border-color: var(--seo-border) !important;
+  }
+
+  .facemex-public-seo [class~="hover:border-slate-400"]:hover {
+    border-color: #51647d !important;
+  }
+
+  .facemex-public-seo [class~="divide-slate-200"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--seo-border) !important;
+  }
+
+  .facemex-public-seo .seo-feature-card [class~="text-slate-600"] {
+    color: #a8b3c2 !important;
+  }
+
+  .facemex-public-seo a:focus-visible,
+  .facemex-public-seo button:focus-visible,
+  .facemex-public-seo summary:focus-visible {
+    outline-color: #60a5fa;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .facemex-public-seo .seo-feature-card {
+      transition: none;
+    }
+
+    .facemex-public-seo .seo-feature-card:hover {
+      transform: none;
+    }
+  }
+
   @layer base {
     :root {
       color-scheme: light;
@@ -337,16 +517,41 @@
     }
 
     .fm-editor-toolbar {
-      scrollbar-width: none;
-      -ms-overflow-style: none;
+      scrollbar-width: thin;
+      scrollbar-color: #94a3b8 transparent;
       overscroll-behavior-x: contain;
       touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
+      white-space: nowrap;
+    }
+
+    .fm-editor-toolbar--compact > div {
+      flex-shrink: 0;
+      flex-wrap: nowrap;
+    }
+
+    .fm-editor-toolbar--compact button.h-10,
+    .fm-editor-toolbar--compact select.h-10,
+    .fm-editor-toolbar--compact label.h-10 {
+      height: 2rem !important;
+    }
+
+    .fm-editor-toolbar--compact button.w-10,
+    .fm-editor-toolbar--compact label.w-10 {
+      width: 2rem !important;
+    }
+
+    .fm-editor-toolbar--compact button {
+      white-space: nowrap;
     }
 
     .fm-editor-toolbar::-webkit-scrollbar {
-      display: none;
-      height: 0;
-      width: 0;
+      height: 6px;
+    }
+
+    .fm-editor-toolbar::-webkit-scrollbar-thumb {
+      border-radius: 9999px;
+      background: #94a3b8;
     }
 
     @media (max-width: 640px) {
@@ -357,6 +562,32 @@
 
       .fm-document-composer-shell {
         padding-top: 0.5rem;
+      }
+
+      .fm-document-format-panel,
+      .fm-editor-toolbar {
+        min-width: 0;
+        max-width: 100%;
+      }
+
+      .fm-editor-toolbar {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        touch-action: pan-x;
+      }
+
+      .fm-editor-toolbar > div {
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+      }
+
+      .fm-editor-toolbar select {
+        flex: 0 0 auto;
+      }
+
+      .fm-document-page > div {
+        padding: 1rem !important;
       }
     }
 
@@ -441,6 +672,23 @@
       border-color: #414141;
     }
 
+    .fm-document-workspace.fm-theme-dark .fm-table-picker {
+      border-color: #363636;
+      background: #171717;
+      color: #f8fafc;
+    }
+
+    .fm-document-workspace.fm-theme-dark .fm-table-picker p,
+    .fm-document-workspace.fm-theme-dark .fm-table-picker label {
+      color: #e5e7eb;
+    }
+
+    .fm-document-workspace.fm-theme-dark .fm-table-picker input[type='number'] {
+      border-color: #414141;
+      background: #242424;
+      color: #f8fafc;
+    }
+
     .fm-document-workspace.fm-theme-dark .fm-editor-toolbar button.bg-primary {
       border-color: #2563eb;
       background-color: #2563eb;
@@ -492,6 +740,23 @@
     .fm-document-workspace.fm-theme-light .fm-editor-toolbar {
       border-color: #e2e8f0;
       background: #f8fafc;
+    }
+
+    .fm-document-workspace.fm-theme-light .fm-table-picker {
+      border-color: #e2e8f0;
+      background: #fff;
+      color: #1e293b;
+    }
+
+    .fm-document-workspace.fm-theme-light .fm-table-picker p,
+    .fm-document-workspace.fm-theme-light .fm-table-picker label {
+      color: #334155;
+    }
+
+    .fm-document-workspace.fm-theme-light .fm-table-picker input[type='number'] {
+      border-color: #cbd5e1;
+      background: #fff;
+      color: #0f172a;
     }
 
     .fm-document-workspace.fm-theme-light .fm-document-format-panel {
