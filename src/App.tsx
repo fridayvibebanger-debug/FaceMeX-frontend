@@ -173,10 +173,11 @@ function PageSeoMetadata() {
   const location = useLocation();
 
   useEffect(() => {
-    const { title, description, canonical, indexable } = getSeoMetadata(location.pathname);
-    const finalTitle = location.pathname === '/ai/job-assistant'
+    const pagePath = location.pathname.replace(/\/+$/, '') || '/';
+    const { title, description, canonical, indexable } = getSeoMetadata(pagePath);
+    const finalTitle = pagePath === '/ai/job-assistant'
       ? 'FaceMeX AI Workspace'
-      : location.pathname.startsWith('/projects/')
+      : pagePath.startsWith('/projects/')
         ? 'FaceMeX Project Workspace'
         : title;
     const finalDescription = description;
@@ -197,7 +198,7 @@ function PageSeoMetadata() {
     setMeta('meta[name="robots"]', 'name', 'robots', shouldIndex ? 'index, follow' : 'noindex, follow');
     setMeta('meta[property="og:title"]', 'property', 'og:title', finalTitle);
     setMeta('meta[property="og:description"]', 'property', 'og:description', finalDescription);
-    setMeta('meta[property="og:type"]', 'property', 'og:type', location.pathname.startsWith('/resources/') ? 'article' : 'website');
+    setMeta('meta[property="og:type"]', 'property', 'og:type', pagePath.startsWith('/resources/') ? 'article' : 'website');
     setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'FaceMeX');
     setMeta('meta[property="og:image"]', 'property', 'og:image', `${SEO_SITE_ORIGIN}/facemex-logo.png`);
     setMeta('meta[property="og:image:alt"]', 'property', 'og:image:alt', 'FaceMeX');
