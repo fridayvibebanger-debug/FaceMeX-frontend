@@ -5,6 +5,7 @@ export type WorkspaceMarkdownBlock =
   | { type: 'table'; headers: string[]; rows: string[][] }
   | { type: 'quote'; text: string }
   | { type: 'separator' }
+  | { type: 'visual-reference' }
   | { type: 'code'; language: string; text: string };
 
 export type WorkspaceInlineToken =

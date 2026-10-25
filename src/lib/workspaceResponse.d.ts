@@ -24,3 +24,23 @@ export function extractYouTubeVideoId(input: string): string | null;
 export function extractYouTubeUrlFromText(input: string): string | null;
 
 export function isYouTubeSummaryRequest(input: string): boolean;
+
+export type WorkspaceMediaPlan = {
+  category: string;
+  imageQuery: string;
+  videoQuery: string;
+  showImages: boolean;
+  showVideos: boolean;
+};
+
+export function createWorkspaceMediaPlan(prompt: string, context?: string): WorkspaceMediaPlan;
+
+export type WorkspaceFollowUp = {
+  question: string;
+  options: string[];
+};
+
+export function parseWorkspaceFollowUp(input: string): {
+  content: string;
+  followUp: WorkspaceFollowUp | null;
+};

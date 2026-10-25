@@ -59,6 +59,12 @@ export function parseWorkspaceMarkdown(source) {
       continue;
     }
 
+    if (trimmed === '[[VISUAL_REFERENCE]]') {
+      blocks.push({ type: 'visual-reference' });
+      index += 1;
+      continue;
+    }
+
     if (trimmed.startsWith('```')) {
       const language = trimmed.slice(3).trim().split(/\s+/)[0] || '';
       const code = [];
@@ -209,5 +215,13 @@ export function tokenizeWorkspaceInline(source) {
     lastIndex = pattern.lastIndex;
   }
   if (lastIndex < text.length) tokens.push({ type: 'text', text: text.slice(lastIndex) });
-  return tokens;
+  return tokens.reduce((result, token) => {
+    const previous = result.at(-1);
+    if (previous?.type === 'text' && token.type === 'text') {
+      previous.text += token.text;
+    } else {
+      result.push(token);
+    }
+    return result;
+  }, []);
 }

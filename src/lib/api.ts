@@ -336,6 +336,21 @@ export const api = {
       ''
     ),
 
+  postToSameOrigin: (path: string, body?: any) =>
+    request(
+      path.startsWith('/') ? path : `/${path}`,
+      {
+        method: 'POST',
+        body:
+          body instanceof FormData
+            ? body
+            : body !== undefined
+              ? JSON.stringify(body)
+              : undefined,
+      },
+      ''
+    ),
+
   put: (path: string, body?: any) =>
     request(path, {
       method: 'PUT',

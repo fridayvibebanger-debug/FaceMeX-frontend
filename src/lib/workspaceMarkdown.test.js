@@ -65,6 +65,8 @@ test('groups wrapped Markdown text, headings, lists, tables, and code without dr
     '> A grouped',
     '> quotation.',
     '',
+    '[[VISUAL_REFERENCE]]',
+    '',
     '1. First',
     '2. Second',
     '',
@@ -74,8 +76,9 @@ test('groups wrapped Markdown text, headings, lists, tables, and code without dr
   ].join('\n'));
   assert.equal(variedMarkdown[0].text, 'This paragraph continues on its next source line.');
   assert.deepEqual(variedMarkdown[1], { type: 'quote', text: 'A grouped quotation.' });
-  assert.deepEqual(variedMarkdown[2], { type: 'list', ordered: true, start: 1, items: ['First', 'Second'] });
-  assert.deepEqual(variedMarkdown[3], { type: 'code', language: 'ts', text: 'const answer = 42;' });
+  assert.deepEqual(variedMarkdown[2], { type: 'visual-reference' });
+  assert.deepEqual(variedMarkdown[3], { type: 'list', ordered: true, start: 1, items: ['First', 'Second'] });
+  assert.deepEqual(variedMarkdown[4], { type: 'code', language: 'ts', text: 'const answer = 42;' });
 });
 
 test('renders inline emphasis, code, links, images, and mathematical notation as typed tokens', () => {
