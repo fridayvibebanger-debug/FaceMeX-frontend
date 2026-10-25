@@ -32,12 +32,15 @@ import {
   MoreVertical,
   Pin,
   PinOff,
+  RefreshCw,
   Save,
   Search,
   Send,
   Share2,
   Settings,
   ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   Users,
   UserRound,
@@ -71,8 +74,16 @@ import { useUserStore } from '@/store/userStore';
 import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 import { buildPersonalizationContext, getPersonalizationProfile, PERSONALIZATION_CHANGE_EVENT, type PersonalizationProfile } from '@/lib/personalization';
 import { supabase } from '@/lib/supabaseClient';
-import { extractYouTubeUrlFromText, isYouTubeSummaryRequest } from '@/lib/workspaceResponse';
-import { formatWorkspaceMath, tokenizeWorkspaceInline } from '@/lib/workspaceMarkdown';
+import {
+  createWorkspaceMediaPlan,
+  extractYouTubeUrlFromText,
+  isYouTubeSummaryRequest,
+  parseWorkspaceFollowUp,
+  parseWorkspaceVisualization,
+  type WorkspaceVisualization,
+} from '@/lib/workspaceResponse';
+import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
+import { parseWorkspaceMarkdown, tokenizeWorkspaceInline } from '@/lib/workspaceMarkdown';
 
 const PracticalLabLibrary = lazy(() => import('./PracticalLabLibrary'));
 
@@ -152,6 +163,31 @@ type ChatMessage = {
   jobs?: LocalVerifiedJob[];
   jobSearchArea?: string;
   jobSearchQuery?: string;
+  followUp?: {
+    question: string;
+    options: string[];
+  } | null;
+  media?: {
+    status: 'loading' | 'ready';
+    showImages: boolean;
+    showVideos: boolean;
+    images: Array<{
+      id: string;
+      url: string;
+      alt: string;
+      attribution: string;
+      attributionUrl: string;
+    }>;
+    videos: Array<{
+      id: string;
+      title: string;
+      channelTitle: string;
+      duration: string;
+      thumbnail: string;
+      watchUrl: string;
+      relevance: string;
+    }>;
+  };
 };
 
 type ChatSession = {
@@ -636,6 +672,18 @@ Style:
 - Never invent jobs.
 - Never invent closing dates.
 - Only say a job is verified if it comes from FaceMeX verified records, official company source, government/public institution, or a directly confirmed employer.
+
+Answer quality and formatting:
+- Start with the answer or result the user asked for. Do not restate the request or add a generic introduction.
+- Match the depth to the task: answer simple questions briefly; for complex requests, give complete, specific guidance without repeating points.
+- For practical tasks, include actionable steps, a realistic example or ready-to-use script when useful, important risks or limitations, and the next action. Do not force these headings when they do not help.
+- For business questions, prioritize feasible low-cost steps and show assumptions for any calculations.
+- For coding or technical support, explain the likely cause, identify relevant files or commands when known, provide complete snippets when requested, and include verification steps. Never claim to have run or deployed anything unless verified.
+- For tutoring, explain the idea simply, show the reasoning, and include a worked example when useful.
+- For research or comparisons, separate verified facts from assumptions, explain trade-offs, and cite real sources only when research was performed.
+- For writing requests, provide finished, usable copy in the requested style rather than advice about writing.
+- Use Markdown headings, numbered steps, bullets, tables, and fenced code only when they improve readability. Keep paragraphs concise and preserve all relevant details.
+- Never invent personal experience, prices, links, sources, requirements, or completed actions. State uncertainty plainly and ask one focused question only when it blocks a useful answer.
 
 When users ask for jobs:
 - Understand the user's intent first.
@@ -2301,42 +2349,6 @@ function isUsefulYouTubeLessonVideo(video: YouTubeLessonVideo) {
   return true;
 }
 
-function buildWorkspaceMemoryContext(messages: ChatMessage[], sessions: ChatSession[]) {
-  const currentConversation = messages
-    .filter((message) => !message.deletedFromChat)
-    .slice(-14)
-    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
-    .join('\n\n');
-
-  const savedLibraryItems = [
-    ...messages,
-    ...sessions.flatMap((session) => session.messages || []),
-  ]
-    .filter((message) => !message.deletedFromChat && (message.saved || message.pinned || message.savedCategory))
-    .slice(-24)
-    .map((message) => {
-      const label = message.savedCategory ? savedCategoryLabels[message.savedCategory] : 'Saved';
-      return `${label}: ${message.content}`;
-    })
-    .join('\n\n');
-
-  const recentChats = sessions
-    .slice(0, 8)
-    .map((session) => {
-      const last = [...(session.messages || [])].reverse().find((message) => !message.deletedFromChat);
-      return `${session.title || 'Chat'}: ${last?.content || 'No recent message'}`;
-    })
-    .join('\n');
-
-  return [
-    currentConversation ? `Current conversation:\n${currentConversation}` : '',
-    savedLibraryItems ? `Saved library and pinned notes:\n${savedLibraryItems}` : '',
-    recentChats ? `Recent chat history:\n${recentChats}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n---\n\n');
-}
-
 function normalizeBrokenMarkdownLinks(text: string) {
   return normalizeUssdCodes(String(text || ''))
     .replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/gi, '[$1]($2)')
@@ -2394,7 +2406,7 @@ function renderInlineText(text: string, onLinkClick?: (url: string, label?: stri
       return <em key={`emphasis-${index}`}>{token.text}</em>;
     }
     if (token.type === 'code') {
-      return <code key={`code-${index}`} className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.92em]">{token.text}</code>;
+      return <code key={`code-${index}`} className="break-words rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.92em] [overflow-wrap:anywhere]">{token.text}</code>;
     }
     if (token.type === 'math') {
       return (
@@ -2418,74 +2430,36 @@ function renderInlineText(text: string, onLinkClick?: (url: string, label?: stri
   });
 }
 
-function isTableSeparator(line: string) {
-  const value = line.trim();
-
-  if (!value.includes('|')) return false;
-
-  const cells = value
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => cell.trim());
-
-  if (cells.length < 2) return false;
-
-  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-}
-
-function isLikelyTableRow(line: string) {
-  const value = line.trim();
-  if (!value.includes('|')) return false;
-
-  const cells = value
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => cell.trim());
-
-  return cells.length >= 2;
-}
-
-function parseTableRow(line: string) {
-  return line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => cell.trim());
-}
-
 function renderMarkdownTable(
-  tableLines: string[],
+  headers: string[],
+  rows: string[][],
   key: string,
   onLinkClick?: (url: string, label?: string) => void
 ) {
-  const header = parseTableRow(tableLines[0]);
-  const body = tableLines.slice(2).map(parseTableRow);
-  const columnCount = Math.max(header.length, ...body.map((row) => row.length));
+  const columnCount = Math.max(headers.length, ...rows.map((row) => row.length));
 
   return (
     <div
       key={key}
-      className="fm-markdown-table my-4 w-full overflow-x-auto rounded-xl border border-white/10 bg-[#171717]"
+      className="fm-markdown-table my-4 w-full max-w-full overflow-hidden rounded-xl border border-white/10 bg-[#171717]"
     >
-      <table className="w-full min-w-[520px] border-collapse text-left text-sm lg:text-white">
+      <table className="w-full table-fixed border-collapse text-left text-xs sm:text-sm lg:text-white">
         <thead className="fm-markdown-table-head bg-[#222222]">
           <tr>
             {Array.from({ length: columnCount }).map((_, index) => (
               <th
                 key={`head-${index}`}
-                className="border-b border-white/10 px-3 py-3 font-semibold text-white"
+                scope="col"
+                className="break-words border-b border-white/10 px-2 py-2 font-semibold text-white [overflow-wrap:anywhere] sm:px-3 sm:py-3"
               >
-                {renderInlineText(header[index] || '', onLinkClick)}
+                {renderInlineText(headers[index] || '', onLinkClick)}
               </th>
             ))}
           </tr>
         </thead>
 
         <tbody>
-          {body.map((row, rowIndex) => (
+          {rows.map((row, rowIndex) => (
             <tr
               key={`row-${rowIndex}`}
               className="border-b border-white/10 last:border-0"
@@ -2493,7 +2467,7 @@ function renderMarkdownTable(
               {Array.from({ length: columnCount }).map((_, cellIndex) => (
                 <td
                   key={`cell-${rowIndex}-${cellIndex}`}
-                  className="align-top px-3 py-3 text-white/80"
+                  className="break-words align-top px-2 py-2 text-white/80 [overflow-wrap:anywhere] sm:px-3 sm:py-3"
                 >
                   {renderInlineText(row[cellIndex] || '', onLinkClick)}
                 </td>
@@ -2539,183 +2513,331 @@ function MarkdownCodeBlock({ code, language }: { code: string; language: string 
   );
 }
 
-function ChatGPTStyleText({
-  text,
-  onLinkClick,
-}: {
-  text: string;
-  onLinkClick?: (url: string, label?: string) => void;
-}) {
-  const safeText = normalizeBrokenMarkdownLinks(text);
-  const lines = safeText.split('\n');
-  const blocks: ReactNode[] = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index].trim();
-
-    if (line === '$$' || line === '\\[') {
-      const closingDelimiter = line === '$$' ? '$$' : '\\]';
-      const closingIndex = lines.findIndex(
-        (candidate, candidateIndex) => candidateIndex > index && candidate.trim() === closingDelimiter
-      );
-      if (closingIndex > index) {
-        const expression = formatWorkspaceMath(lines.slice(index + 1, closingIndex).join(' '));
-        blocks.push(
-          <div
-            key={`math-block-${index}`}
-            role="math"
-            aria-label={`Mathematical expression: ${expression}`}
-            className="my-3 overflow-x-auto rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 font-serif text-base tracking-wide text-white"
-          >
-            {expression}
-          </div>
-        );
-        index = closingIndex;
-        continue;
-      }
-    }
-
-    if (line.startsWith('```')) {
-      const language = line.slice(3).trim().split(/\s+/)[0] || '';
-      const codeLines: string[] = [];
-      index += 1;
-
-      while (index < lines.length && !lines[index].trim().startsWith('```')) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-
-      blocks.push(<MarkdownCodeBlock key={`code-${index}`} code={codeLines.join('\n')} language={language} />);
-      continue;
-    }
-
-    if (isLikelyTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
-      const tableLines = [lines[index], lines[index + 1]];
-      index += 2;
-
-      while (index < lines.length && isLikelyTableRow(lines[index])) {
-        tableLines.push(lines[index]);
-        index += 1;
-      }
-
-      index -= 1;
-      blocks.push(renderMarkdownTable(tableLines, `table-${index}`, onLinkClick));
-      continue;
-    }
-
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
-      blocks.push(<hr key={`rule-${index}`} className="my-4 border-0 border-t border-white/20" />);
-      continue;
-    }
-
-    if (!line) {
-      blocks.push(<div key={`space-${index}`} className="h-1" />);
-      continue;
-    }
-
-    if (line.startsWith('>')) {
-      blocks.push(
-        <blockquote
-          key={`quote-${index}`}
-          className="fm-markdown-quote border-l-2 border-white/20 pl-4 italic text-white/70"
-        >
-          {renderInlineText(line.replace(/^>\s?/, ''), onLinkClick)}
-        </blockquote>
-      );
-      continue;
-    }
-
-    const heading = line.match(/^#{1,4}\s+(.+)$/);
-    if (heading) {
-      blocks.push(
-        <h3
-          key={`heading-${index}`}
-          className="pt-1 text-lg font-semibold tracking-tight text-white"
-        >
-          {renderInlineText(heading[1], onLinkClick)}
-        </h3>
-      );
-      continue;
-    }
-
-    const numbered = line.match(/^(\d+)\.\s+(.+)$/);
-    if (numbered) {
-      blocks.push(
-        <div key={`number-${index}`} className="flex gap-3">
-          <span className="mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full border border-white/10 bg-[#222222] text-xs font-semibold text-white">
-            {numbered[1]}
-          </span>
-          <div className="min-w-0 flex-1">{renderInlineText(numbered[2], onLinkClick)}</div>
-        </div>
-      );
-      continue;
-    }
-
-    const bullet = line.match(/^[-•*]\s+(.+)$/);
-    if (bullet) {
-      blocks.push(
-        <div key={`bullet-${index}`} className="flex gap-3">
-          <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-white/60" />
-          <div className="min-w-0 flex-1">{renderInlineText(bullet[1], onLinkClick)}</div>
-        </div>
-      );
-      continue;
-    }
-
-    blocks.push(
-      <p key={`p-${index}`} className="text-white/85">
-        {renderInlineText(line, onLinkClick)}
-      </p>
+function WorkspaceVisualizationCard({ visualization }: { visualization: WorkspaceVisualization }) {
+  if (visualization.kind === 'diagram') {
+    return (
+      <section className="my-4 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4" aria-label={visualization.title}>
+        <h3 className="mb-4 text-base font-semibold text-white">{visualization.title}</h3>
+        <ol className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          {visualization.steps.map((step, index) => (
+            <Fragment key={`${index}-${step}`}>
+              <li className="flex min-w-0 flex-1 items-center justify-center rounded-lg border border-white/10 bg-black/15 px-3 py-3 text-center text-sm text-white/85">
+                {step}
+              </li>
+              {index < visualization.steps.length - 1 && (
+                <li aria-hidden="true" className="flex items-center justify-center text-white/40 sm:px-1">
+                  <span className="sm:hidden">↓</span>
+                  <span className="hidden sm:inline">→</span>
+                </li>
+              )}
+            </Fragment>
+          ))}
+        </ol>
+      </section>
     );
   }
 
-  return <div className="fm-assistant-content space-y-3 text-[15px] leading-7 text-white/85">{blocks}</div>;
-}
-
-function isShortContextReply(text: string) {
-  const value = clean(text).toLowerCase();
-
-  if (!value) return false;
-
-  const followUps = [
-    'yes',
-    'yebo',
-    'yeah',
-    'yep',
-    'ok',
-    'okay',
-    'sure',
-    'continue',
-    'go on',
-    'go ahead',
-    'do it',
-    'please do',
-    'send it',
-    'draft it',
-    'tell me more',
-    'what about',
-    'how much',
-    'how do',
-    'why',
-    'when',
-    'where',
-    'who',
-    'can i',
-    'should i',
-    'would that',
-    'is it possible',
-    'and',
-    'also',
-    'then',
-    'next'
-  ];
+  const values = visualization.data.map((point) => point.value);
+  const minimum = Math.min(0, ...values);
+  const maximum = Math.max(0, ...values);
+  const range = maximum - minimum || 1;
+  const plot = { x: 48, y: 18, width: 550, height: 170 };
+  const yFor = (value: number) => plot.y + ((maximum - value) / range) * plot.height;
+  const baseline = yFor(0);
+  const pointSpacing = plot.width / Math.max(visualization.data.length - 1, 1);
+  const barWidth = Math.min(44, plot.width / visualization.data.length * 0.58);
+  const points = visualization.data.map((point, index) =>
+    `${plot.x + index * pointSpacing},${yFor(point.value)}`
+  ).join(' ');
 
   return (
-    value.length < 120 &&
-    followUps.some((item) => value.startsWith(item))
+    <figure className="my-4 max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+      <figcaption className="mb-3 text-base font-semibold text-white">{visualization.title}</figcaption>
+      <div className="w-full max-w-full overflow-x-auto">
+        <svg
+          viewBox="0 0 620 220"
+          role="img"
+          aria-label={`${visualization.title}: ${visualization.yLabel} by ${visualization.xLabel}`}
+          className="h-auto min-w-[440px] w-full"
+        >
+          <line x1={plot.x} y1={plot.y} x2={plot.x} y2={plot.y + plot.height} stroke="rgba(255,255,255,.24)" />
+          <line x1={plot.x} y1={baseline} x2={plot.x + plot.width} y2={baseline} stroke="rgba(255,255,255,.24)" />
+          {visualization.chartType === 'bar' ? visualization.data.map((point, index) => {
+            const x = plot.x + (index + 0.5) * (plot.width / visualization.data.length) - barWidth / 2;
+            const y = yFor(point.value);
+            return (
+              <Fragment key={`${point.label}-${index}`}>
+                <rect
+                  x={x}
+                  y={Math.min(y, baseline)}
+                  width={barWidth}
+                  height={Math.max(2, Math.abs(baseline - y))}
+                  rx="4"
+                  fill="#9eb9ff"
+                >
+                  <title>{`${point.label}: ${point.value}`}</title>
+                </rect>
+                <text x={x + barWidth / 2} y="207" textAnchor="middle" fill="rgba(255,255,255,.72)" fontSize="10">
+                  {point.label.slice(0, 12)}
+                </text>
+              </Fragment>
+            );
+          }) : (
+            <>
+              <polyline points={points} fill="none" stroke="#9eb9ff" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+              {visualization.data.map((point, index) => {
+                const x = plot.x + index * pointSpacing;
+                const y = yFor(point.value);
+                return (
+                  <g key={`${point.label}-${index}`}>
+                    <circle cx={x} cy={y} r="4" fill="#9eb9ff">
+                      <title>{`${point.label}: ${point.value}`}</title>
+                    </circle>
+                    <text x={x} y="207" textAnchor="middle" fill="rgba(255,255,255,.72)" fontSize="10">
+                      {point.label.slice(0, 12)}
+                    </text>
+                  </g>
+                );
+              })}
+            </>
+          )}
+          <text x="8" y="16" fill="rgba(255,255,255,.7)" fontSize="10">{visualization.yLabel.slice(0, 24)}</text>
+          <text x="590" y="218" textAnchor="end" fill="rgba(255,255,255,.7)" fontSize="10">{visualization.xLabel.slice(0, 24)}</text>
+        </svg>
+      </div>
+    </figure>
   );
 }
 
+function ChatGPTStyleText({
+  text,
+  onLinkClick,
+  visualReference,
+}: {
+  text: string;
+  onLinkClick?: (url: string, label?: string) => void;
+  visualReference?: ReactNode;
+}) {
+  const safeText = normalizeBrokenMarkdownLinks(text);
+  const parsedBlocks = parseWorkspaceMarkdown(safeText);
+  const hasVisualMarker = parsedBlocks.some((block) => block.type === 'visual-reference');
+  const blocks = parsedBlocks.map((block, index) => {
+    if (block.type === 'visual-reference') {
+      return visualReference ? <Fragment key={`visual-reference-${index}`}>{visualReference}</Fragment> : null;
+    }
+    if (block.type === 'heading') {
+      const Heading = block.level <= 2 ? 'h2' : block.level === 3 ? 'h3' : 'h4';
+      return (
+        <Heading
+          key={`heading-${index}`}
+          className={`pt-2 font-semibold tracking-tight text-white ${block.level <= 2 ? 'text-xl' : block.level === 3 ? 'text-lg' : 'text-base'}`}
+        >
+          {renderInlineText(block.text, onLinkClick)}
+        </Heading>
+      );
+    }
+    if (block.type === 'paragraph') {
+      return <p key={`paragraph-${index}`} className="break-words text-white/85">{renderInlineText(block.text, onLinkClick)}</p>;
+    }
+    if (block.type === 'list') {
+      const List = block.ordered ? 'ol' : 'ul';
+      return (
+        <List
+          key={`list-${index}`}
+          start={block.ordered ? block.start : undefined}
+          className={`${block.ordered ? 'list-decimal' : 'list-disc'} space-y-2 pl-6 text-white/85 marker:text-white/60`}
+        >
+          {block.items.map((item, itemIndex) => (
+            <li key={`item-${itemIndex}`} className="break-words pl-1 [overflow-wrap:anywhere]">
+              {renderInlineText(item, onLinkClick)}
+            </li>
+          ))}
+        </List>
+      );
+    }
+    if (block.type === 'table') {
+      return renderMarkdownTable(block.headers, block.rows, `table-${index}`, onLinkClick);
+    }
+    if (block.type === 'quote') {
+      return (
+        <blockquote key={`quote-${index}`} className="fm-markdown-quote border-l-2 border-white/20 pl-4 italic text-white/70">
+          {renderInlineText(block.text, onLinkClick)}
+        </blockquote>
+      );
+    }
+    if (block.type === 'separator') {
+      return <hr key={`rule-${index}`} className="my-4 border-0 border-t border-white/20" />;
+    }
+    if (block.type === 'code') {
+      if (block.language.toLowerCase() === 'chart' || block.language.toLowerCase() === 'diagram') {
+        const visualization = parseWorkspaceVisualization(block.language.toLowerCase(), block.text);
+        if (visualization) {
+          return <WorkspaceVisualizationCard key={`visualization-${index}`} visualization={visualization} />;
+        }
+      }
+      return <MarkdownCodeBlock key={`code-${index}`} code={block.text} language={block.language} />;
+    }
+    return null;
+  });
+  if (visualReference && !hasVisualMarker) {
+    const fallbackIndex = parsedBlocks.findIndex((block) => block.type === 'paragraph' || block.type === 'heading');
+    blocks.splice(
+      fallbackIndex >= 0 ? fallbackIndex + 1 : 0,
+      0,
+      <Fragment key="visual-reference-fallback">{visualReference}</Fragment>,
+    );
+  }
+
+  return <div className="fm-assistant-content min-w-0 w-full max-w-3xl space-y-4 break-words text-[15px] leading-7 text-white/85 sm:text-base">{blocks}</div>;
+}
+
+function isTrustedMediaUrl(value: string, host: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === host;
+  } catch {
+    return false;
+  }
+}
+
+function WorkspaceResponseMedia({
+  media,
+  mode,
+}: {
+  media: NonNullable<ChatMessage['media']>;
+  mode: 'images' | 'videos';
+}) {
+  if (media.status === 'loading') {
+    return (
+      <div className="mt-5 flex items-center gap-2 text-sm text-white/55" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        {mode === 'images' ? 'Finding relevant visual references…' : 'Finding two relevant lessons…'}
+      </div>
+    );
+  }
+
+  if (mode === 'images') {
+    const images = media.images.filter((image) => isTrustedMediaUrl(image.url, 'images.unsplash.com'));
+    if (!images.length) return null;
+    return (
+      <section className="my-4 max-w-3xl" aria-label="Relevant visual references">
+        <h3 className="mb-3 text-sm font-semibold text-white/90">Visual references</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {images.map((image) => (
+            <figure key={image.id} className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+              <img
+                src={image.url}
+                alt={image.alt}
+                loading="lazy"
+                decoding="async"
+                className="aspect-[16/10] w-full object-cover"
+              />
+              <figcaption className="px-3 py-2 text-xs text-white/55">
+                Photo by{' '}
+                {isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') ? (
+                  <a href={image.attributionUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+                    {image.attribution}
+                  </a>
+                ) : image.attribution}
+                {' '}on Unsplash
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  const verifiedVideos = media.videos.filter((video) =>
+    /^[A-Za-z0-9_-]{11}$/.test(video.id) &&
+    isTrustedMediaUrl(video.thumbnail, 'i.ytimg.com') &&
+    extractYouTubeUrlFromText(video.watchUrl) !== null
+  ).slice(0, 2);
+  const videos = verifiedVideos.length === 2 ? verifiedVideos : [];
+  if (!videos.length) return null;
+
+  return (
+    <section className="mt-6 max-w-3xl" aria-label="Related YouTube lessons">
+      <h3 className="mb-3 text-sm font-semibold text-white/90">Watch two relevant lessons</h3>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {videos.map((video) => (
+          <article key={video.id} className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+            <a href={video.watchUrl} target="_blank" rel="noreferrer" className="group block">
+              <div className="relative">
+                <img
+                  src={video.thumbnail}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-video w-full object-cover"
+                />
+                {video.duration && (
+                  <span className="absolute bottom-2 right-2 rounded bg-black/85 px-1.5 py-0.5 text-xs text-white">
+                    {video.duration}
+                  </span>
+                )}
+              </div>
+              <span className="block p-3">
+                <span className="line-clamp-2 text-sm font-semibold text-white group-hover:underline">{video.title}</span>
+                <span className="mt-1 block truncate text-xs text-white/55">{video.channelTitle}</span>
+                <span className="mt-2 block text-xs leading-5 text-white/65">{video.relevance}</span>
+                <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-white/85">
+                  Watch Video <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              </span>
+            </a>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceFollowUp({
+  question,
+  options,
+  disabled,
+  onContinue,
+}: {
+  question: string;
+  options: string[];
+  disabled: boolean;
+  onContinue: (answer: string) => void;
+}) {
+  const [selected, setSelected] = useState('');
+  return (
+    <section className="mt-5 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4" aria-label="Choose a follow-up answer">
+      <p className="mb-3 text-sm font-semibold text-white">{question}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            disabled={disabled}
+            aria-pressed={selected === option}
+            onClick={() => setSelected(option)}
+            className={`min-h-9 rounded-full border px-3 py-1.5 text-sm transition ${
+              selected === option
+                ? 'border-white/50 bg-white text-black'
+                : 'border-white/15 bg-white/[0.04] text-white/80 hover:bg-white/10'
+            } disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        disabled={!selected || disabled}
+        onClick={() => onContinue(selected)}
+        className="mt-4 h-9 rounded-lg bg-white px-4 text-black hover:bg-white/90"
+      >
+        Continue
+      </Button>
+    </section>
+  );
+}
 
 function buildPremiumRecentHeading(text: string) {
   const value = clean(text).replace(/\s+/g, ' ').trim();
@@ -2817,14 +2939,6 @@ function groupChatSessionsByDate(sessions: ChatSession[]) {
   });
 
   return Array.from(groups, ([label, groupedSessions]) => ({ label, sessions: groupedSessions }));
-}
-
-function buildConversationContext(messages: ChatMessage[]) {
-  return messages
-    .filter((message) => !message.deletedFromChat)
-    .slice(-10)
-    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
-    .join('\n\n');
 }
 
 function MessageCircleIcon() {
@@ -3145,6 +3259,7 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [prompt, setPrompt] = useState('');
   const [selectedImages, setSelectedImages] = useState<WorkspaceImage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, 'positive' | 'negative'>>({});
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState(() => safeId());
   const [activeWorkspaceConversationId, setActiveWorkspaceConversationId] = useState<string | null>(null);
@@ -3704,6 +3819,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
             jobSearchArea: message.jobSearchArea,
             jobSearchQuery: message.jobSearchQuery,
             images: message.images,
+            followUp: message.followUp,
+            media: message.media,
           },
         })));
         const title = buildChatSessionTitle(messages);
@@ -3742,6 +3859,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
             jobSearchArea: message.jobSearchArea,
             jobSearchQuery: message.jobSearchQuery,
             images: message.images,
+            followUp: message.followUp,
+            media: message.media,
           },
         })));
 
@@ -5161,9 +5280,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       ? `${projectPromptPrefix}\n\n${finalPrompt}`
       : finalPrompt;
 
-    const conversationContext = buildConversationContext(promptHistory);
-    const shouldUseContext = Boolean(isShortContextReply(finalPrompt) && conversationContext);
-
     const intent = detectIntent(finalPrompt, hasImages);
     const suggestedSavedCategory = savedCategoryFromIntent(intent);
     const shouldAutoSaveEducation =
@@ -5172,12 +5288,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       suggestedSavedCategory === 'youtube_lessons' ||
       suggestedSavedCategory === 'institution_applications';
 
-    // `shouldUsePreviousContext` helper is not present; keep initial context decision
-
     const aiPromptWithToolDirection = addFaceMeXCareerToolInstruction(aiPromptWithProjectContext, intent);
-    const promptWithConversationContext = shouldUseContext
-      ? `Continue the current task using the conversation below. Interpret the user's short reply as referring to the immediately preceding discussion, preserve their stated goals and details, and do not restart or ask them to repeat information. If one important detail is still missing, ask one focused question.\n\nRecent conversation:\n${conversationContext}\n\nUser's latest request:\n${aiPromptWithToolDirection}`
-      : aiPromptWithToolDirection;
 
     const userMessage: ChatMessage = {
       id: options?.replaceMessageId || safeId(),
@@ -5335,13 +5446,12 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }
 
     try {
-      const workspaceMemoryContext = buildWorkspaceMemoryContext(promptHistory, chatSessions);
       const projectHistoryContext = activeProject
         ? await searchProjectContext(activeProject.id, finalPrompt)
         : '';
       const promptWithProjectHistory = projectHistoryContext
-        ? `${promptWithConversationContext}\n\nRelevant history from this project (use only if applicable):\n${projectHistoryContext}`
-        : promptWithConversationContext;
+        ? `${aiPromptWithToolDirection}\n\nRelevant history from this project (use only if applicable):\n${projectHistoryContext}`
+        : aiPromptWithToolDirection;
       const personalizationContext = buildPersonalizationContext(personalizationProfile);
 
       const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
@@ -5349,9 +5459,15 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
 FaceMeX intelligence rules:
 - Behave like a polished ChatGPT-style assistant, but focused on FaceMeX users: jobs, students, founders, funding, applications, business and daily practical help.
-- Use previous messages, saved notes and recent chats when the user says short replies like "yes", "continue", "same", "help me apply", "make notes", "more", or "explain".
-- Do not fumble or restart when context is clear. Continue the exact task.
-- When the user asks for videos or lessons, guide them to the correct FaceMeX Library section and YouTube category.
+- Give a direct answer first, then choose only the headings, examples, steps, tables, code, equations, warnings, and links that genuinely help with this request. Never force a fixed recipe, lesson, career, or tutorial template onto unrelated questions, and avoid filler or invented details.
+- Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
+- When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
+- If a visual reference genuinely helps, place the standalone marker [[VISUAL_REFERENCE]] immediately after the relevant explanation or step. Do not add the marker for irrelevant photos or simple answers.
+- When a chart or process diagram materially improves the explanation, use a fenced chart JSON block with type, title, xLabel, yLabel, and labeled numeric data, or a fenced diagram JSON block with type "flow", title, and steps. Use only values grounded in the user's input or reliable context; otherwise explain the comparison without inventing chart data.
+- Format Markdown for readability. Use fenced code blocks for code, tables only for useful comparisons, and never output raw HTML or scripts.
+- Use the preceding user and assistant messages in this request as the active conversation. Resolve follow-ups from that history, preserve the user's details, and continue the task without restarting or asking them to repeat information.
+- If an earlier message refers to an image or file that is not attached now, do not claim to see it; ask the user to attach it again if needed.
+- When the user asks for videos or lessons, focus on the requested topic and let relevant video cards provide recommendations. Mention a FaceMeX Library section only when the user asks or it directly helps.
 - Keep YouTube recommendations useful: full lessons, tutorials, guides and professional explainers. Avoid Shorts, reels, jokes and entertainment clips.
 - Keep libraries separate: Job Library for job-search skills, Investors Library for funding/investors/business, Students Library for subjects/applications/NSFAS.
 - Ask one smart clarifying question only when needed. Otherwise give the answer directly.
@@ -5363,61 +5479,20 @@ FaceMeX intelligence rules:
 
 User name: ${userDisplayName}
 Current automatic job results in FaceMeX:
-${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
+${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2) : 'Only use job records if they are relevant to the user request.'}
 `;
 
-     const payload = {
-  prompt: promptWithProjectHistory,
-  message: promptWithProjectHistory,
-  question: promptWithProjectHistory,
-  originalPrompt: finalPrompt,
-
-  // ONLY send context if needed
-  conversationContext: shouldUseContext ? conversationContext : '',
-
-  // KEEP memory BUT CLEAN IT
-  memoryContext: workspaceMemoryContext || null,
-  userMemoryContext: workspaceMemoryContext || null,
-  previousChatMemory: workspaceMemoryContext || null,
-  personalizationContext: personalizationContext || null,
-
-  // IMPORTANT FIX 👇 only last 6–8 messages
-  conversationMessages: promptHistory
-    .filter((m) => !m.deletedFromChat)
-    .slice(-6)
-    .map((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
-
-        tier: currentTier,
-        creatorPlus,
-        intent,
-        userName: userDisplayName,
-        firstName,
-        source: 'facemex-career-workspace',
-        responseStyle: 'chatgpt-premium',
-        answerStyle: fullSystemInstruction,
-        systemInstruction: fullSystemInstruction,
-        priorityAreas: PRIORITY_AREAS,
-        automaticJobs: sortedLocalJobs.slice(0, 60),
-        imageCount: attachedImages.length,
-        imageDataUrls: attachedImages.map((image) => image.dataUrl),
-        images: attachedImages.map((image) => ({
-          name: image.name,
-          type: image.type,
-          size: image.size,
-          dataUrl: image.dataUrl,
-        })),
+      const payload = {
+        messages: buildWorkspaceConversationMessages(
+          promptHistory,
+          promptWithProjectHistory,
+          fullSystemInstruction,
+        ),
         attachments: attachedImages.map((image) => ({
-          type: 'image',
           name: image.name,
           mimeType: image.type,
-          size: image.size,
           dataUrl: image.dataUrl,
         })),
-        // Hint to backend: prefer a direct AI answer for general questions
-        directAnswer: true,
       };
 
       let data: any = null;
@@ -5470,19 +5545,73 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
       const answer = usageLimitReached
         ? createUsageLimitAnswer(hasImages)
         : normalizedAnswer;
+      const parsedResponse = parseWorkspaceFollowUp(answer);
+      const displayAnswer = parsedResponse.followUp ? parsedResponse.content : answer;
+      const responseId = safeId();
+      const mediaPlan = createWorkspaceMediaPlan(
+        finalPrompt,
+        promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
+      );
+      const hasMediaPlan = !usageLimitReached && (mediaPlan.showImages || mediaPlan.showVideos);
 
       setMessages((prev) => [
         ...prev,
         {
-          id: safeId(),
+          id: responseId,
           role: 'assistant',
-          content: answer,
+          content: displayAnswer,
           createdAt: new Date().toISOString(),
           saved: shouldAutoSaveEducation,
           savedCategory: suggestedSavedCategory,
           intent,
+          followUp: parsedResponse.followUp,
+          media: hasMediaPlan ? {
+            status: 'loading',
+            showImages: mediaPlan.showImages,
+            showVideos: mediaPlan.showVideos,
+            images: [],
+            videos: [],
+          } : undefined,
         },
       ]);
+
+      if (hasMediaPlan) {
+        void api.postToSameOrigin('/api/workspace/media', {
+          imageQuery: mediaPlan.showImages ? mediaPlan.imageQuery : '',
+          videoQuery: mediaPlan.showVideos ? mediaPlan.videoQuery : '',
+        }).then((result) => {
+          const images = Array.isArray(result?.images) ? result.images.slice(0, 4) : [];
+          const videos = Array.isArray(result?.videos) ? result.videos.slice(0, 2) : [];
+          setMessages((previous) => previous.map((message) => message.id === responseId
+            ? {
+                ...message,
+                media: {
+                  status: 'ready',
+                  showImages: mediaPlan.showImages,
+                  showVideos: mediaPlan.showVideos,
+                  images,
+                  videos,
+                },
+              }
+            : message));
+        }).catch((error) => {
+          console.warn('FaceMeX optional response media is unavailable', {
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+          });
+          setMessages((previous) => previous.map((message) => message.id === responseId
+            ? {
+                ...message,
+                media: {
+                  status: 'ready',
+                  showImages: mediaPlan.showImages,
+                  showVideos: mediaPlan.showVideos,
+                  images: [],
+                  videos: [],
+                },
+              }
+            : message));
+        });
+      }
 
       if (!usageLimitReached) recordAIUse();
 
@@ -5493,7 +5622,7 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
         answer_length: answer.length,
       });
 
-      return answer;
+      return displayAnswer;
     } catch (error: any) {
       setPrompt((current) => current || finalPrompt);
       if (attachedImages.length > 0) {
@@ -5601,6 +5730,35 @@ ${JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2)}
     } catch {
       toast({ title: 'Copy failed', description: 'Please copy manually.', variant: 'destructive' });
     }
+  };
+
+  const rateAssistantMessage = (message: ChatMessage, rating: 'positive' | 'negative') => {
+    setMessageFeedback((previous) => ({ ...previous, [message.id]: rating }));
+    trackFeatureUse({
+      feature: 'FaceMeX Career Workspace',
+      action: 'workspace_response_feedback',
+      metadata: { rating, intent: message.intent || 'unknown' },
+    });
+    toast({ title: 'Feedback received', description: 'Thanks for helping improve FaceMeX AI.' });
+  };
+
+  const regenerateAssistantMessage = (message: ChatMessage) => {
+    if (busy || message.role !== 'assistant') return;
+    const answerIndex = messages.findIndex((item) => item.id === message.id);
+    if (answerIndex < 0) return;
+
+    let userIndex = answerIndex - 1;
+    while (userIndex >= 0 && messages[userIndex].role !== 'user') userIndex -= 1;
+    if (userIndex < 0) return;
+
+    const userMessage = messages[userIndex];
+    const contextMessages = messages.slice(0, userIndex);
+    setMessages(contextMessages);
+    void sendPrompt(userMessage.content, {
+      contextMessages,
+      replaceMessageId: userMessage.id,
+      images: userMessage.images,
+    });
   };
 
   const saveMessageAs = (id: string, category: SavedCategory) => {
@@ -6236,6 +6394,45 @@ Start with the most useful next action. Do not invent personal details, course r
           <Copy className="h-3.5 w-3.5" />
         </Button>
 
+        {message.role === 'assistant' && (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => regenerateAssistantMessage(message)}
+              className="h-8 gap-1 rounded-full px-2"
+              aria-label="Regenerate answer"
+              title="Regenerate answer"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span className="sr-only">Regenerate</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => rateAssistantMessage(message, 'positive')}
+              className={`h-8 rounded-full px-2 ${messageFeedback[message.id] === 'positive' ? 'text-emerald-500' : ''}`}
+              aria-label="This answer was helpful"
+              aria-pressed={messageFeedback[message.id] === 'positive'}
+              title="Helpful"
+            >
+              <ThumbsUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => rateAssistantMessage(message, 'negative')}
+              className={`h-8 rounded-full px-2 ${messageFeedback[message.id] === 'negative' ? 'text-rose-500' : ''}`}
+              aria-label="This answer was not helpful"
+              aria-pressed={messageFeedback[message.id] === 'negative'}
+              title="Not helpful"
+            >
+              <ThumbsDown className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        )}
+
         <Button size="sm" variant="ghost" onClick={() => shareMessageLink(message.content, 'FaceMeX AI answer')} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Share answer link">
           <Share2 className="h-3.5 w-3.5" />
         </Button>
@@ -6294,6 +6491,44 @@ Start with the most useful next action. Do not invent personal details, course r
         >
           <Copy className="h-4 w-4" />
         </Button>
+
+        {message.role === 'assistant' && (
+          <>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => regenerateAssistantMessage(message)}
+              title="Regenerate answer"
+              aria-label="Regenerate answer"
+              className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => rateAssistantMessage(message, 'positive')}
+              title="Helpful"
+              aria-label="This answer was helpful"
+              aria-pressed={messageFeedback[message.id] === 'positive'}
+              className={`h-9 w-9 rounded-full transition duration-200 ease-in-out hover:bg-white/10 active:scale-95 ${messageFeedback[message.id] === 'positive' ? 'text-emerald-400' : 'text-white'}`}
+            >
+              <ThumbsUp className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => rateAssistantMessage(message, 'negative')}
+              title="Not helpful"
+              aria-label="This answer was not helpful"
+              aria-pressed={messageFeedback[message.id] === 'negative'}
+              className={`h-9 w-9 rounded-full transition duration-200 ease-in-out hover:bg-white/10 active:scale-95 ${messageFeedback[message.id] === 'negative' ? 'text-rose-400' : 'text-white'}`}
+            >
+              <ThumbsDown className="h-4 w-4" />
+            </Button>
+          </>
+        )}
 
         <Button
           size="icon"
@@ -9298,7 +9533,25 @@ Start with the most useful next action. Do not invent personal details, course r
                               {isJobResultsMessage ? (
                                 renderAssistantJobCards(message)
                               ) : (
-                                <ChatGPTStyleText text={message.content} onLinkClick={handleGeneratedLinkClick} />
+                                <ChatGPTStyleText
+                                  text={message.content}
+                                  onLinkClick={handleGeneratedLinkClick}
+                                  visualReference={message.media?.showImages
+                                    ? <WorkspaceResponseMedia media={message.media} mode="images" />
+                                    : undefined}
+                                />
+                              )}
+                              {message.media?.showVideos && (
+                                <WorkspaceResponseMedia media={message.media} mode="videos" />
+                              )}
+                              {message.followUp && (
+                                <WorkspaceFollowUp
+                                  key={`follow-up-${message.id}`}
+                                  question={message.followUp.question}
+                                  options={message.followUp.options}
+                                  disabled={busy}
+                                  onContinue={(answer) => void sendPrompt(answer)}
+                                />
                               )}
                             </>
                           ) : (
