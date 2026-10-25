@@ -40,6 +40,18 @@
   force = true
 
 [[redirects]]
+  from = "/api/workspace/images"
+  to = "/.netlify/functions/workspace-images"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/workspace/media"
+  to = "/.netlify/functions/workspace-media"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/screen-share"
   to = "/.netlify/functions/screen-share"
   status = 200
