@@ -2713,22 +2713,35 @@ function WorkspaceResponseMedia({
     const images = media.images.filter((image) => isTrustedMediaUrl(image.url, 'images.unsplash.com'));
     if (!images.length) return null;
     return (
-      <section className="my-4 max-w-3xl" aria-label="Relevant visual references">
-        <h3 className="mb-3 text-sm font-semibold text-white/90">Visual references</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {images.map((image) => {
+      <section className="my-3 w-full max-w-3xl" aria-label="Relevant visual references">
+        <div className={`grid overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] ${
+          images.length >= 3
+            ? 'aspect-[3/2] grid-cols-2 grid-rows-2 gap-1 sm:gap-1.5'
+            : images.length === 2
+              ? 'aspect-[16/8] grid-cols-2 gap-1 sm:gap-1.5'
+              : 'aspect-[16/9] grid-cols-1'
+        }`}>
+          {images.map((image, index) => {
             const photoUrl = isTrustedMediaUrl(image.photoUrl, 'unsplash.com')
               ? image.photoUrl
               : image.url;
             return (
-              <figure key={image.id} className="group relative min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+              <figure
+                key={image.id}
+                className={`group relative min-h-0 min-w-0 overflow-hidden bg-[#171717] ${
+                  images.length >= 3 && index === 0 ? 'row-span-2' : ''
+                }`}
+              >
                 <a href={photoUrl} target="_blank" rel="noreferrer" aria-label={`View photo on Unsplash${image.attribution ? ` by ${image.attribution}` : ''}`}>
                   <img
                     src={image.url}
                     alt={image.alt}
                     loading="lazy"
                     decoding="async"
-                    className="aspect-[16/10] w-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.closest('figure')?.setAttribute('hidden', '');
+                    }}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   />
                 </a>
                 {isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') && (
@@ -5464,7 +5477,7 @@ FaceMeX intelligence rules:
 - Give a direct answer first, then choose only the headings, examples, steps, tables, code, equations, warnings, and links that genuinely help with this request. Never force a fixed recipe, lesson, career, or tutorial template onto unrelated questions, and avoid filler or invented details.
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
-- If a visual reference genuinely helps, place the standalone marker [[VISUAL_REFERENCE]] immediately after the relevant explanation or step. Do not add the marker for irrelevant photos or simple answers.
+- Place the standalone marker [[VISUAL_REFERENCE]] immediately after your concise direct-answer introduction, before detailed sections, so relevant visual references appear near the beginning of the reply. The system selects and loads context-aware references; do not invent image URLs or captions.
 - When a chart or process diagram materially improves the explanation, use a fenced chart JSON block with type, title, xLabel, yLabel, and labeled numeric data, or a fenced diagram JSON block with type "flow", title, and steps. Use only values grounded in the user's input or reliable context; otherwise explain the comparison without inventing chart data.
 - Format Markdown for readability. Use fenced code blocks for code, tables only for useful comparisons, and never output raw HTML or scripts.
 - Use the preceding user and assistant messages in this request as the active conversation. Resolve follow-ups from that history, preserve the user's details, and continue the task without restarting or asking them to repeat information.
