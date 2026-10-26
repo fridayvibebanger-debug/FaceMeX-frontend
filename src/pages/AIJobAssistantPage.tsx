@@ -78,6 +78,7 @@ import {
   createWorkspaceMediaPlan,
   extractYouTubeUrlFromText,
   isYouTubeSummaryRequest,
+  normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
   type WorkspaceVisualization,
@@ -177,6 +178,7 @@ type ChatMessage = {
       alt: string;
       attribution: string;
       attributionUrl: string;
+      photoUrl?: string;
     }>;
     videos: Array<{
       id: string;
@@ -2284,16 +2286,7 @@ function isUnavailableAIAnswer(answer: string) {
 }
 
 function normalizeAnswerText(raw: any, fallback: string) {
-  const answer =
-    raw?.answer ||
-    raw?.reply ||
-    raw?.response ||
-    raw?.text ||
-    raw?.content ||
-    raw?.message ||
-    (Array.isArray(raw?.suggestions) ? raw.suggestions.join('\n\n') : '') ||
-    '';
-
+  const answer = normalizeWorkspaceResponse(raw, fallback);
   return normalizeUssdCodes(clean(answer) || fallback);
 }
 
@@ -2441,9 +2434,9 @@ function renderMarkdownTable(
   return (
     <div
       key={key}
-      className="fm-markdown-table my-4 w-full max-w-full overflow-hidden rounded-xl border border-white/10 bg-[#171717]"
+      className="fm-markdown-table my-4 w-full max-w-full overflow-x-auto rounded-xl border border-white/10 bg-[#171717]"
     >
-      <table className="w-full table-fixed border-collapse text-left text-xs sm:text-sm lg:text-white">
+      <table className="w-full min-w-[520px] border-collapse text-left text-xs sm:text-sm lg:text-white">
         <thead className="fm-markdown-table-head bg-[#222222]">
           <tr>
             {Array.from({ length: columnCount }).map((_, index) => (
@@ -2723,26 +2716,35 @@ function WorkspaceResponseMedia({
       <section className="my-4 max-w-3xl" aria-label="Relevant visual references">
         <h3 className="mb-3 text-sm font-semibold text-white/90">Visual references</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {images.map((image) => (
-            <figure key={image.id} className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
-              <img
-                src={image.url}
-                alt={image.alt}
-                loading="lazy"
-                decoding="async"
-                className="aspect-[16/10] w-full object-cover"
-              />
-              <figcaption className="px-3 py-2 text-xs text-white/55">
-                Photo by{' '}
-                {isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') ? (
-                  <a href={image.attributionUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
-                    {image.attribution}
+          {images.map((image) => {
+            const photoUrl = isTrustedMediaUrl(image.photoUrl, 'unsplash.com')
+              ? image.photoUrl
+              : image.url;
+            return (
+              <figure key={image.id} className="group relative min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+                <a href={photoUrl} target="_blank" rel="noreferrer" aria-label={`View photo on Unsplash${image.attribution ? ` by ${image.attribution}` : ''}`}>
+                  <img
+                    src={image.url}
+                    alt={image.alt}
+                    loading="lazy"
+                    decoding="async"
+                    className="aspect-[16/10] w-full object-cover"
+                  />
+                </a>
+                {isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') && (
+                  <a
+                    href={image.attributionUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Photographer ${image.attribution} on Unsplash`}
+                    className="absolute bottom-2 right-2 rounded bg-black/75 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                  >
+                    Unsplash
                   </a>
-                ) : image.attribution}
-                {' '}on Unsplash
-              </figcaption>
-            </figure>
-          ))}
+                )}
+              </figure>
+            );
+          })}
         </div>
       </section>
     );
@@ -2753,12 +2755,12 @@ function WorkspaceResponseMedia({
     isTrustedMediaUrl(video.thumbnail, 'i.ytimg.com') &&
     extractYouTubeUrlFromText(video.watchUrl) !== null
   ).slice(0, 2);
-  const videos = verifiedVideos.length === 2 ? verifiedVideos : [];
+  const videos = verifiedVideos;
   if (!videos.length) return null;
 
   return (
     <section className="mt-6 max-w-3xl" aria-label="Related YouTube lessons">
-      <h3 className="mb-3 text-sm font-semibold text-white/90">Watch two relevant lessons</h3>
+      <h3 className="mb-3 text-sm font-semibold text-white/90">Relevant YouTube lessons</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {videos.map((video) => (
           <article key={video.id} className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
@@ -5551,6 +5553,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       const mediaPlan = createWorkspaceMediaPlan(
         finalPrompt,
         promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
+        displayAnswer,
       );
       const hasMediaPlan = !usageLimitReached && (mediaPlan.showImages || mediaPlan.showVideos);
 
@@ -5580,7 +5583,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           imageQuery: mediaPlan.showImages ? mediaPlan.imageQuery : '',
           videoQuery: mediaPlan.showVideos ? mediaPlan.videoQuery : '',
         }).then((result) => {
-          const images = Array.isArray(result?.images) ? result.images.slice(0, 4) : [];
+          const images = Array.isArray(result?.images) ? result.images.slice(0, 3) : [];
           const videos = Array.isArray(result?.videos) ? result.videos.slice(0, 2) : [];
           setMessages((previous) => previous.map((message) => message.id === responseId
             ? {
