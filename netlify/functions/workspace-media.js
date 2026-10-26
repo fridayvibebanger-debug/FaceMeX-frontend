@@ -202,7 +202,7 @@ export function createWorkspaceMediaHandler({
         attributionUrl: image.photographerProfileUrl,
         photoUrl: image.photoUrl,
       })),
-      videos: videos.length === 2 ? videos : [],
+      videos: videos.slice(0, 2),
       imageSearchAvailable,
       videoSearchAvailable,
     });
