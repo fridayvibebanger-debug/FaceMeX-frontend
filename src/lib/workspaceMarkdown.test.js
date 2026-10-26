@@ -126,6 +126,24 @@ test('preserves escaped table pipes and escaped inline math delimiters', () => {
   assert.equal(escapedMath.map((token) => token.text).join(''), String.raw`escaped \$not math$`);
 });
 
+test('normalizes raw HTML break tags without changing fenced code', () => {
+  const blocks = parseWorkspaceMarkdown([
+    'First line<br>second line',
+    '',
+    '| Item | Details |',
+    '| --- | --- |',
+    '| One | first<br />second |',
+    '',
+    '```html',
+    '<br>',
+    '```',
+  ].join('\n'));
+
+  assert.equal(blocks[0].text, 'First line second line');
+  assert.deepEqual(blocks[1].rows, [['One', 'first second']]);
+  assert.equal(blocks[2].text, '<br>');
+});
+
 test('formats inline math and keeps unsafe link schemes as ordinary text', () => {
   assert.deepEqual(tokenizeWorkspaceInline('Use \\(x^2 + y^2 = z^2\\), then read example.org/guide.'), [
     { type: 'text', text: 'Use ' },

@@ -47,8 +47,23 @@ function isBlockStart(lines, index) {
     (isTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1]));
 }
 
+function normalizeRawBreakTags(source) {
+  let insideCodeBlock = false;
+  return String(source || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => {
+      if (/^\s*```/.test(line)) {
+        insideCodeBlock = !insideCodeBlock;
+        return line;
+      }
+      return insideCodeBlock ? line : line.replace(/<br\s*\/?>/gi, ' ');
+    })
+    .join('\n');
+}
+
 export function parseWorkspaceMarkdown(source) {
-  const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = normalizeRawBreakTags(source).split('\n');
   const blocks = [];
 
   for (let index = 0; index < lines.length;) {

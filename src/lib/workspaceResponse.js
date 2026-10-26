@@ -85,7 +85,64 @@ export function isYouTubeSummaryRequest(input) {
     /\b(?:summari[sz](?:e|es|ed|ing)|summary|transcrib(?:e|es|ed|ing)|transcript)\b/i.test(input);
 }
 
-export function createWorkspaceMediaPlan(prompt, context = '') {
+function responseText(value) {
+  if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+  if (Array.isArray(value)) {
+    return value.map((item) => responseText(
+      typeof item === 'object' && item !== null
+        ? item.content ?? item.text ?? item.body ?? item.label
+        : item
+    )).filter(Boolean).join('\n');
+  }
+  return '';
+}
+
+export function normalizeWorkspaceResponse(raw, fallback = '') {
+  if (typeof raw === 'string') return raw.trim() || fallback;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
+
+  const directAnswer = [raw.answer, raw.reply, raw.response, raw.text, raw.content, raw.message]
+    .map(responseText)
+    .find(Boolean) || '';
+  const suggestions = Array.isArray(raw.suggestions)
+    ? raw.suggestions.map(responseText).filter(Boolean).join('\n\n')
+    : '';
+  const sections = Array.isArray(raw.sections)
+    ? raw.sections.map((section) => {
+      if (!section || typeof section !== 'object') return responseText(section);
+      const heading = responseText(section.heading ?? section.title);
+      const content = responseText(section.content ?? section.text ?? section.body);
+      return [heading ? `### ${heading}` : '', content].filter(Boolean).join('\n\n');
+    }).filter(Boolean)
+    : [];
+  const warnings = (Array.isArray(raw.warnings) ? raw.warnings : [raw.warnings])
+    .map(responseText)
+    .filter(Boolean);
+  const followUp = raw.followUp ?? raw.followup;
+  const question = responseText(followUp?.question);
+  const options = Array.isArray(followUp?.options)
+    ? followUp.options.map(responseText).filter(Boolean)
+    : Array.isArray(followUp?.choices)
+      ? followUp.choices.map(responseText).filter(Boolean)
+      : [];
+  const validFollowUp = question.length <= 160 &&
+    !/[|\]\r\n]/.test(question) &&
+    options.length >= 2 &&
+    options.length <= MAX_FOLLOW_UP_OPTIONS &&
+    options.every((option) => option.length <= 80 && !/[|\]\r\n]/.test(option));
+  const followUpMarker = validFollowUp
+    ? `[[FOLLOW_UP: ${question} | ${options.join(' | ')}]]`
+    : '';
+
+  return [
+    directAnswer || suggestions,
+    ...sections,
+    ...(warnings.length ? ['### Important cautions', ...warnings.map((warning) => `- ${warning}`)] : []),
+    followUpMarker,
+  ].filter(Boolean).join('\n\n') || fallback;
+}
+
+export function createWorkspaceMediaPlan(prompt, context = '', answer = '') {
   const currentPrompt = String(prompt || '').replace(/\s+/g, ' ').trim();
   const isShortFollowUp = currentPrompt.length <= 60 &&
     currentPrompt.split(/\s+/).length <= 4 &&
@@ -95,8 +152,6 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
     .replace(/\s+/g, ' ')
     .trim();
   const lower = request.toLowerCase();
-  const visualRequest = /\b(?:visual|image|picture|photo|diagram|illustration|inspiration|reference)\b/i.test(lower) ||
-    /\b(?:show|find|search for)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|photo|visual|diagram|illustration|inspiration|reference)\b/i.test(lower);
   const categories = [
     ['food', /\b(recipe|cook|cooking|food|dish|meal|chicken|bake|fry|ingredients)\b/i],
     ['people-fashion', /\b(outfit|fashion|clothing|beauty|hairstyle|makeup|model)\b/i],
@@ -110,18 +165,6 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
     ['programming-software', /\b(code|programming|software|javascript|typescript|react|python|api|component|interface|debug)\b/i],
   ];
   const category = categories.find(([, pattern]) => pattern.test(lower))?.[0] || 'other';
-  const tutorial = /\b(video|videos|youtube|watch|tutorial|walk ?through|lesson|learn|teach|explain|how (?:do|to|can|should)|step[- ]by[- ]step|demonstrat|build|make|cook|install|start|launch)\b/i.test(lower);
-  const visualOnly = visualRequest;
-  const structuredVisualRequest = /\b(diagram|chart|flowchart)\b/i.test(currentPrompt);
-  const imageEligible = !structuredVisualRequest && (
-    visualRequest ||
-    category === 'food' ||
-    category === 'places-travel' ||
-    category === 'nature-environment' ||
-    (category === 'education-science-technology' && /\b(photosynthesis|solar|visual|explain)\b/i.test(lower)) ||
-    (category === 'business-professional' && /\b(brand|branding|logo|visual|inspiration)\b/i.test(lower))
-  );
-  const videoEligible = !visualOnly && tutorial;
   const contextualUserPrompts = isShortFollowUp
     ? String(context || '')
       .split('\n')
@@ -132,15 +175,31 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
   const subject = [...contextualUserPrompts, currentPrompt]
     .filter(Boolean)
     .join(' — ')
-    .slice(-240)
     .slice(0, 180);
+  const answerText = String(answer || '');
+  const visualContext = answerText
+    .replace(/\[\[(?:VISUAL_REFERENCE|FOLLOW_UP):?[\s\S]*?\]\]/g, ' ')
+    .replace(/[#*_`[\]()>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+  const imageSubject = [subject.slice(0, 100), visualContext]
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 145)
+    .trim();
+  const videoSubject = [subject.slice(0, 120), visualContext.slice(0, 60)]
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 175)
+    .trim();
 
   return {
     category,
-    imageQuery: imageEligible && subject ? `${subject} visual reference` : '',
-    videoQuery: videoEligible && subject ? `${subject} tutorial lesson` : '',
-    showImages: Boolean(imageEligible && subject),
-    showVideos: Boolean(videoEligible && subject),
+    imageQuery: imageSubject ? `${imageSubject} visual reference`.slice(0, 160) : '',
+    videoQuery: videoSubject ? `${videoSubject} explainer lesson`.slice(0, 210) : '',
+    showImages: Boolean(imageSubject),
+    showVideos: Boolean(videoSubject),
   };
 }
 
