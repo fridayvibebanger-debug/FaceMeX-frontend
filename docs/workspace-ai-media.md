@@ -1,24 +1,25 @@
 # Workspace AI response media
 
-The Workspace AI response renderer uses the existing AI providers and conversation flow. Image and video search run separately after an answer is displayed; media-provider errors do not fail or replace the answer.
+The Workspace AI response displays media only after its text answer is available. Media searches run independently so provider failures do not replace or delay the answer. Results are attached to the assistant message that requested them.
 
-## Netlify environment variables
+## Images: Unsplash through Netlify
 
-Configure these in the Netlify site environment for deployment. For local Vite development, configure them in an untracked server-side `.env.local` file. Do not use a `VITE_` prefix, add the values to frontend code, or commit them:
+Configure `UNSPLASH_ACCESS_KEY` in the Netlify site environment for deployment. For local Vite development, put it in an untracked server-side `.env.local` file. Do not use a `VITE_` prefix, put the key in frontend code, or commit it.
 
-- `YOUTUBE_API_KEY` — server-side key for YouTube Data API v3 video search and availability checks. Enable only the YouTube Data API v3 for this key.
-- `UNSPLASH_ACCESS_KEY` — server-side Unsplash API access key for relevant photo search.
+The authenticated `POST /api/workspace/media` endpoint is routed by `netlify.toml` to the Netlify `workspace-media` function. That function uses the shared Unsplash search helper to call `https://api.unsplash.com/search/photos` with a server-side `Authorization: Client-ID …` header. It returns up to three validated Unsplash image URLs with photographer and photo attribution links. It does not call Wikimedia or another image provider.
 
-The media function also verifies the signed-in user with the existing Supabase configuration (`SUPABASE_URL` and `SUPABASE_ANON_KEY`; the current `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` values are accepted as fallbacks).
+The function verifies the signed-in user using the existing Supabase configuration (`SUPABASE_URL` and `SUPABASE_ANON_KEY`; the current `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` names are accepted as fallbacks). If the Unsplash key is missing, results are empty; if Unsplash fails, the answer remains available without images. Unsplash results are cached in memory for five minutes and concurrent identical searches are deduplicated.
 
-If either media key is unset, that provider is skipped. The Workspace now requests image and video references for every non-empty AI answer; searches include the prompt and a short answer excerpt. This deliberately increases provider usage and latency: each answer can use one Unsplash search and up to two YouTube Data API calls. Unsplash searches use `GET https://api.unsplash.com/search/photos` with `query`, `per_page=3`, `content_filter=high`, and a server-side `Authorization: Client-ID …` header. The `/api/workspace/images?query=...` endpoint returns only image URL, alt text, photographer name, photographer profile URL, and original photo URL. Attribution links include `utm_source=facemexsocial&utm_medium=referral`; the image card keeps attribution links available on hover or keyboard focus rather than showing a photographer caption. Unsplash results are cached in memory for five minutes and concurrent identical searches are deduplicated.
+## Videos: YouTube through Render
 
-The Vite development server wires `/api/workspace/media` directly to the same Netlify function handler used in production. Restart `npm run dev` after changing `.env.local`. This local development middleware is not included in production builds; deployed requests continue to use the Netlify redirects.
+YouTube searches use the existing Render backend route, `GET /api/youtube/search`. The Workspace calls it through the same `API_URL` and authenticated API client used by the app's Watch and lesson-search features. The YouTube API key must remain in the Render backend's existing environment variable; this frontend repository does not need or receive the key. Do not configure a YouTube search key in Netlify for this flow.
 
-If a provider times out, fails, or returns no suitable results, the text response still renders normally. Unsplash rate limits return HTTP 429 with a bounded `Retry-After`; other provider errors return a safe unavailable response. YouTube cards are shown for up to two distinct public, embeddable videos with usable thumbnails; one valid result is displayed when only one is available. Two videos require `YOUTUBE_API_KEY`, available quota, and two valid results.
+The reply card accepts up to two valid results from the backend, including the actual video title, ID, channel, thumbnail, and watch link. If the Render route or its YouTube provider is unavailable, no video cards are shown and the text answer is unaffected.
 
-## Deploy and verify
+## Routing and deployment
 
-Deploy the Netlify site after setting the environment variables. The Workspace reply flow calls the authenticated `/api/workspace/media` endpoint, which can return both relevant Unsplash images and YouTube lessons. The dedicated `/api/workspace/images` route is also available and uses the same Unsplash search helper. Sign in to the deployed app and try an instructional prompt (for example, “How do I make crispy fried chicken with rice?”) and a general fact prompt (for example, “What is the capital of South Africa?”). The first may include relevant media when provider credentials and results are available; the second should remain a concise text response.
+The `/api/workspace/media` redirect in `netlify.toml` is forced and placed before the single-page-app fallback, so the image request is handled by the Netlify function rather than frontend HTML. The Render `/api/youtube/search` request is made directly to the configured backend origin; it is not routed through Netlify.
 
-The YouTube search uses API quota, so keep the media planner enabled only for requests likely to benefit from demonstrations or lessons and monitor quota usage in Google Cloud.
+The Vite development server exposes `/api/workspace/media` using the same Netlify function handler. Restart `npm run dev` after changing local server-side environment configuration.
+
+To verify a deployment, sign in and ask a question that benefits from images, then explicitly ask for relevant videos. In the browser network panel, image searches should target the same-origin `/api/workspace/media` route and video searches should target the configured Render origin at `/api/youtube/search`. Confirm that response cards display only returned results and that failures leave the text answer intact.
