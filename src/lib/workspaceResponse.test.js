@@ -4,7 +4,9 @@ import {
   extractYouTubeUrlFromText,
   extractYouTubeVideoId,
   createWorkspaceMediaPlan,
+  isExplicitTechnicalRequest,
   isYouTubeSummaryRequest,
+  normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
@@ -94,76 +96,109 @@ test('preserves plain-text response fallbacks when structured data is unavailabl
   }), '### Explanation\n\nSolar panels convert sunlight to electricity.');
 });
 
-test('plans relevant images and video lessons for every response intent', () => {
+test('plans images and videos only when the request makes them relevant', () => {
   const foodPlan = createWorkspaceMediaPlan('How do I make crispy fried chicken with rice?');
   assert.equal(foodPlan.category, 'food');
   assert.equal(foodPlan.showImages, true);
-  assert.equal(foodPlan.showVideos, true);
-  assert.match(foodPlan.imageQuery, /crispy fried chicken with rice/);
+  assert.equal(foodPlan.showVideos, false);
+  assert.match(foodPlan.imageQuery, /crispy fried chicken with rice/i);
+  assert.doesNotMatch(foodPlan.imageQuery, /visual reference/i);
 
   const codePlan = createWorkspaceMediaPlan('Fix this React component: const App = () => <main />;');
   assert.equal(codePlan.category, 'programming-software');
-  assert.equal(codePlan.showImages, true);
-  assert.equal(codePlan.showVideos, true);
-  assert.match(codePlan.imageQuery, /React component/);
-  assert.match(codePlan.videoQuery, /React component/);
+  assert.equal(codePlan.showImages, false);
+  assert.equal(codePlan.showVideos, false);
+  assert.equal(codePlan.imageQuery, '');
+  assert.equal(codePlan.videoQuery, '');
 
   const logoPlan = createWorkspaceMediaPlan('Show me visual inspiration for a modern delivery company logo.');
   assert.equal(logoPlan.showImages, true);
-  assert.equal(logoPlan.showVideos, true);
+  assert.equal(logoPlan.showVideos, false);
 
   const factPlan = createWorkspaceMediaPlan('What is the capital of South Africa?');
-  assert.equal(factPlan.showImages, true);
-  assert.equal(factPlan.showVideos, true);
-  assert.match(factPlan.imageQuery, /capital of South Africa/);
+  assert.equal(factPlan.showImages, false);
+  assert.equal(factPlan.showVideos, false);
 
   const examplePlan = createWorkspaceMediaPlan('What is compound interest? Show me an example.');
-  assert.equal(examplePlan.showImages, true);
-  assert.equal(examplePlan.showVideos, true);
+  assert.equal(examplePlan.showImages, false);
+  assert.equal(examplePlan.showVideos, false);
 
   const greetingPlan = createWorkspaceMediaPlan('Hi');
-  assert.equal(greetingPlan.showImages, true);
-  assert.equal(greetingPlan.showVideos, true);
-  assert.match(greetingPlan.imageQuery, /Hi/);
+  assert.equal(greetingPlan.showImages, false);
+  assert.equal(greetingPlan.showVideos, false);
+  assert.equal(greetingPlan.imageQuery, '');
 
   const requestedVideosPlan = createWorkspaceMediaPlan('Find me two videos about compound interest.');
+  assert.equal(requestedVideosPlan.showImages, false);
   assert.equal(requestedVideosPlan.showVideos, true);
+  assert.match(requestedVideosPlan.videoQuery, /compound interest/i);
 
   const diagramPlan = createWorkspaceMediaPlan('Show me a diagram of how solar panels generate electricity.');
   assert.equal(diagramPlan.showImages, true);
-  assert.equal(diagramPlan.showVideos, true);
+  assert.equal(diagramPlan.showVideos, false);
 
   const photosynthesisPlan = createWorkspaceMediaPlan('Explain photosynthesis to a 13-year-old.');
   assert.equal(photosynthesisPlan.category, 'education-science-technology');
   assert.equal(photosynthesisPlan.showImages, true);
-  assert.equal(photosynthesisPlan.showVideos, true);
+  assert.equal(photosynthesisPlan.showVideos, false);
 
   const solarPlan = createWorkspaceMediaPlan('Explain how solar panels generate electricity.');
   assert.equal(solarPlan.showImages, true);
-  assert.equal(solarPlan.showVideos, true);
+  assert.equal(solarPlan.showVideos, false);
 
   const startupPlan = createWorkspaceMediaPlan('Help me start a delivery business with no money.');
-  assert.equal(startupPlan.showImages, true);
-  assert.equal(startupPlan.showVideos, true);
+  assert.equal(startupPlan.showImages, false);
+  assert.equal(startupPlan.showVideos, false);
 
   const websitePlan = createWorkspaceMediaPlan('Give me a tutorial on how to build a website.');
-  assert.equal(websitePlan.showImages, true);
-  assert.equal(websitePlan.showVideos, true);
+  assert.equal(websitePlan.showImages, false);
+  assert.equal(websitePlan.showVideos, false);
 
   const cvPlan = createWorkspaceMediaPlan('Write a professional CV for an entry-level applicant.');
-  assert.equal(cvPlan.showImages, true);
-  assert.equal(cvPlan.showVideos, true);
+  assert.equal(cvPlan.showImages, false);
+  assert.equal(cvPlan.showVideos, false);
+
+  const cvExamplePlan = createWorkspaceMediaPlan('Show me examples of a strong CV template.');
+  assert.equal(cvExamplePlan.showImages, true);
+  assert.match(cvExamplePlan.imageQuery, /CV resume template/i);
+  assert.equal(cvExamplePlan.showVideos, false);
 
   const contextPlan = createWorkspaceMediaPlan('Wings', 'user: How do I make crispy fried chicken?\nassistant: Which cut do you have?');
   assert.match(contextPlan.imageQuery, /crispy fried chicken/);
+  assert.equal(contextPlan.showImages, true);
 
   const sectionPlan = createWorkspaceMediaPlan(
     'Explain solar energy.',
-    '',
-    'Solar panels convert sunlight into electricity through photovoltaic cells.\n[[VISUAL_REFERENCE]]',
   );
   assert.match(sectionPlan.imageQuery, /solar energy/i);
-  assert.match(sectionPlan.imageQuery, /photovoltaic cells/i);
+  assert.doesNotMatch(sectionPlan.imageQuery, /photovoltaic cells/i);
+});
+
+test('keeps accidental code and machine output out of everyday replies but preserves explicit technical answers', () => {
+  const cookingQuestion = 'How do I make fried chicken?';
+  const codeAnswer = 'Mix the flour and seasoning.\n\n```js\nconst pan = document.querySelector(\"#pan\");\n```';
+  assert.equal(isExplicitTechnicalRequest(cookingQuestion), false);
+  assert.doesNotMatch(normalizeWorkspaceAnswerForDisplay(codeAnswer, cookingQuestion), /```|const pan/);
+  assert.equal(isExplicitTechnicalRequest('What is a function in mathematics?'), false);
+  assert.equal(isExplicitTechnicalRequest('Explain what JavaScript is in simple terms.'), false);
+  assert.doesNotMatch(
+    normalizeWorkspaceAnswerForDisplay('const pan = document.querySelector(\"#pan\");\npan.addEventListener(\"click\", cook);', cookingQuestion),
+    /const pan|addEventListener/,
+  );
+  assert.equal(isExplicitTechnicalRequest('Write a React component that lists jobs.'), true);
+  assert.equal(isExplicitTechnicalRequest('Show me Python code that sorts a list.'), true);
+  assert.equal(normalizeWorkspaceAnswerForDisplay(codeAnswer, 'Write JavaScript code for this.'), codeAnswer);
+  assert.match(
+    normalizeWorkspaceAnswerForDisplay('{"choices":[{"message":{"content":"internal"}}]}', cookingQuestion),
+    /plain language/i,
+  );
+  assert.match(
+    normalizeWorkspaceAnswerForDisplay('Traceback (most recent call last):\n  File \"app.py\"', cookingQuestion),
+    /plain language/i,
+  );
+  const validChart = '```chart\n{\"type\":\"bar\",\"title\":\"Totals\",\"xLabel\":\"Month\",\"yLabel\":\"Count\",\"data\":[{\"label\":\"May\",\"value\":2}]}\n```';
+  assert.equal(normalizeWorkspaceAnswerForDisplay(validChart, cookingQuestion), validChart);
+  assert.equal(normalizeWorkspaceAnswerForDisplay('```chart\n{\"raw\":\"data\"}\n```', cookingQuestion), 'Sorry, I couldn’t format that answer clearly. Please ask again, and I’ll try to explain it in plain language.');
 });
 
 test('validates selectable follow-ups and leaves malformed markers as safe text', () => {

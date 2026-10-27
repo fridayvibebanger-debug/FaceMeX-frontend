@@ -25,6 +25,10 @@ export function extractYouTubeUrlFromText(input: string): string | null;
 
 export function isYouTubeSummaryRequest(input: string): boolean;
 
+export function isExplicitTechnicalRequest(prompt: string): boolean;
+
+export function normalizeWorkspaceAnswerForDisplay(answer: string, prompt?: string): string;
+
 export function normalizeWorkspaceResponse(raw: unknown, fallback?: string): string;
 
 export type WorkspaceMediaPlan = {
@@ -35,7 +39,7 @@ export type WorkspaceMediaPlan = {
   showVideos: boolean;
 };
 
-export function createWorkspaceMediaPlan(prompt: string, context?: string, answer?: string): WorkspaceMediaPlan;
+export function createWorkspaceMediaPlan(prompt: string, context?: string): WorkspaceMediaPlan;
 
 export type WorkspaceFollowUp = {
   question: string;

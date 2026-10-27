@@ -128,7 +128,7 @@ export function renderMarkdownToEditorHtml(text, slides = false) {
     if (index + 1 < lines.length) {
       const tableRows = [];
       if (parseMarkdownTable(line, lines[index + 1])) {
-        tableRows.push(lines[index]);
+        tableRows.push(lines[index], lines[index + 1]);
         index += 2;
         while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
           tableRows.push(lines[index]);

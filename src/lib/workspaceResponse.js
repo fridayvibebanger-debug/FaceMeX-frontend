@@ -142,7 +142,71 @@ export function normalizeWorkspaceResponse(raw, fallback = '') {
   ].filter(Boolean).join('\n\n') || fallback;
 }
 
-export function createWorkspaceMediaPlan(prompt, context = '', answer = '') {
+const TECHNICAL_REQUEST_PATTERN = /\b(?:write|generate|provide|show|give|create|build|implement|fix|debug|refactor|review|run|execute|convert|translate)\b.{0,80}\b(?:code|script|program|function|component|query|regex|regular expression|javascript|typescript|react|python|java|c\+\+|html|css|sql|json|yaml|xml|api|terminal|command line)\b|\b(?:source code|example code|sample code|programming help|coding help|debugging help|technical documentation)\b|\b(?:code|coding|programming)\b.{0,50}\b(?:example|snippet|function|component|script|program|query)\b/i;
+const CODE_LANGUAGE_PATTERN = /^(?:[a-z][\w+-]*|)$/i;
+const CODE_SYNTAX_PATTERN = /(?:^|\n)\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|<\/?[a-z][^>]*>|[\w$]+\s*=>)/i;
+const CODE_LINE_PATTERN = /^\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|console\.(?:log|error|warn)\s*\(|\/\/|#include\b|<\/?[a-z][^>]*>)/i;
+const INTERNAL_OUTPUT_PATTERN = /(?:\b(?:system prompt|hidden instructions|developer message|internal reasoning|stack trace|traceback)\b|^\s*at\s+[\w.$]+\s*\(|\b(?:TypeError|ReferenceError|SyntaxError):\s)/im;
+
+export function isExplicitTechnicalRequest(prompt) {
+  const text = String(prompt || '');
+  if (/\b(?:without|no|don't|do not|not)\s+(?:include\s+|show\s+|give\s+|use\s+)?(?:any\s+)?(?:source\s+)?code\b/i.test(text)) {
+    return false;
+  }
+  return TECHNICAL_REQUEST_PATTERN.test(text);
+}
+
+function isMachineResponseJson(text) {
+  if (!/^\s*[\[{]/.test(text)) return false;
+  try {
+    const value = JSON.parse(text);
+    return Boolean(value && typeof value === 'object');
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
+  let text = String(answer || '').trim();
+  if (!text || isExplicitTechnicalRequest(prompt)) return text;
+  if (
+    INTERNAL_OUTPUT_PATTERN.test(text) ||
+    /^\s*(?:system|developer)\s*:/im.test(text) ||
+    /^\s*you are facemex\b/im.test(text) ||
+    isMachineResponseJson(text)
+  ) {
+    return 'Sorry, I couldn’t format that answer clearly. Please ask again, and I’ll try to explain it in plain language.';
+  }
+
+  text = text.replace(/```([^\n`]*)\n([\s\S]*?)```/g, (block, rawLanguage, body) => {
+    const language = String(rawLanguage || '').trim().toLowerCase();
+    if (['chart', 'diagram'].includes(language)) {
+      return parseWorkspaceVisualization(language, body) ? block : '';
+    }
+    const isCode = (
+      CODE_LANGUAGE_PATTERN.test(language) &&
+      /^(?:js|jsx|ts|tsx|py|python|java|c|cpp|csharp|cs|go|rust|php|ruby|swift|kotlin|sql|html|css|json|bash|sh|shell|powershell|yaml|yml|xml|jsonc)$/.test(language)
+    ) || CODE_SYNTAX_PATTERN.test(body);
+    return isCode ? '' : block;
+  });
+  text = text.replace(/`([^`\n]+)`/g, (inlineCode, body) =>
+    CODE_SYNTAX_PATTERN.test(body) ? '' : inlineCode
+  );
+  text = text
+    .split(/\n{2,}/)
+    .filter((paragraph) => !(
+      CODE_SYNTAX_PATTERN.test(paragraph) ||
+      paragraph.split('\n').some((line) => CODE_LINE_PATTERN.test(line))
+    ))
+    .join('\n\n')
+    .replace(/<\/?[a-z][^>]*>/gi, '');
+  if (!text.trim()) {
+    return 'Sorry, I couldn’t format that answer clearly. Please ask again, and I’ll try to explain it in plain language.';
+  }
+  return text.trim();
+}
+
+export function createWorkspaceMediaPlan(prompt, context = '') {
   const currentPrompt = String(prompt || '').replace(/\s+/g, ' ').trim();
   const isShortFollowUp = currentPrompt.length <= 60 &&
     currentPrompt.split(/\s+/).length <= 4 &&
@@ -153,6 +217,7 @@ export function createWorkspaceMediaPlan(prompt, context = '', answer = '') {
     .trim();
   const lower = request.toLowerCase();
   const categories = [
+    ['programming-software', /\b(code|programming|software|javascript|typescript|react|python|api|component|interface|debug)\b/i],
     ['food', /\b(recipe|cook|cooking|food|dish|meal|chicken|bake|fry|ingredients)\b/i],
     ['people-fashion', /\b(outfit|fashion|clothing|beauty|hairstyle|makeup|model)\b/i],
     ['products-shopping', /\b(product|shopping|buy|compare|laptop|phone|gadget)\b/i],
@@ -162,7 +227,6 @@ export function createWorkspaceMediaPlan(prompt, context = '', answer = '') {
     ['architecture-engineering', /\b(architecture|building|construction|engineering|blueprint|structure)\b/i],
     ['nature-environment', /\b(nature|animal|wildlife|plant|environment|climate|garden)\b/i],
     ['art-design', /\b(art|design|creative|illustration|graphic|logo|inspiration)\b/i],
-    ['programming-software', /\b(code|programming|software|javascript|typescript|react|python|api|component|interface|debug)\b/i],
   ];
   const category = categories.find(([, pattern]) => pattern.test(lower))?.[0] || 'other';
   const contextualUserPrompts = isShortFollowUp
@@ -175,31 +239,38 @@ export function createWorkspaceMediaPlan(prompt, context = '', answer = '') {
   const subject = [...contextualUserPrompts, currentPrompt]
     .filter(Boolean)
     .join(' — ')
-    .slice(0, 180);
-  const answerText = String(answer || '');
-  const visualContext = answerText
-    .replace(/\[\[(?:VISUAL_REFERENCE|FOLLOW_UP):?[\s\S]*?\]\]/g, ' ')
-    .replace(/[#*_`[\]()>|]/g, ' ')
+    .slice(0, 180)
+    .replace(/[\r\n|]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 100);
-  const imageSubject = [subject.slice(0, 100), visualContext]
-    .filter(Boolean)
-    .join(' ')
-    .slice(0, 145)
+    .replace(/^(?:please\s+)?(?:how\s+(?:do|can|should)\s+i|what\s+is|explain|tell\s+me\s+about|show\s+me|find\s+me|give\s+me)\s+/i, '')
+    .replace(/[?!.,;:]+$/g, '')
     .trim();
-  const videoSubject = [subject.slice(0, 120), visualContext.slice(0, 60)]
-    .filter(Boolean)
-    .join(' ')
-    .slice(0, 175)
-    .trim();
+  const asksForImages = /\b(?:image|images|photo|photos|picture|pictures|visual reference|show me what .{1,35} looks like)\b/i.test(request);
+  const asksForVideos = /\b(?:video|videos|youtube|watch|lesson video|find .* lesson|tutorial video)\b/i.test(request);
+  const hasVisualTopic = [
+    category === 'food',
+    category === 'people-fashion',
+    category === 'products-shopping',
+    category === 'places-travel',
+    category === 'education-science-technology',
+    category === 'architecture-engineering',
+    category === 'nature-environment',
+    category === 'art-design',
+    /\b(?:logo|branding|cv example|resume example|cv template|resume template|portfolio example)\b/i.test(request),
+  ].some(Boolean);
+  const imageIsRelevant = category !== 'programming-software' && (asksForImages || hasVisualTopic);
+  const imageQuery = subject
+    ? `${subject} ${/\b(cv|resume)\b/i.test(request) ? 'CV resume template' : ''}`.replace(/\s+/g, ' ').trim().slice(0, 160)
+    : '';
+  const videoQuery = subject ? subject.slice(0, 210) : '';
 
   return {
     category,
-    imageQuery: imageSubject ? `${imageSubject} visual reference`.slice(0, 160) : '',
-    videoQuery: videoSubject ? `${videoSubject} explainer lesson`.slice(0, 210) : '',
-    showImages: Boolean(imageSubject),
-    showVideos: Boolean(videoSubject),
+    imageQuery: imageIsRelevant ? imageQuery : '',
+    videoQuery: asksForVideos ? videoQuery : '',
+    showImages: Boolean(imageIsRelevant && imageQuery),
+    showVideos: Boolean(asksForVideos && videoQuery),
   };
 }
 
