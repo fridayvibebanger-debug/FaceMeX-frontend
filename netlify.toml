@@ -19,7 +19,7 @@
 
 [[redirects]]
   from = "/api/auth/*"
-  to = "https://facemex-backend.onrender.com/api/auth/:splat"
+  to = "https://facemex-backend-4akg.onrender.com/api/auth/:splat"
   status = 200
   force = true
 
@@ -36,18 +36,6 @@
 [[redirects]]
   from = "/api/youtube/summarize"
   to = "/.netlify/functions/youtube-summarize"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/workspace/images"
-  to = "/.netlify/functions/workspace-images"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/workspace/media"
-  to = "/.netlify/functions/workspace-media"
   status = 200
   force = true
 
