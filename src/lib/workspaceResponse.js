@@ -263,7 +263,7 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
   const imageQuery = subject
     ? `${subject} ${/\b(cv|resume)\b/i.test(request) ? 'CV resume template' : ''}`.replace(/\s+/g, ' ').trim().slice(0, 160)
     : '';
-  const videoQuery = subject ? subject.slice(0, 210) : '';
+  const videoQuery = subject ? subject.slice(0, 200) : '';
 
   return {
     category,
