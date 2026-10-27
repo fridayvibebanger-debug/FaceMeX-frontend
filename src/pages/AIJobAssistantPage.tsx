@@ -5599,9 +5599,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
       if (hasMediaPlan) {
         const imageRequest = mediaPlan.showImages
-          ? api.postToSameOrigin('/api/workspace/media', {
-              imageQuery: mediaPlan.imageQuery,
-            })
+          ? api.get(`/api/media/images/search?query=${encodeURIComponent(mediaPlan.imageQuery)}`)
           : Promise.resolve({ images: [] });
         const videoRequest = mediaPlan.showVideos
           ? api.get(`/api/youtube/search?q=${encodeURIComponent(mediaPlan.videoQuery)}&limit=2&duration=medium`)
