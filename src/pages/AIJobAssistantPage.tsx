@@ -78,6 +78,7 @@ import {
   createWorkspaceMediaPlan,
   extractYouTubeUrlFromText,
   isYouTubeSummaryRequest,
+  normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
@@ -2606,12 +2607,14 @@ function ChatGPTStyleText({
   text,
   onLinkClick,
   visualReference,
+  sourcePrompt,
 }: {
   text: string;
   onLinkClick?: (url: string, label?: string) => void;
   visualReference?: ReactNode;
+  sourcePrompt?: string;
 }) {
-  const safeText = normalizeBrokenMarkdownLinks(text);
+  const safeText = normalizeBrokenMarkdownLinks(normalizeWorkspaceAnswerForDisplay(text, sourcePrompt));
   const parsedBlocks = parseWorkspaceMarkdown(safeText);
   const hasVisualMarker = parsedBlocks.some((block) => block.type === 'visual-reference');
   const blocks = parsedBlocks.map((block, index) => {
@@ -2744,16 +2747,17 @@ function WorkspaceResponseMedia({
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   />
                 </a>
-                {isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') && (
-                  <a
-                    href={image.attributionUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`Photographer ${image.attribution} on Unsplash`}
-                    className="absolute bottom-2 right-2 rounded bg-black/75 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-                  >
-                    Unsplash
-                  </a>
+                {image.attribution && isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') && (
+                  <figcaption className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/85 to-transparent px-2 pb-2 pt-5 text-[10px] leading-4 text-white sm:text-xs">
+                    <span>Photo by</span>
+                    <a href={image.attributionUrl} target="_blank" rel="noreferrer" className="max-w-[45%] truncate underline underline-offset-2">
+                      {image.attribution}
+                    </a>
+                    <span>on</span>
+                    <a href={photoUrl} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
+                      Unsplash
+                    </a>
+                  </figcaption>
                 )}
               </figure>
             );
@@ -5474,10 +5478,12 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
 FaceMeX intelligence rules:
 - Behave like a polished ChatGPT-style assistant, but focused on FaceMeX users: jobs, students, founders, funding, applications, business and daily practical help.
-- Give a direct answer first, then choose only the headings, examples, steps, tables, code, equations, warnings, and links that genuinely help with this request. Never force a fixed recipe, lesson, career, or tutorial template onto unrelated questions, and avoid filler or invented details.
+- Give a direct answer first, then choose only the headings, examples, steps, tables, equations, warnings, and links that genuinely help with this request. Include source code only when the user explicitly asks for code or programming help. Never force a fixed recipe, lesson, career, or tutorial template onto unrelated questions, and avoid filler or invented details.
+- For everyday questions, answer in natural, plain language. Do not include source code, terminal commands, raw JSON, API payloads, database records, HTML, internal instructions, or technical diagnostics unless the user explicitly asks for programming, code, or technical output.
+- Do not add code merely because it might be useful. For explicit programming requests, provide correct code in a fenced block with a brief explanation. For all other requests, explain the answer in ordinary language and readable Markdown.
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
-- Place the standalone marker [[VISUAL_REFERENCE]] immediately after your concise direct-answer introduction, before detailed sections, so relevant visual references appear near the beginning of the reply. The system selects and loads context-aware references; do not invent image URLs or captions.
+- When a relevant photo would materially improve the answer, place the standalone marker [[VISUAL_REFERENCE]] after your concise introduction so it appears near the beginning. Do not request images for greetings, simple facts, code, or unrelated topics. The system selects images from the user's actual subject; never invent image URLs, results, or captions.
 - When a chart or process diagram materially improves the explanation, use a fenced chart JSON block with type, title, xLabel, yLabel, and labeled numeric data, or a fenced diagram JSON block with type "flow", title, and steps. Use only values grounded in the user's input or reliable context; otherwise explain the comparison without inventing chart data.
 - Format Markdown for readability. Use fenced code blocks for code, tables only for useful comparisons, and never output raw HTML or scripts.
 - Use the preceding user and assistant messages in this request as the active conversation. Resolve follow-ups from that history, preserve the user's details, and continue the task without restarting or asking them to repeat information.
@@ -5517,8 +5523,6 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
         const res = await api.postViaSameOriginProxy('/api/ai/pro/job-assistant', payload);
 
-        console.log('AI Response:', res);
-
         data = unwrapApiResponse(res);
       } catch (err: any) {
         console.error('Primary AI endpoint failed:', err);
@@ -5551,7 +5555,10 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         throw new Error(errorMessage);
       }
 
-      const normalizedAnswer = normalizeAnswerText(data, '');
+      const normalizedAnswer = normalizeWorkspaceAnswerForDisplay(
+        normalizeAnswerText(data, ''),
+        finalPrompt,
+      );
       if (!normalizedAnswer.trim() || isUnavailableAIAnswer(normalizedAnswer)) {
         throw new Error('The AI service returned an empty or unavailable response.');
       }
@@ -5566,7 +5573,6 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       const mediaPlan = createWorkspaceMediaPlan(
         finalPrompt,
         promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
-        displayAnswer,
       );
       const hasMediaPlan = !usageLimitReached && (mediaPlan.showImages || mediaPlan.showVideos);
 
@@ -5592,12 +5598,48 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       ]);
 
       if (hasMediaPlan) {
-        void api.postToSameOrigin('/api/workspace/media', {
-          imageQuery: mediaPlan.showImages ? mediaPlan.imageQuery : '',
-          videoQuery: mediaPlan.showVideos ? mediaPlan.videoQuery : '',
-        }).then((result) => {
-          const images = Array.isArray(result?.images) ? result.images.slice(0, 3) : [];
-          const videos = Array.isArray(result?.videos) ? result.videos.slice(0, 2) : [];
+        const imageRequest = mediaPlan.showImages
+          ? api.postToSameOrigin('/api/workspace/media', {
+              imageQuery: mediaPlan.imageQuery,
+            })
+          : Promise.resolve({ images: [] });
+        const videoRequest = mediaPlan.showVideos
+          ? api.get(`/api/youtube/search?q=${encodeURIComponent(mediaPlan.videoQuery)}&limit=2&duration=medium`)
+          : Promise.resolve({ videos: [] });
+
+        void Promise.allSettled([imageRequest, videoRequest]).then(([imageResult, videoResult]) => {
+          if (imageResult.status === 'rejected') {
+            console.warn('FaceMeX optional Unsplash image search is unavailable', {
+              errorName: imageResult.reason instanceof Error ? imageResult.reason.name : 'UnknownError',
+            });
+          }
+          if (videoResult.status === 'rejected') {
+            console.warn('FaceMeX optional Render video search is unavailable', {
+              errorName: videoResult.reason instanceof Error ? videoResult.reason.name : 'UnknownError',
+            });
+          }
+
+          const imageData = imageResult.status === 'fulfilled' ? imageResult.value : null;
+          const images = Array.isArray(imageData?.images) ? imageData.images.slice(0, 3) : [];
+          const videoData = videoResult.status === 'fulfilled'
+            ? unwrapApiResponse(videoResult.value)
+            : null;
+          const videos = normalizeYouTubeLessonVideos(videoData)
+            .filter((video) =>
+              /^[A-Za-z0-9_-]{11}$/.test(video.videoId) &&
+              Boolean(video.thumbnail && isTrustedMediaUrl(video.thumbnail, 'i.ytimg.com')) &&
+              Boolean(extractYouTubeUrlFromText(video.watchUrl))
+            )
+            .slice(0, 2)
+            .map((video) => ({
+              id: video.videoId,
+              title: video.title,
+              channelTitle: video.channelTitle || '',
+              duration: '',
+              thumbnail: video.thumbnail || '',
+              watchUrl: video.watchUrl,
+              relevance: `Related to: ${mediaPlan.videoQuery}`,
+            }));
           setMessages((previous) => previous.map((message) => message.id === responseId
             ? {
                 ...message,
@@ -5607,22 +5649,6 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
                   showVideos: mediaPlan.showVideos,
                   images,
                   videos,
-                },
-              }
-            : message));
-        }).catch((error) => {
-          console.warn('FaceMeX optional response media is unavailable', {
-            errorName: error instanceof Error ? error.name : 'UnknownError',
-          });
-          setMessages((previous) => previous.map((message) => message.id === responseId
-            ? {
-                ...message,
-                media: {
-                  status: 'ready',
-                  showImages: mediaPlan.showImages,
-                  showVideos: mediaPlan.showVideos,
-                  images: [],
-                  videos: [],
                 },
               }
             : message));
@@ -9552,6 +9578,7 @@ Start with the most useful next action. Do not invent personal details, course r
                                 <ChatGPTStyleText
                                   text={message.content}
                                   onLinkClick={handleGeneratedLinkClick}
+                                  sourcePrompt={previousUserText}
                                   visualReference={message.media?.showImages
                                     ? <WorkspaceResponseMedia media={message.media} mode="images" />
                                     : undefined}
