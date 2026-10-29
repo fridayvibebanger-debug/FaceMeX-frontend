@@ -75,6 +75,7 @@ import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from 
 import { buildPersonalizationContext, getPersonalizationProfile, PERSONALIZATION_CHANGE_EVENT, type PersonalizationProfile } from '@/lib/personalization';
 import { supabase } from '@/lib/supabaseClient';
 import {
+  createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
   extractYouTubeUrlFromText,
   isYouTubeSummaryRequest,
@@ -82,10 +83,17 @@ import {
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
+  selectRelevantYouTubeLessonVideos,
   type WorkspaceVisualization,
 } from '@/lib/workspaceResponse';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import { parseWorkspaceMarkdown, tokenizeWorkspaceInline } from '@/lib/workspaceMarkdown';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const PracticalLabLibrary = lazy(() => import('./PracticalLabLibrary'));
 
@@ -2291,7 +2299,7 @@ function normalizeAnswerText(raw: any, fallback: string) {
   return normalizeUssdCodes(clean(answer) || fallback);
 }
 
-function normalizeYouTubeLessonVideos(raw: any): YouTubeLessonVideo[] {
+function normalizeYouTubeLessonVideos(raw: any, limit = 8): YouTubeLessonVideo[] {
   const videos = Array.isArray(raw?.videos) ? raw.videos : Array.isArray(raw?.items) ? raw.items : [];
 
   return videos
@@ -2322,7 +2330,7 @@ function normalizeYouTubeLessonVideos(raw: any): YouTubeLessonVideo[] {
     })
     .filter(Boolean)
     .filter((video: YouTubeLessonVideo) => isUsefulYouTubeLessonVideo(video))
-    .slice(0, 8) as YouTubeLessonVideo[];
+    .slice(0, limit) as YouTubeLessonVideo[];
 }
 
 function isUsefulYouTubeLessonVideo(video: YouTubeLessonVideo) {
@@ -2703,6 +2711,8 @@ function WorkspaceResponseMedia({
   media: NonNullable<ChatMessage['media']>;
   mode: 'images' | 'videos';
 }) {
+  const [selectedImage, setSelectedImage] = useState<NonNullable<ChatMessage['media']>['images'][number] | null>(null);
+
   if (media.status === 'loading') {
     return (
       <div className="mt-5 flex items-center gap-2 text-sm text-white/55" role="status">
@@ -2725,9 +2735,6 @@ function WorkspaceResponseMedia({
               : 'aspect-[16/9] grid-cols-1'
         }`}>
           {images.map((image, index) => {
-            const photoUrl = isTrustedMediaUrl(image.photoUrl, 'unsplash.com')
-              ? image.photoUrl
-              : image.url;
             return (
               <figure
                 key={image.id}
@@ -2735,7 +2742,12 @@ function WorkspaceResponseMedia({
                   images.length >= 3 && index === 0 ? 'row-span-2' : ''
                 }`}
               >
-                <a href={photoUrl} target="_blank" rel="noreferrer" aria-label={`View photo on Unsplash${image.attribution ? ` by ${image.attribution}` : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedImage(image)}
+                  aria-label={`Open image preview${image.alt ? `: ${image.alt}` : ''}`}
+                  className="absolute inset-0 block h-full w-full cursor-zoom-in text-left focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-white"
+                >
                   <img
                     src={image.url}
                     alt={image.alt}
@@ -2746,30 +2758,69 @@ function WorkspaceResponseMedia({
                     }}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   />
-                </a>
-                {image.attribution && isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') && (
+                </button>
+                {image.attribution && (
                   <figcaption className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/85 to-transparent px-2 pb-2 pt-5 text-[10px] leading-4 text-white sm:text-xs">
                     <span>Photo by</span>
-                    <a href={image.attributionUrl} target="_blank" rel="noreferrer" className="max-w-[45%] truncate underline underline-offset-2">
-                      {image.attribution}
-                    </a>
-                    <span>on</span>
-                    <a href={photoUrl} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
-                      Unsplash
-                    </a>
+                    {isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') ? (
+                      <a href={image.attributionUrl} target="_blank" rel="noreferrer" className="max-w-[45%] truncate underline underline-offset-2">
+                        {image.attribution}
+                      </a>
+                    ) : (
+                      <span className="max-w-[45%] truncate">{image.attribution}</span>
+                    )}
                   </figcaption>
                 )}
               </figure>
             );
           })}
         </div>
+        <Dialog
+          open={Boolean(selectedImage)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedImage(null);
+          }}
+        >
+          <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto border-white/10 bg-[#101010] p-3 text-white sm:p-5 [&>button]:text-white">
+            <DialogTitle className="sr-only">Image preview</DialogTitle>
+            <DialogDescription className="sr-only">
+              {selectedImage?.alt || 'Selected image'}
+            </DialogDescription>
+            {selectedImage && (
+              <div className="flex min-h-0 flex-col items-center gap-3">
+                <img
+                  src={selectedImage.url}
+                  alt={selectedImage.alt}
+                  className="max-h-[calc(100dvh-7rem)] max-w-full object-contain"
+                />
+                {selectedImage.attribution && (
+                  <p className="text-center text-sm text-white/75">
+                    Photo by{' '}
+                    {isTrustedMediaUrl(selectedImage.attributionUrl, 'unsplash.com') ? (
+                      <a
+                        href={selectedImage.attributionUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                      >
+                        {selectedImage.attribution}
+                      </a>
+                    ) : (
+                      <span>{selectedImage.attribution}</span>
+                    )}{' '}
+                    on Unsplash
+                  </p>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </section>
     );
   }
 
   const verifiedVideos = media.videos.filter((video) =>
     /^[A-Za-z0-9_-]{11}$/.test(video.id) &&
-    isTrustedMediaUrl(video.thumbnail, 'i.ytimg.com') &&
     extractYouTubeUrlFromText(video.watchUrl) !== null
   ).slice(0, 2);
   const videos = verifiedVideos;
@@ -2781,30 +2832,19 @@ function WorkspaceResponseMedia({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {videos.map((video) => (
           <article key={video.id} className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
-            <a href={video.watchUrl} target="_blank" rel="noreferrer" className="group block">
-              <div className="relative">
-                <img
-                  src={video.thumbnail}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="aspect-video w-full object-cover"
-                />
-                {video.duration && (
-                  <span className="absolute bottom-2 right-2 rounded bg-black/85 px-1.5 py-0.5 text-xs text-white">
-                    {video.duration}
-                  </span>
-                )}
-              </div>
-              <span className="block p-3">
-                <span className="line-clamp-2 text-sm font-semibold text-white group-hover:underline">{video.title}</span>
-                <span className="mt-1 block truncate text-xs text-white/55">{video.channelTitle}</span>
-                <span className="mt-2 block text-xs leading-5 text-white/65">{video.relevance}</span>
-                <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-white/85">
-                  Watch Video <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-              </span>
-            </a>
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${video.id}`}
+              title={video.title}
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="aspect-video w-full border-0 bg-black"
+            />
+            <div className="p-3">
+              <h4 className="line-clamp-2 text-sm font-semibold text-white">{video.title}</h4>
+              <p className="mt-1 truncate text-xs text-white/55">{video.channelTitle}</p>
+            </div>
           </article>
         ))}
       </div>
@@ -5473,6 +5513,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
         : aiPromptWithToolDirection;
       const personalizationContext = buildPersonalizationContext(personalizationProfile);
 
+      const solveForXGuidance = createSolveForXGuidanceResponse(finalPrompt);
       const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
     ${personalizationContext ? `\n\n${personalizationContext}\n` : ''}
 
@@ -5555,10 +5596,11 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         throw new Error(errorMessage);
       }
 
-      const normalizedAnswer = normalizeWorkspaceAnswerForDisplay(
+      const aiAnswer = normalizeWorkspaceAnswerForDisplay(
         normalizeAnswerText(data, ''),
         finalPrompt,
       );
+      const normalizedAnswer = solveForXGuidance || aiAnswer;
       if (!normalizedAnswer.trim() || isUnavailableAIAnswer(normalizedAnswer)) {
         throw new Error('The AI service returned an empty or unavailable response.');
       }
@@ -5602,7 +5644,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           ? api.get(`/api/media/images/search?query=${encodeURIComponent(mediaPlan.imageQuery)}`)
           : Promise.resolve({ images: [] });
         const videoRequest = mediaPlan.showVideos
-          ? api.get(`/api/youtube/search?q=${encodeURIComponent(mediaPlan.videoQuery)}&limit=2&duration=medium`)
+          ? api.get(`/api/youtube/search?q=${encodeURIComponent(mediaPlan.videoQuery)}&limit=10&duration=medium`)
           : Promise.resolve({ videos: [] });
 
         void Promise.allSettled([imageRequest, videoRequest]).then(([imageResult, videoResult]) => {
@@ -5618,17 +5660,37 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           }
 
           const imageData = imageResult.status === 'fulfilled' ? imageResult.value : null;
-          const images = Array.isArray(imageData?.images) ? imageData.images.slice(0, 3) : [];
+          const images = Array.isArray(imageData?.images)
+            ? imageData.images.slice(0, 3)
+              .map((image: unknown, index: number): NonNullable<ChatMessage['media']>['images'][number] | null => {
+                if (!image || typeof image !== 'object' || Array.isArray(image)) return null;
+                const imageRecord = image as Record<string, unknown>;
+                const url = clean(imageRecord.url);
+                if (!url) return null;
+                return {
+                  id: clean(imageRecord.id) || url || `unsplash-${index}`,
+                  url,
+                  alt: clean(imageRecord.alt),
+                  attribution: clean(imageRecord.photographer || imageRecord.attribution),
+                  attributionUrl: clean(imageRecord.attributionUrl),
+                  photoUrl: clean(imageRecord.photoUrl),
+                };
+              })
+              .filter((image): image is NonNullable<ChatMessage['media']>['images'][number] => image !== null)
+            : [];
           const videoData = videoResult.status === 'fulfilled'
             ? unwrapApiResponse(videoResult.value)
             : null;
-          const videos = normalizeYouTubeLessonVideos(videoData)
+          const videoCandidates = normalizeYouTubeLessonVideos(videoData, 10)
             .filter((video) =>
               /^[A-Za-z0-9_-]{11}$/.test(video.videoId) &&
-              Boolean(video.thumbnail && isTrustedMediaUrl(video.thumbnail, 'i.ytimg.com')) &&
               Boolean(extractYouTubeUrlFromText(video.watchUrl))
-            )
-            .slice(0, 2)
+            );
+          const videos = selectRelevantYouTubeLessonVideos(
+            videoCandidates,
+            mediaPlan.videoQuery,
+            2,
+          )
             .map((video) => ({
               id: video.videoId,
               title: video.title,
