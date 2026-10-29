@@ -97,6 +97,59 @@ function responseText(value) {
   return '';
 }
 
+export function normalizeClarificationText(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function removeRepeatedClarification(value, question) {
+  if (typeof value !== 'string') return value;
+  const text = value.trim();
+  if (!text || !question) return value;
+
+  const questionKey = normalizeClarificationText(question);
+  if (!questionKey) return value;
+
+  const normalized = normalizeClarificationText(text);
+  if (!normalized.includes(questionKey)) return value;
+
+  return text
+    .split(/(\r?\n+)/)
+    .map((part) => {
+      if (/^\r?\n+$/.test(part)) return part;
+      return part
+        .split(/(?<=[.!?])\s+/)
+        .filter((sentence) => normalizeClarificationText(sentence) !== questionKey)
+        .join(' ');
+    })
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function createSolveForXGuidanceResponse(prompt = '') {
+  const text = String(prompt || '');
+  if (
+    /[=≠≈]/.test(text) ||
+    !/\b(?:how\s+to\s+solve\s+for\s+x|how\s+(?:do|can|should)\s+(?:i|we|you)\s+solve\s+for\s+x|solve\s+for\s+x|solving\s+for\s+x)\b/i.test(text)
+  ) {
+    return '';
+  }
+
+  return [
+    '1. Simplify both sides of the equation.',
+    '2. Move the terms containing X to one side.',
+    '3. Move the constants to the other side.',
+    '4. Divide by the coefficient of X to isolate it.',
+    '5. Check the answer by substituting it back into the original equation.',
+    '',
+    'Send me your exact equation, and I\'ll solve it step by step.',
+  ].join('\n');
+}
+
 export function normalizeWorkspaceResponse(raw, fallback = '') {
   if (typeof raw === 'string') return raw.trim() || fallback;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
@@ -118,13 +171,20 @@ export function normalizeWorkspaceResponse(raw, fallback = '') {
   const warnings = (Array.isArray(raw.warnings) ? raw.warnings : [raw.warnings])
     .map(responseText)
     .filter(Boolean);
-  const followUp = raw.followUp ?? raw.followup;
-  const question = responseText(followUp?.question);
-  const options = Array.isArray(followUp?.options)
-    ? followUp.options.map(responseText).filter(Boolean)
-    : Array.isArray(followUp?.choices)
-      ? followUp.choices.map(responseText).filter(Boolean)
-      : [];
+  const clarification = raw.followUp ?? raw.followup ?? raw.clarification;
+  const question = responseText(
+    clarification?.question ??
+    raw.clarifyingQuestion ??
+    (typeof clarification === 'string' ? clarification : raw.question),
+  );
+  const clarificationOptions = clarification?.options ?? clarification?.choices;
+  const options = Array.isArray(clarificationOptions)
+    ? clarificationOptions.map(responseText).filter(Boolean)
+    : Array.isArray(raw.options)
+      ? raw.options.map(responseText).filter(Boolean)
+      : Array.isArray(raw.choices)
+        ? raw.choices.map(responseText).filter(Boolean)
+        : [];
   const validFollowUp = question.length <= 160 &&
     !/[|\]\r\n]/.test(question) &&
     options.length >= 2 &&
@@ -133,11 +193,18 @@ export function normalizeWorkspaceResponse(raw, fallback = '') {
   const followUpMarker = validFollowUp
     ? `[[FOLLOW_UP: ${question} | ${options.join(' | ')}]]`
     : '';
-
-  return [
+  const answerSections = [
     directAnswer || suggestions,
     ...sections,
     ...(warnings.length ? ['### Important cautions', ...warnings.map((warning) => `- ${warning}`)] : []),
+  ];
+  const questionKey = normalizeClarificationText(question);
+  const cleanedSections = validFollowUp
+    ? answerSections.map((section) => removeRepeatedClarification(section, questionKey)).filter(Boolean)
+    : answerSections;
+
+  return [
+    ...cleanedSections,
     followUpMarker,
   ].filter(Boolean).join('\n\n') || fallback;
 }
@@ -248,6 +315,9 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
     .trim();
   const asksForImages = /\b(?:image|images|photo|photos|picture|pictures|visual reference|show me what .{1,35} looks like)\b/i.test(request);
   const asksForVideos = /\b(?:video|videos|youtube|watch|lesson video|find .* lesson|tutorial video)\b/i.test(request);
+  const asksForLearningVideo = /\b(?:explain|teach|learn|tutorial|lesson|walk me through|step[- ]by[- ]step|how\s+(?:do|does|can|should|to)\b|show me how|guide me through|prepare for (?:a |an )?(?:job )?interview|career guidance|career planning|career advice|career path|career plan|improve my skills|skill development)\b/i.test(request);
+  const asksForConceptExplanation = /\bwhat (?:is|are)\b/i.test(request) &&
+    !/\b(?:capital|population|currency|president) of\b|\b(?:weather|time|distance|age)\b|\byour name\b/i.test(request);
   const hasVisualTopic = [
     category === 'food',
     category === 'people-fashion',
@@ -263,15 +333,72 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
   const imageQuery = subject
     ? `${subject} ${/\b(cv|resume)\b/i.test(request) ? 'CV resume template' : ''}`.replace(/\s+/g, ' ').trim().slice(0, 160)
     : '';
-  const videoQuery = subject ? subject.slice(0, 200) : '';
+  const videoQuery = subject
+    .replace(/\s+\b(?:and\s+)?(?:show|find|get|give)\s+me\b.*$/i, '')
+    .replace(/^(?:(?:one|two|three|a few|some|\d+)\s+)?(?:useful\s+|relevant\s+)?(?:videos?|lessons?|youtube)\s+(?:about|on|for)\s+/i, '')
+    .replace(/\s+(?:useful\s+|relevant\s+)?(?:videos?|lessons?|youtube)\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+  const asksForScienceExplanation = category === 'education-science-technology' &&
+    /\b(?:how|why|what)\b/i.test(request);
+  const showVideos = Boolean(
+    (asksForVideos || asksForLearningVideo || asksForConceptExplanation || asksForScienceExplanation) &&
+    videoQuery,
+  );
 
   return {
     category,
     imageQuery: imageIsRelevant ? imageQuery : '',
-    videoQuery: asksForVideos ? videoQuery : '',
+    videoQuery: showVideos ? videoQuery : '',
     showImages: Boolean(imageIsRelevant && imageQuery),
-    showVideos: Boolean(asksForVideos && videoQuery),
+    showVideos,
   };
+}
+
+const YOUTUBE_QUERY_STOP_WORDS = new Set([
+  'about', 'and', 'are', 'can', 'does', 'for', 'from', 'help', 'how', 'into',
+  'learn', 'lesson', 'make', 'me', 'my', 'please', 'show', 'teach', 'the',
+  'through', 'to', 'tutorial', 'video', 'videos', 'walk', 'watch', 'what',
+  'when', 'where', 'which', 'who', 'why', 'with', 'work', 'you', 'your',
+  'explain', 'guide', 'step', 'steps', 'should', 'could', 'would', 'prepare',
+  'improve', 'skills', 'skill', 'development', 'career', 'plan', 'job',
+  'student', 'old', 'year', 'human', 'diagram',
+]);
+
+export function selectRelevantYouTubeLessonVideos(videos, query, limit = 2) {
+  if (!Array.isArray(videos) || !Number.isInteger(limit) || limit < 1) return [];
+
+  const terms = [...new Set(
+    (String(query || '').toLowerCase().match(/[a-z0-9]+/g) || [])
+      .filter((term) => term.length > 2 && !/^\d+$/.test(term) && !YOUTUBE_QUERY_STOP_WORDS.has(term)),
+  )];
+  if (!terms.length) return [];
+
+  const selected = [];
+  const seenIds = new Set();
+
+  for (const video of videos) {
+    if (!video || typeof video !== 'object') continue;
+    const id = String(video.videoId || video.id || '').trim();
+    if (!id || seenIds.has(id)) continue;
+
+    const searchableText = [
+      video.title,
+      video.description,
+      video.channelTitle,
+    ].filter((value) => typeof value === 'string').join(' ').toLowerCase();
+    const searchableTerms = new Set(searchableText.match(/[a-z0-9]+/g) || []);
+    const matchedTerms = terms.filter((term) => searchableTerms.has(term)).length;
+    const minimumMatches = terms.length > 1 ? 2 : 1;
+    if (matchedTerms < minimumMatches) continue;
+
+    seenIds.add(id);
+    selected.push(video);
+    if (selected.length >= limit) break;
+  }
+
+  return selected;
 }
 
 export function parseWorkspaceFollowUp(input) {

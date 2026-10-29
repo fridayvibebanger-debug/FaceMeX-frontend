@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   extractYouTubeUrlFromText,
   extractYouTubeVideoId,
+  createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
   isExplicitTechnicalRequest,
   isYouTubeSummaryRequest,
@@ -10,6 +11,7 @@ import {
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
+  selectRelevantYouTubeLessonVideos,
 } from './workspaceResponse.js';
 
 test('validates structured chart data without inventing values', () => {
@@ -88,6 +90,24 @@ test('normalizes structured response sections, cautions, and selectable follow-u
   });
 });
 
+test('removes a repeated clarification question without discarding the useful answer', () => {
+  const answer = normalizeWorkspaceResponse({
+    answer: 'Both sides should be simplified first. Which equation are you solving?',
+    followUp: {
+      question: 'Which equation are you solving?',
+      options: ['Linear', 'Quadratic'],
+    },
+  });
+  const parsed = parseWorkspaceFollowUp(answer);
+
+  assert.equal(parsed.content, 'Both sides should be simplified first.');
+  assert.deepEqual(parsed.followUp, {
+    question: 'Which equation are you solving?',
+    options: ['Linear', 'Quadratic'],
+  });
+  assert.equal((answer.match(/\[\[FOLLOW_UP:/g) || []).length, 1);
+});
+
 test('preserves plain-text response fallbacks when structured data is unavailable', () => {
   assert.equal(normalizeWorkspaceResponse('Plain answer'), 'Plain answer');
   assert.equal(normalizeWorkspaceResponse({ sections: [] }, 'Fallback answer'), 'Fallback answer');
@@ -96,11 +116,25 @@ test('preserves plain-text response fallbacks when structured data is unavailabl
   }), '### Explanation\n\nSolar panels convert sunlight to electricity.');
 });
 
-test('plans images and videos only when the request makes them relevant', () => {
+test('provides general solve-for-X guidance only when an equation is not supplied', () => {
+  const guidance = createSolveForXGuidanceResponse('How to solve for X');
+
+  assert.match(guidance, /1\. Simplify both sides/);
+  assert.match(guidance, /2\. Move the terms containing X to one side/);
+  assert.match(guidance, /3\. Move the constants to the other side/);
+  assert.match(guidance, /4\. Divide by the coefficient of X/);
+  assert.match(guidance, /5\. Check the answer by substituting it back/);
+  assert.equal((guidance.match(/Send me your exact equation/g) || []).length, 1);
+  assert.equal(createSolveForXGuidanceResponse('Solve 2x + 5 = 13'), '');
+  assert.equal(createSolveForXGuidanceResponse('How do I build a website?'), '');
+  assert.equal(createSolveForXGuidanceResponse('Hi, how are you?'), '');
+});
+
+test('plans images and videos when the request makes them relevant', () => {
   const foodPlan = createWorkspaceMediaPlan('How do I make crispy fried chicken with rice?');
   assert.equal(foodPlan.category, 'food');
   assert.equal(foodPlan.showImages, true);
-  assert.equal(foodPlan.showVideos, false);
+  assert.equal(foodPlan.showVideos, true);
   assert.match(foodPlan.imageQuery, /crispy fried chicken with rice/i);
   assert.doesNotMatch(foodPlan.imageQuery, /visual reference/i);
 
@@ -121,30 +155,37 @@ test('plans images and videos only when the request makes them relevant', () => 
 
   const examplePlan = createWorkspaceMediaPlan('What is compound interest? Show me an example.');
   assert.equal(examplePlan.showImages, false);
-  assert.equal(examplePlan.showVideos, false);
+  assert.equal(examplePlan.showVideos, true);
 
   const greetingPlan = createWorkspaceMediaPlan('Hi');
   assert.equal(greetingPlan.showImages, false);
   assert.equal(greetingPlan.showVideos, false);
   assert.equal(greetingPlan.imageQuery, '');
 
+  const smallTalkPlan = createWorkspaceMediaPlan('How are you today?');
+  assert.equal(smallTalkPlan.showVideos, false);
+
   const requestedVideosPlan = createWorkspaceMediaPlan('Find me two videos about compound interest.');
   assert.equal(requestedVideosPlan.showImages, false);
   assert.equal(requestedVideosPlan.showVideos, true);
-  assert.match(requestedVideosPlan.videoQuery, /compound interest/i);
+  assert.equal(requestedVideosPlan.videoQuery, 'compound interest');
+
+  const educationalVideosPlan = createWorkspaceMediaPlan('Explain photosynthesis and show me useful videos.');
+  assert.equal(educationalVideosPlan.showVideos, true);
+  assert.equal(educationalVideosPlan.videoQuery, 'photosynthesis');
 
   const diagramPlan = createWorkspaceMediaPlan('Show me a diagram of how solar panels generate electricity.');
   assert.equal(diagramPlan.showImages, true);
-  assert.equal(diagramPlan.showVideos, false);
+  assert.equal(diagramPlan.showVideos, true);
 
   const photosynthesisPlan = createWorkspaceMediaPlan('Explain photosynthesis to a 13-year-old.');
   assert.equal(photosynthesisPlan.category, 'education-science-technology');
   assert.equal(photosynthesisPlan.showImages, true);
-  assert.equal(photosynthesisPlan.showVideos, false);
+  assert.equal(photosynthesisPlan.showVideos, true);
 
   const solarPlan = createWorkspaceMediaPlan('Explain how solar panels generate electricity.');
   assert.equal(solarPlan.showImages, true);
-  assert.equal(solarPlan.showVideos, false);
+  assert.equal(solarPlan.showVideos, true);
 
   const startupPlan = createWorkspaceMediaPlan('Help me start a delivery business with no money.');
   assert.equal(startupPlan.showImages, false);
@@ -152,7 +193,7 @@ test('plans images and videos only when the request makes them relevant', () => 
 
   const websitePlan = createWorkspaceMediaPlan('Give me a tutorial on how to build a website.');
   assert.equal(websitePlan.showImages, false);
-  assert.equal(websitePlan.showVideos, false);
+  assert.equal(websitePlan.showVideos, true);
 
   const cvPlan = createWorkspaceMediaPlan('Write a professional CV for an entry-level applicant.');
   assert.equal(cvPlan.showImages, false);
@@ -166,12 +207,54 @@ test('plans images and videos only when the request makes them relevant', () => 
   const contextPlan = createWorkspaceMediaPlan('Wings', 'user: How do I make crispy fried chicken?\nassistant: Which cut do you have?');
   assert.match(contextPlan.imageQuery, /crispy fried chicken/);
   assert.equal(contextPlan.showImages, true);
+  assert.equal(contextPlan.showVideos, true);
+
+  const excelPlan = createWorkspaceMediaPlan('Teach me Excel formulas.');
+  assert.equal(excelPlan.showVideos, true);
+  assert.match(excelPlan.videoQuery, /Excel formulas/i);
+
+  const heartPlan = createWorkspaceMediaPlan('How does the human heart work?');
+  assert.equal(heartPlan.showVideos, true);
+  assert.match(heartPlan.videoQuery, /human heart/i);
+
+  const careerPlan = createWorkspaceMediaPlan('Show me how to prepare for a job interview.');
+  assert.equal(careerPlan.showVideos, true);
+  assert.match(careerPlan.videoQuery, /job interview/i);
 
   const sectionPlan = createWorkspaceMediaPlan(
     'Explain solar energy.',
   );
   assert.match(sectionPlan.imageQuery, /solar energy/i);
   assert.doesNotMatch(sectionPlan.imageQuery, /photovoltaic cells/i);
+});
+
+test('selects up to two distinct YouTube results that match the requested topic', () => {
+  const videos = [
+    { videoId: 'photosynth1', title: 'Photosynthesis explained for beginners' },
+    { videoId: 'unrelated01', title: 'A guide to the solar system' },
+    { videoId: 'photosynth1', title: 'Duplicate photosynthesis result' },
+    { videoId: 'photosynth2', title: 'How plants make food: photosynthesis' },
+  ];
+
+  assert.deepEqual(
+    selectRelevantYouTubeLessonVideos(videos, 'Explain photosynthesis to a student'),
+    [videos[0], videos[3]],
+  );
+  assert.deepEqual(
+    selectRelevantYouTubeLessonVideos([videos[0]], 'Explain photosynthesis'),
+    [videos[0]],
+  );
+  assert.deepEqual(
+    selectRelevantYouTubeLessonVideos([videos[1]], 'Explain photosynthesis'),
+    [],
+  );
+  assert.deepEqual(
+    selectRelevantYouTubeLessonVideos([
+      { videoId: 'solarwrong1', title: 'The solar system explained' },
+      { videoId: 'solarright1', title: 'How solar panels generate electricity' },
+    ], 'Explain how solar panels generate electricity'),
+    [{ videoId: 'solarright1', title: 'How solar panels generate electricity' }],
+  );
 });
 
 test('keeps accidental code and machine output out of everyday replies but preserves explicit technical answers', () => {

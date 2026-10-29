@@ -25,6 +25,12 @@ export function extractYouTubeUrlFromText(input: string): string | null;
 
 export function isYouTubeSummaryRequest(input: string): boolean;
 
+export function normalizeClarificationText(value: unknown): string;
+
+export function removeRepeatedClarification(value: string, question: string): string;
+
+export function createSolveForXGuidanceResponse(prompt?: string): string;
+
 export function isExplicitTechnicalRequest(prompt: string): boolean;
 
 export function normalizeWorkspaceAnswerForDisplay(answer: string, prompt?: string): string;
@@ -40,6 +46,14 @@ export type WorkspaceMediaPlan = {
 };
 
 export function createWorkspaceMediaPlan(prompt: string, context?: string): WorkspaceMediaPlan;
+
+export function selectRelevantYouTubeLessonVideos<T extends {
+  videoId?: string;
+  id?: string;
+  title?: string;
+  description?: string | null;
+  channelTitle?: string | null;
+}>(videos: T[], query: string, limit?: number): T[];
 
 export type WorkspaceFollowUp = {
   question: string;
