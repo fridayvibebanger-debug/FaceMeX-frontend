@@ -2737,20 +2737,12 @@ function WorkspaceResponseMedia({
     return (
       <section className="my-3 min-w-0 w-full max-w-3xl" aria-label="Relevant images">
         <h3 className="mb-2 text-xs font-semibold text-white/85">Relevant images</h3>
-        <div className={`grid overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] ${
-          images.length >= 3
-            ? 'aspect-[3/2] grid-cols-2 grid-rows-2 gap-1'
-            : images.length === 2
-              ? 'aspect-[16/8] grid-cols-2 gap-1'
-              : 'aspect-[16/9] grid-cols-1'
-        }`}>
-          {images.map((image, index) => {
+        <div className="grid grid-cols-2 gap-2">
+          {images.map((image) => {
             return (
               <figure
                 key={image.id}
-                className={`group relative min-h-0 min-w-0 overflow-hidden bg-[#171717] ${
-                  images.length >= 3 && index === 0 ? 'row-span-2' : ''
-                }`}
+                className="group relative aspect-video min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#171717]"
               >
                 <button
                   type="button"
@@ -2768,15 +2760,8 @@ function WorkspaceResponseMedia({
                   />
                 </button>
                 {image.attribution && (
-                  <figcaption className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/85 to-transparent px-2 pb-2 pt-5 text-[10px] leading-4 text-white sm:text-xs">
-                    <span>Photo by</span>
-                    {isTrustedMediaUrl(image.attributionUrl, 'unsplash.com') ? (
-                      <a href={image.attributionUrl} target="_blank" rel="noreferrer" className="max-w-[45%] truncate underline underline-offset-2">
-                        {image.attribution}
-                      </a>
-                    ) : (
-                      <span className="max-w-[45%] truncate">{image.attribution}</span>
-                    )}
+                  <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-4 text-right text-[10px] leading-4 text-white sm:text-xs">
+                    {image.attribution}
                   </figcaption>
                 )}
               </figure>
@@ -2789,34 +2774,21 @@ function WorkspaceResponseMedia({
             if (!open) setSelectedImage(null);
           }}
         >
-          <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto border-white/10 bg-[#101010] p-3 text-white sm:p-5 [&>button]:text-white">
+          <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-7xl overflow-y-auto border-white/10 bg-[#101010] p-2 text-white sm:p-4 [&>button]:text-white">
             <DialogTitle className="sr-only">Image preview</DialogTitle>
             <DialogDescription className="sr-only">
               {selectedImage?.alt || 'Selected image'}
             </DialogDescription>
             {selectedImage && (
-              <div className="flex min-h-0 flex-col items-center gap-3">
+              <div className="flex min-h-0 w-full flex-col items-center gap-2">
                 <img
                   src={selectedImage.url}
                   alt={selectedImage.alt}
-                  className="max-h-[calc(100dvh-7rem)] max-w-full object-contain"
+                  className="max-h-[calc(100dvh-5rem)] w-full object-contain"
                 />
                 {selectedImage.attribution && (
-                  <p className="text-center text-sm text-white/75">
-                    Photo by{' '}
-                    {isTrustedMediaUrl(selectedImage.attributionUrl, 'unsplash.com') ? (
-                      <a
-                        href={selectedImage.attributionUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline underline-offset-2 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-                      >
-                        {selectedImage.attribution}
-                      </a>
-                    ) : (
-                      <span>{selectedImage.attribution}</span>
-                    )}{' '}
-                    on Unsplash
+                  <p className="text-center text-xs text-white/65">
+                    {selectedImage.attribution}
                   </p>
                 )}
               </div>
