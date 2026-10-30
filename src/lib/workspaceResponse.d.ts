@@ -25,6 +25,20 @@ export function extractYouTubeUrlFromText(input: string): string | null;
 
 export function isYouTubeSummaryRequest(input: string): boolean;
 
+export type WorkspaceResponseImage = {
+  id: string;
+  url: string;
+  alt: string;
+  attribution: string;
+  attributionUrl: string;
+  photoUrl?: string;
+};
+
+export function normalizeWorkspaceImages(
+  raw: unknown,
+  limit?: number,
+): WorkspaceResponseImage[];
+
 export function normalizeClarificationText(value: unknown): string;
 
 export function removeRepeatedClarification(value: string, question: string): string;

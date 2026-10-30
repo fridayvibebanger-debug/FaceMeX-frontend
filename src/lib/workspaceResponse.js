@@ -97,6 +97,41 @@ function responseText(value) {
   return '';
 }
 
+export function normalizeWorkspaceImages(raw, limit = 3) {
+  if (!Number.isInteger(limit) || limit < 1 || !raw || typeof raw !== 'object') return [];
+
+  let payload = raw;
+  for (let depth = 0; depth < 2; depth += 1) {
+    if (Array.isArray(payload.images)) break;
+    if (!payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) break;
+    payload = payload.data;
+  }
+
+  if (!Array.isArray(payload.images)) return [];
+
+  return payload.images.slice(0, limit).flatMap((image, index) => {
+    if (!image || typeof image !== 'object' || Array.isArray(image)) return [];
+
+    const url = responseText(image.url);
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'images.unsplash.com' ||
+        parsedUrl.username || parsedUrl.password) return [];
+    } catch {
+      return [];
+    }
+
+    return [{
+      id: responseText(image.id) || url || `unsplash-${index}`,
+      url,
+      alt: responseText(image.alt),
+      attribution: responseText(image.photographer || image.attribution),
+      attributionUrl: responseText(image.attributionUrl),
+      photoUrl: responseText(image.photoUrl),
+    }];
+  });
+}
+
 export function normalizeClarificationText(value) {
   return String(value ?? '')
     .toLowerCase()

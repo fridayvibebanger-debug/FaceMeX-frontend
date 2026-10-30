@@ -8,6 +8,7 @@ import {
   isExplicitTechnicalRequest,
   isYouTubeSummaryRequest,
   normalizeWorkspaceAnswerForDisplay,
+  normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
@@ -114,6 +115,62 @@ test('preserves plain-text response fallbacks when structured data is unavailabl
   assert.equal(normalizeWorkspaceResponse({
     sections: [{ title: 'Explanation', text: 'Solar panels convert sunlight to electricity.' }],
   }), '### Explanation\n\nSolar panels convert sunlight to electricity.');
+});
+
+test('normalizes direct and wrapped Unsplash image results and rejects invalid sources', () => {
+  const first = {
+    id: 'photo-1',
+    url: 'https://images.unsplash.com/photo-1?auto=format',
+    alt: 'Green plant',
+    photographer: 'A. Photographer',
+    attributionUrl: 'https://unsplash.com/@aphotographer',
+  };
+  const second = {
+    id: 'photo-2',
+    url: 'https://images.unsplash.com/photo-2',
+    alt: 'Sunlight through leaves',
+  };
+  const unsafe = { url: 'https://images.unsplash.com.evil.example/photo-3' };
+
+  assert.deepEqual(normalizeWorkspaceImages({ images: [first, unsafe, second] }), [
+    {
+      id: 'photo-1',
+      url: first.url,
+      alt: first.alt,
+      attribution: first.photographer,
+      attributionUrl: first.attributionUrl,
+      photoUrl: '',
+    },
+    {
+      id: 'photo-2',
+      url: second.url,
+      alt: second.alt,
+      attribution: '',
+      attributionUrl: '',
+      photoUrl: '',
+    },
+  ]);
+  assert.deepEqual(normalizeWorkspaceImages({ data: { images: [first] } }), [
+    {
+      id: 'photo-1',
+      url: first.url,
+      alt: first.alt,
+      attribution: first.photographer,
+      attributionUrl: first.attributionUrl,
+      photoUrl: '',
+    },
+  ]);
+  assert.deepEqual(normalizeWorkspaceImages({ images: [first, second] }, 1), [
+    {
+      id: 'photo-1',
+      url: first.url,
+      alt: first.alt,
+      attribution: first.photographer,
+      attributionUrl: first.attributionUrl,
+      photoUrl: '',
+    },
+  ]);
+  assert.deepEqual(normalizeWorkspaceImages({ success: true, images: [] }), []);
 });
 
 test('provides general solve-for-X guidance only when an equation is not supplied', () => {
@@ -226,6 +283,18 @@ test('plans images and videos when the request makes them relevant', () => {
   );
   assert.match(sectionPlan.imageQuery, /solar energy/i);
   assert.doesNotMatch(sectionPlan.imageQuery, /photovoltaic cells/i);
+});
+
+test('keeps image and video media plans independent', () => {
+  const both = createWorkspaceMediaPlan('Explain photosynthesis and show me useful videos.');
+  const imagesOnly = createWorkspaceMediaPlan('Show me images of a modern delivery company logo.');
+  const videosOnly = createWorkspaceMediaPlan('Find me two videos about compound interest.');
+  const none = createWorkspaceMediaPlan('Hi, how are you?');
+
+  assert.deepEqual([both.showImages, both.showVideos], [true, true]);
+  assert.deepEqual([imagesOnly.showImages, imagesOnly.showVideos], [true, false]);
+  assert.deepEqual([videosOnly.showImages, videosOnly.showVideos], [false, true]);
+  assert.deepEqual([none.showImages, none.showVideos], [false, false]);
 });
 
 test('selects up to two distinct YouTube results that match the requested topic', () => {
