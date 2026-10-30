@@ -180,6 +180,8 @@ type ChatMessage = {
   } | null;
   media?: {
     status: 'loading' | 'ready';
+    imagesStatus?: 'loading' | 'ready';
+    videosStatus?: 'loading' | 'ready';
     showImages: boolean;
     showVideos: boolean;
     images: Array<{
@@ -2714,8 +2716,11 @@ function WorkspaceResponseMedia({
 }) {
   const [selectedImage, setSelectedImage] = useState<NonNullable<ChatMessage['media']>['images'][number] | null>(null);
   const [failedImageIds, setFailedImageIds] = useState<Set<string>>(() => new Set());
+  const modeStatus = mode === 'images'
+    ? media.imagesStatus ?? media.status
+    : media.videosStatus ?? media.status;
 
-  if (media.status === 'loading') {
+  if (modeStatus === 'loading') {
     return (
       <div className="my-3 w-full max-w-3xl">
         <h3 className="mb-2 text-xs font-semibold text-white/85">
@@ -5611,6 +5616,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           followUp: parsedResponse.followUp,
           media: hasMediaPlan ? {
             status: 'loading',
+            imagesStatus: mediaPlan.showImages ? 'loading' : 'ready',
+            videosStatus: mediaPlan.showVideos ? 'loading' : 'ready',
             showImages: mediaPlan.showImages,
             showVideos: mediaPlan.showVideos,
             images: [],
@@ -5620,63 +5627,59 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       ]);
 
       if (hasMediaPlan) {
-        const imageRequest = mediaPlan.showImages
-          ? api.get(`/api/media/images/search?query=${encodeURIComponent(mediaPlan.imageQuery)}`)
-          : Promise.resolve({ images: [] });
-        const videoRequest = mediaPlan.showVideos
-          ? api.get(`/api/youtube/search?q=${encodeURIComponent(mediaPlan.videoQuery)}&limit=10&duration=medium`)
-          : Promise.resolve({ videos: [] });
+        const updateResponseMedia = (mediaUpdate: Partial<NonNullable<ChatMessage['media']>>) => {
+          setMessages((previous) => previous.map((message) => {
+            if (message.id !== responseId || !message.media) return message;
+            const media = { ...message.media, ...mediaUpdate };
+            return {
+              ...message,
+              media,
+            };
+          }));
+        };
 
-        void Promise.allSettled([imageRequest, videoRequest]).then(([imageResult, videoResult]) => {
-          if (imageResult.status === 'rejected') {
-            console.warn('FaceMeX optional Unsplash image search is unavailable', {
-              errorName: imageResult.reason instanceof Error ? imageResult.reason.name : 'UnknownError',
-            });
-          }
-          if (videoResult.status === 'rejected') {
-            console.warn('FaceMeX optional Render video search is unavailable', {
-              errorName: videoResult.reason instanceof Error ? videoResult.reason.name : 'UnknownError',
-            });
-          }
+        if (mediaPlan.showImages) {
+          void api.get(`/api/media/images/search?query=${encodeURIComponent(mediaPlan.imageQuery)}`)
+            .then((result) => normalizeWorkspaceImages(result))
+            .catch((error: unknown) => {
+              console.warn('FaceMeX optional Unsplash image search is unavailable', {
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+              });
+              return [];
+            })
+            .then((images) => updateResponseMedia({ images, imagesStatus: 'ready' }));
+        }
 
-          const images = imageResult.status === 'fulfilled'
-            ? normalizeWorkspaceImages(imageResult.value)
-            : [];
-          const videoData = videoResult.status === 'fulfilled'
-            ? unwrapApiResponse(videoResult.value)
-            : null;
-          const videoCandidates = normalizeYouTubeLessonVideos(videoData, 10)
-            .filter((video) =>
-              /^[A-Za-z0-9_-]{11}$/.test(video.videoId) &&
-              Boolean(extractYouTubeUrlFromText(video.watchUrl))
-            );
-          const videos = selectRelevantYouTubeLessonVideos(
-            videoCandidates,
-            mediaPlan.videoQuery,
-            2,
-          )
-            .map((video) => ({
-              id: video.videoId,
-              title: video.title,
-              channelTitle: video.channelTitle || '',
-              duration: '',
-              thumbnail: video.thumbnail || '',
-              watchUrl: video.watchUrl,
-              relevance: `Related to: ${mediaPlan.videoQuery}`,
-            }));
-          setMessages((previous) => previous.map((message) => message.id === responseId
-            ? {
-                ...message,
-                media: {
-                  status: 'ready',
-                  showImages: mediaPlan.showImages,
-                  showVideos: mediaPlan.showVideos,
-                  images,
-                  videos,
-                },
-              }
-            : message));
-        });
+        if (mediaPlan.showVideos) {
+          void api.get(`/api/youtube/search?q=${encodeURIComponent(mediaPlan.videoQuery)}&limit=10&duration=medium`)
+            .then((result) => {
+              const videoCandidates = normalizeYouTubeLessonVideos(unwrapApiResponse(result), 10)
+                .filter((video) =>
+                  /^[A-Za-z0-9_-]{11}$/.test(video.videoId) &&
+                  Boolean(extractYouTubeUrlFromText(video.watchUrl))
+                );
+              return selectRelevantYouTubeLessonVideos(
+                videoCandidates,
+                mediaPlan.videoQuery,
+                2,
+              ).map((video) => ({
+                id: video.videoId,
+                title: video.title,
+                channelTitle: video.channelTitle || '',
+                duration: '',
+                thumbnail: video.thumbnail || '',
+                watchUrl: video.watchUrl,
+                relevance: `Related to: ${mediaPlan.videoQuery}`,
+              }));
+            })
+            .catch((error: unknown) => {
+              console.warn('FaceMeX optional Render video search is unavailable', {
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+              });
+              return [];
+            })
+            .then((videos) => updateResponseMedia({ videos, videosStatus: 'ready' }));
+        }
       }
 
       if (!usageLimitReached) recordAIUse();
