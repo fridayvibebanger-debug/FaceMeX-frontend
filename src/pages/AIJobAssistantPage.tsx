@@ -80,6 +80,7 @@ import {
   extractYouTubeUrlFromText,
   isYouTubeSummaryRequest,
   normalizeWorkspaceAnswerForDisplay,
+  normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
@@ -2712,26 +2713,35 @@ function WorkspaceResponseMedia({
   mode: 'images' | 'videos';
 }) {
   const [selectedImage, setSelectedImage] = useState<NonNullable<ChatMessage['media']>['images'][number] | null>(null);
+  const [failedImageIds, setFailedImageIds] = useState<Set<string>>(() => new Set());
 
   if (media.status === 'loading') {
     return (
-      <div className="mt-5 flex items-center gap-2 text-sm text-white/55" role="status">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        {mode === 'images' ? 'Finding relevant visual references…' : 'Finding two relevant lessons…'}
+      <div className="my-3 w-full max-w-3xl">
+        <h3 className="mb-2 text-xs font-semibold text-white/85">
+          {mode === 'images' ? 'Relevant images' : 'Relevant YouTube lessons'}
+        </h3>
+        <div className="flex items-center gap-2 text-xs text-white/55" role="status">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          {mode === 'images' ? 'Finding relevant images…' : 'Finding relevant lessons…'}
+        </div>
       </div>
     );
   }
 
   if (mode === 'images') {
-    const images = media.images.filter((image) => isTrustedMediaUrl(image.url, 'images.unsplash.com'));
+    const images = media.images.filter((image) =>
+      isTrustedMediaUrl(image.url, 'images.unsplash.com') && !failedImageIds.has(image.id)
+    );
     if (!images.length) return null;
     return (
-      <section className="my-3 w-full max-w-3xl" aria-label="Relevant visual references">
-        <div className={`grid overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] ${
+      <section className="my-3 min-w-0 w-full max-w-3xl" aria-label="Relevant images">
+        <h3 className="mb-2 text-xs font-semibold text-white/85">Relevant images</h3>
+        <div className={`grid overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] ${
           images.length >= 3
-            ? 'aspect-[3/2] grid-cols-2 grid-rows-2 gap-1 sm:gap-1.5'
+            ? 'aspect-[3/2] grid-cols-2 grid-rows-2 gap-1'
             : images.length === 2
-              ? 'aspect-[16/8] grid-cols-2 gap-1 sm:gap-1.5'
+              ? 'aspect-[16/8] grid-cols-2 gap-1'
               : 'aspect-[16/9] grid-cols-1'
         }`}>
           {images.map((image, index) => {
@@ -2753,9 +2763,7 @@ function WorkspaceResponseMedia({
                     alt={image.alt}
                     loading="lazy"
                     decoding="async"
-                    onError={(event) => {
-                      event.currentTarget.closest('figure')?.setAttribute('hidden', '');
-                    }}
+                    onError={() => setFailedImageIds((previous) => new Set(previous).add(image.id))}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   />
                 </button>
@@ -2827,11 +2835,11 @@ function WorkspaceResponseMedia({
   if (!videos.length) return null;
 
   return (
-    <section className="mt-6 max-w-3xl" aria-label="Related YouTube lessons">
-      <h3 className="mb-3 text-sm font-semibold text-white/90">Relevant YouTube lessons</h3>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <section className="my-3 min-w-0 w-full max-w-3xl" aria-label="Relevant YouTube lessons">
+      <h3 className="mb-2 text-xs font-semibold text-white/85">Relevant YouTube lessons</h3>
+      <div className={`grid gap-2 ${videos.length > 1 ? 'grid-cols-2' : 'grid-cols-1 max-w-md'}`}>
         {videos.map((video) => (
-          <article key={video.id} className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+          <article key={video.id} className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
             <iframe
               src={`https://www.youtube-nocookie.com/embed/${video.id}`}
               title={video.title}
@@ -2839,11 +2847,11 @@ function WorkspaceResponseMedia({
               referrerPolicy="strict-origin-when-cross-origin"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
-              className="aspect-video w-full border-0 bg-black"
+              className="block aspect-video w-full border-0 bg-black"
             />
-            <div className="p-3">
-              <h4 className="line-clamp-2 text-sm font-semibold text-white">{video.title}</h4>
-              <p className="mt-1 truncate text-xs text-white/55">{video.channelTitle}</p>
+            <div className="p-2">
+              <h4 className="line-clamp-2 text-xs font-semibold leading-4 text-white">{video.title}</h4>
+              <p className="mt-0.5 truncate text-[10px] leading-4 text-white/55">{video.channelTitle}</p>
             </div>
           </article>
         ))}
@@ -5659,24 +5667,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
             });
           }
 
-          const imageData = imageResult.status === 'fulfilled' ? imageResult.value : null;
-          const images = Array.isArray(imageData?.images)
-            ? imageData.images.slice(0, 3)
-              .map((image: unknown, index: number): NonNullable<ChatMessage['media']>['images'][number] | null => {
-                if (!image || typeof image !== 'object' || Array.isArray(image)) return null;
-                const imageRecord = image as Record<string, unknown>;
-                const url = clean(imageRecord.url);
-                if (!url) return null;
-                return {
-                  id: clean(imageRecord.id) || url || `unsplash-${index}`,
-                  url,
-                  alt: clean(imageRecord.alt),
-                  attribution: clean(imageRecord.photographer || imageRecord.attribution),
-                  attributionUrl: clean(imageRecord.attributionUrl),
-                  photoUrl: clean(imageRecord.photoUrl),
-                };
-              })
-              .filter((image): image is NonNullable<ChatMessage['media']>['images'][number] => image !== null)
+          const images = imageResult.status === 'fulfilled'
+            ? normalizeWorkspaceImages(imageResult.value)
             : [];
           const videoData = videoResult.status === 'fulfilled'
             ? unwrapApiResponse(videoResult.value)
@@ -9639,10 +9631,10 @@ Start with the most useful next action. Do not invent personal details, course r
                                   text={message.content}
                                   onLinkClick={handleGeneratedLinkClick}
                                   sourcePrompt={previousUserText}
-                                  visualReference={message.media?.showImages
-                                    ? <WorkspaceResponseMedia media={message.media} mode="images" />
-                                    : undefined}
                                 />
+                              )}
+                              {message.media?.showImages && (
+                                <WorkspaceResponseMedia media={message.media} mode="images" />
                               )}
                               {message.media?.showVideos && (
                                 <WorkspaceResponseMedia media={message.media} mode="videos" />
