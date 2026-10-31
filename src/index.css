@@ -1008,6 +1008,55 @@
     }
   }
 
+  .fm-document-page[data-template-variant='creative'] .document-editor .ProseMirror > h1:first-child {
+    border-bottom: 0.45rem solid #a3d900;
+    padding-bottom: 0.5rem;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+  }
+
+  .fm-document-page[data-template-variant='creative'] .document-editor .ProseMirror h2 {
+    color: #537000;
+    letter-spacing: 0.1em;
+  }
+
+  .fm-document-page[data-template-variant='sidebar'] .document-editor .ProseMirror > table:first-of-type {
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0.65rem 0;
+  }
+
+  .fm-document-page[data-template-variant='sidebar'] .document-editor .ProseMirror > table:first-of-type th:first-child,
+  .fm-document-page[data-template-variant='sidebar'] .document-editor .ProseMirror > table:first-of-type td:first-child {
+    width: 32%;
+    background: #eaf0fb;
+  }
+
+  .fm-document-page[data-template-variant='sidebar'] .document-editor .ProseMirror > table:first-of-type th {
+    color: #25416f;
+  }
+
+  .fm-document-page[data-template-variant='proposal'] .document-editor .ProseMirror > h1:first-child,
+  .fm-document-page[data-template-variant='startup'] .document-editor .ProseMirror > h1:first-child,
+  .fm-document-page[data-template-variant='pitch'] .document-editor .ProseMirror > h1:first-child {
+    border-bottom: 0.25rem solid #2477d2;
+    padding-bottom: 0.55rem;
+    color: #173c70;
+  }
+
+  .fm-document-page[data-template-variant='clinical'] .document-editor .ProseMirror h2 {
+    border-radius: 0.25rem;
+    background: #eaf3fb;
+    padding: 0.3rem 0.5rem;
+    color: #14558f;
+  }
+
+  .fm-document-page[data-template-variant='technology'] .document-editor .ProseMirror h2 {
+    border-left: 3px solid #1769c2;
+    padding-left: 0.5rem;
+    color: #174c7e;
+  }
+
   @layer base {
     :root {
       color-scheme: light;
@@ -1268,6 +1317,11 @@
       padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
     }
 
+    .fm-document-workspace-root.fm-theme-dark .fm-document-composer-shell {
+      background-color: #0b0b0b;
+      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+
     .fm-document-mode-select {
       flex-basis: clamp(108px, 36vw, 150px);
       width: clamp(108px, 36vw, 150px);
@@ -1319,6 +1373,168 @@
     .fm-document-page[data-template='classic'] .document-editor .ProseMirror h2 {
       color: #475569;
       letter-spacing: 0.06em;
+    }
+
+    .fm-document-page.fm-document-classic-cv {
+      position: relative;
+      border: 0;
+      color: #172033;
+      font-family: Arial, Helvetica, sans-serif;
+      overflow-wrap: anywhere;
+    }
+
+    .fm-document-page.fm-document-classic-cv::before {
+      position: absolute;
+      z-index: 1;
+      inset: 20px;
+      border: 1px solid #cbd5e1;
+      content: '';
+      pointer-events: none;
+    }
+
+    .fm-document-page.fm-document-classic-cv > div {
+      position: relative;
+      z-index: 2;
+      padding: 2.5rem 3rem !important;
+    }
+
+    .fm-classic-cv-title {
+      color: #172033;
+      font-size: 23pt;
+      font-weight: 700;
+      line-height: 1.25;
+      text-align: center;
+      text-transform: uppercase;
+      overflow-wrap: anywhere;
+    }
+
+    .fm-classic-cv-title p {
+      margin: 0.2rem 0 0;
+      color: #475569;
+      font-size: 11pt;
+      font-weight: 400;
+      text-transform: none;
+    }
+
+    .fm-classic-cv-divider {
+      margin: 0.65rem 0;
+      border-top: 1px solid #94a3b8;
+    }
+
+    .fm-classic-cv-contact-grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.25rem 1rem;
+      color: #475569;
+      font-size: 9.5pt;
+      line-height: 1.45;
+    }
+
+    .fm-classic-cv-contact-grid > div {
+      overflow-wrap: anywhere;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table {
+      width: 100%;
+      margin: 0 0 0.35rem;
+      border: 0;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: inherit;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table thead {
+      display: none;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table td {
+      border: 0;
+      padding: 0.1rem 0.2rem;
+      background: transparent;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table td:first-child {
+      width: 32%;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table td:nth-child(2) {
+      width: auto;
+      text-align: left;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(tr > td:nth-child(3)) td:nth-child(2) {
+      width: 1.5rem;
+      text-align: center;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror {
+      color: #000;
+      font-size: 10pt;
+      line-height: 1.45;
+      text-align: left;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror > p:first-child,
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror > h1:first-child {
+      border: 0;
+      padding: 0;
+      text-align: left;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror h2 {
+      margin: 0.85rem 0 0.35rem;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 0.2rem;
+      color: #172033;
+      font-size: 11pt;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-align: left;
+      text-decoration: none;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul) td {
+      width: 50%;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul) li {
+      break-inside: avoid;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror p {
+      margin: 0 0 0.25rem;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror h1,
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror h3,
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror h4 {
+      color: #000;
+      font-size: 11pt;
+      text-align: left;
+    }
+
+    .fm-document-page.fm-document-classic-cv[data-hide-classic-header-nodes='1'] .document-editor .ProseMirror > :first-child,
+    .fm-document-page.fm-document-classic-cv[data-hide-classic-header-nodes='2'] .document-editor .ProseMirror > :nth-child(-n + 2),
+    .fm-document-page.fm-document-classic-cv[data-hide-classic-header-nodes='3'] .document-editor .ProseMirror > :nth-child(-n + 3),
+    .fm-document-page.fm-document-classic-cv[data-hide-classic-header-nodes='4'] .document-editor .ProseMirror > :nth-child(-n + 4) {
+      display: none !important;
+    }
+
+    @media (max-width: 640px) {
+      .fm-document-page.fm-document-classic-cv > div {
+        padding: 2.5rem 2rem !important;
+      }
+
+      .fm-classic-cv-contact-grid {
+        justify-content: flex-start;
+      }
+
+      .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul) {
+        table-layout: auto;
+      }
     }
 
     .fm-document-page[data-template='executive'] .document-editor .ProseMirror h2 {
@@ -1406,7 +1622,7 @@
       }
 
       .fm-document-workspace-root .fm-document-composer-shell {
-        padding: 0.45rem 0 max(0.25rem, env(safe-area-inset-bottom));
+        padding: 0.45rem 0 max(0.5rem, env(safe-area-inset-bottom));
       }
 
       .fm-document-workspace-root .fm-document-composer {
@@ -1458,9 +1674,17 @@
       color: #f8fafc !important;
     }
 
+    .fm-document-workspace.fm-theme-dark .fm-document-composer-shell {
+      background-color: #0b0b0b;
+    }
+
     .fm-document-workspace.fm-theme-light {
       background-color: #f8fafc !important;
       color: #0f172a !important;
+    }
+
+    .fm-document-workspace.fm-theme-light .fm-document-composer-shell {
+      background-color: #f8fafc;
     }
 
     .fm-document-workspace.fm-theme-dark .fm-document-composer {
