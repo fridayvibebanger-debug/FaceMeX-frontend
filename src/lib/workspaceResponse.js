@@ -141,18 +141,24 @@ export function normalizeWorkspaceImages(raw, limit = 3) {
   if (!Number.isInteger(limit) || limit < 1 || !raw || typeof raw !== 'object') return [];
 
   let payload = raw;
-  for (let depth = 0; depth < 2; depth += 1) {
-    if (Array.isArray(payload.images)) break;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (Array.isArray(payload) || Array.isArray(payload.images) ||
+      Array.isArray(payload.results) || Array.isArray(payload.photos)) break;
     if (!payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) break;
     payload = payload.data;
   }
 
-  if (!Array.isArray(payload.images)) return [];
+  const imageResults = Array.isArray(payload)
+    ? payload
+    : payload.images ?? payload.results ?? payload.photos;
+  if (!Array.isArray(imageResults)) return [];
 
-  return payload.images.slice(0, limit).flatMap((image, index) => {
+  return imageResults.slice(0, limit).flatMap((image, index) => {
     if (!image || typeof image !== 'object' || Array.isArray(image)) return [];
 
-    const url = responseText(image.url);
+    const url = responseText(
+      image.url ?? image.urls?.regular ?? image.urls?.small ?? image.urls?.raw,
+    );
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'images.unsplash.com' ||
@@ -164,10 +170,10 @@ export function normalizeWorkspaceImages(raw, limit = 3) {
     return [{
       id: responseText(image.id) || url || `unsplash-${index}`,
       url,
-      alt: responseText(image.alt),
-      attribution: responseText(image.photographer || image.attribution),
-      attributionUrl: responseText(image.attributionUrl),
-      photoUrl: responseText(image.photoUrl),
+      alt: responseText(image.alt || image.alt_description || image.description),
+      attribution: responseText(image.photographer || image.attribution || image.user?.name),
+      attributionUrl: responseText(image.attributionUrl || image.user?.links?.html),
+      photoUrl: responseText(image.photoUrl || image.links?.html),
     }];
   });
 }
@@ -404,7 +410,10 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
     category === 'art-design',
     /\b(?:logo|branding|cv example|resume example|cv template|resume template|portfolio example)\b/i.test(request),
   ].some(Boolean);
-  const imageIsRelevant = category !== 'programming-software' && (asksForImages || hasVisualTopic);
+  const imageIsRelevant = category !== 'programming-software' && (
+    asksForImages ||
+    (hasVisualTopic && !(category === 'education-science-technology' && isMathematicsQuestion(request)))
+  );
   const imageQuery = subject
     ? `${subject} ${/\b(cv|resume)\b/i.test(request) ? 'CV resume template' : ''}`.replace(/\s+/g, ' ').trim().slice(0, 160)
     : '';

@@ -232,6 +232,37 @@ test('normalizes direct and wrapped Unsplash image results and rejects invalid s
   assert.deepEqual(normalizeWorkspaceImages({ success: true, images: [] }), []);
 });
 
+test('normalizes native Unsplash search results and wrapped result arrays', () => {
+  const nativeImage = {
+    id: 'photo-native',
+    urls: {
+      regular: 'https://images.unsplash.com/photo-native?auto=format&fit=crop&w=1200&q=80',
+      small: 'https://images.unsplash.com/photo-native?auto=format&fit=crop&w=400&q=80',
+    },
+    alt_description: 'A labelled geometry diagram',
+    user: {
+      name: 'A. Photographer',
+      links: { html: 'https://unsplash.com/@aphotographer' },
+    },
+    links: { html: 'https://unsplash.com/photos/photo-native' },
+  };
+  const expected = [{
+    id: 'photo-native',
+    url: nativeImage.urls.regular,
+    alt: nativeImage.alt_description,
+    attribution: 'A. Photographer',
+    attributionUrl: 'https://unsplash.com/@aphotographer',
+    photoUrl: 'https://unsplash.com/photos/photo-native',
+  }];
+
+  assert.deepEqual(normalizeWorkspaceImages({ results: [nativeImage] }), expected);
+  assert.deepEqual(normalizeWorkspaceImages({ data: { results: [nativeImage] } }), expected);
+  assert.deepEqual(normalizeWorkspaceImages([nativeImage]), expected);
+  assert.deepEqual(normalizeWorkspaceImages({
+    results: [{ ...nativeImage, urls: { regular: 'http://images.unsplash.com/insecure' } }],
+  }), []);
+});
+
 test('provides general solve-for-X guidance only when an equation is not supplied', () => {
   const guidance = createSolveForXGuidanceResponse('How to solve for X');
 
@@ -285,6 +316,11 @@ test('plans images and videos when the request makes them relevant', () => {
   assert.equal(requestedVideosPlan.showImages, false);
   assert.equal(requestedVideosPlan.showVideos, true);
   assert.equal(requestedVideosPlan.videoQuery, 'compound interest');
+
+  const mathWithoutStockImages = createWorkspaceMediaPlan('Simplify 3a^2 × 4a^3');
+  assert.equal(mathWithoutStockImages.showImages, false);
+  const explicitMathImage = createWorkspaceMediaPlan('Show me an image of a fraction bar for 3/4.');
+  assert.equal(explicitMathImage.showImages, true);
 
   const educationalVideosPlan = createWorkspaceMediaPlan('Explain photosynthesis and show me useful videos.');
   assert.equal(educationalVideosPlan.showVideos, true);
@@ -356,6 +392,12 @@ test('keeps image and video media plans independent', () => {
   assert.deepEqual([none.showImages, none.showVideos], [false, false]);
 });
 
+test('plans images and lessons together when both are relevant', () => {
+  const both = createWorkspaceMediaPlan('Explain photosynthesis and show me relevant videos.');
+  assert.equal(both.showImages, true);
+  assert.equal(both.showVideos, true);
+});
+
 test('selects up to two distinct YouTube results that match the requested topic', () => {
   const videos = [
     { videoId: 'photosynth1', title: 'Photosynthesis explained for beginners' },
@@ -409,6 +451,12 @@ test('keeps accidental code and machine output out of everyday replies but prese
   );
   const validChart = '```chart\n{\"type\":\"bar\",\"title\":\"Totals\",\"xLabel\":\"Month\",\"yLabel\":\"Count\",\"data\":[{\"label\":\"May\",\"value\":2}]}\n```';
   assert.equal(normalizeWorkspaceAnswerForDisplay(validChart, cookingQuestion), validChart);
+  const validPractice = 'Try one yourself:\n\n```practice\n{\"question\":\"2x + 3 = ?\",\"solution\":\"5\"}\n```';
+  assert.equal(normalizeWorkspaceAnswerForDisplay(validPractice, cookingQuestion), validPractice);
+  assert.doesNotMatch(
+    normalizeWorkspaceAnswerForDisplay('```practice\n{\"question\":\"q\"}\n```', cookingQuestion),
+    /```practice/,
+  );
   assert.equal(normalizeWorkspaceAnswerForDisplay('```chart\n{\"raw\":\"data\"}\n```', cookingQuestion), 'Sorry, I couldn’t format that answer clearly. Please ask again, and I’ll try to explain it in plain language.');
 });
 
