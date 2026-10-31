@@ -78,6 +78,7 @@ import {
   createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
   extractYouTubeUrlFromText,
+  isMathematicsQuestion,
   isYouTubeSummaryRequest,
   normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceImages,
@@ -88,7 +89,12 @@ import {
   type WorkspaceVisualization,
 } from '@/lib/workspaceResponse';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
-import { parseWorkspaceMarkdown, tokenizeWorkspaceInline } from '@/lib/workspaceMarkdown';
+import {
+  formatWorkspaceMath,
+  parseWorkspaceMarkdown,
+  renderWorkspaceMathML,
+  tokenizeWorkspaceInline,
+} from '@/lib/workspaceMarkdown';
 import {
   Dialog,
   DialogContent,
@@ -2415,9 +2421,13 @@ function renderInlineText(text: string, onLinkClick?: (url: string, label?: stri
     }
     if (token.type === 'math') {
       return (
-        <span key={`math-${index}`} role="math" aria-label={`Mathematical expression: ${token.text}`} className="font-serif tracking-wide text-white">
-          {token.text}
-        </span>
+        <MathExpression
+          key={`math-${index}`}
+          latex={token.latex}
+          fallback={token.text}
+          display={false}
+          markup={renderMathMarkup(token.latex, false)}
+        />
       );
     }
     if (token.type === 'link' || token.type === 'image') {
@@ -2433,6 +2443,48 @@ function renderInlineText(text: string, onLinkClick?: (url: string, label?: stri
     }
     return token.text;
   });
+}
+
+function renderMathMarkup(latex: string, displayMode: boolean) {
+  return renderWorkspaceMathML(latex, displayMode);
+}
+
+function MathExpression({
+  latex,
+  fallback,
+  display,
+  markup,
+}: {
+  latex: string;
+  fallback: string;
+  display: boolean;
+  markup: string;
+}) {
+  const expression = markup
+    ? <span className="fm-math-rendered" dangerouslySetInnerHTML={{ __html: markup }} />
+    : <span className="font-serif">{formatWorkspaceMath(latex) || fallback}</span>;
+
+  if (display) {
+    return (
+      <div
+        role="math"
+        aria-label={`Mathematical expression: ${fallback}`}
+        className="fm-math-display my-4 min-w-0 max-w-full overflow-x-auto rounded-lg border border-white/10 bg-white/[0.035] px-3 py-3 text-center text-white sm:px-4"
+      >
+        <span className="inline-block min-w-max">{expression}</span>
+      </div>
+    );
+  }
+
+  return (
+    <span
+      role="math"
+      aria-label={`Mathematical expression: ${fallback}`}
+      className="fm-math-inline max-w-full font-serif text-white"
+    >
+      {expression}
+    </span>
+  );
 }
 
 function renderMarkdownTable(
@@ -2520,6 +2572,53 @@ function MarkdownCodeBlock({ code, language }: { code: string; language: string 
 
 function WorkspaceVisualizationCard({ visualization }: { visualization: WorkspaceVisualization }) {
   if (visualization.kind === 'diagram') {
+    if (visualization.diagramType === 'triangle') {
+      const scale = 220 / Math.max(visualization.legA, visualization.legB);
+      const left = 54;
+      const bottom = 238;
+      const right = left + visualization.legA * scale;
+      const top = bottom - visualization.legB * scale;
+      const unit = visualization.unit ? ` ${visualization.unit}` : '';
+      return (
+        <figure className="my-4 w-full max-w-[500px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+          <figcaption className="mb-2 text-base font-semibold text-white">{visualization.title}</figcaption>
+          <svg
+            viewBox="0 0 340 280"
+            role="img"
+            aria-label={`Right-angled triangle: legs ${visualization.legA}${unit} and ${visualization.legB}${unit}, hypotenuse ${visualization.hypotenuse}${unit}`}
+            className="mx-auto block h-auto w-full max-w-[360px]"
+          >
+            <path
+              d={`M ${left} ${bottom} L ${right} ${bottom} L ${right} ${top} Z`}
+              fill="rgba(158,185,255,.12)"
+              stroke="#9eb9ff"
+              strokeWidth="3"
+              strokeLinejoin="round"
+            />
+            <path
+              d={`M ${right - 14} ${bottom} L ${right - 14} ${bottom - 14} L ${right} ${bottom - 14}`}
+              fill="none"
+              stroke="rgba(255,255,255,.8)"
+              strokeWidth="2"
+            />
+            <text x={(left + right) / 2} y={bottom + 24} textAnchor="middle" fill="currentColor" fontSize="14">
+              {`${visualization.legA}${unit}`}
+            </text>
+            <text x={right + 10} y={(bottom + top) / 2} fill="currentColor" fontSize="14">
+              {`${visualization.legB}${unit}`}
+            </text>
+            <text x={(left + right) / 2 - 12} y={(bottom + top) / 2 - 12} textAnchor="middle" fill="currentColor" fontSize="14">
+              {`${visualization.hypotenuse}${unit}`}
+            </text>
+            <text x={right - 8} y={bottom + 24} textAnchor="end" fill="rgba(255,255,255,.6)" fontSize="11">
+              90°
+            </text>
+          </svg>
+          <p className="mt-1 text-center text-xs text-white/60">The longest side is opposite the right angle.</p>
+        </figure>
+      );
+    }
+
     return (
       <section className="my-4 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4" aria-label={visualization.title}>
         <h3 className="mb-4 text-base font-semibold text-white">{visualization.title}</h3>
@@ -2627,6 +2726,7 @@ function ChatGPTStyleText({
 }) {
   const safeText = normalizeBrokenMarkdownLinks(normalizeWorkspaceAnswerForDisplay(text, sourcePrompt));
   const parsedBlocks = parseWorkspaceMarkdown(safeText);
+  const mathReply = isMathematicsQuestion(sourcePrompt || '');
   const hasVisualMarker = parsedBlocks.some((block) => block.type === 'visual-reference');
   const blocks = parsedBlocks.map((block, index) => {
     if (block.type === 'visual-reference') {
@@ -2637,10 +2737,22 @@ function ChatGPTStyleText({
       return (
         <Heading
           key={`heading-${index}`}
-          className={`pt-2 font-semibold tracking-tight text-white ${block.level <= 2 ? 'text-xl' : block.level === 3 ? 'text-lg' : 'text-base'}`}
+          className={`${mathReply ? 'mt-2 border-l-2 border-sky-400/70 pl-3 pt-1' : 'pt-2'} font-semibold tracking-tight text-white ${block.level <= 2 ? 'text-xl' : block.level === 3 ? 'text-lg' : 'text-base'} ${mathReply && /^final answer$/i.test(block.text.trim()) ? 'rounded-lg border border-sky-300/20 bg-sky-300/[0.08] py-2 pl-3' : ''}`}
         >
           {renderInlineText(block.text, onLinkClick)}
         </Heading>
+      );
+    }
+    if (block.type === 'math') {
+      const fallback = formatWorkspaceMath(block.latex);
+      return (
+        <MathExpression
+          key={`display-math-${index}`}
+          latex={block.latex}
+          fallback={fallback}
+          display
+          markup={renderMathMarkup(block.latex, true)}
+        />
       );
     }
     if (block.type === 'paragraph') {
@@ -2695,7 +2807,7 @@ function ChatGPTStyleText({
     );
   }
 
-  return <div className="fm-assistant-content min-w-0 w-full max-w-3xl space-y-4 break-words text-[15px] leading-7 text-white/85 sm:text-base">{blocks}</div>;
+  return <div className={`fm-assistant-content min-w-0 w-full max-w-3xl space-y-4 break-words text-[15px] leading-7 text-white/85 sm:text-base ${mathReply ? 'fm-math-response' : ''}`}>{blocks}</div>;
 }
 
 function isTrustedMediaUrl(value: string, host: string) {
@@ -5499,6 +5611,23 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       const personalizationContext = buildPersonalizationContext(personalizationProfile);
 
       const solveForXGuidance = createSolveForXGuidanceResponse(finalPrompt);
+      const mathLearningRequest = isMathematicsQuestion(finalPrompt);
+      const mathematicsLearningGuidance = mathLearningRequest ? `
+
+Mathematics learning response:
+- Keep the original question and mathematical conditions unchanged. If a symbol or handwriting is unclear, ask the learner to clarify it rather than guessing.
+- Use beginner-friendly language unless the learner asks for advanced detail. Identify the topic and define important variables or symbols briefly.
+- Explain the method in small, ordered steps. Show the formula, substitute the actual values, include every important calculation, and explain why key operations are valid.
+- Use properly delimited LaTeX for equations: \\( ... \\) inline and $$ ... $$ on separate lines for display equations. Never expose raw LaTeX when it should be rendered.
+- Use concise sections such as "Understanding the question", "Step-by-step solution", "Final answer", "Check your answer", and "Help you understand"; omit sections that add no value and keep straightforward answers concise.
+- Verify arithmetic by substitution or an independent check where possible. State relevant restrictions and distinguish local from global extrema. For stationary-point questions, solve for every point, show the Hessian, and classify each point using the Hessian test.
+- Use a mathematical visual only when it directly helps. For a right triangle, provide a labelled diagram JSON block only when the side lengths satisfy the Pythagorean theorem, for example:
+\`\`\`diagram
+{"type":"triangle","title":"Right-angled triangle","legA":6,"legB":8,"hypotenuse":10,"unit":"cm"}
+\`\`\`
+For charts, calculate every plotted value from the stated equation. Never use a stock photo as a substitute for a mathematical diagram.
+- Include one short practice question only when it supports learning and does not overwhelm the answer.
+` : '';
       const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
     ${personalizationContext ? `\n\n${personalizationContext}\n` : ''}
 
@@ -5523,6 +5652,8 @@ FaceMeX intelligence rules:
 - If the user asks for research, analysis, strategy, market or breakdown, answer like a research assistant and make the answer easy to save as a note.
 - If the user asks about university, college, TVET, NSFAS, bursaries, grants, funding, investors or pitch decks, answer like an application assistant and guide them toward applying or scheduling follow-up.
 - Never mix Library sections. Students = school/university/NSFAS. Investors = grants/funding/investors/pitching. Jobs = jobs/CV/interviews/learnerships.
+
+${mathematicsLearningGuidance}
 
 User name: ${userDisplayName}
 Current automatic job results in FaceMeX:
@@ -5601,7 +5732,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         finalPrompt,
         promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
       );
-      const hasMediaPlan = !usageLimitReached && (mediaPlan.showImages || mediaPlan.showVideos);
+      const showResponseImages = mediaPlan.showImages && !mathLearningRequest;
+      const hasMediaPlan = !usageLimitReached && (showResponseImages || mediaPlan.showVideos);
 
       setMessages((prev) => [
         ...prev,
@@ -5616,9 +5748,9 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           followUp: parsedResponse.followUp,
           media: hasMediaPlan ? {
             status: 'loading',
-            imagesStatus: mediaPlan.showImages ? 'loading' : 'ready',
+            imagesStatus: showResponseImages ? 'loading' : 'ready',
             videosStatus: mediaPlan.showVideos ? 'loading' : 'ready',
-            showImages: mediaPlan.showImages,
+            showImages: showResponseImages,
             showVideos: mediaPlan.showVideos,
             images: [],
             videos: [],
@@ -5638,7 +5770,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           }));
         };
 
-        if (mediaPlan.showImages) {
+        if (showResponseImages) {
           void api.get(`/api/media/images/search?query=${encodeURIComponent(mediaPlan.imageQuery)}`)
             .then((result) => normalizeWorkspaceImages(result))
             .catch((error: unknown) => {
