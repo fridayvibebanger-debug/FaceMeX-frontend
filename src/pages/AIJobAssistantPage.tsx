@@ -2956,7 +2956,7 @@ function WorkspaceResponseMedia({
   return (
     <section className="my-3 min-w-0 w-full max-w-3xl" aria-label="Relevant YouTube lessons">
       <h3 className="mb-2 text-xs font-semibold text-white/85">Relevant YouTube lessons</h3>
-      <div className={`grid gap-2 ${videos.length > 1 ? 'grid-cols-2' : 'grid-cols-1 max-w-md'}`}>
+      <div className={`grid min-w-0 gap-2 ${videos.length > 1 ? 'grid-cols-2' : 'grid-cols-1 max-w-[320px] sm:max-w-sm'}`}>
         {videos.map((video) => (
           <article key={video.id} className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
             <iframe
@@ -5766,7 +5766,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         finalPrompt,
         promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
       );
-      const showResponseImages = mediaPlan.showImages && !mathLearningRequest;
+      const showResponseImages = mediaPlan.showImages;
       const hasMediaPlan = !usageLimitReached && (showResponseImages || mediaPlan.showVideos);
 
       setMessages((prev) => [
