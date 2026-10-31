@@ -83,6 +83,7 @@ import {
   normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
+  parseWorkspacePractice,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
   selectRelevantYouTubeLessonVideos,
@@ -2537,6 +2538,29 @@ function renderMarkdownTable(
   );
 }
 
+function WorkspacePracticeCard({ question, solution }: { question: string; solution: string }) {
+  return (
+    <section className="my-4 max-w-3xl overflow-hidden rounded-xl border border-sky-300/20 bg-sky-300/[0.04]">
+      <div className="space-y-3 px-4 py-3">
+        <h3 className="font-semibold text-white">Try one yourself</h3>
+        <p className="text-white/85">{renderInlineText(question)}</p>
+        <details className="border-t border-sky-300/15 pt-3">
+          <summary className="cursor-pointer font-medium text-white/85 marker:text-sky-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300">
+            Reveal solution
+          </summary>
+          <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+            {solution.split(/\n+/).map((line, index) => (
+              <p key={`practice-solution-${index}`} className="break-words text-sm leading-6 text-white/75">
+                {renderInlineText(line)}
+              </p>
+            ))}
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function MarkdownCodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -2788,6 +2812,12 @@ function ChatGPTStyleText({
       return <hr key={`rule-${index}`} className="my-4 border-0 border-t border-white/20" />;
     }
     if (block.type === 'code') {
+      if (block.language.toLowerCase() === 'practice') {
+        const practice = parseWorkspacePractice(block.text);
+        return practice
+          ? <WorkspacePracticeCard key={`practice-${index}`} {...practice} />
+          : <p key={`practice-error-${index}`} role="status" className="text-sm text-white/60">This practice question could not be displayed.</p>;
+      }
       if (block.language.toLowerCase() === 'chart' || block.language.toLowerCase() === 'diagram') {
         const visualization = parseWorkspaceVisualization(block.language.toLowerCase(), block.text);
         if (visualization) {
@@ -5626,7 +5656,11 @@ Mathematics learning response:
 {"type":"triangle","title":"Right-angled triangle","legA":6,"legB":8,"hypotenuse":10,"unit":"cm"}
 \`\`\`
 For charts, calculate every plotted value from the stated equation. Never use a stock photo as a substitute for a mathematical diagram.
-- Include one short practice question only when it supports learning and does not overwhelm the answer.
+- When a short practice question would reinforce learning, include one `practice` block with JSON keys "question" and "solution", for example:
+\`\`\`practice
+{"question":"Simplify: \\\\(2x^3 \\\\times 5x^2\\\\)","solution":"Multiply the coefficients, then add the exponents: \\\\(10x^5\\\\)."}
+\`\`\`
+Keep the question visible and do not reveal its solution elsewhere in the answer; the student reveals it with the "Reveal solution" control. Use LaTeX delimiters inside the JSON strings for formulas.
 ` : '';
       const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
     ${personalizationContext ? `\n\n${personalizationContext}\n` : ''}
