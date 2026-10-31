@@ -5004,42 +5004,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       description: 'Ask FaceMeX AI to continue, research deeper, or help you apply.',
     });
   };
-
-
-  const clearCurrentChatOnly = () => {
-    if (activeProjectConversationId) {
-      toast({ title: 'Project conversation retained', description: 'Project messages are kept in the project history.' });
-      return;
-    }
-    setMessages([]);
-    setPrompt('');
-    setSelectedImages([]);
-    setJobVisibleCounts({});
-    setFollowUpExpanded(false);
-    setEditingMessageId(null);
-    setEditText('');
-    setApplySheetOpen(false);
-    setApplySheetContext('');
-    setApplySheetJob(null);
-    setLastSelectedJob(null);
-
-    try {
-      localStorage.setItem(ownedWorkspaceStorageKey(WORKSPACE_STORAGE_KEY), JSON.stringify([]));
-      setChatSessions((prev) => {
-        const next = prev.filter((session) => session.id !== activeSessionId);
-        localStorage.setItem(ownedWorkspaceStorageKey(WORKSPACE_SESSIONS_STORAGE_KEY), JSON.stringify(next));
-        return next;
-      });
-    } catch {
-      // ignore
-    }
-
-    toast({
-      title: 'Chat cleared',
-      description: 'This chat is now clean. Your other recent chats stay saved.',
-    });
-  };
-
   const shareMessageLink = async (text: string, title = 'FaceMeX AI') => {
     const payload = buildSharePayload(text, title);
 
@@ -6620,12 +6584,10 @@ Start with the most useful next action. Do not invent personal details, course r
       message.intent === 'education_homework' ||
       message.intent === 'education_assignment' ||
       message.intent === 'education_youtube';
-    const hasScheduleCardAction = shouldShowApplicationActions(message, previousUserText);
-
     return (
     <>
-      <div className="fm-message-actions mt-3 flex flex-wrap items-center gap-1 border-t border-white/10 pt-2 opacity-80 lg:hidden">
-        <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white">
+      <div className="fm-message-actions mt-3 grid grid-cols-6 items-center gap-1 border-t border-white/10 pt-2 opacity-80 lg:hidden">
+        <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Copy message" title="Copy">
           <Copy className="h-3.5 w-3.5" />
         </Button>
 
@@ -6676,12 +6638,6 @@ Start with the most useful next action. Do not invent personal details, course r
           <Search className="h-3.5 w-3.5" />
         </Button>
 
-        {!hasScheduleCardAction && (
-          <Button size="sm" variant="ghost" onClick={() => openSchedulePanel(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Schedule this chat">
-            <CalendarDays className="h-3.5 w-3.5" />
-          </Button>
-        )}
-
         {message.role === 'user' && (
           <Button size="sm" variant="ghost" onClick={() => startEdit(message)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Edit your prompt">
             <Edit3 className="h-3.5 w-3.5" />
@@ -6707,9 +6663,9 @@ Start with the most useful next action. Do not invent personal details, course r
         <Button
           size="sm"
           variant="ghost"
-          onClick={clearCurrentChatOnly}
+          onClick={() => deleteMessage(message.id)}
           className="h-8 rounded-full px-2 text-red-500"
-          aria-label="Clear current chat"
+          aria-label="Delete this message"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
@@ -6786,19 +6742,6 @@ Start with the most useful next action. Do not invent personal details, course r
         >
           <Search className="h-4 w-4" />
         </Button>
-
-        {!hasScheduleCardAction && (
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => openSchedulePanel(message.content)}
-            title="Schedule"
-            aria-label="Schedule this chat"
-            className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
-          >
-            <CalendarDays className="h-4 w-4" />
-          </Button>
-        )}
 
         {message.role === 'user' && (
           <Button
@@ -8243,6 +8186,19 @@ Start with the most useful next action. Do not invent personal details, course r
 
           .fm-ai-workspace.fm-theme-light .fm-assistant-content hr {
             border-color: #dedede !important;
+          }
+
+          .fm-message-actions {
+            grid-template-columns: repeat(6, minmax(0, 2rem));
+            justify-content: start;
+          }
+
+          .fm-message-actions > button {
+            width: 2rem;
+            min-width: 2rem;
+            justify-self: center;
+            padding-left: 0;
+            padding-right: 0;
           }
 
           .fm-ai-workspace.fm-theme-light .fm-message-actions {
