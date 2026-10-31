@@ -178,7 +178,7 @@ test('parses multiline display equations without exposing their delimiters', () 
   ]);
 });
 
-test('renders all six learning examples as KaTeX without raw source or parse errors', () => {
+test('renders all six learning examples as MathML without raw LaTeX commands', () => {
   const examples = [
     String.raw`3a^2 \times 4a^3 = \boxed{12a^5}`,
     String.raw`\frac{3}{4}+\frac{5}{6}=\frac{19}{12}=1\frac{7}{12}`,
@@ -217,4 +217,10 @@ test('renders advanced LaTeX constructs including derivatives, sums, limits, and
     assert.match(markup, /<math\b/);
     assert.doesNotMatch(markup, /\\(?:int|sum|lim|partial|begin|nabla)\b/);
   }
+});
+
+test('escapes LaTeX text content before embedding it in MathML', () => {
+  const markup = renderWorkspaceMathML(String.raw`\text{<img src=x onerror=alert(1)>}`);
+  assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(markup, /<img\b/);
 });

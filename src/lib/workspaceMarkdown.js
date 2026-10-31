@@ -89,7 +89,7 @@ export function parseWorkspaceMarkdown(source) {
     if (mathStart) {
       const remainder = trimmed.slice(mathStart.opening.length);
       const closingIndex = remainder.indexOf(mathStart.closing);
-        if (closingIndex >= 0 && !remainder.slice(closingIndex + mathStart.closing.length).trim()) {
+      if (closingIndex >= 0 && !remainder.slice(closingIndex + mathStart.closing.length).trim()) {
         blocks.push({ type: 'math', latex: remainder.slice(0, closingIndex).trim() });
         index += 1;
         continue;
@@ -288,17 +288,17 @@ function readMathArgument(source, start, depth) {
 function splitMathEnvironment(source) {
   const rows = [[]];
   let cellStart = 0;
-  let depth = 0;
+  let groupDepth = 0;
+  let environmentDepth = 0;
   for (let index = 0; index < source.length; index += 1) {
     if (source[index] === '\\') {
-      const nestedStart = source.slice(index).match(/^\\begin\s*\{([^}]+)\}/);
-      if (nestedStart) {
-        const contentStart = index + nestedStart[0].length;
-        const nested = renderMathEnvironment(source.slice(contentStart), nestedStart[1], 0);
-        index = contentStart + nested.next - 1;
+      const environmentMarker = source.slice(index).match(/^\\(begin|end)\s*\{([^}]+)\}/);
+      if (environmentMarker) {
+        environmentDepth += environmentMarker[1] === 'begin' ? 1 : -1;
+        index += environmentMarker[0].length - 1;
         continue;
       }
-      if (source[index + 1] === '\\' && depth === 0) {
+      if (source[index + 1] === '\\' && groupDepth === 0 && environmentDepth === 0) {
         rows.at(-1).push(source.slice(cellStart, index));
         rows.push([]);
         index += 1;
@@ -310,9 +310,9 @@ function splitMathEnvironment(source) {
       else index += 1;
       continue;
     }
-    if (source[index] === '{') depth += 1;
-    if (source[index] === '}') depth = Math.max(0, depth - 1);
-    if (source[index] === '&' && depth === 0) {
+    if (source[index] === '{') groupDepth += 1;
+    if (source[index] === '}') groupDepth = Math.max(0, groupDepth - 1);
+    if (source[index] === '&' && groupDepth === 0 && environmentDepth === 0) {
       rows.at(-1).push(source.slice(cellStart, index));
       cellStart = index + 1;
     }

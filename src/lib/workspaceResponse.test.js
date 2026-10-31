@@ -12,6 +12,7 @@ import {
   normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
+  parseWorkspacePractice,
   parseWorkspaceVisualization,
   selectRelevantYouTubeLessonVideos,
 } from './workspaceResponse.js';
@@ -92,6 +93,22 @@ test('recognizes all six requested math topics without changing other prompt int
   assert.equal(isMathematicsQuestion('Write a friendly message to my classmate.'), false);
   assert.equal(isMathematicsQuestion('Help me solve this laptop issue.'), false);
   assert.equal(isMathematicsQuestion(null), false);
+});
+
+test('validates interactive practice blocks before rendering them', () => {
+  assert.deepEqual(parseWorkspacePractice(JSON.stringify({
+    question: String.raw`2x^3 \times 5x^2 = ?`,
+    solution: String.raw`Multiply 2 and 5, then add exponents: \(10x^5\).`,
+  })), {
+    question: String.raw`2x^3 \times 5x^2 = ?`,
+    solution: String.raw`Multiply 2 and 5, then add exponents: \(10x^5\).`,
+  });
+  assert.equal(parseWorkspacePractice('{'), null);
+  assert.equal(parseWorkspacePractice(JSON.stringify({ question: 'Practice only', solution: '' })), null);
+  assert.equal(parseWorkspacePractice(JSON.stringify({
+    question: 'q'.repeat(501),
+    solution: 'answer',
+  })), null);
 });
 
 test('accepts supported YouTube URL forms and rejects unrelated or unsafe URLs', () => {

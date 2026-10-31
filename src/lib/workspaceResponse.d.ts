@@ -28,6 +28,13 @@ export function parseWorkspaceVisualization(
   source: string,
 ): WorkspaceVisualization | null;
 
+export type WorkspacePractice = {
+  question: string;
+  solution: string;
+};
+
+export function parseWorkspacePractice(source: string): WorkspacePractice | null;
+
 export function extractYouTubeVideoId(input: string): string | null;
 
 export function extractYouTubeUrlFromText(input: string): string | null;

@@ -43,7 +43,7 @@ export function parseWorkspaceVisualization(kind, source) {
       typeof side === 'number' && Number.isFinite(side) && side > 0 && side <= 1_000_000_000
     )) return null;
     const expectedHypotenuse = Math.hypot(legA, legB);
-    if (Math.abs(hypotenuse - expectedHypotenuse) > Math.max(0.000001, expectedHypotenuse * 0.005)) return null;
+    if (Math.abs(hypotenuse - expectedHypotenuse) > Math.max(1e-9, expectedHypotenuse * 1e-6)) return null;
     if (typeof value.unit !== 'string' || value.unit.length > 10) return null;
     return {
       kind: 'diagram',
@@ -64,6 +64,20 @@ export function parseWorkspaceVisualization(kind, source) {
   }
 
   return null;
+}
+
+export function parseWorkspacePractice(source) {
+  if (typeof source !== 'string' || source.length > 2000) return null;
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const question = safeLabel(value.question, 500);
+  const solution = safeLabel(value.solution, 1200);
+  return question && solution ? { question, solution } : null;
 }
 
 export function extractYouTubeVideoId(input) {
