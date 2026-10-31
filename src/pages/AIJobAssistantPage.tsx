@@ -5620,7 +5620,7 @@ Mathematics learning response:
 {"type":"triangle","title":"Right-angled triangle","legA":6,"legB":8,"hypotenuse":10,"unit":"cm"}
 \`\`\`
 For charts, calculate every plotted value from the stated equation. Never use a stock photo as a substitute for a mathematical diagram.
-- When a short practice question would reinforce learning, include one `practice` block with JSON keys "question" and "solution", for example:
+- When a short practice question would reinforce learning, include one \`practice\` block with JSON keys "question" and "solution", for example:
 \`\`\`practice
 {"question":"Simplify: \\\\(2x^3 \\\\times 5x^2\\\\)","solution":"Multiply the coefficients, then add the exponents: \\\\(10x^5\\\\)."}
 \`\`\`
