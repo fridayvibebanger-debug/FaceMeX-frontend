@@ -36,6 +36,12 @@ import { useUserStore } from '@/store/userStore';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import EditorToolbar from './EditorToolbar';
 import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
+import DocumentTemplateGallery from './DocumentTemplateGallery';
+import {
+  buildClassicCvTemplateContent,
+  buildDocumentTemplateContent,
+  getDocumentTemplate,
+} from './documentTemplates';
 
 function escapeHtml(value: string) {
   return value
@@ -98,6 +104,7 @@ type FormState = {
   experience: string;
   skills: string;
   education: string;
+  references: string;
   extras: string;
   portfolio?: string;
   bio?: string;
@@ -133,6 +140,7 @@ const emptyForm: FormState = {
   experience: '',
   skills: '',
   education: '',
+  references: '',
   extras: '',
 };
 
@@ -314,27 +322,61 @@ function renderDocumentMarkdown(text: string) {
   return <div className="space-y-2 text-[15px] leading-7">{blocks}</div>;
 }
 
-function buildLocalCv(form: FormState) {
+function buildLocalCv(form: FormState, classic = false) {
+  if (!classic) {
+    return [
+      form.fullName,
+      form.jobTitle || 'Professional Title',
+      [form.email, form.phone, form.location].filter(Boolean).join(' · ') || '[ADD YOUR CONTACT DETAILS]',
+      '',
+      'PROFESSIONAL SUMMARY',
+      form.summary || '[ADD A PROFESSIONAL SUMMARY BASED ON YOUR REAL GOALS AND EXPERIENCE]',
+      '',
+      'EXPERIENCE',
+      form.experience || '[ADD YOUR REAL WORK, PROJECT, VOLUNTEERING, OR PRACTICAL EXPERIENCE]',
+      '',
+      'SKILLS',
+      form.skills || '[ADD SKILLS YOU CAN GENUINELY DEMONSTRATE]',
+      '',
+      'EDUCATION',
+      form.education || '[ADD YOUR EDUCATION, CERTIFICATES, OR TRAINING]',
+      '',
+      'ADDITIONAL INFORMATION',
+      form.extras || '[ADD LANGUAGES, LINKS, ACHIEVEMENTS, OR REFERENCES YOU CAN VERIFY]',
+    ].join('\n');
+  }
+
+  const entries = (value: string) => value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+  const entryTable = (value: string, emptyLabel: string, kind: 'education' | 'experience' | 'references') => {
+    const rows = entries(value).map((entry) => {
+      const columns = entry.split('|').map((column) => column.trim()).filter(Boolean);
+      const splitAt = columns.length >= 3 ? 2 : 1;
+      const left = columns.length > 1 ? columns.slice(0, splitAt).join(' · ') : '';
+      const right = columns.length > 1 ? columns.slice(splitAt).join(' · ') : entry;
+      return `<tr><td>${escapeHtml(left)}</td><td>${escapeHtml(right)}</td></tr>`;
+    });
+    const leftLabel = kind === 'references' ? 'Name / position' : 'Dates / institution';
+    const placeholder = `<tr><td><em>[${leftLabel}]</em></td><td><em>[${escapeHtml(emptyLabel)}]</em></td></tr>`;
+    return `<table><tbody>${rows.length ? rows.join('') : placeholder}</tbody></table>`;
+  };
+  const skills = entries(form.skills).map((skill) => `<li>${escapeHtml(skill.replace(/^[-*•]\s*/, ''))}</li>`);
+  const skillSplit = Math.ceil(skills.length / 2);
+  const skillColumns = [skills.slice(0, skillSplit), skills.slice(skillSplit)];
+  const skillsMarkup = `<table><tbody><tr>${skillColumns
+    .map((column, index) => `<td>${column.length ? `<ul>${column.join('')}</ul>` : !skills.length && index === 0 ? '<p><em>[Demonstrable skill]</em></p>' : '<p></p>'}</td>`)
+    .join('')}</tr></tbody></table>`;
+  const section = (heading: string, body: string) => `<h2>${heading}</h2>${body}`;
+
   return [
-    form.fullName || 'Your Name',
-    form.jobTitle || 'Professional Title',
-    [form.email, form.phone, form.location].filter(Boolean).join(' · ') || '[ADD YOUR CONTACT DETAILS]',
-    '',
-    'PROFESSIONAL SUMMARY',
-    form.summary || '[ADD A PROFESSIONAL SUMMARY BASED ON YOUR REAL GOALS AND EXPERIENCE]',
-    '',
-    'EXPERIENCE',
-    form.experience || '[ADD YOUR REAL WORK, PROJECT, VOLUNTEERING, OR PRACTICAL EXPERIENCE]',
-    '',
-    'SKILLS',
-    form.skills || '[ADD SKILLS YOU CAN GENUINELY DEMONSTRATE]',
-    '',
-    'EDUCATION',
-    form.education || '[ADD YOUR EDUCATION, CERTIFICATES, OR TRAINING]',
-    '',
-    'ADDITIONAL INFORMATION',
-    form.extras || '[ADD LANGUAGES, LINKS, ACHIEVEMENTS, OR REFERENCES YOU CAN VERIFY]',
-  ].join('\n');
+    section('PROFESSIONAL SUMMARY', `<p>${form.summary.trim() ? escapeHtml(form.summary.trim()).replace(/\r?\n/g, '<br>') : '<em>[Professional summary]</em>'}</p>`),
+    section('EDUCATION', entryTable(form.education, 'Qualification and institution', 'education')),
+    section('EXPERIENCE', entryTable(form.experience, 'Role and verified responsibilities', 'experience')),
+    section('SKILLS', skillsMarkup),
+    section('REFERENCES', entryTable(form.references, 'Organisation and contact details', 'references')),
+    ...(form.extras.trim()
+      ? [section('ADDITIONAL INFORMATION', `<p>${escapeHtml(form.extras.trim()).replace(/\r?\n/g, '<br>')}</p>`)]
+      : []),
+  ].join('');
 }
 
 function buildLocalLetter(form: FormState) {
@@ -740,6 +782,164 @@ function fontFamily(font: FontKey) {
       : 'Arial, Helvetica, sans-serif';
 }
 
+function getClassicCvHeaderNodeCount(content: string, form: FormState) {
+  const parsed = new DOMParser().parseFromString(content, 'text/html');
+  const elements = Array.from(parsed.body.children);
+  const normalize = (value: string) => value.replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+  const candidateNames = [form.fullName, 'Your Name'].filter(Boolean).map(normalize);
+  const contactValues = [form.email, form.phone, form.location]
+    .filter(Boolean)
+    .map(normalize);
+  const sectionHeadings = /^(personal information|educational qualifications|education(?: & qualifications)?|professional title|professional summary|experience|work experience|skills|additional information|references|projects(?: & achievements)?)$/;
+  const headerValues = (element: Element, index: number) => {
+    const text = normalize(element.textContent || '');
+    return candidateNames.includes(text) ||
+      (Boolean(form.fullName) && text.startsWith(normalize(form.fullName))) ||
+      text === 'curriculum vitae' ||
+      text.startsWith('curriculum vitae of') ||
+      text === 'of' ||
+      (Boolean(form.jobTitle) && text === normalize(form.jobTitle)) ||
+      text === 'professional title' ||
+      text === '[add your professional title]' ||
+      text.includes('add your role or purpose') ||
+      text.includes('@') ||
+      contactValues.some((value) => text.includes(value)) ||
+      text.includes('add your contact details') ||
+      text.includes('add your email') ||
+      text.includes('add your phone') ||
+      text.includes('add your location') ||
+      (index === 0 && element.tagName === 'H1');
+  };
+  let count = 0;
+  while (count < elements.length) {
+    const element = elements[count];
+    const text = normalize(element.textContent || '');
+    if (!text || sectionHeadings.test(text) && !headerValues(element, count)) break;
+    if (!headerValues(element, count)) break;
+    count += 1;
+  }
+  return count;
+}
+
+function stripCvNamePlaceholder(content: string) {
+  const parsed = new DOMParser().parseFromString(content, 'text/html');
+  const firstContent = Array.from(parsed.body.children).find((element) => element.textContent?.trim());
+  if (firstContent?.textContent?.replace(/\s+/g, ' ').trim().toLocaleLowerCase() === 'your name') {
+    firstContent.remove();
+  }
+  return parsed.body.innerHTML;
+}
+
+function ClassicCvHeader({ form }: { form: FormState }) {
+  const contactDetails = [
+    form.phone ? <div key="phone"><span aria-hidden="true">☎</span> {form.phone}</div> : null,
+    form.location ? <div key="location"><span aria-hidden="true">⌖</span> {form.location}</div> : null,
+    form.email ? <div key="email"><span aria-hidden="true">✉</span> {form.email}</div> : null,
+  ].filter(Boolean);
+
+  return (
+    <header className="fm-classic-cv-header">
+      <div className="fm-classic-cv-title">
+        <div>{form.fullName || '[Full name]'}</div>
+        <p>{form.jobTitle || '[Professional title]'}</p>
+      </div>
+      <div className="fm-classic-cv-divider" />
+      {contactDetails.length > 0 && <div className="fm-classic-cv-contact-grid">{contactDetails}</div>}
+    </header>
+  );
+}
+
+function stripClassicCvHeader(content: string, form: FormState) {
+  const parsed = new DOMParser().parseFromString(content, 'text/html');
+  const count = getClassicCvHeaderNodeCount(content, form);
+  Array.from(parsed.body.children).slice(0, count).forEach((element) => element.remove());
+
+  parsed.body.querySelectorAll('p, li').forEach((element) => {
+    const text = element.textContent?.trim() || '';
+    if (!text || /^\[(?:add|enter|list|describe|explain|state|capture|record|include|replace)\b/i.test(text)) {
+      element.remove();
+    }
+  });
+
+  Array.from(parsed.body.querySelectorAll('h2')).forEach((heading) => {
+    let sibling = heading.nextElementSibling;
+    let hasSectionContent = false;
+    while (sibling && !/^H[1-3]$/.test(sibling.tagName)) {
+      if (sibling.textContent?.trim()) {
+        hasSectionContent = true;
+        break;
+      }
+      sibling = sibling.nextElementSibling;
+    }
+    if (!hasSectionContent) heading.remove();
+  });
+
+  return { html: parsed.body.innerHTML, count };
+}
+
+function ensureClassicCvPersonalInfo(content: string, form: FormState) {
+  const identityNumber = form.idNumber.trim();
+  if (!identityNumber) return content;
+
+  const parsed = new DOMParser().parseFromString(content, 'text/html');
+  if ((parsed.body.textContent || '').includes(identityNumber)) return content;
+
+  const headings = Array.from(parsed.body.querySelectorAll('h1, h2, h3'));
+  const personalHeading = headings.find((heading) =>
+    heading.textContent?.trim().toLocaleLowerCase() === 'personal information'
+  );
+  const details = parsed.createElement('table');
+  const row = parsed.createElement('tr');
+  for (const value of ['Identity number', ':', identityNumber]) {
+    const cell = parsed.createElement('td');
+    cell.textContent = value;
+    row.append(cell);
+  }
+  const body = parsed.createElement('tbody');
+  body.append(row);
+  details.append(body);
+
+  if (personalHeading) {
+    const nextHeading = headings.find((heading) => heading.compareDocumentPosition(personalHeading) & Node.DOCUMENT_POSITION_PRECEDING);
+    if (nextHeading) {
+      nextHeading.before(details);
+    } else {
+      personalHeading.after(details);
+    }
+    return parsed.body.innerHTML;
+  }
+
+  const sectionHeading = parsed.createElement('h2');
+  sectionHeading.textContent = 'PERSONAL INFORMATION';
+  const educationHeading = headings.find((heading) =>
+    /educational qualifications|education/i.test(heading.textContent || '')
+  );
+  if (educationHeading) {
+    educationHeading.before(sectionHeading, details);
+  } else {
+    parsed.body.prepend(sectionHeading, details);
+  }
+  return parsed.body.innerHTML;
+}
+
+function classicCvHeaderMarkup(form: FormState) {
+  const contactDetails = [
+    form.phone ? `<div>☎ ${escapeHtml(form.phone)}</div>` : '',
+    form.location ? `<div>⌖ ${escapeHtml(form.location)}</div>` : '',
+    form.email ? `<div>✉ ${escapeHtml(form.email)}</div>` : '',
+  ].filter(Boolean);
+
+  return `<header class="classic-cv-header"><div class="classic-cv-title"><div>${escapeHtml(form.fullName || '[Full name]')}</div><p>${escapeHtml(form.jobTitle || '[Professional title]')}</p></div><div class="classic-cv-divider"></div>${contactDetails.length ? `<div class="classic-cv-contact-grid">${contactDetails.join('')}</div>` : ''}</header>`;
+}
+
+function prepareClassicCvContent(content: string, form: FormState) {
+  const stripped = stripClassicCvHeader(content, form);
+  return {
+    ...stripped,
+    html: ensureClassicCvPersonalInfo(stripped.html, form),
+  };
+}
+
 function documentHtml(
   kind: DocumentKind,
   form: FormState,
@@ -749,7 +949,9 @@ function documentHtml(
   alignment: 'left' | 'center' | 'right' | 'justify',
   highlightColor: string,
   orientation: PageOrientation,
+  variant = 'default',
 ) {
+  const isClassicCv = kind === 'cv' && template === 'classic';
   const accent = template === 'minimal'
     ? '#172033'
     : template === 'executive'
@@ -758,13 +960,38 @@ function documentHtml(
         ? '#475569'
         : '#2563eb';
 
-  const header = kind === 'cv'
-    ? `<div class="name">${escapeHtml(form.fullName || 'Your Name')}</div><div class="meta">${[form.email, form.phone, form.location, form.idNumber].filter(Boolean).map(escapeHtml).join('  |  ')}</div>`
-    : `<div class="name">${escapeHtml(form.fullName || 'Your Name')}</div><div class="meta">${[form.email, form.phone, form.location].filter(Boolean).map(escapeHtml).join('  |  ')}</div><div class="date">${new Date().toLocaleDateString('en-ZA')}</div>`;
+  const preparedCvContent = kind === 'cv' ? stripCvNamePlaceholder(content) : content;
+  const classicContent = isClassicCv ? prepareClassicCvContent(preparedCvContent, form) : { html: preparedCvContent, count: 0 };
+  const header = isClassicCv
+    ? ''
+    : kind === 'cv'
+      ? `${form.fullName ? `<div class="name">${escapeHtml(form.fullName)}</div>` : ''}<div class="meta">${[form.email, form.phone, form.location, form.idNumber].filter(Boolean).map(escapeHtml).join('  |  ')}</div>`
+      : `${form.fullName ? `<div class="name">${escapeHtml(form.fullName)}</div>` : ''}<div class="meta">${[form.email, form.phone, form.location].filter(Boolean).map(escapeHtml).join('  |  ')}</div><div class="date">${new Date().toLocaleDateString('en-ZA')}</div>`;
+  const headerMarkup = isClassicCv
+    ? classicCvHeaderMarkup(form)
+    : variant === 'default' && (header.trim() || kind !== 'cv')
+      ? `<header class="header">${header}</header>`
+      : '';
+  const documentContent = isClassicCv ? classicContent.html : preparedCvContent;
 
   const pageWidth = orientation === 'portrait' ? '210mm' : '297mm';
   const pageHeight = orientation === 'portrait' ? '297mm' : '210mm';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>FaceMeX ${kind === 'cv' ? 'CV' : 'Cover Letter'}</title><style>@page{size:A4 ${orientation};margin:0}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:${fontFamily(font)};color:#172033}.page{width:${pageWidth};min-height:${pageHeight};margin:16px auto;padding:20mm;background:#fff;box-shadow:0 16px 45px rgba(15,23,42,.14);font-size:11pt;line-height:1.45;text-align:${alignment}}.header{border-top:5px solid ${accent};padding:13px 0 12px;border-bottom:1px solid #dbe2ea;margin-bottom:22px}.name{font-size:25px;font-weight:800;letter-spacing:.02em;color:#101827}.meta,.date{margin-top:6px;font-size:9.5pt;color:#526174}.date{margin-top:16px}h2{font-size:11pt;letter-spacing:.12em;color:${accent};margin:18px 0 7px;border-bottom:1px solid #dbe2ea;padding-bottom:4px}p{margin:0 0 7px;white-space:pre-wrap}ul,ol{padding-left:20px;margin:0 0 10px}li{margin:0 0 4px}mark{background:${highlightColor};padding:0 .12em}.space{height:5px}.document-page-break{break-before:page;page-break-before:always;height:0;border:0}@media screen and (max-width:600px){body{background:#f8fafc}.page{width:100%;min-height:100vh;margin:0;padding:24px 20px;box-shadow:none;font-size:10pt}.name{font-size:22px}.header{margin-bottom:16px}}@media print{body{background:#fff}.page{margin:0;box-shadow:none;width:${pageWidth};min-height:${pageHeight};padding:20mm}}</style></head><body><main class="page"><header class="header">${header}</header><section>${content}</section></main></body></html>`;
+  const variantStyles = variant === 'creative'
+    ? '.page section h1:first-child{border-bottom:7px solid #a3d900;padding-bottom:8px;text-transform:uppercase}.page h2{color:#537000}'
+    : variant === 'sidebar'
+      ? '.page table{table-layout:fixed}.page td:first-child,.page th:first-child{width:32%;background:#eaf0fb}.page th{color:#25416f}'
+      : variant === 'clinical'
+        ? '.page h2{background:#eaf3fb;color:#14558f;padding:5px}'
+        : variant === 'technology'
+          ? '.page h2{border-left:3px solid #1769c2;padding-left:8px;color:#174c7e}'
+          : ['proposal', 'startup', 'pitch'].includes(variant)
+            ? '.page section>h1:first-child{border-bottom:4px solid #2477d2;padding-bottom:8px;color:#173c70}'
+            : '';
+  const pageStyles = isClassicCv
+    ? `@page{size:A4 portrait;margin:8mm}.page{width:auto;min-height:281mm;margin:0;padding:8mm;border:1px solid #cbd5e1;box-decoration-break:clone;-webkit-box-decoration-break:clone;overflow-wrap:anywhere;text-align:left;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.4;print-color-adjust:exact;-webkit-print-color-adjust:exact}.classic-cv-title{text-align:center;font-size:23pt;line-height:1.25;font-weight:700;text-transform:uppercase;overflow-wrap:anywhere;color:#172033}.classic-cv-title p{margin:3pt 0 0;font-size:11pt;font-weight:400;text-transform:none;color:#475569}.classic-cv-header{margin-bottom:12pt}.classic-cv-divider{border-top:1px solid #94a3b8;margin:8pt 0}.classic-cv-contact-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:4pt 16pt;font-size:9.5pt;color:#475569}.classic-cv-contact-grid>div{overflow-wrap:anywhere}.page section h2{color:#172033;text-align:left;text-decoration:none;letter-spacing:.04em;font-size:11pt;margin:12pt 0 5pt;border-bottom:1px solid #cbd5e1;padding:0 0 3pt;break-after:avoid-page;page-break-after:avoid}.page section p{margin:0 0 5pt;white-space:pre-wrap}.page section li{break-inside:avoid;page-break-inside:avoid}.page section table{width:100%;margin:0 0 5pt;border:0;border-collapse:collapse;table-layout:fixed;font-size:10pt}.page section table thead{display:none}.page section th,.page section td{border:0;background:transparent;padding:2pt 4pt;vertical-align:top}.page section td:first-child{width:32%;color:#475569}.page section table:has(td>ul) td{width:50%}.page section table:has(tr>td:nth-child(3)) td:nth-child(2){width:1.5rem;text-align:center}.page section h2+ p{margin-top:0}.page section>h2,.page section>h2+*{break-inside:avoid-page;page-break-inside:avoid}`
+    : '';
+  const pageMargin = isClassicCv ? '8mm' : '0';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>FaceMeX ${kind.replace(/-/g, ' ')}</title><style>@page{size:${isClassicCv ? 'A4 portrait' : `A4 ${orientation}`};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:${fontFamily(font)};color:#172033}.page{width:${pageWidth};min-height:${pageHeight};margin:16px auto;padding:20mm;background:#fff;box-shadow:0 16px 45px rgba(15,23,42,.14);font-size:11pt;line-height:1.45;text-align:${alignment}}.header{border-top:5px solid ${accent};padding:13px 0 12px;border-bottom:1px solid #dbe2ea;margin-bottom:22px}.name{font-size:25px;font-weight:800;letter-spacing:.02em;color:#101827}.meta,.date{margin-top:6px;font-size:9.5pt;color:#526174}.date{margin-top:16px}h2{font-size:11pt;letter-spacing:.12em;color:${accent};margin:18px 0 7px;border-bottom:1px solid #dbe2ea;padding-bottom:4px}p{margin:0 0 7px;white-space:pre-wrap}ul,ol{padding-left:20px;margin:0 0 10px}li{margin:0 0 4px}table{width:100%;border-collapse:collapse;margin:10px 0 16px;font-size:9.5pt}th,td{border:1px solid #dbe2ea;padding:7px;vertical-align:top}th{background:#f1f5f9;text-align:left}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}h1,h2,h3{break-after:avoid-page;page-break-after:avoid}mark{background:${highlightColor};padding:0 .12em}.document-page-break{break-before:page;page-break-before:always;height:0;border:0}${variantStyles}${pageStyles}@media screen and (max-width:600px){body{background:#f8fafc}.page{width:100%;min-height:100vh;margin:0;padding:24px 20px;box-shadow:none;font-size:10pt}.name{font-size:22px}.header{margin-bottom:16px}}@media print{body{background:#fff}.page{margin:0;box-shadow:none;width:${isClassicCv ? 'auto' : pageWidth};min-height:${isClassicCv ? '281mm' : pageHeight};padding:${isClassicCv ? '8mm' : '20mm'};break-after:auto}.classic-cv-title{page-break-after:avoid;break-after:avoid-page}.classic-cv-header,.page section>h2{break-inside:avoid-page;page-break-inside:avoid}}</style></head><body><main class="page" data-variant="${variant}"${isClassicCv ? ' data-template="classic"' : ''}>${headerMarkup}<section>${documentContent}</section></main></body></html>`;
 }
 
 function makeDocxRuns(node: Node, marks: Record<string, any> = {}): TextRun[] {
@@ -947,7 +1174,8 @@ export default function DocumentStudio({
   }, []);
 
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [template, setTemplate] = useState<TemplateKey>('modern');
+  const [template, setTemplate] = useState<TemplateKey>(kind === 'cv' ? 'classic' : 'modern');
+  const [templateId, setTemplateId] = useState('');
   const [font, setFont] = useState<FontKey>('sans');
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
   const [orientation, setOrientation] = useState<PageOrientation>(kind === 'presentation' ? 'landscape' : 'portrait');
@@ -956,6 +1184,7 @@ export default function DocumentStudio({
   const [busy, setBusy] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'loading' | 'saving' | 'saved' | 'error'>('loading');
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -969,6 +1198,7 @@ export default function DocumentStudio({
   const [documentLoadWarning, setDocumentLoadWarning] = useState('');
   const documentSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const coachTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const documentUploadRef = useRef<HTMLInputElement>(null);
   const coachSelectionRef = useRef<{ from: number; to: number; original: string } | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -988,10 +1218,10 @@ export default function DocumentStudio({
 
   const title = documentName || documentTitles[kind];
 
-  const buildLocalContent = (docKind: DocumentKind, docForm: FormState): string => {
+  const buildLocalContent = (docKind: DocumentKind, docForm: FormState, docTemplate: TemplateKey): string => {
     switch (docKind) {
       case 'cv':
-        return buildLocalCv(docForm);
+        return buildLocalCv(docForm, docTemplate === 'classic');
       case 'cover-letter':
         return buildLocalLetter(docForm);
       case 'portfolio':
@@ -1013,11 +1243,11 @@ export default function DocumentStudio({
       case 'meeting-notes':
         return buildLocalMeetingNotes(docForm);
       default:
-        return buildLocalCv(docForm);
+        return buildLocalCv(docForm, docTemplate === 'classic');
     }
   };
 
-  const localContent = useMemo(() => buildLocalContent(kind, form), [form, kind]);
+  const localContent = useMemo(() => buildLocalContent(kind, form, template), [form, kind, template]);
 
   const saveDocumentWithRetry = async (key: string, draft: Parameters<typeof saveDocument>[1]): Promise<PersistedDocument> => {
     const save: Promise<PersistedDocument> = documentSaveQueue.current.catch(() => undefined).then(async () => {
@@ -1112,6 +1342,7 @@ export default function DocumentStudio({
           setContent(createEditorHtml(localDraft.content, kind === 'presentation'));
         }
         if (localDraft.template) setTemplate(localDraft.template);
+        if (localDraft.templateId) setTemplateId(localDraft.templateId);
         if (localDraft.font) setFont(localDraft.font);
         if (localDraft.alignment) setAlignment(localDraft.alignment);
         if (localDraft.orientation) setOrientation(localDraft.orientation);
@@ -1138,6 +1369,7 @@ export default function DocumentStudio({
             if (metadata.form) setForm({ ...emptyForm, ...(metadata.form as Partial<FormState>) });
             setContent(createEditorHtml(saved.content || '<p></p>', kind === 'presentation'));
             if (metadata.template) setTemplate(metadata.template as TemplateKey);
+            if (metadata.templateId) setTemplateId(String(metadata.templateId));
             if (metadata.font) setFont(metadata.font as FontKey);
             if (metadata.alignment) setAlignment(metadata.alignment as 'left' | 'center' | 'right' | 'justify');
             if (metadata.orientation) setOrientation(metadata.orientation as PageOrientation);
@@ -1194,10 +1426,21 @@ export default function DocumentStudio({
   }, [content, editor]);
 
   useEffect(() => {
+    if (!draftHydrated || !editor || kind !== 'cv') return;
+    const placeholderCleaned = stripCvNamePlaceholder(content);
+    const sanitized = template === 'classic'
+      ? prepareClassicCvContent(placeholderCleaned, form).html
+      : placeholderCleaned;
+    if (sanitized === content) return;
+    editor.commands.setContent(sanitized, { emitUpdate: false });
+    setContent(sanitized);
+  }, [content, draftHydrated, editor, form, kind, template]);
+
+  useEffect(() => {
     if (!draftHydrated) return;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, font, alignment, highlightColor, orientation, savedAt: new Date().toISOString() }));
+        localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, templateId, font, alignment, highlightColor, orientation, savedAt: new Date().toISOString() }));
       } catch {
         setDraftSaved(false);
       }
@@ -1207,7 +1450,7 @@ export default function DocumentStudio({
         title,
         documentType: kind,
         content,
-        metadata: { form, template, font, alignment, highlightColor, orientation },
+        metadata: { form, template, templateId, font, alignment, highlightColor, orientation },
         projectId,
       };
       trackDocumentEvent('save', 'started');
@@ -1227,7 +1470,7 @@ export default function DocumentStudio({
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [alignment, content, font, form, kind, template, documentId, highlightColor, title, userId, draftHydrated, projectId, orientation, onDocumentSaved]);
+  }, [alignment, content, font, form, kind, template, templateId, documentId, highlightColor, title, userId, draftHydrated, projectId, orientation, onDocumentSaved]);
 
   const update = (key: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -1246,6 +1489,7 @@ export default function DocumentStudio({
           ['experience', 'Experience / projects'],
           ['skills', 'Skills'],
           ['education', 'Education'],
+          ['references', 'References'],
           ['extras', 'Additional information'],
         ];
       case 'cover-letter':
@@ -1359,6 +1603,9 @@ export default function DocumentStudio({
   };
 
   const fields = getFields(kind);
+  const selectedTemplate = getDocumentTemplate(templateId);
+  const isClassicCv = kind === 'cv' && template === 'classic';
+  const classicHeaderNodeCount = isClassicCv ? getClassicCvHeaderNodeCount(content, form) : 0;
 
   const Icon = isPlus ? Sparkles : Wand2;
 
@@ -1392,11 +1639,16 @@ export default function DocumentStudio({
             : '/api/ai/workspace';
         const candidateDetails = { ...form };
         delete candidateDetails.idNumber;
+        const templateGuidance = selectedTemplate?.id === 'cv-corporate' || (kind === 'cv' && template === 'classic')
+          ? 'Use a professional CV section order: PROFESSIONAL SUMMARY, EDUCATION, EXPERIENCE, SKILLS, REFERENCES, ADDITIONAL INFORMATION. The candidate name, professional title, and contact details are rendered in the page header; do not repeat them in the body. Use only supplied information and do not include placeholders or empty sections.'
+          : selectedTemplate
+            ? `Follow the selected template "${selectedTemplate.name}" and its section structure: ${selectedTemplate.description}.`
+            : `Use the ${template} visual style.`;
         const request = kind === 'cv'
-          ? `Create a polished, ATS-friendly CV using only the candidate details below. Keep every claim factual; do not invent experience, achievements, skills, dates, or qualifications. Use clear section headings and concise bullets. Template style: ${template}. Candidate details: ${JSON.stringify(candidateDetails)}`
+          ? `Create a polished, ATS-friendly CV using only the candidate details below. Keep every claim factual; do not invent experience, achievements, skills, dates, or qualifications. Use clear section headings and concise bullets. ${templateGuidance} Candidate details: ${JSON.stringify(candidateDetails)}`
           : kind === 'cover-letter'
-            ? `Create a tailored, professional cover letter using only the candidate details below. Do not invent experience, achievements, skills, dates, or qualifications. Template style: ${template}. Candidate details: ${JSON.stringify(candidateDetails)}`
-            : `Create a polished ${kind.replace(/-/g, ' ')} using only the user details below. Never invent experience, qualifications, skills, dates, contact details, achievements, or project results. Use clear section headings. Template style: ${template}. User details: ${JSON.stringify(candidateDetails)}`;
+            ? `Create a tailored, professional cover letter using only the candidate details below. Do not invent experience, achievements, skills, dates, or qualifications. ${templateGuidance} Candidate details: ${JSON.stringify(candidateDetails)}`
+            : `Create a polished ${kind.replace(/-/g, ' ')} using only the user details below. Never invent experience, qualifications, skills, dates, contact details, achievements, or project results. Use clear section headings. ${templateGuidance} User details: ${JSON.stringify(candidateDetails)}`;
         const response = await api.postViaSameOriginProxy(endpoint, {
           messages: [{ role: 'user', content: request }],
           ...(kind === 'cv' ? { task: 'resume_builder' } : kind === 'cover-letter' ? { task: 'cover_letter' } : {}),
@@ -1410,6 +1662,9 @@ export default function DocumentStudio({
         ).trim();
         if (!generated) throw new Error('The AI service returned an empty document.');
         nextContent = createEditorHtml(generated, kind === 'presentation', true);
+        if (kind === 'cv' && template === 'classic') {
+          nextContent = ensureClassicCvPersonalInfo(nextContent, form);
+        }
         recordDocumentAIUsage();
       }
 
@@ -1429,6 +1684,68 @@ export default function DocumentStudio({
     }
   };
 
+  const applyDocumentTemplate = (item: NonNullable<ReturnType<typeof getDocumentTemplate>>) => {
+    const existingText = editor?.getText().trim() || '';
+    if (existingText && !window.confirm('Applying a template replaces the current document content. Cancel to keep editing your current document. Continue?')) {
+      return;
+    }
+
+    const details = Object.fromEntries(
+      Object.entries(form).map(([key, value]) => [key, String(value || '')]),
+    );
+    const markdown = item.id === 'cv-corporate'
+      ? buildClassicCvTemplateContent(details)
+      : buildDocumentTemplateContent(item, details);
+    const nextContent = createEditorHtml(markdown, kind === 'presentation', true);
+    editor?.commands.setContent(nextContent);
+    setContent(nextContent);
+    setTemplate(item.style);
+    setTemplateId(item.id);
+    setTemplateGalleryOpen(false);
+    setCoachResponse('');
+    setCoachSuggestion(null);
+    toast({
+      title: 'Template applied',
+      description: item.id === 'cv-corporate'
+        ? `${item.name} is ready to edit.`
+        : `${item.name} is ready to edit. Replace bracketed prompts with your verified information.`,
+    });
+  };
+
+  const importDocumentFile = async (file?: File) => {
+    if (!file) return;
+    const extension = file.name.toLocaleLowerCase().split('.').pop();
+    if (!['txt', 'md', 'markdown'].includes(extension || '')) {
+      toast({ title: 'Unsupported file type', description: 'Upload a plain text or Markdown file (.txt, .md, .markdown).', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'File is too large', description: 'Choose a text document smaller than 2 MB.', variant: 'destructive' });
+      return;
+    }
+    try {
+      const source = await file.text();
+      if (!source.trim()) throw new Error('This file is empty.');
+      if (editor?.getText().trim() && !window.confirm('Importing this file replaces the current document content. Continue?')) return;
+      const nextContent = createEditorHtml(source, kind === 'presentation', true);
+      editor?.commands.setContent(nextContent);
+      setContent(nextContent);
+      setForm(emptyForm);
+      setTemplateId('');
+      setCoachResponse('');
+      setCoachSuggestion(null);
+      setTemplateGalleryOpen(false);
+      toast({ title: 'Document imported', description: 'The text is now editable in the document studio.' });
+    } catch (error) {
+      console.error('FaceMeX document import failed', error);
+      toast({
+        title: 'Could not import this document',
+        description: error instanceof Error ? error.message : 'Please check the file and try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const printDocument = () => {
     trackDocumentEvent('export', 'started');
     try {
@@ -1439,7 +1756,7 @@ export default function DocumentStudio({
         return;
       }
 
-      win.document.write(documentHtml(kind, form, content, template, font, alignment, highlightColor, orientation));
+      win.document.write(documentHtml(kind, form, content, template, font, alignment, highlightColor, orientation, selectedTemplate?.variant));
       win.document.close();
       win.focus();
       win.print();
@@ -1463,8 +1780,8 @@ export default function DocumentStudio({
             },
           },
           children: [
-            new Paragraph({ children: [new TextRun({ text: form.fullName || 'Your Name', bold: true, size: 34 })] }),
-            ...makeDocxBlocks(content),
+            ...(form.fullName ? [new Paragraph({ children: [new TextRun({ text: form.fullName, bold: true, size: 34 })] })] : []),
+            ...makeDocxBlocks(kind === 'cv' ? stripCvNamePlaceholder(content) : content),
           ],
         }],
       });
@@ -1489,13 +1806,14 @@ export default function DocumentStudio({
   const clearDocument = () => {
     setForm(emptyForm);
     setContent('<p></p>');
+    setTemplateId('');
   };
 
   const handleSave = async () => {
     trackDocumentEvent('save', 'started');
     let localCopySaved = false;
     try {
-      localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, font, alignment, highlightColor, orientation, savedAt: new Date().toISOString() }));
+      localStorage.setItem(getDraftKey(kind, documentId, userId), JSON.stringify({ form, content, template, templateId, font, alignment, highlightColor, orientation, savedAt: new Date().toISOString() }));
       localCopySaved = true;
     } catch (error) {
       console.error('FaceMeX local document recovery failed', error);
@@ -1507,7 +1825,7 @@ export default function DocumentStudio({
         title,
         documentType: kind,
         content,
-        metadata: { form, template, font, alignment, highlightColor, orientation },
+        metadata: { form, template, templateId, font, alignment, highlightColor, orientation },
         projectId,
       });
       setDraftSaved(true);
@@ -1576,7 +1894,7 @@ export default function DocumentStudio({
       const response = await api.postViaSameOriginProxy('/api/ai/workspace', {
         messages: [{
           role: 'user',
-          content: `${instruction}\n\nDocument type: ${kind}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(userDetails)}`,
+          content: `${instruction}\n\nDocument type: ${kind}\nSelected template: ${selectedTemplate ? `${selectedTemplate.name} — ${selectedTemplate.description}` : 'Blank or imported document'}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(userDetails)}`,
         }],
         intent: 'document_analysis',
         source: 'facemex-document-coach',
@@ -1732,7 +2050,8 @@ export default function DocumentStudio({
   };
 
   const wordCount = (editor?.getText() || '').trim().split(/\s+/).filter(Boolean).length;
-  const pageWidthPx = (orientation === 'portrait' ? 210 : 297) * (96 / 25.4);
+  const pageOrientation = isClassicCv ? 'portrait' : orientation;
+  const pageWidthPx = (pageOrientation === 'portrait' ? 210 : 297) * (96 / 25.4);
   const composerPlaceholder = coachMode === 'draft'
     ? `Ask FaceMeX to write or edit your ${kind === 'cv' ? 'CV' : 'document'}`
     : coachMode === 'ask'
@@ -1789,6 +2108,19 @@ export default function DocumentStudio({
           </div>
         </div>
 
+        <input
+          ref={documentUploadRef}
+          type="file"
+          accept=".txt,.md,.markdown,text/plain,text/markdown"
+          className="hidden"
+          aria-label="Upload a text or Markdown document"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            void importDocumentFile(file);
+          }}
+        />
+
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 xl:flex-row xl:gap-4">
           {detailsOpen && (
             <>
@@ -1811,14 +2143,25 @@ export default function DocumentStudio({
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
                   {fields.map(([key, label]) =>
-                    key === 'summary' || key === 'experience' || key === 'skills' || key === 'education' || key === 'extras'
+                    key === 'summary' || key === 'experience' || key === 'skills' || key === 'education' || key === 'references' || key === 'extras'
                       ? (
                           <label key={key} className="block space-y-1">
                             <span className="text-xs font-semibold text-slate-600 lg:text-white/70">{label}</span>
                             <Textarea
-                              rows={key === 'experience' ? 4 : 3}
+                              rows={key === 'experience' || key === 'references' ? 4 : 3}
                               value={form[key as keyof FormState]}
                               onChange={(event) => update(key as keyof FormState, event.target.value)}
+                              placeholder={
+                                key === 'education'
+                                  ? 'One entry per line: dates | institution | qualification | description'
+                                  : key === 'experience'
+                                    ? 'One entry per line: dates | company | job title | responsibilities'
+                                    : key === 'references'
+                                      ? 'One entry per line: name | position | organisation | contact'
+                                      : key === 'skills'
+                                        ? 'One skill per line'
+                                        : undefined
+                              }
                               className="border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 lg:border-white/10 lg:bg-white/[0.04] lg:text-white lg:placeholder:text-white/35"
                             />
                           </label>
@@ -1889,6 +2232,10 @@ export default function DocumentStudio({
                   <Button type="button" variant="outline" size="sm" onClick={() => setTemplatesOpen((value) => !value)} aria-expanded={templatesOpen} className="fm-document-control h-9 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                     Page style
                   </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setTemplateGalleryOpen(true)} className="fm-document-control h-9 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+                    <Sparkles className="mr-1.5 h-4 w-4" />
+                    Templates
+                  </Button>
                 </div>
                 {templatesOpen && (
                   <div className="mb-2 grid gap-2 sm:grid-cols-2">
@@ -1935,9 +2282,11 @@ export default function DocumentStudio({
               )}
               <div className="mx-auto w-full" style={{ maxWidth: pageWidthPx }}>
                 <div
-                  className="fm-document-page mx-auto bg-white text-slate-900 shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
+                  className={`fm-document-page mx-auto bg-white text-slate-900 shadow-[0_12px_40px_rgba(0,0,0,0.35)]${isClassicCv ? ' fm-document-classic-cv' : ''}`}
                   data-template={template}
-                  data-orientation={orientation}
+                  data-template-variant={selectedTemplate?.variant || 'default'}
+                  data-hide-classic-header-nodes={classicHeaderNodeCount || undefined}
+                  data-orientation={pageOrientation}
                   role="region"
                   aria-label={`Document page, A4 ${orientation}`}
                   tabIndex={0}
@@ -1945,11 +2294,12 @@ export default function DocumentStudio({
                     width: '100%',
                     maxWidth: pageWidthPx,
                     minHeight: 0,
-                    aspectRatio: orientation === 'portrait' ? '210 / 297' : '297 / 210',
+                    aspectRatio: pageOrientation === 'portrait' ? '210 / 297' : '297 / 210',
                     zoom: zoom / 100,
                   }}
                 >
                   <div className="w-full p-7 sm:p-12">
+                    {isClassicCv && <ClassicCvHeader form={form} />}
                     <EditorContent editor={editor} className="document-editor" />
                   </div>
                 </div>
@@ -2064,6 +2414,22 @@ export default function DocumentStudio({
           </main>
         </div>
       </SensitiveContentShield>
+      <DocumentTemplateGallery
+        open={templateGalleryOpen}
+        kind={kind}
+        selectedTemplateId={templateId}
+        onClose={() => setTemplateGalleryOpen(false)}
+        onUseTemplate={applyDocumentTemplate}
+        onStartBlank={() => {
+          if (editor?.getText().trim() && !window.confirm('Starting blank replaces the current document content. Continue?')) return;
+          clearDocument();
+          editor?.commands.setContent('<p></p>');
+          setCoachResponse('');
+          setCoachSuggestion(null);
+          setTemplateGalleryOpen(false);
+        }}
+        onUpload={() => documentUploadRef.current?.click()}
+      />
     </div>
   );
 }
