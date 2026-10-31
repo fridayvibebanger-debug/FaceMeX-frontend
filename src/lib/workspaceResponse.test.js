@@ -6,6 +6,7 @@ import {
   createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
   isExplicitTechnicalRequest,
+  isMathematicsQuestion,
   isYouTubeSummaryRequest,
   normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceImages,
@@ -50,6 +51,47 @@ test('rejects malformed, unsafe, and oversized visualizations', () => {
   assert.equal(parseWorkspaceVisualization('diagram', JSON.stringify({
     type: 'flow', title: 'Bad flow', steps: ['Only one'],
   })), null);
+  assert.equal(parseWorkspaceVisualization('diagram', JSON.stringify({
+    type: 'triangle', title: 'Bad triangle', legA: 6, legB: 8, hypotenuse: 9, unit: 'cm',
+  })), null);
+});
+
+test('accepts a labelled right triangle only when its side lengths satisfy Pythagoras', () => {
+  assert.deepEqual(
+    parseWorkspaceVisualization('diagram', JSON.stringify({
+      type: 'triangle',
+      title: 'Right-angled triangle',
+      legA: 6,
+      legB: 8,
+      hypotenuse: 10,
+      unit: 'cm',
+    })),
+    {
+      kind: 'diagram',
+      diagramType: 'triangle',
+      title: 'Right-angled triangle',
+      legA: 6,
+      legB: 8,
+      hypotenuse: 10,
+      unit: 'cm',
+    },
+  );
+});
+
+test('recognizes all six requested math topics without changing other prompt intent', () => {
+  const examples = [
+    'Simplify: 3a^2 × 4a^3',
+    'Solve: 3/4 + 5/6',
+    'Solve: 2x^2 - 7x + 3 = 0',
+    'Calculate the hypotenuse of a right-angled triangle with sides 6 cm and 8 cm',
+    'Differentiate: f(x)=3x^4-5x^2+7x-9',
+    'Find the stationary points and Hessian of f(x,y)=x^3+y^3-3xy+2x^2+2y^2-8x-8y',
+  ];
+
+  for (const example of examples) assert.equal(isMathematicsQuestion(example), true, example);
+  assert.equal(isMathematicsQuestion('Write a friendly message to my classmate.'), false);
+  assert.equal(isMathematicsQuestion('Help me solve this laptop issue.'), false);
+  assert.equal(isMathematicsQuestion(null), false);
 });
 
 test('accepts supported YouTube URL forms and rejects unrelated or unsafe URLs', () => {

@@ -37,6 +37,25 @@ export function parseWorkspaceVisualization(kind, source) {
     return { kind: 'chart', chartType: value.type, title, xLabel, yLabel, data };
   }
 
+  if (kind === 'diagram' && value.type === 'triangle') {
+    const { legA, legB, hypotenuse } = value;
+    if (![legA, legB, hypotenuse].every((side) =>
+      typeof side === 'number' && Number.isFinite(side) && side > 0 && side <= 1_000_000_000
+    )) return null;
+    const expectedHypotenuse = Math.hypot(legA, legB);
+    if (Math.abs(hypotenuse - expectedHypotenuse) > Math.max(0.000001, expectedHypotenuse * 0.005)) return null;
+    if (typeof value.unit !== 'string' || value.unit.length > 10) return null;
+    return {
+      kind: 'diagram',
+      diagramType: 'triangle',
+      title,
+      legA,
+      legB,
+      hypotenuse,
+      unit: value.unit.trim(),
+    };
+  }
+
   if (kind === 'diagram' && value.type === 'flow' && Array.isArray(value.steps) &&
     value.steps.length >= 2 && value.steps.length <= MAX_FLOW_STEPS) {
     const steps = value.steps.map((step) => safeLabel(step, 180));
@@ -83,6 +102,13 @@ export function extractYouTubeUrlFromText(input) {
 export function isYouTubeSummaryRequest(input) {
   return typeof input === 'string' &&
     /\b(?:summari[sz](?:e|es|ed|ing)|summary|transcrib(?:e|es|ed|ing)|transcript)\b/i.test(input);
+}
+
+export function isMathematicsQuestion(input) {
+  if (typeof input !== 'string') return false;
+  return /\b(?:math(?:ematics)?|algebra|geometry|trigonometry|calculus|statistics|probability|fraction|hypotenuse|quadratic|equation|inequality|derivative|differentiat(?:e|ion)|integrat(?:e|ion)|integral|summation|limit|matrix|matrices|hessian|stationary point|maximum|minimum|factor(?:ise|ize)?|simplif(?:y|ication)|solve for [a-z]|exponent|indices|logarithm|gradient|slope)\b/i.test(input) ||
+    /\\(?:frac|sqrt|sum|int|lim|partial|nabla|begin|boxed)\b/.test(input) ||
+    /(?:\d|[a-z])\s*[+\-*/×÷=^]\s*(?:\d|[a-z(])/i.test(input);
 }
 
 function responseText(value) {

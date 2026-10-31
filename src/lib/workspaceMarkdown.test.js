@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   formatWorkspaceMath,
   parseWorkspaceMarkdown,
+  renderWorkspaceMathML,
   tokenizeWorkspaceInline,
 } from './workspaceMarkdown.js';
 
@@ -99,7 +100,7 @@ test('renders inline emphasis, code, links, images, and mathematical notation as
     ],
   );
   assert.deepEqual(tokenizeWorkspaceInline('$C_{6}H_{12}O_{6} \\rightarrow O_{2}$'), [
-    { type: 'math', text: 'C₆H₁₂O₆ → O₂' },
+    { type: 'math', text: 'C₆H₁₂O₆ → O₂', latex: 'C_{6}H_{12}O_{6} \\rightarrow O_{2}', display: false },
   ]);
   assert.equal(formatWorkspaceMath('\\(6 CO_{2} + 6 H_{2}O \\rightarrow C_{6}H_{12}O_{6} + 6 O_{2}\\)'),
     '6 CO₂ + 6 H₂O → C₆H₁₂O₆ + 6 O₂');
@@ -147,7 +148,7 @@ test('normalizes raw HTML break tags without changing fenced code', () => {
 test('formats inline math and keeps unsafe link schemes as ordinary text', () => {
   assert.deepEqual(tokenizeWorkspaceInline('Use \\(x^2 + y^2 = z^2\\), then read example.org/guide.'), [
     { type: 'text', text: 'Use ' },
-    { type: 'math', text: 'x² + y² = z²' },
+    { type: 'math', text: 'x² + y² = z²', latex: 'x^2 + y^2 = z^2', display: false },
     { type: 'text', text: ', then read ' },
     { type: 'link', text: 'example.org/guide', href: 'https://example.org/guide' },
     { type: 'text', text: '.' },
@@ -155,4 +156,65 @@ test('formats inline math and keeps unsafe link schemes as ordinary text', () =>
   assert.deepEqual(tokenizeWorkspaceInline('[unsafe](javascript:alert(1))'), [
     { type: 'text', text: '[unsafe](javascript:alert(1))' },
   ]);
+});
+
+test('parses multiline display equations without exposing their delimiters', () => {
+  const blocks = parseWorkspaceMarkdown([
+    'Use the Pythagorean theorem:',
+    '',
+    '\\[',
+    'c^2 = a^2 + b^2',
+    '\\]',
+  ].join('\n'));
+
+  assert.deepEqual(blocks, [
+    { type: 'paragraph', text: 'Use the Pythagorean theorem:' },
+    { type: 'math', latex: 'c^2 = a^2 + b^2' },
+  ]);
+  assert.deepEqual(tokenizeWorkspaceInline('The result is $$x^2 + 1$$.'), [
+    { type: 'text', text: 'The result is ' },
+    { type: 'math', text: 'x² + 1', latex: 'x^2 + 1', display: true },
+    { type: 'text', text: '.' },
+  ]);
+});
+
+test('renders all six learning examples as KaTeX without raw source or parse errors', () => {
+  const examples = [
+    String.raw`3a^2 \times 4a^3 = \boxed{12a^5}`,
+    String.raw`\frac{3}{4}+\frac{5}{6}=\frac{19}{12}=1\frac{7}{12}`,
+    String.raw`2x^2-7x+3=0\implies(2x-1)(x-3)=0\implies x=\frac12,3`,
+    String.raw`c=\sqrt{6^2+8^2}=10\ \mathrm{cm}`,
+    String.raw`f'(x)=12x^3-10x+7`,
+    String.raw`\begin{aligned}f_x&=3x^2-3y+4x-8=0\\f_y&=3y^2-3x+4y-8=0\\\nabla^2f&=\begin{bmatrix}6x+4&-3\\-3&6y+4\end{bmatrix}\end{aligned}`,
+  ];
+
+  for (const expression of examples) {
+    const markup = renderWorkspaceMathML(expression, true);
+    assert.match(markup, /<math\b/);
+    assert.doesNotMatch(markup, /\\(?:frac|sqrt|begin|nabla)\b/);
+  }
+
+  assert.match(renderWorkspaceMathML(String.raw`\frac{a}{b}`), /<mfrac>/);
+  assert.match(renderWorkspaceMathML(String.raw`\sqrt{x}`), /<msqrt>/);
+  assert.match(renderWorkspaceMathML(String.raw`\begin{bmatrix}a&b\\c&d\end{bmatrix}`), /<mtable>/);
+  assert.match(renderWorkspaceMathML(String.raw`\boxed{12a^5}`), /<menclose notation="box">/);
+});
+
+test('renders advanced LaTeX constructs including derivatives, sums, limits, and systems', () => {
+  const expressions = [
+    String.raw`\int_0^1 x^2\,dx`,
+    String.raw`\sum_{i=1}^{n} i`,
+    String.raw`\lim_{x\to 0}\frac{\sin x}{x}`,
+    String.raw`\frac{\partial^2 f}{\partial x\,\partial y}`,
+    String.raw`\begin{cases}x+y=3\\2x-y=0\end{cases}`,
+    String.raw`\begin{bmatrix}a&b\\c&d\end{bmatrix}`,
+    String.raw`\alpha+\beta+\gamma=\pi`,
+    String.raw`\left|\begin{matrix}a&b\\c&d\end{matrix}\right|`,
+  ];
+
+  for (const expression of expressions) {
+    const markup = renderWorkspaceMathML(expression, true);
+    assert.match(markup, /<math\b/);
+    assert.doesNotMatch(markup, /\\(?:int|sum|lim|partial|begin|nabla)\b/);
+  }
 });

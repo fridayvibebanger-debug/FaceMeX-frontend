@@ -12,6 +12,15 @@ export type WorkspaceVisualization =
       diagramType: 'flow';
       title: string;
       steps: string[];
+    }
+  | {
+      kind: 'diagram';
+      diagramType: 'triangle';
+      title: string;
+      legA: number;
+      legB: number;
+      hypotenuse: number;
+      unit: string;
     };
 
 export function parseWorkspaceVisualization(
@@ -24,6 +33,8 @@ export function extractYouTubeVideoId(input: string): string | null;
 export function extractYouTubeUrlFromText(input: string): string | null;
 
 export function isYouTubeSummaryRequest(input: string): boolean;
+
+export function isMathematicsQuestion(input: string): boolean;
 
 export type WorkspaceResponseImage = {
   id: string;

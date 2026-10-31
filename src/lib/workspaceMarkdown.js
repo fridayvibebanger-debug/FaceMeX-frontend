@@ -40,6 +40,7 @@ function isBlockStart(lines, index) {
   const line = lines[index];
   return !line.trim() ||
     /^```/.test(line.trim()) ||
+    /^(?:\$\$|\\\[)/.test(line.trim()) ||
     /^#{1,6}\s+/.test(line.trim()) ||
     /^>\s?/.test(line.trim()) ||
     /^(-{3,}|\*{3,}|_{3,})$/.test(line.trim()) ||
@@ -78,6 +79,42 @@ export function parseWorkspaceMarkdown(source) {
       blocks.push({ type: 'visual-reference' });
       index += 1;
       continue;
+    }
+
+    const mathStart = trimmed.startsWith('$$')
+      ? { opening: '$$', closing: '$$' }
+      : trimmed.startsWith('\\[')
+        ? { opening: '\\[', closing: '\\]' }
+        : null;
+    if (mathStart) {
+      const remainder = trimmed.slice(mathStart.opening.length);
+      const closingIndex = remainder.indexOf(mathStart.closing);
+        if (closingIndex >= 0 && !remainder.slice(closingIndex + mathStart.closing.length).trim()) {
+        blocks.push({ type: 'math', latex: remainder.slice(0, closingIndex).trim() });
+        index += 1;
+        continue;
+      }
+
+      const equation = [remainder];
+      let cursor = index + 1;
+      let closed = false;
+      while (cursor < lines.length) {
+        const closingLineIndex = lines[cursor].indexOf(mathStart.closing);
+        if (closingLineIndex >= 0) {
+          if (lines[cursor].slice(closingLineIndex + mathStart.closing.length).trim()) break;
+          equation.push(lines[cursor].slice(0, closingLineIndex));
+          cursor += 1;
+          closed = true;
+          break;
+        }
+        equation.push(lines[cursor]);
+        cursor += 1;
+      }
+      if (closed) {
+        blocks.push({ type: 'math', latex: equation.join('\n').trim() });
+        index = cursor;
+        continue;
+      }
     }
 
     if (trimmed.startsWith('```')) {
@@ -188,6 +225,274 @@ export function formatWorkspaceMath(source) {
   return value;
 }
 
+const MATH_SYMBOLS = {
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ϵ',
+  zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ',
+  lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ',
+  tau: 'τ', upsilon: 'υ', phi: 'φ', varphi: 'ϕ', chi: 'χ', psi: 'ψ', omega: 'ω',
+  Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π',
+  Sigma: 'Σ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω',
+  times: '×', cdot: '·', div: '÷', pm: '±', mp: '∓', neq: '≠', approx: '≈',
+  leq: '≤', le: '≤', geq: '≥', ge: '≥', to: '→', rightarrow: '→',
+  longrightarrow: '⟶', implies: '⟹', iff: '⟺', leftarrow: '←', leftrightarrow: '↔',
+  infinity: '∞', partial: '∂',
+  nabla: '∇', int: '∫', iint: '∬', oint: '∮', sum: '∑', prod: '∏',
+  cdots: '⋯', ldots: '…', forall: '∀', exists: '∃', in: '∈', notin: '∉',
+  subset: '⊂', subseteq: '⊆', perp: '⊥', angle: '∠', degree: '°',
+};
+
+const MATH_OPERATORS = new Set([
+  '+', '-', '=', '<', '>', '≤', '≥', '≠', '≈', '×', '·', '÷', '±', '∓',
+  '→', '⟶', '⟹', '⟺', '←', '↔', '∞', '∫', '∬', '∮', '∑', '∏', '∈', '∉', '⊂', '⊆',
+  '⊥', '∠', '°', '(', ')', '[', ']', '{', '}', '|', ',', ';', ':',
+]);
+
+function escapeMathXml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function mathNode(name, content, attributes = '') {
+  return `<${name}${attributes}>${content}</${name}>`;
+}
+
+function readMathGroup(source, start, opening = '{', closing = '}') {
+  if (source[start] !== opening) return { value: '', next: start };
+  let depth = 1;
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === opening) depth += 1;
+    if (source[index] === closing) depth -= 1;
+    if (depth === 0) return { value: source.slice(start + 1, index), next: index + 1 };
+  }
+  return { value: source.slice(start + 1), next: source.length };
+}
+
+function readMathArgument(source, start, depth) {
+  let index = start;
+  while (/\s/.test(source[index] || '')) index += 1;
+  if (source[index] === '{') {
+    const group = readMathGroup(source, index);
+    return { markup: mathNode('mrow', renderMathSequence(group.value, depth + 1)), next: group.next };
+  }
+  return parseMathAtom(source, index, depth + 1);
+}
+
+function splitMathEnvironment(source) {
+  const rows = [[]];
+  let cellStart = 0;
+  let depth = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] === '\\') {
+      const nestedStart = source.slice(index).match(/^\\begin\s*\{([^}]+)\}/);
+      if (nestedStart) {
+        const contentStart = index + nestedStart[0].length;
+        const nested = renderMathEnvironment(source.slice(contentStart), nestedStart[1], 0);
+        index = contentStart + nested.next - 1;
+        continue;
+      }
+      if (source[index + 1] === '\\' && depth === 0) {
+        rows.at(-1).push(source.slice(cellStart, index));
+        rows.push([]);
+        index += 1;
+        cellStart = index + 1;
+        continue;
+      }
+      const command = source.slice(index + 1).match(/^[a-zA-Z]+/);
+      if (command) index += command[0].length;
+      else index += 1;
+      continue;
+    }
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth = Math.max(0, depth - 1);
+    if (source[index] === '&' && depth === 0) {
+      rows.at(-1).push(source.slice(cellStart, index));
+      cellStart = index + 1;
+    }
+  }
+  rows.at(-1).push(source.slice(cellStart));
+  return rows;
+}
+
+function renderMathEnvironment(source, name, depth) {
+  const expression = /\\(begin|end)\s*\{([^}]+)\}/g;
+  let nesting = 1;
+  let match;
+  let closingStart = -1;
+  let closingEnd = -1;
+  while ((match = expression.exec(source)) !== null) {
+    if (match[2] !== name) continue;
+    if (match[1] === 'begin') nesting += 1;
+    else nesting -= 1;
+    if (nesting === 0) {
+      closingStart = match.index;
+      closingEnd = expression.lastIndex;
+      break;
+    }
+  }
+  if (closingStart < 0) return { markup: `<mtext>${escapeMathXml(name)}</mtext>`, next: source.length };
+
+  const rows = splitMathEnvironment(source.slice(0, closingStart));
+  const table = `<mtable>${rows.map((row) =>
+    `<mtr>${row.map((cell) => `<mtd>${renderMathSequence(cell, depth + 1)}</mtd>`).join('')}</mtr>`
+  ).join('')}</mtable>`;
+  const delimiters = {
+    bmatrix: ['[', ']'],
+    pmatrix: ['(', ')'],
+    Bmatrix: ['{', '}'],
+    vmatrix: ['|', '|'],
+    Vmatrix: ['‖', '‖'],
+    cases: ['{', ''],
+  }[name];
+  const markup = delimiters
+    ? `<mrow><mo>${delimiters[0]}</mo>${table}${delimiters[1] ? `<mo>${delimiters[1]}</mo>` : ''}</mrow>`
+    : table;
+  return { markup, next: closingEnd };
+}
+
+function parseMathAtom(source, start, depth = 0) {
+  let index = start;
+  while (/\s/.test(source[index] || '')) index += 1;
+  if (index >= source.length) return { markup: '', next: index };
+  if (depth > 32) return { markup: '<mtext>…</mtext>', next: source.length };
+
+  const character = source[index];
+  if (character === '{') {
+    const group = readMathGroup(source, index);
+    return { markup: mathNode('mrow', renderMathSequence(group.value, depth + 1)), next: group.next };
+  }
+
+  if (character === '\\') {
+    if (source[index + 1] === '\\') return { markup: '<mspace width="0.5em"/>', next: index + 2 };
+    const commandMatch = source.slice(index + 1).match(/^[a-zA-Z]+/);
+    const command = commandMatch?.[0] || source[index + 1] || '';
+    const next = index + 1 + command.length;
+    if (command === 'left' || command === 'right' || command === 'displaystyle' || command === 'limits') {
+      return { markup: '', next };
+    }
+    if (command === 'begin') {
+      const environment = readMathGroup(source, next);
+      const renderedEnvironment = renderMathEnvironment(source.slice(environment.next), environment.value, depth);
+      return { ...renderedEnvironment, next: environment.next + renderedEnvironment.next };
+    }
+    if (command === 'frac' || command === 'dfrac' || command === 'tfrac') {
+      const numerator = readMathArgument(source, next, depth);
+      const denominator = readMathArgument(source, numerator.next, depth);
+      return {
+        markup: `<mfrac>${numerator.markup}${denominator.markup}</mfrac>`,
+        next: denominator.next,
+      };
+    }
+    if (command === 'sqrt') {
+      let argumentStart = next;
+      let rootIndex = null;
+      while (/\s/.test(source[argumentStart] || '')) argumentStart += 1;
+      if (source[argumentStart] === '[') {
+        const indexGroup = readMathGroup(source, argumentStart, '[', ']');
+        rootIndex = mathNode('mrow', renderMathSequence(indexGroup.value, depth + 1));
+        argumentStart = indexGroup.next;
+      }
+      const radicand = readMathArgument(source, argumentStart, depth);
+      return {
+        markup: rootIndex
+          ? `<mroot>${radicand.markup}${rootIndex}</mroot>`
+          : `<msqrt>${radicand.markup}</msqrt>`,
+        next: radicand.next,
+      };
+    }
+    if (command === 'boxed' || command === 'cancel') {
+      const group = readMathGroup(source, next);
+      const inner = mathNode('mrow', renderMathSequence(group.value, depth + 1));
+      const notation = command === 'boxed' ? 'box' : 'updiagonalstrike';
+      return { markup: `<menclose notation="${notation}">${inner}</menclose>`, next: group.next };
+    }
+    if (['text', 'mathrm', 'mathbf', 'mathit', 'operatorname', 'mathbb', 'boldsymbol'].includes(command)) {
+      const group = readMathGroup(source, next);
+      const text = escapeMathXml(group.value.replace(/\\([{}%])/g, '$1'));
+      const variant = ['mathbf', 'boldsymbol'].includes(command)
+        ? 'bold'
+        : command === 'mathit' ? 'italic' : command === 'mathbb' ? 'double-struck' : 'normal';
+      const tag = command === 'text' ? 'mtext' : 'mi';
+      return { markup: mathNode(tag, text, ` mathvariant="${variant}"`), next: group.next };
+    }
+    if ([',', ';', ':', '!', ' '].includes(command)) {
+      const width = command === ',' ? '0.2em' : command === ';' ? '0.35em' : command === '!' ? '0.05em' : '0.25em';
+      return { markup: `<mspace width="${width}"/>`, next };
+    }
+    if (command === 'quad' || command === 'qquad') {
+      return { markup: `<mspace width="${command === 'quad' ? '1em' : '2em'}"/>`, next };
+    }
+    const symbol = MATH_SYMBOLS[command] || ({
+      '{': '{', '}': '}', '|': '|', '%': '%', '_': '_', '#': '#', '&': '&',
+    }[command] ?? command);
+    const tag = MATH_OPERATORS.has(symbol) ? 'mo' : 'mi';
+    return { markup: mathNode(tag, escapeMathXml(symbol)), next };
+  }
+
+  if (/\d/.test(character)) {
+    const number = source.slice(index).match(/^\d+(?:\.\d+)?/)[0];
+    return { markup: mathNode('mn', number), next: index + number.length };
+  }
+
+  if (/[a-zA-Z]/.test(character)) return { markup: mathNode('mi', escapeMathXml(character)), next: index + 1 };
+  if (character === '&') return { markup: '<mo>&amp;</mo>', next: index + 1 };
+  if (character === '_') return { markup: '<mi>_</mi>', next: index + 1 };
+  if (character === '^') return { markup: '<mo>^</mo>', next: index + 1 };
+  return {
+    markup: mathNode(MATH_OPERATORS.has(character) ? 'mo' : 'mi', escapeMathXml(character)),
+    next: index + 1,
+  };
+}
+
+function renderMathSequence(source, depth = 0) {
+  if (depth > 32) return '<mtext>…</mtext>';
+  let index = 0;
+  let markup = '';
+  while (index < source.length) {
+    while (/\s/.test(source[index] || '')) index += 1;
+    if (index >= source.length) break;
+    const atom = parseMathAtom(source, index, depth);
+    if (atom.next <= index) break;
+    index = atom.next;
+    let subscript = '';
+    let superscript = '';
+    while (index < source.length) {
+      const script = source[index];
+      if (script !== '_' && script !== '^') break;
+      const argument = readMathArgument(source, index + 1, depth);
+      if (argument.next <= index + 1) break;
+      if (script === '_') subscript = argument.markup;
+      else superscript = argument.markup;
+      index = argument.next;
+      while (/\s/.test(source[index] || '')) index += 1;
+    }
+    if (subscript && superscript) {
+      markup += `<msubsup>${atom.markup}${subscript}${superscript}</msubsup>`;
+    } else if (subscript) {
+      markup += `<msub>${atom.markup}${subscript}</msub>`;
+    } else if (superscript) {
+      markup += `<msup>${atom.markup}${superscript}</msup>`;
+    } else {
+      markup += atom.markup;
+    }
+  }
+  return markup;
+}
+
+export function renderWorkspaceMathML(source, display = false) {
+  const latex = String(source || '');
+  if (!latex || latex.length > 10_000) return '';
+  const body = renderMathSequence(latex);
+  return `<math xmlns="http://www.w3.org/1998/Math/MathML"${display ? ' display="block"' : ''}><mrow>${body}</mrow></math>`;
+}
+
 export function tokenizeWorkspaceInline(source) {
   const text = String(source || '');
   const tokens = [];
@@ -202,7 +507,15 @@ export function tokenizeWorkspaceInline(source) {
       /^(?:\$\$|\\\[|\\\()/.test(value) ||
       (/^\$(?!\$)/.test(value) && text[match.index - 1] !== '\\')
     ) {
-      tokens.push({ type: 'math', text: formatWorkspaceMath(value) });
+      const delimiterLength = value.startsWith('$$') ? 2 : value.startsWith('\\[') || value.startsWith('\\(') ? 2 : 1;
+      const closingLength = value.startsWith('$$') ? 2 : value.endsWith('\\]') || value.endsWith('\\)') ? 2 : 1;
+      const latex = value.slice(delimiterLength, value.length - closingLength);
+      tokens.push({
+        type: 'math',
+        text: formatWorkspaceMath(value),
+        latex,
+        display: value.startsWith('$$') || value.startsWith('\\['),
+      });
     } else if (value.startsWith('`')) {
       tokens.push({ type: 'code', text: value.slice(1, -1) });
     } else if (value.startsWith('**') || value.startsWith('__')) {
