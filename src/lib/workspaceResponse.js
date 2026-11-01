@@ -56,6 +56,23 @@ export function parseWorkspaceVisualization(kind, source) {
     };
   }
 
+  if (kind === 'diagram' && value.type === 'timeline' && Array.isArray(value.events) &&
+    value.events.length >= 2 && value.events.length <= MAX_CHART_POINTS) {
+    const events = value.events.map((event) => {
+      if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
+      const date = safeLabel(event.date, 40);
+      const label = safeLabel(event.label, 100);
+      const description = event.description === undefined
+        ? ''
+        : typeof event.description === 'string' && event.description.length <= 180
+          ? event.description.trim()
+          : null;
+      return date && label && description !== null ? { date, label, description } : null;
+    });
+    if (events.some((event) => event === null)) return null;
+    return { kind: 'diagram', diagramType: 'timeline', title, events };
+  }
+
   if (kind === 'diagram' && value.type === 'flow' && Array.isArray(value.steps) &&
     value.steps.length >= 2 && value.steps.length <= MAX_FLOW_STEPS) {
     const steps = value.steps.map((step) => safeLabel(step, 180));

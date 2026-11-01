@@ -21,6 +21,12 @@ export type WorkspaceVisualization =
       legB: number;
       hypotenuse: number;
       unit: string;
+    }
+  | {
+      kind: 'diagram';
+      diagramType: 'timeline';
+      title: string;
+      events: Array<{ date: string; label: string; description: string }>;
     };
 
 export function parseWorkspaceVisualization(

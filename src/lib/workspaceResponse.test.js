@@ -79,6 +79,27 @@ test('accepts a labelled right triangle only when its side lengths satisfy Pytha
   );
 });
 
+test('validates compact timelines and rejects malformed historical event data', () => {
+  const timeline = {
+    type: 'timeline',
+    title: 'Events in the supplied account',
+    events: [
+      { date: 'Date A', label: 'First event', description: 'From the question' },
+      { date: 'Date B', label: 'Second event', description: 'From the question' },
+    ],
+  };
+  assert.deepEqual(parseWorkspaceVisualization('diagram', JSON.stringify(timeline)), {
+    kind: 'diagram',
+    diagramType: 'timeline',
+    title: timeline.title,
+    events: timeline.events,
+  });
+  assert.equal(parseWorkspaceVisualization('diagram', JSON.stringify({
+    ...timeline,
+    events: [{ date: 'Date A', label: 'Only one' }],
+  })), null);
+});
+
 test('recognizes all six requested math topics without changing other prompt intent', () => {
   const examples = [
     'Simplify: 3a^2 × 4a^3',
