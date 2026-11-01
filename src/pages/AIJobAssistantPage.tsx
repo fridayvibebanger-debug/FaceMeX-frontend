@@ -95,6 +95,7 @@ import {
   createLearningContext,
   createHydrogenWaterReactionDiagram,
   createNewtonSecondLawDiagram,
+  createQuadraticStationaryPointDiagram,
   validateLearningResponse,
   type LearningContext,
   type NewtonSecondLawDiagram,
@@ -2795,6 +2796,67 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
       );
     }
 
+    if (visualization.diagramType === 'contour') {
+      const maxRadius = visualization.radii.at(-1) || 1;
+      const scale = 82 / maxRadius;
+      const center = { x: 220, y: 138 };
+      const xAxis = center.x - visualization.centerX * scale;
+      const yAxis = center.y + visualization.centerY * scale;
+      const number = (value: number) => new Intl.NumberFormat(undefined, {
+        maximumSignificantDigits: 5,
+      }).format(value);
+      const classification = visualization.curvature > 0 ? 'local minimum' : 'local maximum';
+      return (
+        <figure className="my-4 w-full max-w-[500px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+          <figcaption className="mb-2 text-base font-semibold text-white">{visualization.title}</figcaption>
+          <svg
+            viewBox="0 0 480 290"
+            role="img"
+            aria-label={`Contour plot centered at (${number(visualization.centerX)}, ${number(visualization.centerY)}), stationary value ${number(visualization.stationaryValue)}, a ${classification}`}
+            className="mx-auto block h-auto w-full"
+          >
+            {xAxis >= 42 && xAxis <= 400 && (
+              <line x1={xAxis} y1="34" x2={xAxis} y2="242" stroke="rgba(255,255,255,.32)" />
+            )}
+            {yAxis >= 34 && yAxis <= 242 && (
+              <line x1="42" y1={yAxis} x2="400" y2={yAxis} stroke="rgba(255,255,255,.32)" />
+            )}
+            {visualization.radii.map((radius, index) => {
+              const level = visualization.stationaryValue + visualization.curvature * radius ** 2;
+              return (
+                <g key={radius}>
+                  <circle
+                    cx={center.x}
+                    cy={center.y}
+                    r={radius * scale}
+                    fill="none"
+                    stroke={['#8fb1ff', '#73d2a4', '#f4a261', '#d6a8ff'][index]}
+                    strokeWidth="2.5"
+                  />
+                  <text
+                    x={center.x + radius * scale + 7}
+                    y={center.y + 4}
+                    fill="rgba(255,255,255,.75)"
+                    fontSize="11"
+                  >
+                    {`f = ${number(level)}`}
+                  </text>
+                </g>
+              );
+            })}
+            <circle cx={center.x} cy={center.y} r="5" fill="#fff" stroke="#172554" strokeWidth="2">
+              <title>{`Stationary point (${number(visualization.centerX)}, ${number(visualization.centerY)})`}</title>
+            </circle>
+            <text x="410" y="246" fill="rgba(255,255,255,.75)" fontSize="12">{visualization.xLabel}</text>
+            <text x="32" y="30" fill="rgba(255,255,255,.75)" fontSize="12">{visualization.yLabel}</text>
+          </svg>
+          <p className="text-center text-xs leading-5 text-white/65">
+            Stationary point ({number(visualization.centerX)}, {number(visualization.centerY)}), f = {number(visualization.stationaryValue)} — {classification}
+          </p>
+        </figure>
+      );
+    }
+
     if (visualization.diagramType === 'triangle') {
       const scale = 220 / Math.max(visualization.legA, visualization.legB);
       const left = 54;
@@ -2865,9 +2927,12 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
   }
 
   const isScatter = visualization.chartType === 'scatter';
+  const isMultiLine = visualization.chartType === 'multi-line';
   const values = isScatter
     ? visualization.data.map((point) => point.y)
-    : visualization.data.map((point) => point.value);
+    : isMultiLine
+      ? visualization.series.flatMap((series) => series.data.map((point) => point.y))
+      : visualization.data.map((point) => point.value);
   const rawMinimum = Math.min(0, ...values);
   const rawMaximum = Math.max(0, ...values);
   const minimum = rawMinimum === rawMaximum ? -1 : rawMinimum;
@@ -2876,30 +2941,43 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
   const plot = { x: 62, y: 30, width: 526, height: 170 };
   const yFor = (value: number) => plot.y + ((maximum - value) / range) * plot.height;
   const baseline = yFor(0);
-  const pointSpacing = plot.width / Math.max(visualization.data.length - 1, 1);
-  const barWidth = Math.min(44, plot.width / visualization.data.length * 0.58);
+  const categoryData = isMultiLine ? [] : visualization.data;
+  const pointSpacing = plot.width / Math.max(categoryData.length - 1, 1);
+  const barWidth = Math.min(44, plot.width / Math.max(categoryData.length, 1) * 0.58);
   const yTicks = Array.from({ length: 5 }, (_, index) => maximum - (range * index) / 4);
-  const xValues = isScatter ? visualization.data.map((point) => point.x) : [];
-  const rawXMinimum = isScatter ? Math.min(...xValues) : 0;
-  const rawXMaximum = isScatter ? Math.max(...xValues) : 1;
+  const xValues = isScatter
+    ? visualization.data.map((point) => point.x)
+    : isMultiLine
+      ? visualization.series.flatMap((series) => series.data.map((point) => point.x))
+      : [];
+  const rawXMinimum = isScatter || isMultiLine ? Math.min(...xValues) : 0;
+  const rawXMaximum = isScatter || isMultiLine ? Math.max(...xValues) : 1;
   const xMinimum = rawXMinimum === rawXMaximum ? rawXMinimum - 1 : rawXMinimum;
   const xMaximum = rawXMinimum === rawXMaximum ? rawXMaximum + 1 : rawXMaximum;
   const xRange = xMaximum - xMinimum;
   const xFor = (value: number) => plot.x + ((value - xMinimum) / xRange) * plot.width;
   const xTicks = Array.from({ length: 5 }, (_, index) => xMinimum + (xRange * index) / 4);
-  const xAxis = isScatter && xMinimum <= 0 && xMaximum >= 0 ? xFor(0) : plot.x;
+  const xAxis = (isScatter || isMultiLine) && xMinimum <= 0 && xMaximum >= 0 ? xFor(0) : plot.x;
   const formatValue = (value: number) => new Intl.NumberFormat(undefined, {
     maximumSignificantDigits: 5,
   }).format(value);
   const points = isScatter
     ? visualization.data.map((point) => `${xFor(point.x)},${yFor(point.y)}`).join(' ')
-    : visualization.data.map((point, index) =>
+    : !isMultiLine ? visualization.data.map((point, index) =>
         `${plot.x + index * pointSpacing},${yFor(point.value)}`
-      ).join(' ');
+      ).join(' ') : '';
+  const seriesColors = ['#8fb1ff', '#f4a261', '#73d2a4', '#d6a8ff'];
 
   return (
     <figure className="my-4 max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-      <figcaption className="mb-3 text-base font-semibold text-white">{visualization.title}</figcaption>
+      <figcaption className="mb-3 flex flex-wrap items-center gap-2 text-base font-semibold text-white">
+        <span>{visualization.title}</span>
+        {isMultiLine && visualization.illustrative && (
+          <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55">
+            Illustrative example
+          </span>
+        )}
+      </figcaption>
       <div className="w-full max-w-full overflow-x-auto">
         <svg
           viewBox="0 0 640 264"
@@ -2918,7 +2996,7 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
               </g>
             );
           })}
-          {isScatter && xTicks.map((tick, index) => {
+          {(isScatter || isMultiLine) && xTicks.map((tick, index) => {
             const x = xFor(tick);
             return (
               <g key={`x-tick-${index}`}>
@@ -2951,7 +3029,24 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
                 </text>
               </Fragment>
             );
-          }) : isScatter ? (
+          }) : isMultiLine ? (
+            <>
+              {visualization.series.map((series, seriesIndex) => {
+                const color = seriesColors[seriesIndex];
+                const seriesPoints = series.data.map((point) => `${xFor(point.x)},${yFor(point.y)}`).join(' ');
+                return (
+                  <g key={series.label}>
+                    <polyline points={seriesPoints} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                    {series.data.map((point, index) => (
+                      <circle key={`${series.label}-${point.x}-${index}`} cx={xFor(point.x)} cy={yFor(point.y)} r="4.5" fill={color} stroke="#172554" strokeWidth="2">
+                        <title>{`${series.label}: ${visualization.xLabel} = ${formatValue(point.x)}, ${visualization.yLabel} = ${formatValue(point.y)}`}</title>
+                      </circle>
+                    ))}
+                  </g>
+                );
+              })}
+            </>
+          ) : isScatter ? (
             <>
               <polyline points={points} fill="none" stroke="#8fb1ff" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
               {visualization.data.map((point, index) => (
@@ -2983,6 +3078,16 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
           <text x={plot.x + plot.width / 2} y="250" textAnchor="middle" fill="rgba(255,255,255,.78)" fontSize="11" fontWeight="600">{visualization.xLabel.slice(0, 46)}</text>
         </svg>
       </div>
+      {isMultiLine && (
+        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/75" aria-label="Chart legend">
+          {visualization.series.map((series, index) => (
+            <li key={series.label} className="flex items-center gap-2">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: seriesColors[index] }} />
+              {series.label}
+            </li>
+          ))}
+        </ul>
+      )}
     </figure>
   );
 }
@@ -3006,6 +3111,14 @@ function ChatGPTStyleText({
   const parsedBlocks = parseWorkspaceMarkdown(safeText);
   const mathReply = isMathematicsQuestion(sourcePrompt || '');
   const hasVisualMarker = parsedBlocks.some((block) => block.type === 'visual-reference');
+  const automaticVisualization = sourcePrompt
+    ? createQuadraticStationaryPointDiagram(sourcePrompt)
+    : null;
+  const hasRenderedVisualization = parsedBlocks.some((block) =>
+    block.type === 'code' &&
+    ['chart', 'diagram'].includes(block.language.toLowerCase()) &&
+    Boolean(parseWorkspaceVisualization(block.language.toLowerCase(), block.text))
+  );
   const blocks = parsedBlocks.map((block, index) => {
     if (block.type === 'visual-reference') {
       return visualReference ? <Fragment key={`visual-reference-${index}`}>{visualReference}</Fragment> : null;
@@ -3093,6 +3206,14 @@ function ChatGPTStyleText({
       fallbackIndex >= 0 ? fallbackIndex + 1 : 0,
       0,
       <Fragment key="visual-reference-fallback">{visualReference}</Fragment>,
+    );
+  }
+  if (automaticVisualization && !hasRenderedVisualization) {
+    const fallbackIndex = parsedBlocks.findIndex((block) => block.type === 'paragraph' || block.type === 'heading');
+    blocks.splice(
+      fallbackIndex >= 0 ? fallbackIndex + 1 : 0,
+      0,
+      <WorkspaceVisualizationCard key="quadratic-contour-fallback" visualization={automaticVisualization} />,
     );
   }
 
@@ -5953,8 +6074,8 @@ FaceMeX intelligence rules:
 - Do not add code merely because it might be useful. For explicit programming requests, provide correct code in a fenced block with a brief explanation. For all other requests, explain the answer in ordinary language and readable Markdown.
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
-- When a relevant photo would materially improve the answer, place the standalone marker [[VISUAL_REFERENCE]] after your concise introduction so it appears near the beginning. Do not request images for greetings, simple facts, code, or unrelated topics. The system selects images from the user's actual subject; never invent image URLs, results, or captions.
-- When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block. For mathematical function plots, use chart type "scatter" with numeric { "x": number, "y": number } points in increasing x order, calculated from the supplied function. Use only values grounded in the user's input or reliable context; label hypothetical data explicitly and never present invented data as factual.
+- When a relevant photograph would materially improve the answer, the existing media integration may show a separately retrieved, relevance-checked image card. Never output a visual marker or placeholder, and never invent image URLs, results, or captions.
+- When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block so the visual is actually rendered. Use numeric scatter points calculated from the supplied function; use a contour only when its values are derived from the exact supported quadratic; and use a labeled multi-line chart for conceptual relationships such as supply and demand, explicitly marked as illustrative unless sourced. Use only factual values grounded in the user's input or a reliable source; never present invented data as factual.
 - Format Markdown for readability. Use fenced code blocks for code, tables only for useful comparisons, and never output raw HTML or scripts.
 - Use the preceding user and assistant messages in this request as the active conversation. Resolve follow-ups from that history, preserve the user's details, and continue the task without restarting or asking them to repeat information.
 - If an earlier message refers to an image or file that is not attached now, do not claim to see it; ask the user to attach it again if needed.
