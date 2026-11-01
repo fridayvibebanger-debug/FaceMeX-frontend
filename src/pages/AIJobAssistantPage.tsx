@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import SubscriptionModal from "../components/SubscriptionModal";
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -92,8 +92,11 @@ import {
 import {
   buildLearningInstruction,
   createLearningContext,
+  createHydrogenWaterReactionDiagram,
+  createNewtonSecondLawDiagram,
   validateLearningResponse,
   type LearningContext,
+  type NewtonSecondLawDiagram,
 } from '@/lib/workspaceLearningEngine';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import {
@@ -628,20 +631,22 @@ Main rule:
 
 Education rule:
 - If the user is in Homework Help, behave as a professional educational assistant.
-- First understand the subject, grade/level, exact question, and what the learner has already tried.
-- Explain step by step in a way a student can understand.
+- Answer a clear, solvable question immediately. Never require the learner's grade, level, or previous attempts.
+- Use a clear beginner-friendly explanation by default, adapting only when the learner requests a different level or conversation context makes it relevant.
+- Ask one focused question only if an essential value, instruction, or part of an uploaded question is genuinely missing or unreadable.
 - Do not only give final answers. Teach the method.
 - Highlight key words and key points.
 - End with a short revision note.
 
 Assignments rule:
-- If the user is in Assignments, first ask for the assignment instructions, subject, grade/level, due date, marking rubric, and required format.
+- Do not request grade, level, due date, rubric, or format before helping when the assignment prompt is already actionable.
+- Ask for the assignment prompt only when it is missing and needed to proceed; ask for other requirements only when they materially affect the requested output.
 - Help the student plan the assignment academically.
 - Help with structure, research points, introduction, paragraphs, conclusion, references, and editing.
 - Do not encourage copying. Help the student understand and write better.
 
 YouTube Lessons rule:
-- If the user is in YouTube Lessons, first ask what subject, topic, grade/level, and type of lesson they want to watch.
+- Answer or teach the topic immediately when it is provided. Ask for the topic only when it is missing; never require a grade or level.
 - If the user gives a YouTube link, title, or transcript, summarize the lesson into academic notes.
 - Create sections: Lesson title, Main idea, Key terms, Step-by-step explanation, Important points, Example, Quick revision notes.
 - If a YouTube video is needed, give a YouTube search link like:
@@ -805,19 +810,19 @@ const educationTools: ApplySheetTool[] = [
     label: 'Homework Help',
     icon: FileText,
     prompt:
-      'Education Workspace: Homework Help. First ask me for my subject, grade or level, exact homework question, and what I have already tried. Then help me understand the answer step by step. Highlight key words and key points, and save the answer under Homework Help.',
+      'Education Workspace: Homework Help. If I have provided a clear question, answer it immediately with a beginner-friendly step-by-step explanation. Never require my grade or what I have already tried. Ask one focused question only if essential information is missing or unreadable. Highlight key points and save the answer under Homework Help.',
   },
   {
     label: 'Assignments',
     icon: Edit3,
     prompt:
-      'Education Workspace: Assignments. First ask me for the assignment instructions, subject, grade or level, due date, rubric, and required format. Then help me plan and write it academically step by step. Save the answer under Assignments.',
+      'Education Workspace: Assignments. Help with the assignment information I have provided; do not request grade, due date, rubric, or format before helping when the task is actionable. Ask for the assignment prompt only if it is missing and essential. Help me plan and write academically, and save the answer under Assignments.',
   },
   {
     label: 'YouTube Lessons',
     icon: Globe2,
     prompt:
-      'Education Workspace: YouTube Lessons. First ask me what subject, topic, grade or level, and type of lesson I want to watch. If I provide a YouTube link, title, or transcript, summarize it into academic notes with key terms, key points, examples, and revision notes. Save the summary under YouTube Lessons.',
+      'Education Workspace: YouTube Lessons. Teach the topic immediately if I provided it; do not require a grade or level. If I provide a YouTube link, title, or transcript, summarize it into academic notes with key terms, key points, examples, and revision notes. Ask one focused question only if the topic is genuinely missing. Save the answer under YouTube Lessons.',
   },
   {
     label: 'College / University',
@@ -1479,8 +1484,8 @@ function addFaceMeXCareerToolInstruction(promptText: string, intent: string) {
 
 FaceMeX Education Workspace:
 You are now in Homework Help.
-First ask for the subject, grade/level, exact question, and what the student has already tried.
-Then teach step by step.
+Answer clear questions immediately using a concise, beginner-friendly explanation and show the steps when helpful.
+Never require grade/level or a previous attempt. Ask only if essential information is missing or unreadable.
 Highlight key words and key points.
 Save this response under Homework Help.`;
   }
@@ -1490,7 +1495,7 @@ Save this response under Homework Help.`;
 
 FaceMeX Education Workspace:
 You are now in Assignments.
-First ask for the assignment instructions, subject, grade/level, due date, rubric, and required format.
+Help with the information already provided. Ask for the assignment prompt only when it is missing and essential; do not require grade/level, due date, rubric, or format before starting.
 Help the student plan and write academically.
 Save this response under Assignments.`;
   }
@@ -1500,7 +1505,7 @@ Save this response under Assignments.`;
 
 FaceMeX Education Workspace:
 You are now in YouTube Lessons.
-First ask what subject, topic, grade/level, and lesson type the student wants to watch.
+Teach a topic immediately when provided. Never require a grade/level; ask for a topic only if it is missing and essential.
 If a YouTube link, title, or transcript is provided, summarize it into academic notes.
 Use: Lesson title, Main idea, Key terms, Step-by-step explanation, Key points, Example, Quick revision notes.
 Save this response under YouTube Lessons.`;
@@ -2604,6 +2609,131 @@ function WorkspacePracticeCard({
   );
 }
 
+function WorkspaceForceDiagram({ diagram }: { diagram: NewtonSecondLawDiagram }) {
+  const arrowId = `fm-force-arrow-${useId()}`;
+  const number = (value: number) => new Intl.NumberFormat(undefined, {
+    maximumSignificantDigits: 6,
+  }).format(value);
+  const arrowStart = diagram.direction === 'right' ? 270 : 170;
+  const arrowEnd = diagram.direction === 'right' ? 405 : 35;
+  const arrowLabelX = (arrowStart + arrowEnd) / 2;
+  const arrowLabel = `Fnet = ${number(diagram.force)} N`;
+
+  return (
+    <figure className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+      <figcaption className="mb-3 text-sm font-semibold text-white">Newton's Second Law: net force on the car</figcaption>
+      <svg
+        viewBox="0 0 440 250"
+        role="img"
+        aria-label={`Car force diagram. Mass ${number(diagram.mass)} kilograms. Acceleration ${number(diagram.acceleration)} metres per second squared. Net force ${number(diagram.force)} newtons, pointing ${diagram.direction}.`}
+        className="h-auto w-full rounded-lg bg-slate-50"
+      >
+        <defs>
+          <marker id={arrowId} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+          </marker>
+        </defs>
+        <text x="220" y="25" textAnchor="middle" fill="#172554" fontSize="14" fontWeight="700">
+          F = m × a = {number(diagram.mass)} × {number(diagram.acceleration)} = {number(diagram.force)} N
+        </text>
+        <line x1="30" y1="192" x2="410" y2="192" stroke="#94a3b8" strokeWidth="2" />
+        <line
+          x1={arrowStart}
+          y1="77"
+          x2={arrowEnd}
+          y2="77"
+          stroke="#2563eb"
+          strokeWidth="5"
+          markerEnd={`url(#${arrowId})`}
+        />
+        <text x={arrowLabelX} y="61" textAnchor="middle" fill="#1d4ed8" fontSize="13" fontWeight="700">
+          {arrowLabel}
+        </text>
+        <path d="M 137 151 L 157 117 Q 164 106 180 104 L 250 104 Q 265 105 278 120 L 301 145 L 301 178 L 137 178 Z" fill="#bfdbfe" stroke="#1e3a8a" strokeWidth="3" />
+        <path d="M 169 118 Q 174 111 183 111 L 207 111 L 207 139 L 155 139 Z" fill="#eff6ff" stroke="#1e3a8a" strokeWidth="2" />
+        <path d="M 214 111 L 248 111 Q 258 112 267 123 L 280 139 L 214 139 Z" fill="#eff6ff" stroke="#1e3a8a" strokeWidth="2" />
+        <circle cx="174" cy="177" r="15" fill="#1e293b" />
+        <circle cx="174" cy="177" r="6" fill="#cbd5e1" />
+        <circle cx="267" cy="177" r="15" fill="#1e293b" />
+        <circle cx="267" cy="177" r="6" fill="#cbd5e1" />
+        <text x="220" y="218" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">
+          Mass: {number(diagram.mass)} kg
+        </text>
+        <text x="220" y="237" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">
+          Acceleration: {number(diagram.acceleration)} m/s²
+        </text>
+      </svg>
+      <p className="mt-2 text-center text-xs leading-5 text-white/65">
+        {diagram.directionSpecified
+          ? `The net force points ${diagram.direction}, matching the stated acceleration.`
+          : 'The arrow shows a representative direction; the question does not specify which way the car accelerates.'}
+      </p>
+    </figure>
+  );
+}
+
+function WorkspaceHydrogenWaterDiagram() {
+  const arrowId = `fm-reaction-arrow-${useId()}`;
+  const renderAtom = (key: string, x: number, y: number, element: 'H' | 'O') => (
+    <g key={key}>
+      <circle cx={x} cy={y} r="15" fill={element === 'H' ? '#dbeafe' : '#fecaca'} stroke={element === 'H' ? '#2563eb' : '#dc2626'} strokeWidth="2" />
+      <text x={x} y={y + 5} textAnchor="middle" fill="#172554" fontSize="14" fontWeight="700">{element}</text>
+    </g>
+  );
+
+  return (
+    <figure className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+      <figcaption className="mb-3 text-sm font-semibold text-white">Balanced formation of water</figcaption>
+      <svg
+        viewBox="0 0 600 205"
+        role="img"
+        aria-label="Two hydrogen molecules plus one oxygen molecule form two water molecules. Four hydrogen atoms and two oxygen atoms are present on both sides."
+        className="h-auto w-full rounded-lg bg-slate-50"
+      >
+        <defs>
+          <marker id={arrowId} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+          </marker>
+        </defs>
+        <text x="300" y="27" textAnchor="middle" fill="#172554" fontSize="17" fontWeight="700">2H₂ + O₂ → 2H₂O</text>
+        {[0, 1].map((index) => {
+          const x = 70 + index * 75;
+          return (
+            <g key={`hydrogen-molecule-${index}`}>
+              <line x1={x} y1="112" x2={x + 30} y2="112" stroke="#64748b" strokeWidth="4" />
+              {renderAtom(`h-${index}-1`, x, 112, 'H')}
+              {renderAtom(`h-${index}-2`, x + 30, 112, 'H')}
+            </g>
+          );
+        })}
+        <line x1="258" y1="112" x2="288" y2="112" stroke="#64748b" strokeWidth="4" />
+        {renderAtom('o-1', 258, 112, 'O')}
+        {renderAtom('o-2', 288, 112, 'O')}
+        <line x1="325" y1="112" x2="365" y2="112" stroke="#475569" strokeWidth="3" markerEnd={`url(#${arrowId})`} />
+        {[0, 1].map((index) => {
+          const oxygenX = 430 + index * 95;
+          return (
+            <g key={`water-molecule-${index}`}>
+              <line x1={oxygenX} y1="118" x2={oxygenX - 20} y2="92" stroke="#64748b" strokeWidth="4" />
+              <line x1={oxygenX} y1="118" x2={oxygenX + 20} y2="92" stroke="#64748b" strokeWidth="4" />
+              {renderAtom(`water-o-${index}`, oxygenX, 122, 'O')}
+              {renderAtom(`water-h-left-${index}`, oxygenX - 22, 90, 'H')}
+              {renderAtom(`water-h-right-${index}`, oxygenX + 22, 90, 'H')}
+            </g>
+          );
+        })}
+        <text x="150" y="163" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">Hydrogen molecules</text>
+        <text x="273" y="163" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">Oxygen</text>
+        <text x="477" y="163" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">Water molecules</text>
+        <text x="300" y="192" textAnchor="middle" fill="#475569" fontSize="12">4 H atoms and 2 O atoms on each side</text>
+      </svg>
+      <p className="mt-2 text-center text-xs leading-5 text-white/65">
+        Coefficients balance the atoms; subscripts inside each molecule stay unchanged.
+      </p>
+    </figure>
+  );
+}
+
 function MarkdownCodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -2726,31 +2856,73 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
     );
   }
 
-  const values = visualization.data.map((point) => point.value);
-  const minimum = Math.min(0, ...values);
-  const maximum = Math.max(0, ...values);
-  const range = maximum - minimum || 1;
-  const plot = { x: 48, y: 18, width: 550, height: 170 };
+  const isScatter = visualization.chartType === 'scatter';
+  const values = isScatter
+    ? visualization.data.map((point) => point.y)
+    : visualization.data.map((point) => point.value);
+  const rawMinimum = Math.min(0, ...values);
+  const rawMaximum = Math.max(0, ...values);
+  const minimum = rawMinimum === rawMaximum ? -1 : rawMinimum;
+  const maximum = rawMinimum === rawMaximum ? 1 : rawMaximum;
+  const range = maximum - minimum;
+  const plot = { x: 62, y: 30, width: 526, height: 170 };
   const yFor = (value: number) => plot.y + ((maximum - value) / range) * plot.height;
   const baseline = yFor(0);
   const pointSpacing = plot.width / Math.max(visualization.data.length - 1, 1);
   const barWidth = Math.min(44, plot.width / visualization.data.length * 0.58);
-  const points = visualization.data.map((point, index) =>
-    `${plot.x + index * pointSpacing},${yFor(point.value)}`
-  ).join(' ');
+  const yTicks = Array.from({ length: 5 }, (_, index) => maximum - (range * index) / 4);
+  const xValues = isScatter ? visualization.data.map((point) => point.x) : [];
+  const rawXMinimum = isScatter ? Math.min(...xValues) : 0;
+  const rawXMaximum = isScatter ? Math.max(...xValues) : 1;
+  const xMinimum = rawXMinimum === rawXMaximum ? rawXMinimum - 1 : rawXMinimum;
+  const xMaximum = rawXMinimum === rawXMaximum ? rawXMaximum + 1 : rawXMaximum;
+  const xRange = xMaximum - xMinimum;
+  const xFor = (value: number) => plot.x + ((value - xMinimum) / xRange) * plot.width;
+  const xTicks = Array.from({ length: 5 }, (_, index) => xMinimum + (xRange * index) / 4);
+  const xAxis = isScatter && xMinimum <= 0 && xMaximum >= 0 ? xFor(0) : plot.x;
+  const formatValue = (value: number) => new Intl.NumberFormat(undefined, {
+    maximumSignificantDigits: 5,
+  }).format(value);
+  const points = isScatter
+    ? visualization.data.map((point) => `${xFor(point.x)},${yFor(point.y)}`).join(' ')
+    : visualization.data.map((point, index) =>
+        `${plot.x + index * pointSpacing},${yFor(point.value)}`
+      ).join(' ');
 
   return (
     <figure className="my-4 max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
       <figcaption className="mb-3 text-base font-semibold text-white">{visualization.title}</figcaption>
       <div className="w-full max-w-full overflow-x-auto">
         <svg
-          viewBox="0 0 620 220"
+          viewBox="0 0 640 264"
           role="img"
           aria-label={`${visualization.title}: ${visualization.yLabel} by ${visualization.xLabel}`}
-          className="h-auto min-w-[440px] w-full"
+          className="h-auto min-w-[380px] w-full"
         >
-          <line x1={plot.x} y1={plot.y} x2={plot.x} y2={plot.y + plot.height} stroke="rgba(255,255,255,.24)" />
-          <line x1={plot.x} y1={baseline} x2={plot.x + plot.width} y2={baseline} stroke="rgba(255,255,255,.24)" />
+          {yTicks.map((tick, index) => {
+            const y = yFor(tick);
+            return (
+              <g key={`y-tick-${index}`}>
+                <line x1={plot.x} y1={y} x2={plot.x + plot.width} y2={y} stroke="rgba(255,255,255,.12)" strokeDasharray={index === 4 ? undefined : '3 5'} />
+                <text x={plot.x - 9} y={y + 4} textAnchor="end" fill="rgba(255,255,255,.62)" fontSize="11">
+                  {formatValue(tick)}
+                </text>
+              </g>
+            );
+          })}
+          {isScatter && xTicks.map((tick, index) => {
+            const x = xFor(tick);
+            return (
+              <g key={`x-tick-${index}`}>
+                <line x1={x} y1={plot.y} x2={x} y2={plot.y + plot.height} stroke="rgba(255,255,255,.1)" strokeDasharray="3 5" />
+                <text x={x} y={plot.y + plot.height + 17} textAnchor="middle" fill="rgba(255,255,255,.76)" fontSize="10">
+                  {formatValue(tick)}
+                </text>
+              </g>
+            );
+          })}
+          <line x1={xAxis} y1={plot.y} x2={xAxis} y2={plot.y + plot.height} stroke="rgba(255,255,255,.4)" />
+          <line x1={plot.x} y1={baseline} x2={plot.x + plot.width} y2={baseline} stroke="rgba(255,255,255,.4)" />
           {visualization.chartType === 'bar' ? visualization.data.map((point, index) => {
             const x = plot.x + (index + 0.5) * (plot.width / visualization.data.length) - barWidth / 2;
             const y = yFor(point.value);
@@ -2762,36 +2934,45 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
                   width={barWidth}
                   height={Math.max(2, Math.abs(baseline - y))}
                   rx="4"
-                  fill="#9eb9ff"
+                  fill="#8fb1ff"
                 >
-                  <title>{`${point.label}: ${point.value}`}</title>
+                  <title>{`${point.label}: ${formatValue(point.value)} ${visualization.yLabel}`}</title>
                 </rect>
-                <text x={x + barWidth / 2} y="207" textAnchor="middle" fill="rgba(255,255,255,.72)" fontSize="10">
-                  {point.label.slice(0, 12)}
+                <text x={x + barWidth / 2} y={plot.y + plot.height + 17} textAnchor="middle" fill="rgba(255,255,255,.76)" fontSize="10">
+                  {point.label.slice(0, 14)}
                 </text>
               </Fragment>
             );
-          }) : (
+          }) : isScatter ? (
             <>
-              <polyline points={points} fill="none" stroke="#9eb9ff" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+              <polyline points={points} fill="none" stroke="#8fb1ff" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+              {visualization.data.map((point, index) => (
+                <circle key={`${point.x}-${index}`} cx={xFor(point.x)} cy={yFor(point.y)} r="5" fill="#8fb1ff" stroke="#172554" strokeWidth="2">
+                  <title>{`x = ${formatValue(point.x)}, ${visualization.yLabel} = ${formatValue(point.y)}`}</title>
+                </circle>
+              ))}
+            </>
+          ) : (
+            <>
+              <polyline points={points} fill="none" stroke="#8fb1ff" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
               {visualization.data.map((point, index) => {
                 const x = plot.x + index * pointSpacing;
                 const y = yFor(point.value);
                 return (
                   <g key={`${point.label}-${index}`}>
-                    <circle cx={x} cy={y} r="4" fill="#9eb9ff">
-                      <title>{`${point.label}: ${point.value}`}</title>
+                    <circle cx={x} cy={y} r="5" fill="#8fb1ff" stroke="#172554" strokeWidth="2">
+                      <title>{`${point.label}: ${formatValue(point.value)} ${visualization.yLabel}`}</title>
                     </circle>
-                    <text x={x} y="207" textAnchor="middle" fill="rgba(255,255,255,.72)" fontSize="10">
-                      {point.label.slice(0, 12)}
+                    <text x={x} y={plot.y + plot.height + 17} textAnchor="middle" fill="rgba(255,255,255,.76)" fontSize="10">
+                      {point.label.slice(0, 14)}
                     </text>
                   </g>
                 );
               })}
             </>
           )}
-          <text x="8" y="16" fill="rgba(255,255,255,.7)" fontSize="10">{visualization.yLabel.slice(0, 24)}</text>
-          <text x="590" y="218" textAnchor="end" fill="rgba(255,255,255,.7)" fontSize="10">{visualization.xLabel.slice(0, 24)}</text>
+          <text x={plot.x} y="18" fill="rgba(255,255,255,.78)" fontSize="11" fontWeight="600">{visualization.yLabel.slice(0, 38)}</text>
+          <text x={plot.x + plot.width / 2} y="250" textAnchor="middle" fill="rgba(255,255,255,.78)" fontSize="11" fontWeight="600">{visualization.xLabel.slice(0, 46)}</text>
         </svg>
       </div>
     </figure>
@@ -5735,7 +5916,7 @@ FaceMeX intelligence rules:
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
 - When a relevant photo would materially improve the answer, place the standalone marker [[VISUAL_REFERENCE]] after your concise introduction so it appears near the beginning. Do not request images for greetings, simple facts, code, or unrelated topics. The system selects images from the user's actual subject; never invent image URLs, results, or captions.
-- When a chart or process diagram materially improves the explanation, use a fenced chart JSON block with type, title, xLabel, yLabel, and labeled numeric data, or a fenced diagram JSON block with type "flow", title, and steps. Use only values grounded in the user's input or reliable context; otherwise explain the comparison without inventing chart data.
+- When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block. For mathematical function plots, use chart type "scatter" with numeric { "x": number, "y": number } points in increasing x order, calculated from the supplied function. Use only values grounded in the user's input or reliable context; label hypothetical data explicitly and never present invented data as factual.
 - Format Markdown for readability. Use fenced code blocks for code, tables only for useful comparisons, and never output raw HTML or scripts.
 - Use the preceding user and assistant messages in this request as the active conversation. Resolve follow-ups from that history, preserve the user's details, and continue the task without restarting or asking them to repeat information.
 - If an earlier message refers to an image or file that is not attached now, do not claim to see it; ask the user to attach it again if needed.
@@ -5836,7 +6017,11 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
       );
       const showResponseImages = mediaPlan.showImages && !activeLearningContext;
-      const hasMediaPlan = !usageLimitReached && (showResponseImages || mediaPlan.showVideos);
+      const showResponseVideos = mediaPlan.showVideos && (
+        !activeLearningContext ||
+        /\b(?:video|youtube|watch|tutorial)\b|\bfind\b.{0,30}\blesson\b/i.test(finalPrompt)
+      );
+      const hasMediaPlan = !usageLimitReached && (showResponseImages || showResponseVideos);
 
       setMessages((prev) => [
         ...prev,
@@ -5853,9 +6038,9 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           media: hasMediaPlan ? {
             status: 'loading',
             imagesStatus: showResponseImages ? 'loading' : 'ready',
-            videosStatus: mediaPlan.showVideos ? 'loading' : 'ready',
+            videosStatus: showResponseVideos ? 'loading' : 'ready',
             showImages: showResponseImages,
-            showVideos: mediaPlan.showVideos,
+            showVideos: showResponseVideos,
             images: [],
             videos: [],
           } : undefined,
@@ -5886,7 +6071,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
             .then((images) => updateResponseMedia({ images, imagesStatus: 'ready' }));
         }
 
-        if (mediaPlan.showVideos) {
+        if (showResponseVideos) {
           void api.get(`/api/youtube/search?q=${encodeURIComponent(mediaPlan.videoQuery)}&limit=10&duration=medium`)
             .then((result) => {
               const videoCandidates = normalizeYouTubeLessonVideos(unwrapApiResponse(result), 10)
@@ -9758,6 +9943,8 @@ Start with the most useful next action. Do not invent personal details, course r
                     .slice(0, index)
                     .reverse()
                     .find((item) => item.role === 'user')?.content || '';
+                const forceDiagram = createNewtonSecondLawDiagram(previousUserText);
+                const hydrogenWaterDiagram = createHydrogenWaterReactionDiagram(previousUserText);
 
                 const isJobResultsMessage = message.role === 'assistant' && Boolean(message.jobs?.length);
 
@@ -9843,6 +10030,12 @@ Start with the most useful next action. Do not invent personal details, course r
                                       }
                                     : undefined}
                                 />
+                              )}
+                              {forceDiagram && (
+                                <WorkspaceForceDiagram diagram={forceDiagram} />
+                              )}
+                              {hydrogenWaterDiagram && (
+                                <WorkspaceHydrogenWaterDiagram />
                               )}
                               {message.learning && (
                                 <div className="mt-3 flex flex-wrap gap-2">
