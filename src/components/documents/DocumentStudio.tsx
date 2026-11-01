@@ -8,6 +8,9 @@ import {
   Save,
   Sparkles,
   Wand2,
+  Phone,
+  MapPin,
+  Mail,
 } from 'lucide-react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Extension, Node as TiptapNode } from '@tiptap/core';
@@ -347,32 +350,55 @@ function buildLocalCv(form: FormState, classic = false) {
   }
 
   const entries = (value: string) => value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
-  const entryTable = (value: string, emptyLabel: string, kind: 'education' | 'experience' | 'references') => {
+  const fields = (entry: string) => entry.split('|').map((field) => field.trim());
+  const paragraph = (value: string, bold = false) =>
+    `<p>${value ? `${bold ? '<strong>' : ''}${escapeHtml(value)}${bold ? '</strong>' : ''}` : ''}</p>`;
+  const entryTable = (value: string, type: 'education' | 'experience') => {
     const rows = entries(value).map((entry) => {
-      const columns = entry.split('|').map((column) => column.trim()).filter(Boolean);
-      const splitAt = columns.length >= 3 ? 2 : 1;
-      const left = columns.length > 1 ? columns.slice(0, splitAt).join(' · ') : '';
-      const right = columns.length > 1 ? columns.slice(splitAt).join(' · ') : entry;
-      return `<tr><td>${escapeHtml(left)}</td><td>${escapeHtml(right)}</td></tr>`;
+      const columns = fields(entry);
+      const left = type === 'education'
+        ? [columns[0] || '[Dates]', columns[1] || '[Institution]']
+        : [columns[0] || '[Dates]', columns[1] || '[Company / organisation]'];
+      const right = type === 'education'
+        ? [columns[2] || '[Qualification]', columns.slice(3).filter(Boolean).join(' | ')]
+        : [columns[2] || '[Job title]', columns.slice(3).filter(Boolean).join(' | ')];
+      return `<tr><td>${paragraph(left[0], true)}${paragraph(left[1])}</td><td>${paragraph(right[0], true)}${paragraph(right[1])}</td></tr>`;
     });
-    const leftLabel = kind === 'references' ? 'Name / position' : 'Dates / institution';
-    const placeholder = `<tr><td><em>[${leftLabel}]</em></td><td><em>[${escapeHtml(emptyLabel)}]</em></td></tr>`;
-    return `<table><tbody>${rows.length ? rows.join('') : placeholder}</tbody></table>`;
+    if (!rows.length) {
+      const rightTitle = type === 'education' ? '[Qualification]' : '[Job title]';
+      const rightDetail = type === 'education' ? '[Description]' : '[Responsibilities and achievements]';
+      rows.push(`<tr><td>${paragraph('[Dates]', true)}${paragraph('[Institution]')}</td><td>${paragraph(rightTitle, true)}${paragraph(rightDetail)}</td></tr>`);
+    }
+    return `<table><tbody>${rows.join('')}</tbody></table>`;
   };
   const skills = entries(form.skills).map((skill) => `<li>${escapeHtml(skill.replace(/^[-*•]\s*/, ''))}</li>`);
-  const skillSplit = Math.ceil(skills.length / 2);
-  const skillColumns = [skills.slice(0, skillSplit), skills.slice(skillSplit)];
+  const skillColumnSize = Math.ceil(Math.max(skills.length, 1) / 4);
+  const skillColumns = Array.from({ length: 4 }, (_, index) =>
+    skills.slice(index * skillColumnSize, (index + 1) * skillColumnSize)
+  );
   const skillsMarkup = `<table><tbody><tr>${skillColumns
-    .map((column, index) => `<td>${column.length ? `<ul>${column.join('')}</ul>` : !skills.length && index === 0 ? '<p><em>[Demonstrable skill]</em></p>' : '<p></p>'}</td>`)
+    .map((column, index) => `<td><ul>${column.length ? column.join('') : !skills.length && index === 0 ? '<li>[Skill]</li>' : ''}</ul></td>`)
     .join('')}</tr></tbody></table>`;
+  const references = entries(form.references).map((entry) => {
+    const [name, position, organisation, ...contact] = fields(entry);
+    return `<ul><li>${paragraph(name || '[Full name]', true)}${paragraph(position || '[Position or relationship]')}${paragraph(organisation || '[Organisation]')}${paragraph(contact.filter(Boolean).join(' · ') || '[Phone / email]')}</li></ul>`;
+  });
+  if (!references.length) {
+    references.push(`<ul><li>${paragraph('[Full name]', true)}${paragraph('[Position or relationship]')}${paragraph('[Organisation]')}${paragraph('[Phone / email]')}</li></ul>`);
+  }
+  const referenceRows: string[] = [];
+  for (let index = 0; index < references.length; index += 2) {
+    referenceRows.push(`<tr><td>${references[index]}</td><td>${references[index + 1] || ''}</td></tr>`);
+  }
+  const referencesMarkup = `<table><tbody>${referenceRows.join('')}</tbody></table>`;
   const section = (heading: string, body: string) => `<h2>${heading}</h2>${body}`;
 
   return [
-    section('PROFESSIONAL SUMMARY', `<p>${form.summary.trim() ? escapeHtml(form.summary.trim()).replace(/\r?\n/g, '<br>') : '<em>[Professional summary]</em>'}</p>`),
-    section('EDUCATION', entryTable(form.education, 'Qualification and institution', 'education')),
-    section('EXPERIENCE', entryTable(form.experience, 'Role and verified responsibilities', 'experience')),
+    section('ABOUT ME', `<p>${form.summary.trim() ? escapeHtml(form.summary.trim()).replace(/\r?\n/g, '<br>') : '[Professional summary]'}</p>`),
+    section('EDUCATION', entryTable(form.education, 'education')),
+    section('EXPERIENCE', entryTable(form.experience, 'experience')),
     section('SKILLS', skillsMarkup),
-    section('REFERENCES', entryTable(form.references, 'Organisation and contact details', 'references')),
+    section('REFERENCES', referencesMarkup),
     ...(form.extras.trim()
       ? [section('ADDITIONAL INFORMATION', `<p>${escapeHtml(form.extras.trim()).replace(/\r?\n/g, '<br>')}</p>`)]
       : []),
@@ -832,10 +858,10 @@ function stripCvNamePlaceholder(content: string) {
 
 function ClassicCvHeader({ form }: { form: FormState }) {
   const contactDetails = [
-    form.phone ? <div key="phone"><span aria-hidden="true">☎</span> {form.phone}</div> : null,
-    form.location ? <div key="location"><span aria-hidden="true">⌖</span> {form.location}</div> : null,
-    form.email ? <div key="email"><span aria-hidden="true">✉</span> {form.email}</div> : null,
-  ].filter(Boolean);
+    { key: 'phone', icon: Phone, value: form.phone, placeholder: '[Phone]' },
+    { key: 'location', icon: MapPin, value: form.location, placeholder: '[Location]' },
+    { key: 'email', icon: Mail, value: form.email, placeholder: '[Email]' },
+  ];
 
   return (
     <header className="fm-classic-cv-header">
@@ -844,7 +870,15 @@ function ClassicCvHeader({ form }: { form: FormState }) {
         <p>{form.jobTitle || '[Professional title]'}</p>
       </div>
       <div className="fm-classic-cv-divider" />
-      {contactDetails.length > 0 && <div className="fm-classic-cv-contact-grid">{contactDetails}</div>}
+      <div className="fm-classic-cv-contact-grid">
+        {contactDetails.map(({ key, icon: Icon, value, placeholder }) => (
+          <div key={key} className={!value ? 'fm-classic-cv-contact-placeholder' : undefined}>
+            <Icon aria-hidden="true" />
+            <span>{value || placeholder}</span>
+          </div>
+        ))}
+      </div>
+      <div className="fm-classic-cv-divider" />
     </header>
   );
 }
@@ -924,12 +958,12 @@ function ensureClassicCvPersonalInfo(content: string, form: FormState) {
 
 function classicCvHeaderMarkup(form: FormState) {
   const contactDetails = [
-    form.phone ? `<div>☎ ${escapeHtml(form.phone)}</div>` : '',
-    form.location ? `<div>⌖ ${escapeHtml(form.location)}</div>` : '',
-    form.email ? `<div>✉ ${escapeHtml(form.email)}</div>` : '',
-  ].filter(Boolean);
+    `<div><span aria-hidden="true">☎</span> ${escapeHtml(form.phone || '[Phone]')}</div>`,
+    `<div><span aria-hidden="true">⌖</span> ${escapeHtml(form.location || '[Location]')}</div>`,
+    `<div><span aria-hidden="true">✉</span> ${escapeHtml(form.email || '[Email]')}</div>`,
+  ];
 
-  return `<header class="classic-cv-header"><div class="classic-cv-title"><div>${escapeHtml(form.fullName || '[Full name]')}</div><p>${escapeHtml(form.jobTitle || '[Professional title]')}</p></div><div class="classic-cv-divider"></div>${contactDetails.length ? `<div class="classic-cv-contact-grid">${contactDetails.join('')}</div>` : ''}</header>`;
+  return `<header class="classic-cv-header"><div class="classic-cv-title"><div>${escapeHtml(form.fullName || '[Full name]')}</div><p>${escapeHtml(form.jobTitle || '[Professional title]')}</p></div><div class="classic-cv-divider"></div><div class="classic-cv-contact-grid">${contactDetails.join('')}</div><div class="classic-cv-divider"></div></header>`;
 }
 
 function prepareClassicCvContent(content: string, form: FormState) {
@@ -988,7 +1022,28 @@ function documentHtml(
             ? '.page section>h1:first-child{border-bottom:4px solid #2477d2;padding-bottom:8px;color:#173c70}'
             : '';
   const pageStyles = isClassicCv
-    ? `@page{size:A4 portrait;margin:8mm}.page{width:auto;min-height:281mm;margin:0;padding:8mm;border:1px solid #cbd5e1;box-decoration-break:clone;-webkit-box-decoration-break:clone;overflow-wrap:anywhere;text-align:left;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.4;print-color-adjust:exact;-webkit-print-color-adjust:exact}.classic-cv-title{text-align:center;font-size:23pt;line-height:1.25;font-weight:700;text-transform:uppercase;overflow-wrap:anywhere;color:#172033}.classic-cv-title p{margin:3pt 0 0;font-size:11pt;font-weight:400;text-transform:none;color:#475569}.classic-cv-header{margin-bottom:12pt}.classic-cv-divider{border-top:1px solid #94a3b8;margin:8pt 0}.classic-cv-contact-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:4pt 16pt;font-size:9.5pt;color:#475569}.classic-cv-contact-grid>div{overflow-wrap:anywhere}.page section h2{color:#172033;text-align:left;text-decoration:none;letter-spacing:.04em;font-size:11pt;margin:12pt 0 5pt;border-bottom:1px solid #cbd5e1;padding:0 0 3pt;break-after:avoid-page;page-break-after:avoid}.page section p{margin:0 0 5pt;white-space:pre-wrap}.page section li{break-inside:avoid;page-break-inside:avoid}.page section table{width:100%;margin:0 0 5pt;border:0;border-collapse:collapse;table-layout:fixed;font-size:10pt}.page section table thead{display:none}.page section th,.page section td{border:0;background:transparent;padding:2pt 4pt;vertical-align:top}.page section td:first-child{width:32%;color:#475569}.page section table:has(td>ul) td{width:50%}.page section table:has(tr>td:nth-child(3)) td:nth-child(2){width:1.5rem;text-align:center}.page section h2+ p{margin-top:0}.page section>h2,.page section>h2+*{break-inside:avoid-page;page-break-inside:avoid}`
+    ? `@page{size:A4 portrait;margin:8mm}
+      .page{width:auto;min-height:281mm;margin:0;padding:8mm;border:1px solid #cbd5e1;box-decoration-break:clone;-webkit-box-decoration-break:clone;overflow-wrap:anywhere;text-align:left;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.4;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+      .classic-cv-title{text-align:center;font-size:23pt;line-height:1.25;font-weight:700;text-transform:uppercase;overflow-wrap:anywhere;color:#172033}
+      .classic-cv-title p{margin:3pt 0 0;font-size:11pt;font-weight:400;text-transform:none;color:#475569}
+      .classic-cv-header{margin-bottom:12pt}
+      .classic-cv-divider{border-top:1px solid #94a3b8;margin:8pt 0}
+      .classic-cv-contact-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:4pt 16pt;font-size:9.5pt;color:#475569}
+      .classic-cv-contact-grid>div{display:inline-flex;align-items:center;gap:4pt;overflow-wrap:anywhere}
+      .classic-cv-contact-placeholder{color:#64748b}
+      .page section h2{color:#172033;text-align:left;text-decoration:none;letter-spacing:.04em;font-size:11pt;margin:12pt 0 5pt;border-bottom:1px solid #cbd5e1;padding:0 0 3pt;break-after:avoid-page;page-break-after:avoid}
+      .page section p{margin:0 0 5pt;white-space:pre-wrap}
+      .page section li{break-inside:avoid;page-break-inside:avoid}
+      .page section table{width:100%;margin:0 0 5pt;border:0;border-collapse:collapse;table-layout:fixed;font-size:10pt}
+      .page section table thead{display:none}
+      .page section th,.page section td{border:0;background:transparent;padding:2pt 4pt;vertical-align:top}
+      .page section td:first-child{width:32%;color:#475569}
+      .page section table:has(td>ul>li>p:nth-child(2)) td{width:50%}
+      .page section table:has(td>ul>li>p:nth-child(2)) ul{margin:0;padding:0;list-style:none}
+      .page section table:has(td>ul>li>p:nth-child(2)) li{list-style:none}
+      .page section table:has(td>ul>li>p):not(:has(td>ul>li>p:nth-child(2))) td{width:25%}
+      .page section h2+ p{margin-top:0}
+      .page section>h2,.page section>h2+*{break-inside:avoid-page;page-break-inside:avoid}`
     : '';
   const pageMargin = isClassicCv ? '8mm' : '0';
   return `<!doctype html><html><head><meta charset="utf-8"><title>FaceMeX ${kind.replace(/-/g, ' ')}</title><style>@page{size:${isClassicCv ? 'A4 portrait' : `A4 ${orientation}`};margin:${pageMargin}}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:${fontFamily(font)};color:#172033}.page{width:${pageWidth};min-height:${pageHeight};margin:16px auto;padding:20mm;background:#fff;box-shadow:0 16px 45px rgba(15,23,42,.14);font-size:11pt;line-height:1.45;text-align:${alignment}}.header{border-top:5px solid ${accent};padding:13px 0 12px;border-bottom:1px solid #dbe2ea;margin-bottom:22px}.name{font-size:25px;font-weight:800;letter-spacing:.02em;color:#101827}.meta,.date{margin-top:6px;font-size:9.5pt;color:#526174}.date{margin-top:16px}h2{font-size:11pt;letter-spacing:.12em;color:${accent};margin:18px 0 7px;border-bottom:1px solid #dbe2ea;padding-bottom:4px}p{margin:0 0 7px;white-space:pre-wrap}ul,ol{padding-left:20px;margin:0 0 10px}li{margin:0 0 4px}table{width:100%;border-collapse:collapse;margin:10px 0 16px;font-size:9.5pt}th,td{border:1px solid #dbe2ea;padding:7px;vertical-align:top}th{background:#f1f5f9;text-align:left}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}h1,h2,h3{break-after:avoid-page;page-break-after:avoid}mark{background:${highlightColor};padding:0 .12em}.document-page-break{break-before:page;page-break-before:always;height:0;border:0}${variantStyles}${pageStyles}@media screen and (max-width:600px){body{background:#f8fafc}.page{width:100%;min-height:100vh;margin:0;padding:24px 20px;box-shadow:none;font-size:10pt}.name{font-size:22px}.header{margin-bottom:16px}}@media print{body{background:#fff}.page{margin:0;box-shadow:none;width:${isClassicCv ? 'auto' : pageWidth};min-height:${isClassicCv ? '281mm' : pageHeight};padding:${isClassicCv ? '8mm' : '20mm'};break-after:auto}.classic-cv-title{page-break-after:avoid;break-after:avoid-page}.classic-cv-header,.page section>h2{break-inside:avoid-page;page-break-inside:avoid}}</style></head><body><main class="page" data-variant="${variant}"${isClassicCv ? ' data-template="classic"' : ''}>${headerMarkup}<section>${documentContent}</section></main></body></html>`;
@@ -2098,6 +2153,9 @@ export default function DocumentStudio({
             <span className="shrink-0 text-xs text-slate-500 lg:text-white/55" role="status" aria-live="polite">
               {syncStatus === 'loading' ? 'Loading...' : syncStatus === 'saving' ? 'Saving...' : syncStatus === 'error' ? 'Sync issue' : draftSaved ? 'Saved' : 'Unsaved'}
             </span>
+            <Button type="button" variant="outline" size="icon" onClick={() => setTemplateGalleryOpen(true)} aria-label="Browse document templates" title="Browse document templates" className="h-9 w-9 shrink-0 rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
+              <Sparkles className="h-4 w-4" />
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={handleSave} className="h-9 shrink-0 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
               <Save className="h-4 w-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Save</span>
@@ -2231,10 +2289,6 @@ export default function DocumentStudio({
                   </select>
                   <Button type="button" variant="outline" size="sm" onClick={() => setTemplatesOpen((value) => !value)} aria-expanded={templatesOpen} className="fm-document-control h-9 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
                     Page style
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setTemplateGalleryOpen(true)} className="fm-document-control h-9 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
-                    <Sparkles className="mr-1.5 h-4 w-4" />
-                    Templates
                   </Button>
                 </div>
                 {templatesOpen && (
