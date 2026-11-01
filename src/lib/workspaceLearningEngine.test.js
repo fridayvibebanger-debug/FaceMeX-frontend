@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import {
   buildLearningInstruction,
   createLearningContext,
+  createHydrogenWaterReactionDiagram,
+  createNewtonSecondLawDiagram,
   detectSubjectAndTopic,
   selectLearningVisual,
   validateLearningResponse,
@@ -78,6 +80,33 @@ test('prefers the current question over unrelated earlier conversation topics', 
   );
 });
 
+test('derives a Newton second-law force visual only from explicit, unit-bearing values', () => {
+  const question = 'A 1,200 kg car accelerates at 4 m/s². Calculate the force.';
+  assert.deepEqual(createNewtonSecondLawDiagram(question), {
+    mass: 1200,
+    acceleration: 4,
+    force: 4800,
+    direction: 'right',
+    directionSpecified: false,
+  });
+  assert.equal(createLearningContext(question).visual, 'force-diagram');
+  assert.equal(createNewtonSecondLawDiagram('A 1,200 kg car accelerates. Calculate the force.'), null);
+  assert.equal(createNewtonSecondLawDiagram('A car accelerates at 4 m/s². Calculate the force.'), null);
+  assert.deepEqual(
+    (({ direction, directionSpecified }) => ({ direction, directionSpecified }))(
+      createNewtonSecondLawDiagram('The 1,200 kg car accelerates at 4 m/s² to the left. Find the force.'),
+    ),
+    { direction: 'left', directionSpecified: true },
+  );
+});
+
+test('selects a balanced water-formation visual only for a matching chemistry question', () => {
+  const prompt = 'Show how hydrogen and oxygen form water and balance the equation.';
+  assert.equal(createHydrogenWaterReactionDiagram(prompt), true);
+  assert.equal(createLearningContext(prompt).subject, 'Chemistry');
+  assert.equal(createHydrogenWaterReactionDiagram('Explain how water evaporates.'), false);
+});
+
 test('chooses appropriate visual approaches without requesting unsupported stock visuals', () => {
   assert.equal(selectLearningVisual(createLearningContext('Explain mitosis.'), 'Explain mitosis.'), 'diagram');
   assert.equal(selectLearningVisual(createLearningContext('Make a timeline of apartheid.'), 'Make a timeline of apartheid.'), 'timeline');
@@ -93,6 +122,7 @@ test('builds adaptive instructions and asks for evidence-grounded visuals', () =
   assert.match(instruction, /smaller steps/);
   assert.match(instruction, /reliable source/);
   assert.match(instruction, /do not invent facts or data/i);
+  assert.match(instruction, /Never require a grade, level, or previous attempt/i);
 });
 
 test('validates structured visuals and practice while preserving the textual answer', () => {

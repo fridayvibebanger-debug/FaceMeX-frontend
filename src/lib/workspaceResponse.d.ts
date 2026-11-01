@@ -8,6 +8,14 @@ export type WorkspaceVisualization =
       data: Array<{ label: string; value: number }>;
     }
   | {
+      kind: 'chart';
+      chartType: 'scatter';
+      title: string;
+      xLabel: string;
+      yLabel: string;
+      data: Array<{ x: number; y: number }>;
+    }
+  | {
       kind: 'diagram';
       diagramType: 'flow';
       title: string;

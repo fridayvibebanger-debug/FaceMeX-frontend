@@ -29,7 +29,15 @@ export type LearningContext = {
   questionType: 'calculation' | 'comparison' | 'explanation' | 'general';
   hasImage: boolean;
   teachingMethods: string[];
-  visual: 'map' | 'timeline' | 'graph' | 'chart' | 'table' | 'diagram' | 'flowchart' | 'image-analysis' | 'code-diagram' | 'none';
+  visual: 'map' | 'timeline' | 'graph' | 'chart' | 'table' | 'diagram' | 'flowchart' | 'image-analysis' | 'code-diagram' | 'force-diagram' | 'none';
+};
+
+export type NewtonSecondLawDiagram = {
+  mass: number;
+  acceleration: number;
+  force: number;
+  direction: 'left' | 'right';
+  directionSpecified: boolean;
 };
 
 export function detectSubjectAndTopic(question: string, context?: string): {
@@ -45,6 +53,8 @@ export function understandLearningQuestion(
 ): Pick<LearningContext, 'level' | 'struggling' | 'questionType' | 'hasImage'>;
 
 export function selectTeachingMethod(subject: LearningSubject): string[];
+export function createNewtonSecondLawDiagram(question: string): NewtonSecondLawDiagram | null;
+export function createHydrogenWaterReactionDiagram(question: string): boolean;
 export function selectLearningVisual(profile: Partial<LearningContext>, question?: string): LearningContext['visual'];
 export function createLearningContext(
   question: string,

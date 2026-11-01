@@ -37,6 +37,32 @@ test('validates structured chart data without inventing values', () => {
   );
 });
 
+test('validates numeric coordinate graphs with ordered, finite points', () => {
+  const graph = {
+    type: 'scatter',
+    title: 'Quadratic function',
+    xLabel: 'x',
+    yLabel: 'f(x)',
+    data: [{ x: -2, y: 4 }, { x: -1, y: 1 }, { x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 4 }],
+  };
+  assert.deepEqual(parseWorkspaceVisualization('chart', JSON.stringify(graph)), {
+    kind: 'chart',
+    chartType: 'scatter',
+    title: graph.title,
+    xLabel: graph.xLabel,
+    yLabel: graph.yLabel,
+    data: graph.data,
+  });
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...graph,
+    data: [{ x: 1, y: 1 }, { x: 0, y: 0 }],
+  })), null);
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...graph,
+    data: [{ x: 0, y: Number.NaN }, { x: 1, y: 1 }],
+  })), null);
+});
+
 test('rejects malformed, unsafe, and oversized visualizations', () => {
   assert.equal(parseWorkspaceVisualization('chart', '{'), null);
   assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({

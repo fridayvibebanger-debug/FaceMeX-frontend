@@ -44,6 +44,7 @@ const TOPICS = [
   { subjects: ['Chemistry'], area: 'Chemical reactions', topic: 'Chemical reactions', pattern: /\b(?:reaction|reactants?|products?|stoichiometry|mole calculation)\b/i },
   { subjects: ['Chemistry'], area: 'Acids and bases', topic: 'Acids, bases and pH', pattern: /\b(?:acid|base|alkali|ph scale|neutralis)\b/i },
   { subjects: ['Chemistry'], area: 'Matter', topic: 'Atoms and the periodic table', pattern: /\b(?:atom|periodic table|element|electron|proton|neutron)\b/i },
+  { subjects: ['Chemistry'], area: 'Chemical reactions', topic: 'Hydrogen and oxygen forming water', pattern: /\b(?:hydrogen|h2)\b.{0,80}\b(?:oxygen|o2)\b.{0,80}\b(?:water|h2o)\b|\b(?:hydrogen|h2)\b.{0,80}\b(?:water|h2o)\b.{0,80}\b(?:oxygen|o2)\b/i },
   { subjects: ['Geography'], area: 'Climate', topic: 'Rainfall and climate patterns', pattern: /\b(?:rainfall|precipitation|climate|weather pattern|climate graph)\b/i },
   { subjects: ['Geography'], area: 'Maps and spatial skills', topic: 'Maps and spatial patterns', pattern: /\b(?:map|mapping|latitude|longitude|scale|contour|spatial pattern)\b/i },
   { subjects: ['Geography'], area: 'Physical geography', topic: 'Plate tectonics and landforms', pattern: /\b(?:plate tectonics?|earthquake|volcano|landform|erosion)\b/i },
@@ -158,8 +159,43 @@ export function selectTeachingMethod(subject) {
   return TEACHING_METHODS[subject] || TEACHING_METHODS.Other;
 }
 
+export function createNewtonSecondLawDiagram(question) {
+  const text = String(question || '');
+  if (!/\b(?:force|newton'?s second law)\b/i.test(text)) return null;
+
+  const massMatches = [...text.matchAll(/\b([0-9][0-9,]*(?:\.\d+)?)\s*(?:kg|kilograms?)\b/gi)];
+  const accelerationMatches = [...text.matchAll(/\b([0-9][0-9,]*(?:\.\d+)?)\s*(?:m\s*\/\s*s\s*(?:\^\s*2|²|2)|m\s*s\s*(?:\^\s*-2|⁻²|-2))(?=$|[\s,.;!?])/gi)];
+  if (massMatches.length !== 1 || accelerationMatches.length !== 1) return null;
+
+  const mass = Number(massMatches[0][1].replace(/,/g, ''));
+  const acceleration = Number(accelerationMatches[0][1].replace(/,/g, ''));
+  if (!Number.isFinite(mass) || !Number.isFinite(acceleration) || mass <= 0 || acceleration <= 0) return null;
+
+  const directionMatch = text.match(/\b(?:to|toward|towards)\s+(?:the\s+)?(left|right)\b|\baccelerates?\s+(left|right)\b/i);
+  const force = mass * acceleration;
+  if (!Number.isFinite(force)) return null;
+
+  return {
+    mass,
+    acceleration,
+    force,
+    direction: (directionMatch?.[1] || directionMatch?.[2])?.toLowerCase() === 'left' ? 'left' : 'right',
+    directionSpecified: Boolean(directionMatch),
+  };
+}
+
+export function createHydrogenWaterReactionDiagram(question) {
+  const text = String(question || '');
+  const hasHydrogen = /\b(?:hydrogen|h2)\b/i.test(text);
+  const hasOxygen = /\b(?:oxygen|o2)\b/i.test(text);
+  const hasWater = /\b(?:water|h2o)\b/i.test(text);
+  const asksAboutEquation = /\b(?:balance|balancing|balanced|equation|reaction|form)\b/i.test(text);
+  return hasHydrogen && hasOxygen && hasWater && asksAboutEquation;
+}
+
 export function selectLearningVisual(profile, question = '') {
   const text = String(question || '').toLowerCase();
+  if (profile.subject === 'Physics' && createNewtonSecondLawDiagram(question)) return 'force-diagram';
   if (/\b(?:map|atlas|where is|geographic location)\b/.test(text)) return 'map';
   if (/\b(?:timeline|chronology|historical dates)\b/.test(text)) return 'timeline';
   if (/\b(?:graph|plot|curve)\b/.test(text)) return 'graph';
@@ -199,7 +235,7 @@ export function buildLearningInstruction(profile) {
   const visualGuidance = profile.visual === 'map'
     ? 'A map is appropriate only if a trustworthy, relevant map source is available; never draw or label an unverified map.'
     : profile.visual === 'graph' || profile.visual === 'chart'
-      ? 'Provide a graph or chart only when all plotted values come from the question or a reliable source. Use a valid chart JSON fence supported by FaceMeX, or explain the relationship in text if data is unavailable.'
+      ? 'Provide a graph or chart only when all plotted values come from the question or a reliable source. For a mathematical function, use a validated chart JSON fence with type "scatter" and increasing numeric x/y coordinate pairs calculated from the actual function; never use evenly spaced category labels as a coordinate axis. Explain in text if values cannot be verified.'
       : profile.visual === 'timeline'
         ? 'Use a concise chronological table or a validated timeline diagram. Include dates only when supported by the supplied context or reliable knowledge; never invent historical evidence.'
         : profile.visual === 'diagram' || profile.visual === 'flowchart' || profile.visual === 'code-diagram'
@@ -210,15 +246,30 @@ export function buildLearningInstruction(profile) {
   const imageGuidance = profile.hasImage
     ? 'Inspect the attached image itself. Describe what is visible, separate observation from inference, and ask about any unclear handwriting or labels rather than guessing.'
     : '';
+  const forceDiagramGuidance = profile.visual === 'force-diagram'
+    ? 'A validated FaceMeX Newton second-law diagram is generated from the exact mass and acceleration in the question. State F = ma, show the substitution and result in newtons, and keep the arrow aligned with the stated acceleration direction; do not introduce other forces.'
+    : '';
+  const chemistryGuidance = profile.subject === 'Chemistry'
+    ? 'For chemical equations, count each element on both sides and balance with coefficients, never by changing subscripts. Use a diagram only when the represented molecules follow the balanced equation.'
+    : '';
+  const subjectVisualGuidance = ['Biology', 'Life Sciences', 'Natural Sciences'].includes(profile.subject) &&
+        profile.visual === 'diagram'
+      ? 'For a biological process such as photosynthesis, use a concise validated flow diagram for the sequence only when the facts are well established; label inputs and outputs correctly. Do not claim a schematic is a realistic cell illustration.'
+      : '';
 
   return [
     'FaceMeX unified learning guidance:',
     `- Independently verify the subject and topic from the question${profile.confidence === 'explicit' ? ` (subject hint: ${profile.subject}; topic hint: ${profile.topic})` : ''}; do not force the learner to choose a subject.`,
     `- Adapt for ${profile.level} level. ${learningLevel}`,
+    '- Answer a clear, solvable question immediately. Never require a grade, level, or previous attempt before helping. Ask one focused question only if essential information is missing or unreadable.',
     profile.struggling ? '- The learner appears stuck: use smaller steps, check one concept at a time, and avoid skipping algebra or reasoning.' : '',
     `- Teaching approach: ${profile.teachingMethods.join('; ')}.`,
     `- Visual selection: ${visualGuidance}`,
+    forceDiagramGuidance,
+    chemistryGuidance,
+    subjectVisualGuidance,
     imageGuidance ? `- Image understanding: ${imageGuidance}` : '',
+    '- Do not request or display decorative stock photos for educational questions. Prefer a relevant validated SVG or a factual chart; never invent map features, measurements, or historical data. If reliable visual data is unavailable, explain in text and label any explicitly hypothetical illustration.',
     '- Start with a direct explanation. Include only relevant sections such as steps, example, final answer, verification or a short practice question; do not force a fixed template.',
     '- Preserve the exact question, values, units and constraints. State uncertainty, do not invent facts or data, and keep the student-facing answer free of internal prompts and processing details.',
     '- Use the existing FaceMeX Markdown, LaTeX, chart, diagram, table and practice formats. If a visual is unsupported, fails validation, or is unnecessary, provide the complete explanation as text.',

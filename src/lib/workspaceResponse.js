@@ -21,11 +21,25 @@ export function parseWorkspaceVisualization(kind, source) {
   if (!title) return null;
 
   if (kind === 'chart') {
-    if (!['bar', 'line'].includes(value.type) || !Array.isArray(value.data) ||
+    if (!['bar', 'line', 'scatter'].includes(value.type) || !Array.isArray(value.data) ||
       value.data.length === 0 || value.data.length > MAX_CHART_POINTS) return null;
     const xLabel = safeLabel(value.xLabel, 60);
     const yLabel = safeLabel(value.yLabel, 60);
     if (!xLabel || !yLabel) return null;
+    if (value.type === 'scatter') {
+      const data = value.data.map((point) => {
+        if (!point || typeof point !== 'object' || Array.isArray(point) ||
+          typeof point.x !== 'number' || !Number.isFinite(point.x) ||
+          typeof point.y !== 'number' || !Number.isFinite(point.y) ||
+          Math.abs(point.x) > 1_000_000_000_000 ||
+          Math.abs(point.y) > 1_000_000_000_000) return null;
+        return { x: point.x, y: point.y };
+      });
+      if (data.some((point) => point === null) ||
+        data.some((point, index) => index > 0 && point.x <= data[index - 1].x)) return null;
+      return { kind: 'chart', chartType: value.type, title, xLabel, yLabel, data };
+    }
+
     const data = value.data.map((point) => {
       if (!point || typeof point !== 'object' || Array.isArray(point) ||
         typeof point.value !== 'number' || !Number.isFinite(point.value) ||
