@@ -21,11 +21,44 @@ export function parseWorkspaceVisualization(kind, source) {
   if (!title) return null;
 
   if (kind === 'chart') {
-    if (!['bar', 'line', 'scatter'].includes(value.type) || !Array.isArray(value.data) ||
-      value.data.length === 0 || value.data.length > MAX_CHART_POINTS) return null;
     const xLabel = safeLabel(value.xLabel, 60);
     const yLabel = safeLabel(value.yLabel, 60);
     if (!xLabel || !yLabel) return null;
+    if (value.type === 'multi-line') {
+      if (!Array.isArray(value.series) || value.series.length < 2 || value.series.length > 4) return null;
+      const series = value.series.map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+        const label = safeLabel(item.label, 48);
+        if (!label || !Array.isArray(item.data) || item.data.length < 2 ||
+          item.data.length > MAX_CHART_POINTS) return null;
+        const data = item.data.map((point) => {
+          if (!point || typeof point !== 'object' || Array.isArray(point) ||
+            typeof point.x !== 'number' || !Number.isFinite(point.x) ||
+            typeof point.y !== 'number' || !Number.isFinite(point.y) ||
+            Math.abs(point.x) > 1_000_000_000_000 ||
+            Math.abs(point.y) > 1_000_000_000_000) return null;
+          return { x: point.x, y: point.y };
+        });
+        if (data.some((point) => point === null) ||
+          data.some((point, index) => index > 0 && point.x <= data[index - 1].x)) return null;
+        return { label, data };
+      });
+      if (series.some((item) => item === null) ||
+        new Set(series.map((item) => item.label)).size !== series.length ||
+        (value.illustrative !== undefined && typeof value.illustrative !== 'boolean')) return null;
+      return {
+        kind: 'chart',
+        chartType: value.type,
+        title,
+        xLabel,
+        yLabel,
+        series,
+        illustrative: value.illustrative === true,
+      };
+    }
+
+    if (!['bar', 'line', 'scatter'].includes(value.type) || !Array.isArray(value.data) ||
+      value.data.length === 0 || value.data.length > MAX_CHART_POINTS) return null;
     if (value.type === 'scatter') {
       const data = value.data.map((point) => {
         if (!point || typeof point !== 'object' || Array.isArray(point) ||
@@ -67,6 +100,36 @@ export function parseWorkspaceVisualization(kind, source) {
       legB,
       hypotenuse,
       unit: value.unit.trim(),
+    };
+  }
+
+  if (kind === 'diagram' && value.type === 'contour') {
+    const numbers = [value.centerX, value.centerY, value.stationaryValue, value.curvature];
+    if (!numbers.every((number) =>
+      typeof number === 'number' && Number.isFinite(number) && Math.abs(number) <= 1_000_000_000
+    ) || value.curvature === 0 || !Array.isArray(value.radii) ||
+      value.radii.length < 2 || value.radii.length > 4) return null;
+    const radii = value.radii.map((radius) =>
+      typeof radius === 'number' && Number.isFinite(radius) && radius > 0 && radius <= 1_000_000
+        ? radius
+        : null
+    );
+    if (radii.some((radius) => radius === null) ||
+      radii.some((radius, index) => index > 0 && radius <= radii[index - 1])) return null;
+    const xLabel = safeLabel(value.xLabel, 20);
+    const yLabel = safeLabel(value.yLabel, 20);
+    if (!xLabel || !yLabel) return null;
+    return {
+      kind: 'diagram',
+      diagramType: 'contour',
+      title,
+      xLabel,
+      yLabel,
+      centerX: value.centerX,
+      centerY: value.centerY,
+      stationaryValue: value.stationaryValue,
+      curvature: value.curvature,
+      radii,
     };
   }
 
@@ -592,7 +655,13 @@ function isMachineResponseJson(text) {
 
 export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
   let text = String(answer || '').trim();
-  if (!text || isExplicitTechnicalRequest(prompt)) return text;
+  if (!text) return text;
+  text = text.replace(
+    /\[\[(?:VISUAL_REFERENCE|INSERT IMAGE|INSERT DIAGRAM|INSERT VISUAL|DIAGRAM HERE)\]\]|\[(?:INSERT IMAGE|INSERT DIAGRAM|INSERT VISUAL|DIAGRAM HERE|VISUAL HERE|PLACEHOLDER(?: IMAGE| DIAGRAM)?|IMAGE PLACEHOLDER)\]/gi,
+    '',
+  );
+  text = text.replace(/```[^\n`]*\n\s*```/g, '');
+  if (isExplicitTechnicalRequest(prompt)) return text.trim();
   if (
     INTERNAL_OUTPUT_PATTERN.test(text) ||
     /^\s*(?:system|developer)\s*:/im.test(text) ||

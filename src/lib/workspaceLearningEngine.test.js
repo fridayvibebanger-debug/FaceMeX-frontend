@@ -5,6 +5,7 @@ import {
   createLearningContext,
   createHydrogenWaterReactionDiagram,
   createNewtonSecondLawDiagram,
+  createQuadraticStationaryPointDiagram,
   detectSubjectAndTopic,
   selectLearningVisual,
   validateLearningResponse,
@@ -48,6 +49,12 @@ test('detects subjects and topics from two representative questions per subject'
     ['Statistics', 'Explain probability and sample size in statistics.'],
     ['English and Literature', 'Analyze the theme and characters in this novel.'],
     ['English and Literature', 'How do I identify a metaphor in a poem?'],
+    ['Languages', 'Explain verb conjugation in a foreign language.'],
+    ['Languages', 'Translate this sentence and explain the grammar.'],
+    ['Technology', 'Explain a technological system.'],
+    ['Technology', 'How does a design and technology process work?'],
+    ['Health Sciences', 'Explain human anatomy and physiology.'],
+    ['Health Sciences', 'How does the circulatory system work in health sciences?'],
   ];
 
   for (const [subject, question] of examples) {
@@ -107,11 +114,53 @@ test('selects a balanced water-formation visual only for a matching chemistry qu
   assert.equal(createHydrogenWaterReactionDiagram('Explain how water evaporates.'), false);
 });
 
+test('derives and renders the stationary point of an isotropic quadratic surface', () => {
+  const prompt = 'Find and classify the stationary points of f(x) = x² + y² - 4x - 6y.';
+  assert.deepEqual(createQuadraticStationaryPointDiagram(prompt), {
+    kind: 'diagram',
+    diagramType: 'contour',
+    title: 'Quadratic function contour',
+    xLabel: 'x',
+    yLabel: 'y',
+    centerX: 2,
+    centerY: 3,
+    stationaryValue: -13,
+    curvature: 1,
+    radii: [1, 2, 3],
+  });
+  assert.equal(createLearningContext(prompt).visual, 'contour');
+  assert.equal(
+    createQuadraticStationaryPointDiagram('Find the stationary point of f(x,y) = x² + 2y² - 4x - 6y.'),
+    null,
+  );
+});
+
 test('chooses appropriate visual approaches without requesting unsupported stock visuals', () => {
   assert.equal(selectLearningVisual(createLearningContext('Explain mitosis.'), 'Explain mitosis.'), 'diagram');
   assert.equal(selectLearningVisual(createLearningContext('Make a timeline of apartheid.'), 'Make a timeline of apartheid.'), 'timeline');
   assert.equal(selectLearningVisual(createLearningContext('Show me a rainfall map.'), 'Show me a rainfall map.'), 'map');
   assert.equal(selectLearningVisual(createLearningContext('Explain this topic.'), 'Explain this topic.'), 'none');
+});
+
+test('selects subject-appropriate renderable visuals for the requested cross-subject examples', () => {
+  const examples = [
+    ['Biology', 'Explain the human circulatory system using a labelled diagram.', 'diagram'],
+    ['Physics', 'A 1,200 kg car accelerates at 4 m/s². Calculate the force.', 'force-diagram'],
+    ['Chemistry', 'Show how hydrogen and oxygen form water using a molecular model.', 'diagram'],
+    ['Geography', 'Explain drought in Limpopo using a climate graph.', 'graph'],
+    ['History', 'Create a timeline of important Industrial Revolution events.', 'timeline'],
+    ['Accounting', 'Prepare an income statement from the supplied financial figures.', 'table'],
+    ['Economics', 'Explain supply and demand using an accurately labelled graph.', 'graph'],
+    ['Computer Science', 'Explain how an API request travels between frontend, backend and database.', 'code-diagram'],
+    ['Agricultural Sciences', 'Explain the stages of maize growth using a lifecycle diagram.', 'diagram'],
+    ['Engineering', 'Explain how a solar photovoltaic system converts sunlight into electricity.', 'diagram'],
+  ];
+
+  for (const [subject, prompt, visual] of examples) {
+    const profile = createLearningContext(prompt);
+    assert.equal(profile.subject, subject, prompt);
+    assert.equal(profile.visual, visual, prompt);
+  }
 });
 
 test('builds adaptive instructions and asks for evidence-grounded visuals', () => {
@@ -123,6 +172,8 @@ test('builds adaptive instructions and asks for evidence-grounded visuals', () =
   assert.match(instruction, /reliable source/);
   assert.match(instruction, /do not invent facts or data/i);
   assert.match(instruction, /Never require a grade, level, or previous attempt/i);
+  assert.match(instruction, /multi-line/);
+  assert.match(instruction, /Never emit \[\[VISUAL_REFERENCE\]\]/);
 });
 
 test('validates structured visuals and practice while preserving the textual answer', () => {
@@ -141,4 +192,7 @@ test('validates structured visuals and practice while preserving the textual ans
 
   assert.equal(validateLearningResponse('').valid, false);
   assert.equal(validateLearningResponse('```diagram\n{}\n```').valid, false);
+  assert.equal(validateLearningResponse(
+    'Demand falls as price rises.\n\n```chart\n{"type":"multi-line","title":"Illustrative supply and demand","xLabel":"Quantity","yLabel":"Price","illustrative":true,"series":[{"label":"Demand","data":[{"x":0,"y":10},{"x":5,"y":5}]},{"label":"Supply","data":[{"x":0,"y":0},{"x":5,"y":5}]}]}\n```',
+  ).valid, true);
 });

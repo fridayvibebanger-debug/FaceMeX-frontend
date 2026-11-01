@@ -17,6 +17,9 @@ export type LearningSubject =
   | 'Environmental Studies'
   | 'Statistics'
   | 'English and Literature'
+  | 'Languages'
+  | 'Technology'
+  | 'Health Sciences'
   | 'Other';
 
 export type LearningContext = {
@@ -29,7 +32,7 @@ export type LearningContext = {
   questionType: 'calculation' | 'comparison' | 'explanation' | 'general';
   hasImage: boolean;
   teachingMethods: string[];
-  visual: 'map' | 'timeline' | 'graph' | 'chart' | 'table' | 'diagram' | 'flowchart' | 'image-analysis' | 'code-diagram' | 'force-diagram' | 'none';
+  visual: 'map' | 'timeline' | 'graph' | 'chart' | 'contour' | 'table' | 'diagram' | 'flowchart' | 'image-analysis' | 'code-diagram' | 'force-diagram' | 'none';
 };
 
 export type NewtonSecondLawDiagram = {
@@ -55,6 +58,18 @@ export function understandLearningQuestion(
 export function selectTeachingMethod(subject: LearningSubject): string[];
 export function createNewtonSecondLawDiagram(question: string): NewtonSecondLawDiagram | null;
 export function createHydrogenWaterReactionDiagram(question: string): boolean;
+export function createQuadraticStationaryPointDiagram(question: string): {
+  kind: 'diagram';
+  diagramType: 'contour';
+  title: string;
+  xLabel: string;
+  yLabel: string;
+  centerX: number;
+  centerY: number;
+  stationaryValue: number;
+  curvature: number;
+  radii: number[];
+} | null;
 export function selectLearningVisual(profile: Partial<LearningContext>, question?: string): LearningContext['visual'];
 export function createLearningContext(
   question: string,

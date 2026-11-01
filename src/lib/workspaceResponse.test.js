@@ -64,6 +64,40 @@ test('validates numeric coordinate graphs with ordered, finite points', () => {
   })), null);
 });
 
+test('validates multi-series numeric graphs and requires factual data to stay distinguishable', () => {
+  const graph = {
+    type: 'multi-line',
+    title: 'Supply and demand (illustrative)',
+    xLabel: 'Quantity',
+    yLabel: 'Price',
+    illustrative: true,
+    series: [
+      { label: 'Demand', data: [{ x: 0, y: 10 }, { x: 5, y: 5 }, { x: 10, y: 0 }] },
+      { label: 'Supply', data: [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }] },
+    ],
+  };
+  assert.deepEqual(parseWorkspaceVisualization('chart', JSON.stringify(graph)), {
+    kind: 'chart',
+    chartType: 'multi-line',
+    title: graph.title,
+    xLabel: graph.xLabel,
+    yLabel: graph.yLabel,
+    series: graph.series,
+    illustrative: true,
+  });
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...graph,
+    illustrative: undefined,
+  })).illustrative, false);
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...graph,
+    series: graph.series.map((series) => ({
+      ...series,
+      data: [{ x: 1, y: 1 }, { x: 1, y: 2 }],
+    })),
+  })), null);
+});
+
 test('rejects malformed, unsafe, and oversized visualizations', () => {
   assert.equal(parseWorkspaceVisualization('chart', '{'), null);
   assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
@@ -102,6 +136,52 @@ test('accepts a labelled right triangle only when its side lengths satisfy Pytha
       legB: 8,
       hypotenuse: 10,
       unit: 'cm',
+    },
+  );
+});
+
+test('validates contour diagrams with ordered radii and bounded coordinates', () => {
+  const contour = {
+    type: 'contour',
+    title: 'Quadratic function contour',
+    xLabel: 'x',
+    yLabel: 'y',
+    centerX: 2,
+    centerY: 3,
+    stationaryValue: -13,
+    curvature: 1,
+    radii: [1, 2, 3],
+  };
+  assert.deepEqual(parseWorkspaceVisualization('diagram', JSON.stringify(contour)), {
+    kind: 'diagram',
+    diagramType: 'contour',
+    title: contour.title,
+    xLabel: contour.xLabel,
+    yLabel: contour.yLabel,
+    centerX: 2,
+    centerY: 3,
+    stationaryValue: -13,
+    curvature: 1,
+    radii: [1, 2, 3],
+  });
+  assert.equal(parseWorkspaceVisualization('diagram', JSON.stringify({
+    ...contour,
+    radii: [1, 3, 2],
+  })), null);
+});
+
+test('accepts a renderable process flow with concise labeled stages', () => {
+  assert.deepEqual(
+    parseWorkspaceVisualization('diagram', JSON.stringify({
+      type: 'flow',
+      title: 'API request path',
+      steps: ['Frontend sends request', 'Backend validates and processes', 'Database returns data'],
+    })),
+    {
+      kind: 'diagram',
+      diagramType: 'flow',
+      title: 'API request path',
+      steps: ['Frontend sends request', 'Backend validates and processes', 'Database returns data'],
     },
   );
 });
@@ -563,6 +643,10 @@ test('keeps accidental code and machine output out of everyday replies but prese
   assert.equal(isExplicitTechnicalRequest('Write a React component that lists jobs.'), true);
   assert.equal(isExplicitTechnicalRequest('Show me Python code that sorts a list.'), true);
   assert.equal(normalizeWorkspaceAnswerForDisplay(codeAnswer, 'Write JavaScript code for this.'), codeAnswer);
+  assert.equal(
+    normalizeWorkspaceAnswerForDisplay('Here is the code. [[VISUAL_REFERENCE]]', 'Write JavaScript code for this.'),
+    'Here is the code.',
+  );
   assert.match(
     normalizeWorkspaceAnswerForDisplay('{"choices":[{"message":{"content":"internal"}}]}', cookingQuestion),
     /plain language/i,
@@ -580,6 +664,13 @@ test('keeps accidental code and machine output out of everyday replies but prese
     /```practice/,
   );
   assert.equal(normalizeWorkspaceAnswerForDisplay('```chart\n{\"raw\":\"data\"}\n```', cookingQuestion), 'Sorry, I couldn’t format that answer clearly. Please ask again, and I’ll try to explain it in plain language.');
+  assert.equal(
+    normalizeWorkspaceAnswerForDisplay(
+      'Here is the explanation. [[VISUAL_REFERENCE]] [INSERT IMAGE] [DIAGRAM HERE]',
+      'Explain photosynthesis.',
+    ),
+    'Here is the explanation.',
+  );
 });
 
 test('validates selectable follow-ups and leaves malformed markers as safe text', () => {

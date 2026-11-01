@@ -16,6 +16,15 @@ export type WorkspaceVisualization =
       data: Array<{ x: number; y: number }>;
     }
   | {
+      kind: 'chart';
+      chartType: 'multi-line';
+      title: string;
+      xLabel: string;
+      yLabel: string;
+      series: Array<{ label: string; data: Array<{ x: number; y: number }> }>;
+      illustrative: boolean;
+    }
+  | {
       kind: 'diagram';
       diagramType: 'flow';
       title: string;
@@ -29,6 +38,18 @@ export type WorkspaceVisualization =
       legB: number;
       hypotenuse: number;
       unit: string;
+    }
+  | {
+      kind: 'diagram';
+      diagramType: 'contour';
+      title: string;
+      xLabel: string;
+      yLabel: string;
+      centerX: number;
+      centerY: number;
+      stationaryValue: number;
+      curvature: number;
+      radii: number[];
     }
   | {
       kind: 'diagram';

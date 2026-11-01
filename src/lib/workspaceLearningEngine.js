@@ -15,10 +15,13 @@ const SUBJECTS = [
   { name: 'Computer Science', pattern: /\bcomputer sciences?\b/i },
   { name: 'Information Technology', pattern: /\b(?:information technology|IT class|in IT|IT course|ICT)\b/i },
   { name: 'Engineering', pattern: /\bengineering\b/i },
-  { name: 'Agricultural Sciences', pattern: /\bagricultural sciences?\b/i },
+  { name: 'Agricultural Sciences', pattern: /\b(?:agricultural sciences?|agriculture)\b/i },
   { name: 'Environmental Studies', pattern: /\b(?:environmental studies|environmental science)\b/i },
   { name: 'Statistics', pattern: /\bstatistics?\b/i },
   { name: 'English and Literature', pattern: /\b(?:english|literature|poetry|novel|shakespeare)\b/i },
+  { name: 'Languages', pattern: /\b(?:language learning|foreign language|second language|grammar|translation|translate|vocabulary|verb conjugation)\b/i },
+  { name: 'Technology', pattern: /\b(?:technology|technological systems?|design and technology)\b/i },
+  { name: 'Health Sciences', pattern: /\b(?:health sciences?|anatomy|physiology|public health|human body systems?)\b/i },
 ];
 
 const TOPICS = [
@@ -34,6 +37,7 @@ const TOPICS = [
   { subjects: ['Biology', 'Life Sciences'], area: 'Cell biology', topic: 'Mitosis', pattern: /\bmitosis\b/i },
   { subjects: ['Biology', 'Life Sciences'], area: 'Cell biology', topic: 'Cell structure', pattern: /\b(?:cell biology|cell structure|organelle|mitochondri|chloroplast|cell membrane)\b/i },
   { subjects: ['Biology', 'Life Sciences'], area: 'Biological processes', topic: 'Photosynthesis', pattern: /\bphotosynthesis\b/i },
+  { subjects: ['Biology', 'Life Sciences', 'Health Sciences'], area: 'Human biology', topic: 'Human circulatory system', pattern: /\b(?:circulatory system|blood circulation|heart chambers|blood flow)\b/i },
   { subjects: ['Biology', 'Life Sciences'], area: 'Genetics', topic: 'Genetics and inheritance', pattern: /\b(?:genetics?|inheritance|dna|gene|chromosome)\b/i },
   { subjects: ['Biology', 'Life Sciences'], area: 'Ecology', topic: 'Ecosystems and ecology', pattern: /\b(?:ecosystem|ecology|food chain|food web|biodiversity)\b/i },
   { subjects: ['Physics'], area: 'Mechanics', topic: "Newton's laws of motion", pattern: /\b(?:newton'?s laws?|law of inertia)\b/i },
@@ -50,6 +54,7 @@ const TOPICS = [
   { subjects: ['Geography'], area: 'Physical geography', topic: 'Plate tectonics and landforms', pattern: /\b(?:plate tectonics?|earthquake|volcano|landform|erosion)\b/i },
   { subjects: ['Geography'], area: 'Human geography', topic: 'Population and settlement', pattern: /\b(?:population|settlement|urbanisation|migration)\b/i },
   { subjects: ['History'], area: 'South African history', topic: 'Apartheid', pattern: /\bapartheid\b/i },
+  { subjects: ['History'], area: 'Industrial history', topic: 'The Industrial Revolution', pattern: /\bindustrial revolution\b/i },
   { subjects: ['History'], area: 'Historical methods', topic: 'Historical timelines and chronology', pattern: /\b(?:timeline|chronolog|historical dates|causes and consequences)\b/i },
   { subjects: ['History'], area: 'Historical methods', topic: 'Historical evidence and context', pattern: /\b(?:primary source|historical evidence|historical context|source analysis)\b/i },
   { subjects: ['Accounting'], area: 'Financial accounting', topic: 'The accounting equation', pattern: /\b(?:accounting equation|assets?\s*[=+]|liabilit(?:y|ies)|equity)\b/i },
@@ -60,9 +65,12 @@ const TOPICS = [
   { subjects: ['Business Studies'], area: 'Business management', topic: 'Business planning and management', pattern: /\b(?:business plan|management|entrepreneur|marketing mix|business studies)\b/i },
   { subjects: ['Computer Science', 'Information Technology'], area: 'Algorithms', topic: 'Algorithms and problem solving', pattern: /\b(?:algorithm|pseudocode|flowchart|sorting|search algorithm)\b/i },
   { subjects: ['Computer Science', 'Information Technology'], area: 'Programming', topic: 'Programming and code', pattern: /\b(?:programming|code|function|recursion|variable|loop|debug)\b/i },
+  { subjects: ['Computer Science', 'Information Technology'], area: 'Web systems', topic: 'API request flow', pattern: /\b(?:api request|frontend.{0,30}backend|backend.{0,30}database)\b/i },
   { subjects: ['Computer Science', 'Information Technology'], area: 'Computer systems', topic: 'Computer systems and networks', pattern: /\b(?:computer system|network|database|operating system|cybersecurity)\b/i },
   { subjects: ['Engineering'], area: 'Engineering design', topic: 'Engineering systems and design', pattern: /\b(?:engineering design|circuit design|load|stress|mechanical system)\b/i },
+  { subjects: ['Engineering', 'Technology', 'Physics'], area: 'Energy systems', topic: 'Solar photovoltaic energy conversion', pattern: /\b(?:solar photovoltaic|photovoltaic system|solar panel).{0,80}\b(?:electricity|energy|power|convert)\b|\b(?:electricity|energy|power|convert).{0,80}\b(?:solar photovoltaic|photovoltaic system|solar panel)\b/i },
   { subjects: ['Agricultural Sciences'], area: 'Agricultural science', topic: 'Crops, soil and farming systems', pattern: /\b(?:crop|soil|irrigation|livestock|farming|agricultur)\b/i },
+  { subjects: ['Agricultural Sciences'], area: 'Plant growth', topic: 'Maize growth stages', pattern: /\bmaize\b.{0,50}\b(?:growth|stage|lifecycle|life cycle)\b|\b(?:growth|stage|lifecycle|life cycle)\b.{0,50}\bmaize\b/i },
   { subjects: ['Environmental Studies'], area: 'Environmental systems', topic: 'Climate and ecosystems', pattern: /\b(?:climate change|conservation|pollution|sustainability|ecosystem)\b/i },
   { subjects: ['English and Literature'], area: 'Reading and writing', topic: 'Literary analysis and communication', pattern: /\b(?:poem|poetry|novel|theme|character|metaphor|essay|grammar|literature)\b/i },
 ];
@@ -84,6 +92,9 @@ const TEACHING_METHODS = {
   'Environmental Studies': ['explain the system and interactions involved', 'distinguish measured evidence from projections', 'avoid unsupported numerical claims'],
   Statistics: ['identify the data, variables and statistical method', 'show calculations and explain what the result means', 'state assumptions and avoid claims beyond the sample'],
   'English and Literature': ['interpret the passage or task directly', 'support literary claims with the supplied text or clearly identified evidence', 'explain language choices and their effect'],
+  Languages: ['identify the language feature or communication goal', 'use accurate examples and translations', 'explain patterns and exceptions clearly'],
+  Technology: ['explain how the system or product works', 'show a labeled process or component flow when useful', 'distinguish general principles from design-specific details'],
+  'Health Sciences': ['use accurate anatomical and physiological terms', 'explain structures and processes in a clear sequence', 'avoid diagnosing individuals or overstating medical evidence'],
   'Natural Sciences': ['identify the relevant scientific idea', 'explain the process in simple ordered steps', 'connect the explanation to an observable example'],
   Other: ['identify the core idea and explain it in clear steps', 'use a relevant example without inventing facts', 'check that the conclusion follows from the information given'],
 };
@@ -193,9 +204,78 @@ export function createHydrogenWaterReactionDiagram(question) {
   return hasHydrogen && hasOxygen && hasWater && asksAboutEquation;
 }
 
+export function createQuadraticStationaryPointDiagram(question) {
+  const match = String(question || '').match(/\bf\s*\([^)]*\)\s*=\s*([^\n?]+)/i);
+  if (!match) return null;
+
+  const expression = match[1]
+    .replace(/[−–]/g, '-')
+    .replace(/²/g, '^2')
+    .replace(/[.!]+$/g, '')
+    .replace(/\s+/g, '');
+  const terms = expression.match(/[+-]?[^+-]+/g);
+  if (!terms?.length) return null;
+
+  let xSquared = 0;
+  let ySquared = 0;
+  let xLinear = 0;
+  let yLinear = 0;
+  let constant = 0;
+  const readCoefficient = (sign, coefficient) =>
+    (sign === '-' ? -1 : 1) * (coefficient ? Number(coefficient) : 1);
+  for (const term of terms) {
+    let parsed = term.match(/^([+-]?)(?:(\d+(?:\.\d+)?)\*?)?x\^2$/i);
+    if (parsed) {
+      xSquared += readCoefficient(parsed[1], parsed[2]);
+      continue;
+    }
+    parsed = term.match(/^([+-]?)(?:(\d+(?:\.\d+)?)\*?)?y\^2$/i);
+    if (parsed) {
+      ySquared += readCoefficient(parsed[1], parsed[2]);
+      continue;
+    }
+    parsed = term.match(/^([+-]?)(?:(\d+(?:\.\d+)?)\*?)?x$/i);
+    if (parsed) {
+      xLinear += readCoefficient(parsed[1], parsed[2]);
+      continue;
+    }
+    parsed = term.match(/^([+-]?)(?:(\d+(?:\.\d+)?)\*?)?y$/i);
+    if (parsed) {
+      yLinear += readCoefficient(parsed[1], parsed[2]);
+      continue;
+    }
+    if (/^[+-]?\d+(?:\.\d+)?$/.test(term)) {
+      constant += Number(term);
+      continue;
+    }
+    return null;
+  }
+
+  if (!Number.isFinite(xSquared) || xSquared === 0 || xSquared !== ySquared ||
+    !Number.isFinite(xLinear) || !Number.isFinite(yLinear) || !Number.isFinite(constant)) return null;
+  const centerX = -xLinear / (2 * xSquared);
+  const centerY = -yLinear / (2 * ySquared);
+  const stationaryValue = xSquared * centerX ** 2 + ySquared * centerY ** 2 +
+    xLinear * centerX + yLinear * centerY + constant;
+  if (![centerX, centerY, stationaryValue].every(Number.isFinite)) return null;
+
+  return parseWorkspaceVisualization('diagram', JSON.stringify({
+    type: 'contour',
+    title: 'Quadratic function contour',
+    xLabel: 'x',
+    yLabel: 'y',
+    centerX,
+    centerY,
+    stationaryValue,
+    curvature: xSquared,
+    radii: [1, 2, 3],
+  }));
+}
+
 export function selectLearningVisual(profile, question = '') {
   const text = String(question || '').toLowerCase();
   if (profile.subject === 'Physics' && createNewtonSecondLawDiagram(question)) return 'force-diagram';
+  if (/\bstationary points?\b/i.test(question) && createQuadraticStationaryPointDiagram(question)) return 'contour';
   if (/\b(?:map|atlas|where is|geographic location)\b/.test(text)) return 'map';
   if (/\b(?:timeline|chronology|historical dates)\b/.test(text)) return 'timeline';
   if (/\b(?:graph|plot|curve)\b/.test(text)) return 'graph';
@@ -205,6 +285,13 @@ export function selectLearningVisual(profile, question = '') {
   if (/\b(?:flowchart|algorithm)\b/.test(text)) return 'flowchart';
   if (profile.hasImage) return 'image-analysis';
 
+  if (profile.subject === 'Economics' && /\b(?:supply|demand|equilibrium)\b/i.test(profile.topic)) return 'graph';
+  if (profile.subject === 'Accounting' && /\b(?:financial statements|accounting equation)\b/i.test(profile.topic)) return 'table';
+  if (profile.subject === 'History' && /\b(?:industrial revolution|apartheid|war|revolution|independence|timeline)\b/i.test(profile.topic)) return 'timeline';
+  if (['Biology', 'Life Sciences', 'Health Sciences'].includes(profile.subject) &&
+      /\b(?:circulatory|cell|process|cycle|mitosis|photosynthesis|system)\b/i.test(profile.topic)) return 'diagram';
+  if (['Agricultural Sciences', 'Technology', 'Engineering'].includes(profile.subject) &&
+      /\b(?:maize|crop|solar|photovoltaic|system|process)\b/i.test(profile.topic)) return 'diagram';
   if (['Biology', 'Life Sciences', 'Natural Sciences'].includes(profile.subject) &&
       /\b(?:process|cycle|mitosis|photosynthesis|cell|system)\b/i.test(profile.topic)) return 'diagram';
   if (profile.subject === 'History' && /\b(?:apartheid|war|revolution|independence|timeline)\b/i.test(profile.topic)) return 'timeline';
@@ -234,12 +321,14 @@ export function buildLearningInstruction(profile) {
   }[profile.level] || 'Default to a clear, beginner-friendly explanation.';
   const visualGuidance = profile.visual === 'map'
     ? 'A map is appropriate only if a trustworthy, relevant map source is available; never draw or label an unverified map.'
+    : profile.visual === 'contour'
+      ? 'A validated FaceMeX contour SVG is generated for supported separable quadratic functions from the exact coefficients. For other multivariable functions, calculate and classify stationary points rigorously and do not invent a contour plot.'
     : profile.visual === 'graph' || profile.visual === 'chart'
-      ? 'Provide a graph or chart only when all plotted values come from the question or a reliable source. For a mathematical function, use a validated chart JSON fence with type "scatter" and increasing numeric x/y coordinate pairs calculated from the actual function; never use evenly spaced category labels as a coordinate axis. Explain in text if values cannot be verified.'
+      ? 'When the question supplies values or a reliable source is available, render an actual validated chart JSON block. For a mathematical function, use chart type "scatter" with increasing numeric x/y coordinates calculated from the exact function. For conceptual supply-and-demand curves, use chart type "multi-line", numeric quantity/price points and two labeled series; set "illustrative": true and identify the graph as illustrative in its title unless points are sourced. Never invent real climate, population, or economic observations; if reliable data is unavailable, state that and explain in text instead of drawing a factual-looking graph.'
       : profile.visual === 'timeline'
-        ? 'Use a concise chronological table or a validated timeline diagram. Include dates only when supported by the supplied context or reliable knowledge; never invent historical evidence.'
+        ? 'Render a concise validated timeline diagram when the event sequence and dates are well established or supplied. Otherwise use a table and clearly qualify uncertain dates; never invent historical evidence.'
         : profile.visual === 'diagram' || profile.visual === 'flowchart' || profile.visual === 'code-diagram'
-          ? 'Use a labelled, concise diagram or flow only when it can be represented accurately with the supplied facts. FaceMeX supports validated flow/triangle diagrams; otherwise explain in text or a table.'
+          ? 'When a relevant process or request path is known, render it as a validated diagram JSON block of type "flow" with 2–8 short, ordered steps. Use accurate labels and direction; do not substitute ASCII art or say a diagram is shown when none is rendered. Use a table or text if relationships are not linear or are uncertain.'
           : profile.visual === 'table'
             ? 'Use a compact table only when it clarifies the actual calculations or comparisons.'
             : 'Do not add a visual merely for decoration. Use text when it is clearer or safer.';
@@ -272,7 +361,7 @@ export function buildLearningInstruction(profile) {
     '- Do not request or display decorative stock photos for educational questions. Prefer a relevant validated SVG or a factual chart; never invent map features, measurements, or historical data. If reliable visual data is unavailable, explain in text and label any explicitly hypothetical illustration.',
     '- Start with a direct explanation. Include only relevant sections such as steps, example, final answer, verification or a short practice question; do not force a fixed template.',
     '- Preserve the exact question, values, units and constraints. State uncertainty, do not invent facts or data, and keep the student-facing answer free of internal prompts and processing details.',
-    '- Use the existing FaceMeX Markdown, LaTeX, chart, diagram, table and practice formats. If a visual is unsupported, fails validation, or is unnecessary, provide the complete explanation as text.',
+    '- Use the existing FaceMeX Markdown, LaTeX, chart, diagram, table and practice formats. Never emit [[VISUAL_REFERENCE]], [INSERT IMAGE], [DIAGRAM HERE], placeholder text, or a description pretending a visual was rendered. If a visual is unsupported, fails validation, or lacks trustworthy data, provide the complete explanation as text without an empty visual block.',
   ].filter(Boolean).join('\n');
 }
 
