@@ -60,7 +60,12 @@ export function isMathematicsQuestion(input: string): boolean;
 export type WorkspaceResponseImage = {
   id: string;
   url: string;
+  smallUrl?: string;
   alt: string;
+  description?: string;
+  tags?: string[];
+  width?: number;
+  height?: number;
   attribution: string;
   attributionUrl: string;
   photoUrl?: string;
@@ -85,13 +90,33 @@ export function normalizeWorkspaceResponse(raw: unknown, fallback?: string): str
 
 export type WorkspaceMediaPlan = {
   category: string;
+  subject: string;
+  topic: string;
+  mainObject: string;
+  photoType: string;
+  purpose: string;
+  educationalPhoto: boolean;
+  allowPeople: boolean;
+  allowPortrait: boolean;
+  keywordGroups: string[][];
   imageQuery: string;
+  imageKeywords: string[];
   videoQuery: string;
   showImages: boolean;
   showVideos: boolean;
 };
 
-export function createWorkspaceMediaPlan(prompt: string, context?: string): WorkspaceMediaPlan;
+export function createWorkspaceMediaPlan(
+  prompt: string,
+  context?: string,
+  learningProfile?: { subject?: string; topic?: string; visual?: string },
+): WorkspaceMediaPlan;
+
+export function selectRelevantWorkspaceImages(
+  images: WorkspaceResponseImage[],
+  plan: Partial<WorkspaceMediaPlan>,
+  limit?: number,
+): WorkspaceResponseImage[];
 
 export function selectRelevantYouTubeLessonVideos<T extends {
   videoId?: string;

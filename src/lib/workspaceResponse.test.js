@@ -14,6 +14,7 @@ import {
   parseWorkspaceFollowUp,
   parseWorkspacePractice,
   parseWorkspaceVisualization,
+  selectRelevantWorkspaceImages,
   selectRelevantYouTubeLessonVideos,
 } from './workspaceResponse.js';
 
@@ -296,6 +297,7 @@ test('normalizes native Unsplash search results and wrapped result arrays', () =
   const expected = [{
     id: 'photo-native',
     url: nativeImage.urls.regular,
+    smallUrl: nativeImage.urls.small,
     alt: nativeImage.alt_description,
     attribution: 'A. Photographer',
     attributionUrl: 'https://unsplash.com/@aphotographer',
@@ -329,7 +331,7 @@ test('plans images and videos when the request makes them relevant', () => {
   assert.equal(foodPlan.category, 'food');
   assert.equal(foodPlan.showImages, true);
   assert.equal(foodPlan.showVideos, true);
-  assert.match(foodPlan.imageQuery, /crispy fried chicken with rice/i);
+  assert.match(foodPlan.imageQuery, /crispy fried chicken rice/i);
   assert.doesNotMatch(foodPlan.imageQuery, /visual reference/i);
 
   const codePlan = createWorkspaceMediaPlan('Fix this React component: const App = () => <main />;');
@@ -367,14 +369,14 @@ test('plans images and videos when the request makes them relevant', () => {
   const mathWithoutStockImages = createWorkspaceMediaPlan('Simplify 3a^2 × 4a^3');
   assert.equal(mathWithoutStockImages.showImages, false);
   const explicitMathImage = createWorkspaceMediaPlan('Show me an image of a fraction bar for 3/4.');
-  assert.equal(explicitMathImage.showImages, true);
+  assert.equal(explicitMathImage.showImages, false);
 
   const educationalVideosPlan = createWorkspaceMediaPlan('Explain photosynthesis and show me useful videos.');
   assert.equal(educationalVideosPlan.showVideos, true);
   assert.equal(educationalVideosPlan.videoQuery, 'photosynthesis');
 
   const diagramPlan = createWorkspaceMediaPlan('Show me a diagram of how solar panels generate electricity.');
-  assert.equal(diagramPlan.showImages, true);
+  assert.equal(diagramPlan.showImages, false);
   assert.equal(diagramPlan.showVideos, true);
 
   const photosynthesisPlan = createWorkspaceMediaPlan('Explain photosynthesis to a 13-year-old.');
@@ -423,8 +425,81 @@ test('plans images and videos when the request makes them relevant', () => {
   const sectionPlan = createWorkspaceMediaPlan(
     'Explain solar energy.',
   );
-  assert.match(sectionPlan.imageQuery, /solar energy/i);
-  assert.doesNotMatch(sectionPlan.imageQuery, /photovoltaic cells/i);
+  assert.match(sectionPlan.imageQuery, /solar panels sunlight photovoltaic electricity/i);
+});
+
+test('builds topic-specific educational photo queries from the requested concept', () => {
+  const examples = [
+    ['Explain photosynthesis.', /green plant leaves sunlight photosynthesis/i, 'Photosynthesis', 'green plant leaves'],
+    ['Explain Newton’s second law.', /car accelerating on road vehicle motion physics/i, "Newton's second law of motion", 'car moving on a road'],
+    ['Explain water pollution.', /water pollution contaminated river environmental/i, 'Water pollution', 'polluted waterway'],
+    ['Explain drought in Limpopo.', /Limpopo South Africa drought dry agricultural land/i, 'Drought in Limpopo', 'dry agricultural land in Limpopo'],
+    ['Explain how solar panels generate electricity.', /solar panels sunlight photovoltaic electricity generation/i, 'Solar energy', 'solar panels in sunlight'],
+    ['Explain the human circulatory system.', /human heart anatomy circulatory system medical model/i, 'Human circulatory system', 'human heart or circulatory anatomy model'],
+  ];
+
+  for (const [prompt, query, topic, mainObject] of examples) {
+    const plan = createWorkspaceMediaPlan(prompt);
+    assert.equal(plan.showImages, true, prompt);
+    assert.equal(plan.educationalPhoto, true, prompt);
+    assert.equal(plan.topic, topic, prompt);
+    assert.equal(plan.mainObject, mainObject, prompt);
+    assert.match(plan.imageQuery, query, prompt);
+  }
+
+  const graphRequest = createWorkspaceMediaPlan('Explain drought in Limpopo using a relevant climate graph.');
+  assert.equal(graphRequest.showImages, false);
+  assert.equal(graphRequest.imageQuery, '');
+});
+
+test('ranks educational Unsplash images by topic metadata and rejects portraits and weak matches', () => {
+  const plan = createWorkspaceMediaPlan('Explain photosynthesis.');
+  const candidates = [
+    { id: 'portrait', url: 'portrait', alt: 'Portrait of a woman in sunlight', tags: ['fashion'], attribution: 'Photographer', attributionUrl: 'https://unsplash.com/@photographer' },
+    { id: 'plant', url: 'plant', alt: 'Green plant leaves in bright sunlight', width: 1200, height: 800, attribution: 'Photographer', photoUrl: 'https://unsplash.com/photos/plant' },
+    { id: 'weak', url: 'weak', alt: 'Green trees beside a path', tags: ['park'], attribution: 'Photographer', photoUrl: 'https://unsplash.com/photos/weak' },
+    { id: 'near-duplicate', url: 'near-duplicate', alt: 'Leaves of a plant in sun', width: 800, height: 800, attribution: 'Photographer', photoUrl: 'https://unsplash.com/photos/near-duplicate' },
+  ];
+  assert.deepEqual(
+    selectRelevantWorkspaceImages(candidates, plan, 2).map((image) => image.id),
+    ['plant', 'near-duplicate'],
+  );
+  assert.deepEqual(selectRelevantWorkspaceImages([{
+    id: 'uncited',
+    url: 'uncited',
+    alt: 'Green plant leaves in bright sunlight',
+  }], plan), []);
+  assert.deepEqual(selectRelevantWorkspaceImages([{
+    id: 'empty',
+    url: 'empty',
+    attribution: 'Photographer',
+    photoUrl: 'https://unsplash.com/photos/empty',
+  }], plan), []);
+});
+
+test('requires on-topic metadata for each requested educational photograph', () => {
+  const examples = [
+    ['Explain photosynthesis.', 'Green leaves on a plant in sunlight', ['photosynthesis', 'plant']],
+    ['Explain Newton’s second law.', 'A car driving on a road', ['car', 'motion']],
+    ['Explain water pollution.', 'Pollution and plastic waste in a river', ['water', 'pollution']],
+    ['Explain drought in Limpopo.', 'Dry farmland during a drought in South Africa', ['agriculture', 'drought']],
+    ['Explain how solar panels generate electricity.', 'Solar panels in sunlight generating clean energy', ['solar energy', 'electricity']],
+    ['Explain the human circulatory system.', 'Human heart anatomy model showing blood circulation', ['anatomy', 'heart']],
+  ];
+
+  for (const [prompt, alt, tags] of examples) {
+    const plan = createWorkspaceMediaPlan(prompt);
+    const images = selectRelevantWorkspaceImages([{
+      id: prompt,
+      url: 'https://images.unsplash.com/example',
+      alt,
+      tags,
+      attribution: 'Educational photographer',
+      attributionUrl: 'https://unsplash.com/@educationalphotographer',
+      photoUrl: 'https://unsplash.com/photos/example',
+    }], plan);
+    assert.equal(images.length, 1, prompt);
+  }
 });
 
 test('keeps image and video media plans independent', () => {

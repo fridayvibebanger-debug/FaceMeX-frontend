@@ -187,9 +187,7 @@ export function normalizeWorkspaceImages(raw, limit = 3) {
   return imageResults.slice(0, limit).flatMap((image, index) => {
     if (!image || typeof image !== 'object' || Array.isArray(image)) return [];
 
-    const url = responseText(
-      image.url ?? image.urls?.regular ?? image.urls?.small ?? image.urls?.raw,
-    );
+    const url = responseText(image.url ?? image.urls?.regular ?? image.urls?.raw ?? image.urls?.small);
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'images.unsplash.com' ||
@@ -198,15 +196,262 @@ export function normalizeWorkspaceImages(raw, limit = 3) {
       return [];
     }
 
-    return [{
+    const normalized = {
       id: responseText(image.id) || url || `unsplash-${index}`,
       url,
       alt: responseText(image.alt || image.alt_description || image.description),
       attribution: responseText(image.photographer || image.attribution || image.user?.name),
       attributionUrl: responseText(image.attributionUrl || image.user?.links?.html),
       photoUrl: responseText(image.photoUrl || image.links?.html),
-    }];
+    };
+    const smallUrl = responseText(image.urls?.small);
+    try {
+      const parsedSmallUrl = new URL(smallUrl);
+      if (parsedSmallUrl.protocol === 'https:' && parsedSmallUrl.hostname === 'images.unsplash.com' &&
+        !parsedSmallUrl.username && !parsedSmallUrl.password) normalized.smallUrl = smallUrl;
+    } catch {
+      // The regular image URL remains available when the optional thumbnail URL is invalid.
+    }
+    const description = responseText(image.description);
+    if (description) normalized.description = description;
+    if (Array.isArray(image.tags)) {
+      normalized.tags = image.tags
+        .map((tag) => responseText(typeof tag === 'string' ? tag : tag?.title))
+        .filter(Boolean)
+        .slice(0, 20);
+    }
+    if (Number.isFinite(image.width) && image.width > 0) normalized.width = image.width;
+    if (Number.isFinite(image.height) && image.height > 0) normalized.height = image.height;
+    return [normalized];
   });
+}
+
+const EDUCATIONAL_PHOTO_PLANS = [
+  {
+    subject: 'Biology',
+    topic: 'Photosynthesis',
+    pattern: /\bphotosynthesis\b/i,
+    mainObject: 'green plant leaves',
+    photoType: 'plant leaves receiving sunlight',
+    purpose: 'connect sunlight and plant growth to the photosynthesis process',
+    query: 'green plant leaves sunlight photosynthesis',
+    keywordGroups: [['photosynthesis'], ['plant', 'plants', 'leaf', 'leaves'], ['sunlight', 'sun', 'light', 'solar']],
+  },
+  {
+    subject: 'Biology',
+    topic: 'Plant cell structure',
+    pattern: /\b(?:plant\s+cell|cell\s+structure|cell\s+organelles?|microscop(?:e|ic)\s+cells?)\b/i,
+    mainObject: 'plant cell under a microscope',
+    photoType: 'microscopic plant cell imagery',
+    purpose: 'provide a real microscopic view; use a labelled diagram for organelle identification',
+    query: 'plant cell microscope microscopy biology',
+    keywordGroups: [['plant', 'plants'], ['cell', 'cells'], ['microscope', 'microscopy', 'microscopic']],
+  },
+  {
+    subject: 'Physics',
+    topic: "Newton's second law of motion",
+    pattern: /\b(?:newton[’']?s?\s+(?:second|2nd)\s+law|force\s+of\s+.*mass|mass\s+and\s+acceleration)\b|\bcar\b.{0,60}\b(?:force|accelerat)\w*\b/i,
+    mainObject: 'car moving on a road',
+    photoType: 'vehicle in motion',
+    purpose: 'relate mass and acceleration to a familiar moving vehicle',
+    query: 'car accelerating on road vehicle motion physics',
+    keywordGroups: [['car', 'vehicle', 'automobile'], ['road', 'driving', 'motion', 'moving'], ['acceleration', 'force', 'physics']],
+  },
+  {
+    subject: 'Environment',
+    topic: 'Water pollution',
+    pattern: /\bwater\s+pollution\b|\bpollut(?:ed|ion)\b.{0,30}\b(?:water|river|ocean|lake)\b/i,
+    mainObject: 'polluted waterway',
+    photoType: 'water pollution in a river or coastline',
+    purpose: 'show visible environmental effects on water',
+    query: 'water pollution contaminated river environmental',
+    keywordGroups: [['pollution', 'polluted', 'contaminated', 'waste'], ['water', 'river', 'lake', 'ocean', 'coast'], ['environment', 'plastic', 'debris']],
+  },
+  {
+    subject: 'Geography',
+    topic: 'Drought in Limpopo',
+    pattern: /\bdrought\b.{0,60}\blimpopo\b|\blimpopo\b.{0,60}\bdrought\b/i,
+    mainObject: 'dry agricultural land in Limpopo',
+    photoType: 'drought-affected farmland or dry land',
+    purpose: 'illustrate drought conditions without claiming the photo is a verified local record',
+    query: 'Limpopo South Africa drought dry agricultural land',
+    keywordGroups: [['drought', 'dry', 'arid'], ['farm', 'farmland', 'agriculture', 'field', 'soil', 'land'], ['limpopo', 'south africa']],
+  },
+  {
+    subject: 'Physics',
+    topic: 'Solar energy',
+    pattern: /\b(?:solar\s+panels?|photovoltaic\s+cells?)\b.{0,60}\b(?:electricity|energy|generate|work|power)\b|\b(?:electricity|energy|generate|work|power)\b.{0,60}\b(?:solar\s+panels?|photovoltaic\s+cells?)\b/i,
+    mainObject: 'solar panels in sunlight',
+    photoType: 'solar panels installed in a real setting',
+    purpose: 'connect sunlight reaching solar panels to electricity generation',
+    query: 'solar panels sunlight photovoltaic electricity generation',
+    keywordGroups: [['solar panel', 'solar panels', 'photovoltaic'], ['sunlight', 'sun', 'solar'], ['electricity', 'energy', 'power']],
+  },
+  {
+    subject: 'Physics',
+    topic: 'Electrical components',
+    pattern: /\b(?:electrical\s+components?|circuit\s+components?|electrical\s+circuit|wiring)\b/i,
+    mainObject: 'electrical components',
+    photoType: 'real electrical components or equipment',
+    purpose: 'show real equipment; use a schematic rather than a photograph to explain circuit connections',
+    query: 'electrical circuit components electronics equipment',
+    keywordGroups: [['electrical', 'electricity', 'circuit'], ['component', 'components', 'equipment'], ['electronics', 'wiring', 'board']],
+  },
+  {
+    subject: 'Biology',
+    topic: 'Human circulatory system',
+    pattern: /\b(?:human\s+)?circulatory\s+system\b|\b(?:blood\s+circulation|blood\s+flow\s+through\s+the\s+heart|human\s+heart\s+anatomy)\b/i,
+    mainObject: 'human heart or circulatory anatomy model',
+    photoType: 'anatomical heart model or medically relevant heart imagery',
+    purpose: 'provide a real-world anatomical reference, not a labelled diagram',
+    query: 'human heart anatomy circulatory system medical model',
+    keywordGroups: [['heart', 'cardiac'], ['anatomy', 'anatomical', 'circulatory', 'circulation', 'blood'], ['human', 'medical', 'model']],
+  },
+  {
+    subject: 'Agriculture',
+    topic: 'African farming',
+    pattern: /\b(?:african\s+)?farm(?:ing|er|ers|s)?\b|\bagricultur(?:e|al)\b/i,
+    mainObject: 'farmers working in agricultural fields',
+    photoType: 'working farm or crops in an agricultural landscape',
+    purpose: 'connect the topic to real agricultural practice',
+    query: 'African farmers working agricultural fields crops',
+    keywordGroups: [['farm', 'farmer', 'farmers', 'agriculture', 'agricultural'], ['field', 'fields', 'crop', 'crops', 'soil'], ['africa', 'african']],
+    allowPeople: true,
+  },
+  {
+    subject: 'Agriculture',
+    topic: 'Soil erosion',
+    pattern: /\bsoil\s+erosion\b|\berosion\b.{0,30}\b(?:soil|field|land)\b/i,
+    mainObject: 'eroded agricultural soil',
+    photoType: 'visible soil erosion or gullies',
+    purpose: 'show the physical loss of soil',
+    query: 'visible soil erosion agricultural field gully',
+    keywordGroups: [['erosion', 'eroded', 'gully', 'gullies'], ['soil', 'land', 'field', 'agricultural']],
+  },
+  {
+    subject: 'Agriculture',
+    topic: 'Irrigation',
+    pattern: /\birrigation\b/i,
+    mainObject: 'irrigation system watering crops',
+    photoType: 'agricultural irrigation in a field',
+    purpose: 'show how water is delivered to crops',
+    query: 'agricultural irrigation system watering crops field',
+    keywordGroups: [['irrigation', 'sprinkler', 'drip'], ['farm', 'agricultural', 'field', 'crop', 'crops'], ['water', 'watering']],
+  },
+  {
+    subject: 'Geography',
+    topic: 'Mountains',
+    pattern: /\bmountain(?:s|ous)?\b/i,
+    mainObject: 'mountain landscape',
+    photoType: 'natural mountain landscape',
+    purpose: 'provide a real landscape example',
+    query: 'mountain landscape natural landforms',
+    keywordGroups: [['mountain', 'mountains', 'mountainous'], ['landscape', 'peak', 'range', 'landform']],
+  },
+  {
+    subject: 'Geography',
+    topic: 'Climate and rainfall',
+    pattern: /\b(?:climate|rainfall|precipitation|weather\s+pattern)\b/i,
+    mainObject: 'rainfall or weather conditions',
+    photoType: 'weather and rainfall in a landscape',
+    purpose: 'provide a real-world weather context; use sourced data for charts',
+    query: 'rainfall weather climate landscape clouds',
+    keywordGroups: [['rain', 'rainfall', 'precipitation', 'storm'], ['weather', 'climate', 'cloud', 'clouds'], ['landscape', 'field', 'region']],
+  },
+  {
+    subject: 'Environment',
+    topic: 'Ecosystem',
+    pattern: /\b(?:ecosystem|savanna|food\s+web|food\s+chain|biodiversity|wildlife)\b/i,
+    mainObject: 'ecosystem and its habitat',
+    photoType: 'wildlife or habitat in a natural ecosystem',
+    purpose: 'show a real habitat or organism in context',
+    query: 'African savanna ecosystem wildlife habitat',
+    keywordGroups: [['ecosystem', 'habitat', 'savanna'], ['wildlife', 'animal', 'animals', 'biodiversity'], ['african', 'africa', 'nature']],
+  },
+  {
+    subject: 'Energy',
+    topic: 'Renewable energy',
+    pattern: /\b(?:renewable\s+energy|wind\s+turbines?|solar\s+energy)\b/i,
+    mainObject: 'renewable energy installations',
+    photoType: 'solar panels or wind turbines in a landscape',
+    purpose: 'connect renewable energy concepts to real infrastructure',
+    query: 'solar energy solar panels wind turbines landscape',
+    keywordGroups: [['renewable', 'solar', 'wind'], ['energy', 'electricity', 'power'], ['panel', 'panels', 'turbine', 'turbines']],
+  },
+];
+
+const NON_PHOTOGRAPHIC_VISUAL_PATTERN = /\b(?:diagram|graphs?|charts?|maps?|molecular\s+structures?|chemical\s+equations?|circuit\s+diagrams?|force\s+(?:vector|diagram)s?|geometry|equations?)\b/i;
+const IMAGE_QUERY_NOISE = /\b(?:please|explain|teach|show|find|search|for|me|an?|the|a|what|how|why|does|do|is|are|can|could|would|should|help|understand|learn|about|with|using|user|using|photo|photos|image|images|picture|pictures|visual|reference|relevant|related|useful|diagram|illustration|grade|level|student|students|beginner|intermediate|advanced)\b/gi;
+
+function createEducationalPhotoPlan(request, learningProfile) {
+  const text = `${request} ${learningProfile?.topic || ''}`.trim();
+  if (NON_PHOTOGRAPHIC_VISUAL_PATTERN.test(request)) return null;
+  return EDUCATIONAL_PHOTO_PLANS.find((plan) => plan.pattern.test(text)) || null;
+}
+
+function cleanImageSearchQuery(value) {
+  return String(value || '')
+    .replace(IMAGE_QUERY_NOISE, ' ')
+    .replace(/[?!.,;:]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160);
+}
+
+function isUnsplashPageUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      ['unsplash.com', 'www.unsplash.com'].includes(url.hostname) &&
+      !url.username &&
+      !url.password;
+  } catch {
+    return false;
+  }
+}
+
+export function selectRelevantWorkspaceImages(images, plan, limit = 2) {
+  if (!Array.isArray(images) || !Number.isInteger(limit) || limit < 1) return [];
+  const unique = [];
+  const seen = new Set();
+  for (const image of images) {
+    if (!image || typeof image !== 'object') continue;
+    const identities = [image.id, image.url].filter(Boolean);
+    if (!identities.length || identities.some((identity) => seen.has(identity))) continue;
+    identities.forEach((identity) => seen.add(identity));
+    unique.push(image);
+  }
+  const portraitPattern = /\b(?:portrait|headshot|selfie|posing|studio\s+model)\b/i;
+  const peoplePattern = /\b(?:woman|women|man|men|person|people)\b/i;
+  const keywordGroups = Array.isArray(plan?.keywordGroups) && plan.keywordGroups.length > 0
+    ? plan.keywordGroups
+    : (String(plan?.imageQuery || '').toLowerCase().match(/[a-z][a-z-]{2,}/g) || [])
+      .filter((term, index, terms) => terms.indexOf(term) === index &&
+        !/\b(?:photo|photos|image|images|picture|pictures|visual|reference|relevant|related|useful|show|find|search|explain|teach|about|with|from|into|what|how|why|the|and|for|you|your)\b/.test(term))
+      .map((term) => [term]);
+  const minimumGroups = plan?.educationalPhoto
+    ? 2
+    : Math.min(2, keywordGroups.length);
+  if (!keywordGroups.length) return [];
+
+  return unique.flatMap((image, index) => {
+    const metadata = `${image.alt || ''} ${image.description || ''} ${(image.tags || []).join(' ')}`.toLowerCase();
+    const hasCredit = Boolean(image.attribution) &&
+      (isUnsplashPageUrl(image.photoUrl) || isUnsplashPageUrl(image.attributionUrl));
+    if (!metadata || !hasCredit || (!plan?.allowPortrait && portraitPattern.test(metadata)) ||
+      (!plan?.allowPeople && peoplePattern.test(metadata))) return [];
+    const matchingGroups = keywordGroups.filter((group) => group.some((term) =>
+      new RegExp(`\\b${String(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(metadata)
+    )).length;
+    if (matchingGroups < minimumGroups) return [];
+    const area = Number(image.width) > 0 && Number(image.height) > 0
+      ? image.width / image.height
+      : 1;
+    return [{ image, score: matchingGroups + (area >= 1.15 && area <= 2.2 ? 0.25 : 0), index }];
+  })
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, limit)
+    .map(({ image }) => image);
 }
 
 export function normalizeClarificationText(value) {
@@ -385,7 +630,7 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
   return text.trim();
 }
 
-export function createWorkspaceMediaPlan(prompt, context = '') {
+export function createWorkspaceMediaPlan(prompt, context = '', learningProfile) {
   const currentPrompt = String(prompt || '').replace(/\s+/g, ' ').trim();
   const isShortFollowUp = currentPrompt.length <= 60 &&
     currentPrompt.split(/\s+/).length <= 4 &&
@@ -408,6 +653,7 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
     ['art-design', /\b(art|design|creative|illustration|graphic|logo|inspiration)\b/i],
   ];
   const category = categories.find(([, pattern]) => pattern.test(lower))?.[0] || 'other';
+  const educationalPhoto = createEducationalPhotoPlan(request, learningProfile);
   const contextualUserPrompts = isShortFollowUp
     ? String(context || '')
       .split('\n')
@@ -441,13 +687,18 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
     category === 'art-design',
     /\b(?:logo|branding|cv example|resume example|cv template|resume template|portfolio example)\b/i.test(request),
   ].some(Boolean);
-  const imageIsRelevant = category !== 'programming-software' && (
-    asksForImages ||
+  const imageIsExplicitlyRequested = asksForImages && !NON_PHOTOGRAPHIC_VISUAL_PATTERN.test(request);
+  const imageIsRelevant = Boolean(educationalPhoto) || !NON_PHOTOGRAPHIC_VISUAL_PATTERN.test(request) &&
+    category !== 'programming-software' &&
+    category !== 'education-science-technology' && (
+    imageIsExplicitlyRequested ||
     (hasVisualTopic && !(category === 'education-science-technology' && isMathematicsQuestion(request)))
   );
-  const imageQuery = subject
-    ? `${subject} ${/\b(cv|resume)\b/i.test(request) ? 'CV resume template' : ''}`.replace(/\s+/g, ' ').trim().slice(0, 160)
-    : '';
+  const imageQuery = educationalPhoto
+    ? educationalPhoto.query
+    : subject
+      ? cleanImageSearchQuery(`${subject} ${/\b(cv|resume)\b/i.test(request) ? 'CV resume template' : ''}`)
+      : '';
   const videoQuery = subject
     .replace(/\s+\b(?:and\s+)?(?:show|find|get|give)\s+me\b.*$/i, '')
     .replace(/^(?:(?:one|two|three|a few|some|\d+)\s+)?(?:useful\s+|relevant\s+)?(?:videos?|lessons?|youtube)\s+(?:about|on|for)\s+/i, '')
@@ -464,6 +715,20 @@ export function createWorkspaceMediaPlan(prompt, context = '') {
 
   return {
     category,
+    subject: educationalPhoto?.subject || '',
+    topic: educationalPhoto?.topic || '',
+    mainObject: educationalPhoto?.mainObject || '',
+    photoType: educationalPhoto?.photoType || '',
+    purpose: educationalPhoto?.purpose || '',
+    educationalPhoto: Boolean(educationalPhoto),
+    allowPeople: Boolean(educationalPhoto?.allowPeople) ||
+      ['people-fashion', 'food'].includes(category) ||
+      /\b(?:person|people|portrait|headshot|woman|women|man|men|face|faces)\b/i.test(imageQuery),
+    allowPortrait: /\b(?:portrait|headshot|selfie)\b/i.test(imageQuery),
+    keywordGroups: educationalPhoto?.keywordGroups || [],
+    imageKeywords: educationalPhoto
+      ? [...new Set(educationalPhoto.keywordGroups.flat())]
+      : [],
     imageQuery: imageIsRelevant ? imageQuery : '',
     videoQuery: showVideos ? videoQuery : '',
     showImages: Boolean(imageIsRelevant && imageQuery),
