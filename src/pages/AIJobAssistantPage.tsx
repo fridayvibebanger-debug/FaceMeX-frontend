@@ -1,6 +1,6 @@
 import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import SubscriptionModal from "../components/SubscriptionModal";
-import type { ChangeEvent, ReactNode } from 'react';
+import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -89,6 +89,12 @@ import {
   selectRelevantYouTubeLessonVideos,
   type WorkspaceVisualization,
 } from '@/lib/workspaceResponse';
+import {
+  buildLearningInstruction,
+  createLearningContext,
+  validateLearningResponse,
+  type LearningContext,
+} from '@/lib/workspaceLearningEngine';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import {
   formatWorkspaceMath,
@@ -185,6 +191,7 @@ type ChatMessage = {
     question: string;
     options: string[];
   } | null;
+  learning?: LearningContext;
   media?: {
     status: 'loading' | 'ready';
     imagesStatus?: 'loading' | 'ready';
@@ -2538,12 +2545,48 @@ function renderMarkdownTable(
   );
 }
 
-function WorkspacePracticeCard({ question, solution }: { question: string; solution: string }) {
+function WorkspacePracticeCard({
+  question,
+  solution,
+  onAttempt,
+  disabled = false,
+}: {
+  question: string;
+  solution: string;
+  onAttempt?: (question: string, answer: string) => void;
+  disabled?: boolean;
+}) {
+  const [attempt, setAttempt] = useState('');
+
+  const submitAttempt = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const answer = attempt.trim();
+    if (!answer || !onAttempt || disabled) return;
+    onAttempt(question, answer);
+    setAttempt('');
+  };
+
   return (
     <section className="my-4 max-w-3xl overflow-hidden rounded-xl border border-sky-300/20 bg-sky-300/[0.04]">
       <div className="space-y-3 px-4 py-3">
         <h3 className="font-semibold text-white">Try one yourself</h3>
         <p className="text-white/85">{renderInlineText(question)}</p>
+        {onAttempt && (
+          <form onSubmit={submitAttempt} className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={attempt}
+              onChange={(event) => setAttempt(event.target.value)}
+              aria-label="Your practice answer"
+              placeholder="Your answer"
+              maxLength={2000}
+              disabled={disabled}
+              className="min-h-10 min-w-0 flex-1 rounded-lg border border-white/15 bg-black/20 px-3 text-sm text-white placeholder:text-white/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <Button type="submit" size="sm" disabled={disabled || !attempt.trim()} className="min-h-10">
+              Check my answer
+            </Button>
+          </form>
+        )}
         <details className="border-t border-sky-300/15 pt-3">
           <summary className="cursor-pointer font-medium text-white/85 marker:text-sky-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300">
             Reveal solution
@@ -2596,6 +2639,24 @@ function MarkdownCodeBlock({ code, language }: { code: string; language: string 
 
 function WorkspaceVisualizationCard({ visualization }: { visualization: WorkspaceVisualization }) {
   if (visualization.kind === 'diagram') {
+    if (visualization.diagramType === 'timeline') {
+      return (
+        <figure className="my-4 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4">
+          <figcaption className="mb-4 text-base font-semibold text-white">{visualization.title}</figcaption>
+          <ol className="space-y-3 border-l border-white/20 pl-4">
+            {visualization.events.map((event, index) => (
+              <li key={`${event.date}-${event.label}-${index}`} className="relative min-w-0">
+                <span aria-hidden="true" className="absolute -left-[21px] top-2 h-2.5 w-2.5 rounded-full border border-white/50 bg-[#222]" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-white/60">{event.date}</p>
+                <p className="break-words font-medium text-white/90">{event.label}</p>
+                {event.description && <p className="mt-1 break-words text-sm leading-6 text-white/70">{event.description}</p>}
+              </li>
+            ))}
+          </ol>
+        </figure>
+      );
+    }
+
     if (visualization.diagramType === 'triangle') {
       const scale = 220 / Math.max(visualization.legA, visualization.legB);
       const left = 54;
@@ -2742,11 +2803,15 @@ function ChatGPTStyleText({
   onLinkClick,
   visualReference,
   sourcePrompt,
+  onPracticeAttempt,
+  disabled,
 }: {
   text: string;
   onLinkClick?: (url: string, label?: string) => void;
   visualReference?: ReactNode;
   sourcePrompt?: string;
+  onPracticeAttempt?: (question: string, answer: string) => void;
+  disabled?: boolean;
 }) {
   const safeText = normalizeBrokenMarkdownLinks(normalizeWorkspaceAnswerForDisplay(text, sourcePrompt));
   const parsedBlocks = parseWorkspaceMarkdown(safeText);
@@ -2815,7 +2880,12 @@ function ChatGPTStyleText({
       if (block.language.toLowerCase() === 'practice') {
         const practice = parseWorkspacePractice(block.text);
         return practice
-          ? <WorkspacePracticeCard key={`practice-${index}`} {...practice} />
+          ? <WorkspacePracticeCard
+              key={`practice-${index}`}
+              {...practice}
+              onAttempt={onPracticeAttempt}
+              disabled={disabled}
+            />
           : <p key={`practice-error-${index}`} role="status" className="text-sm text-white/60">This practice question could not be displayed.</p>;
       }
       if (block.language.toLowerCase() === 'chart' || block.language.toLowerCase() === 'diagram') {
@@ -5431,6 +5501,26 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       : finalPrompt;
 
     const intent = detectIntent(finalPrompt, hasImages);
+    const trimmedPrompt = finalPrompt.trim();
+    const isLearningFollowUp =
+      /^(?:(?:why|how|what|can you explain|please explain|explain)\b.*\b(?:that|it|this|those|these|step|example|method)\b|make it (?:simpler|clearer|more advanced)\b|explain (?:more simply|more clearly|simply)\b|go deeper\b|give me a more advanced explanation of that topic\b|my answer\b|i tried this practice\b)/i.test(trimmedPrompt) ||
+      /^(?:why|how|what|again)\??$/i.test(trimmedPrompt);
+    const recentLearningContext = isLearningFollowUp
+      ? promptHistory
+          .filter((message) => message.role === 'user')
+          .slice(-2)
+          .map((message) => message.content)
+          .join('\n')
+      : '';
+    const learningContext = createLearningContext(finalPrompt, {
+      context: recentLearningContext,
+      hasImage: hasImages,
+    });
+    const isLearningRequest =
+      (intent.startsWith('education_') && intent !== 'education_institution') ||
+      learningContext.subject !== 'Other' ||
+      (hasImages && /\b(?:homework|question|exercise|diagram|chart|equation|label|worksheet)\b/i.test(finalPrompt));
+    const activeLearningContext = isLearningRequest ? learningContext : undefined;
     const suggestedSavedCategory = savedCategoryFromIntent(intent);
     const shouldAutoSaveEducation =
       suggestedSavedCategory === 'homework_help' ||
@@ -5606,6 +5696,14 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
       const solveForXGuidance = createSolveForXGuidanceResponse(finalPrompt);
       const mathLearningRequest = isMathematicsQuestion(finalPrompt);
+      const adaptiveLearningGuidance = activeLearningContext
+        ? `\n\n${buildLearningInstruction(activeLearningContext)}`
+        : hasImages
+          ? `\n\nImage-aware learning guidance:
+- Inspect the attached image itself. If it contains a school or academic question, diagram, chart, handwritten work or worksheet, identify the subject and topic from what is visible and teach it using a suitable level and method.
+- Distinguish visible details from inference. Preserve the exact question, values, units and labels; ask about unclear handwriting rather than guessing.
+- Use a supported, validated FaceMeX visual only when it improves the explanation and its facts are grounded. Otherwise give a complete text explanation. If the image is not educational, answer its actual request normally.`
+        : '';
       const mathematicsLearningGuidance = mathLearningRequest ? `
 
 Mathematics learning response:
@@ -5652,6 +5750,7 @@ FaceMeX intelligence rules:
 - Never mix Library sections. Students = school/university/NSFAS. Investors = grants/funding/investors/pitching. Jobs = jobs/CV/interviews/learnerships.
 
 ${mathematicsLearningGuidance}
+${adaptiveLearningGuidance}
 
 User name: ${userDisplayName}
 Current automatic job results in FaceMeX:
@@ -5710,10 +5809,16 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         throw new Error(errorMessage);
       }
 
-      const aiAnswer = normalizeWorkspaceAnswerForDisplay(
-        normalizeAnswerText(data, ''),
-        finalPrompt,
-      );
+      const rawAiAnswer = normalizeAnswerText(data, '');
+      const responseValidation = activeLearningContext || hasImages
+        ? validateLearningResponse(rawAiAnswer)
+        : null;
+      const validatedAiAnswer = responseValidation?.valid
+        ? responseValidation.answer
+        : responseValidation
+          ? ''
+          : rawAiAnswer;
+      const aiAnswer = normalizeWorkspaceAnswerForDisplay(validatedAiAnswer, finalPrompt);
       const normalizedAnswer = solveForXGuidance || aiAnswer;
       if (!normalizedAnswer.trim() || isUnavailableAIAnswer(normalizedAnswer)) {
         throw new Error('The AI service returned an empty or unavailable response.');
@@ -5730,7 +5835,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         finalPrompt,
         promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
       );
-      const showResponseImages = mediaPlan.showImages;
+      const showResponseImages = mediaPlan.showImages && !activeLearningContext;
       const hasMediaPlan = !usageLimitReached && (showResponseImages || mediaPlan.showVideos);
 
       setMessages((prev) => [
@@ -5744,6 +5849,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           savedCategory: suggestedSavedCategory,
           intent,
           followUp: parsedResponse.followUp,
+          learning: activeLearningContext,
           media: hasMediaPlan ? {
             status: 'loading',
             imagesStatus: showResponseImages ? 'loading' : 'ready',
@@ -9728,7 +9834,39 @@ Start with the most useful next action. Do not invent personal details, course r
                                   text={message.content}
                                   onLinkClick={handleGeneratedLinkClick}
                                   sourcePrompt={previousUserText}
+                                  disabled={busy}
+                                  onPracticeAttempt={message.learning
+                                    ? (question, answer) => {
+                                        void sendPrompt(
+                                          `I tried this practice question: ${question}\n\nMy answer: ${answer}\n\nPlease check my reasoning, tell me what I got right or need to correct, and guide me through the next step without immediately giving away the full solution.`
+                                        );
+                                      }
+                                    : undefined}
                                 />
+                              )}
+                              {message.learning && (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={busy}
+                                    onClick={() => void sendPrompt('Please explain that more simply, in smaller steps, and define any unfamiliar terms.')}
+                                    className="min-h-9 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs text-white/75 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+                                  >
+                                    Explain more simply
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={busy}
+                                    onClick={() => void sendPrompt('Give me a more advanced explanation of that topic, including important assumptions and technical detail.')}
+                                    className="min-h-9 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs text-white/75 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+                                  >
+                                    Go deeper
+                                  </Button>
+                                </div>
                               )}
                               {message.media?.showImages && (
                                 <WorkspaceResponseMedia media={message.media} mode="images" />
