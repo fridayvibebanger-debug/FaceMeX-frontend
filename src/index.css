@@ -1432,7 +1432,21 @@
     }
 
     .fm-classic-cv-contact-grid > div {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
       overflow-wrap: anywhere;
+    }
+
+    .fm-classic-cv-contact-grid svg {
+      width: 0.85rem;
+      height: 0.85rem;
+      flex: 0 0 auto;
+      color: #172033;
+    }
+
+    .fm-classic-cv-contact-placeholder {
+      color: #64748b;
     }
 
     .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table {
@@ -1463,7 +1477,7 @@
       text-align: left;
     }
 
-    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(tr > td:nth-child(3)) td:nth-child(2) {
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(tr > td:nth-child(3)):not(:has(td > ul)) td:nth-child(2) {
       width: 1.5rem;
       text-align: center;
     }
@@ -1504,6 +1518,24 @@
       break-inside: avoid;
     }
 
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p:nth-child(2)) td {
+      width: 50%;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p:nth-child(2)) ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p:nth-child(2)) li {
+      list-style: none;
+    }
+
+    .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p):not(:has(td > ul > li > p:nth-child(2))) td {
+      width: 25%;
+    }
+
     .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror p {
       margin: 0 0 0.25rem;
     }
@@ -1525,15 +1557,33 @@
 
     @media (max-width: 640px) {
       .fm-document-page.fm-document-classic-cv > div {
-        padding: 2.5rem 2rem !important;
+        padding: 1.5rem 1.25rem !important;
+      }
+
+      .fm-document-page.fm-document-classic-cv::before {
+        inset: 12px;
       }
 
       .fm-classic-cv-contact-grid {
-        justify-content: flex-start;
+        justify-content: center;
       }
 
-      .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul) {
+      .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p):not(:has(td > ul > li > p:nth-child(2))) {
+        display: block;
         table-layout: auto;
+      }
+
+      .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p):not(:has(td > ul > li > p:nth-child(2))) tbody {
+        display: block;
+      }
+
+      .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p):not(:has(td > ul > li > p:nth-child(2))) tr {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+      }
+
+      .fm-document-page.fm-document-classic-cv .document-editor .ProseMirror table:has(td > ul > li > p):not(:has(td > ul > li > p:nth-child(2))) td {
+        width: auto;
       }
     }
 
@@ -1669,6 +1719,21 @@
       }
     }
 
+    html:has(.fm-document-workspace-root.fm-theme-dark),
+    body:has(.fm-document-workspace-root.fm-theme-dark) {
+      background-color: #0b0b0b !important;
+    }
+
+    .fm-document-workspace-root.fm-theme-dark {
+      background-color: #0b0b0b !important;
+      color-scheme: dark;
+    }
+
+    .fm-document-workspace-root.fm-theme-dark .fm-document-workspace-stage,
+    .fm-document-workspace-root.fm-theme-dark .fm-document-workspace-stage > main {
+      background-color: #0b0b0b;
+    }
+
     .fm-document-workspace.fm-theme-dark {
       background-color: #0b0b0b !important;
       color: #f8fafc !important;
@@ -1701,8 +1766,27 @@
     }
 
     .fm-document-workspace.fm-theme-dark .fm-document-composer select {
+      border: 1px solid #414141;
       background: #363636;
       color: #f8fafc;
+    }
+
+    .fm-document-workspace.fm-theme-dark .fm-document-composer select:focus-visible,
+    .fm-document-workspace.fm-theme-dark .fm-document-composer button:focus-visible {
+      outline: 2px solid rgba(148, 163, 184, 0.9);
+      outline-offset: 2px;
+    }
+
+    .fm-document-workspace.fm-theme-dark .fm-document-composer button:not(.bg-blue-600) {
+      min-width: 2rem;
+      min-height: 2rem;
+      border: 1px solid #414141;
+      background: #242424;
+      color: #f8fafc;
+    }
+
+    .fm-document-workspace.fm-theme-dark .fm-document-composer button:active:not(:disabled) {
+      filter: brightness(0.9);
     }
 
     .fm-document-workspace.fm-theme-light .fm-document-composer {
