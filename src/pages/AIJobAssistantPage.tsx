@@ -83,6 +83,7 @@ import {
   normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
+  selectRelevantWorkspaceImages,
   parseWorkspacePractice,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
@@ -201,10 +202,17 @@ type ChatMessage = {
     videosStatus?: 'loading' | 'ready';
     showImages: boolean;
     showVideos: boolean;
+    imageTopic?: string;
+    imagePurpose?: string;
     images: Array<{
       id: string;
       url: string;
+      smallUrl?: string;
       alt: string;
+      description?: string;
+      tags?: string[];
+      width?: number;
+      height?: number;
       attribution: string;
       attributionUrl: string;
       photoUrl?: string;
@@ -3134,7 +3142,12 @@ function WorkspaceResponseMedia({
     if (!images.length) return null;
     return (
       <section className="my-3 min-w-0 w-full max-w-3xl" aria-label="Relevant images">
-        <h3 className="mb-2 text-xs font-semibold text-white/85">Relevant images</h3>
+        <h3 className="mb-2 text-xs font-semibold text-white/85">
+          {media.imageTopic ? `Photo example: ${media.imageTopic}` : 'Relevant images'}
+        </h3>
+        {media.imagePurpose && (
+          <p className="mb-2 text-xs leading-5 text-white/55">{media.imagePurpose}</p>
+        )}
         <div className="grid grid-cols-2 gap-2">
           {images.map((image) => {
             return (
@@ -3149,7 +3162,8 @@ function WorkspaceResponseMedia({
                   className="absolute inset-0 block h-full w-full cursor-zoom-in text-left focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-white"
                 >
                   <img
-                    src={image.url}
+                    src={image.smallUrl || image.url}
+                    sizes="(max-width: 640px) 50vw, 360px"
                     alt={image.alt}
                     loading="lazy"
                     decoding="async"
@@ -3159,7 +3173,22 @@ function WorkspaceResponseMedia({
                 </button>
                 {image.attribution && (
                   <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-4 text-right text-[10px] leading-4 text-white sm:text-xs">
-                    {image.attribution}
+                    {isTrustedMediaUrl(image.photoUrl || '', 'unsplash.com') ||
+                      isTrustedMediaUrl(image.attributionUrl, 'unsplash.com')
+                      ? (
+                          <a
+                            href={isTrustedMediaUrl(image.photoUrl || '', 'unsplash.com')
+                              ? image.photoUrl
+                              : image.attributionUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            tabIndex={-1}
+                            className="pointer-events-auto hover:underline"
+                          >
+                            Photo by {image.attribution} on Unsplash
+                          </a>
+                        )
+                      : `Photo by ${image.attribution} on Unsplash`}
                   </figcaption>
                 )}
               </figure>
@@ -3186,7 +3215,16 @@ function WorkspaceResponseMedia({
                 />
                 {selectedImage.attribution && (
                   <p className="text-center text-xs text-white/65">
-                    {selectedImage.attribution}
+                    Photo by{' '}
+                    {isTrustedMediaUrl(selectedImage.attributionUrl, 'unsplash.com') ? (
+                      <a href={selectedImage.attributionUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                        {selectedImage.attribution}
+                      </a>
+                    ) : selectedImage.attribution}
+                    {' '}on{' '}
+                    {isTrustedMediaUrl(selectedImage.photoUrl || '', 'unsplash.com') ? (
+                      <a href={selectedImage.photoUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">Unsplash</a>
+                    ) : 'Unsplash'}
                   </p>
                 )}
               </div>
@@ -6015,8 +6053,9 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       const mediaPlan = createWorkspaceMediaPlan(
         finalPrompt,
         promptHistory.slice(-6).map((message) => `${message.role}: ${message.content}`).join('\n'),
+        activeLearningContext,
       );
-      const showResponseImages = mediaPlan.showImages && !activeLearningContext;
+      const showResponseImages = mediaPlan.showImages;
       const showResponseVideos = mediaPlan.showVideos && (
         !activeLearningContext ||
         /\b(?:video|youtube|watch|tutorial)\b|\bfind\b.{0,30}\blesson\b/i.test(finalPrompt)
@@ -6041,6 +6080,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
             videosStatus: showResponseVideos ? 'loading' : 'ready',
             showImages: showResponseImages,
             showVideos: showResponseVideos,
+            imageTopic: mediaPlan.educationalPhoto ? mediaPlan.topic : undefined,
+            imagePurpose: mediaPlan.educationalPhoto ? mediaPlan.purpose : undefined,
             images: [],
             videos: [],
           } : undefined,
@@ -6061,7 +6102,11 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
         if (showResponseImages) {
           void api.get(`/api/media/images/search?query=${encodeURIComponent(mediaPlan.imageQuery)}`)
-            .then((result) => normalizeWorkspaceImages(result))
+            .then((result) => selectRelevantWorkspaceImages(
+              normalizeWorkspaceImages(result, 12),
+              mediaPlan,
+              2,
+            ))
             .catch((error: unknown) => {
               console.warn('FaceMeX optional Unsplash image search is unavailable', {
                 errorName: error instanceof Error ? error.name : 'UnknownError',
