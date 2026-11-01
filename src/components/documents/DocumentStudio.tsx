@@ -147,6 +147,40 @@ const emptyForm: FormState = {
   extras: '',
 };
 
+const cvProfileFieldKeys = ['fullName', 'jobTitle', 'email', 'phone', 'location'] as const;
+type CvProfile = Pick<FormState, (typeof cvProfileFieldKeys)[number]>;
+
+function parseAiDocumentPayload(responseText: string) {
+  const cleaned = responseText.replace(/^```(?:json|markdown|text)?\s*/i, '').replace(/\s*```$/, '').trim();
+  try {
+    const parsed: unknown = JSON.parse(cleaned);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { payload: null, documentText: responseText, profile: {} as Partial<CvProfile> };
+    }
+
+    const payload = parsed as Record<string, unknown>;
+    const profileValue = payload.profile;
+    const profile: Partial<CvProfile> = {};
+    if (profileValue && typeof profileValue === 'object' && !Array.isArray(profileValue)) {
+      const fields = profileValue as Record<string, unknown>;
+      cvProfileFieldKeys.forEach((key) => {
+        if (typeof fields[key] === 'string' && fields[key].trim()) {
+          profile[key] = fields[key].trim();
+        }
+      });
+    }
+
+    const documentText = [payload.documentMarkdown, payload.replacementBody, payload.document]
+      .find((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+    return { payload, documentText: documentText || '', profile };
+  } catch {
+    if (cleaned.startsWith('{')) {
+      throw new Error('The AI response was not valid document JSON. Your document was not changed.');
+    }
+    return { payload: null, documentText: responseText, profile: {} as Partial<CvProfile> };
+  }
+}
+
 function renderDocumentInlineMarkdown(text: string) {
   const parts: ReactNode[] = [];
   const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|==([^=]+)==|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
@@ -1157,7 +1191,7 @@ export default function DocumentStudio({
   onDocumentSaved,
   embeddedWorkspace = false,
 }: Props) {
-  const { id: userId, hasTier } = useUserStore();
+  const { id: userId, hasTier, name: accountName, professional: accountProfessional } = useUserStore();
   const isPlus = hasTier('plus');
   const isPro = hasTier('pro');
   const currentUsageKey = getDocumentAIUsageKey(userId);
@@ -1492,6 +1526,16 @@ export default function DocumentStudio({
   }, [content, draftHydrated, editor, form, kind, template]);
 
   useEffect(() => {
+    if (!draftHydrated || kind !== 'cv') return;
+    setForm((current) => ({
+      ...current,
+      fullName: current.fullName.trim() || accountName,
+      jobTitle: current.jobTitle.trim() || accountProfessional?.headline || '',
+      location: current.location.trim() || accountProfessional?.location || '',
+    }));
+  }, [accountName, accountProfessional?.headline, accountProfessional?.location, draftHydrated, kind]);
+
+  useEffect(() => {
     if (!draftHydrated) return;
     const timer = window.setTimeout(() => {
       try {
@@ -1531,11 +1575,35 @@ export default function DocumentStudio({
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const applyAiProfile = (profile: Partial<CvProfile>, instruction = '') => {
+    if (kind !== 'cv' || !Object.keys(profile).length) return;
+    const explicitProfileEdit = /\b(?:name|title|headline|email|phone|contact|location)\b/i.test(instruction) &&
+      /\b(?:change|update|set|replace|use|correct|add|my|to|is|am|called|named|based)\b/i.test(instruction);
+    const requestedProfileFields: Record<(typeof cvProfileFieldKeys)[number], RegExp> = {
+      fullName: /\b(?:full\s+name|name)\b/i,
+      jobTitle: /\b(?:professional\s+title|job\s+title|headline)\b/i,
+      email: /\b(?:email|contact\s+details?)\b/i,
+      phone: /\b(?:phone|contact\s+details?)\b/i,
+      location: /\b(?:location|address)\b/i,
+    };
+    setForm((current) => {
+      const next = { ...current };
+      cvProfileFieldKeys.forEach((key) => {
+        const value = profile[key];
+        if (value && (!current[key].trim() || explicitProfileEdit && requestedProfileFields[key].test(instruction))) {
+          next[key] = value;
+        }
+      });
+      return next;
+    });
+  };
+
   const getFields = (docKind: DocumentKind): Array<[string, string]> => {
     switch (docKind) {
       case 'cv':
         return [
           ['fullName', 'Full name'],
+          ['jobTitle', 'Professional title'],
           ['email', 'Email'],
           ['phone', 'Phone'],
           ['location', 'Location'],
@@ -1670,11 +1738,6 @@ export default function DocumentStudio({
       return;
     }
 
-    if (kind === 'cv' && (!form.fullName.trim() || !form.email.trim())) {
-      toast({ title: 'Add your details', description: 'Enter your name and email first.' });
-      return;
-    }
-
     if (kind === 'cover-letter' && (!form.jobTitle.trim() && !form.company.trim() && !form.summary.trim())) {
       toast({ title: 'Add job details', description: 'Enter a job title, company, or summary first.' });
       return;
@@ -1695,12 +1758,12 @@ export default function DocumentStudio({
         const candidateDetails = { ...form };
         delete candidateDetails.idNumber;
         const templateGuidance = selectedTemplate?.id === 'cv-corporate' || (kind === 'cv' && template === 'classic')
-          ? 'Use a professional CV section order: PROFESSIONAL SUMMARY, EDUCATION, EXPERIENCE, SKILLS, REFERENCES, ADDITIONAL INFORMATION. The candidate name, professional title, and contact details are rendered in the page header; do not repeat them in the body. Use only supplied information and do not include placeholders or empty sections.'
+          ? 'Follow the active CV template structure exactly: ABOUT ME, EDUCATION, EXPERIENCE, SKILLS, REFERENCES, then ADDITIONAL INFORMATION only when supplied. For each education row use two columns: dates and institution on the left; qualification and description on the right. For each experience row use two columns: dates and organisation on the left; job title and responsibilities/achievements on the right. Format skills in four balanced columns and references in two columns. The full name, professional title, phone, location, and email appear in the editable document header, not as duplicated body sections. Omit empty sections and never leave bracketed placeholders in generated body content.'
           : selectedTemplate
-            ? `Follow the selected template "${selectedTemplate.name}" and its section structure: ${selectedTemplate.description}.`
+            ? `Follow the selected template "${selectedTemplate.name}" and its section structure: ${selectedTemplate.description}\nTemplate content and section order:\n${selectedTemplate.content}`
             : `Use the ${template} visual style.`;
         const request = kind === 'cv'
-          ? `Create a polished, ATS-friendly CV using only the candidate details below. Keep every claim factual; do not invent experience, achievements, skills, dates, or qualifications. Use clear section headings and concise bullets. ${templateGuidance} Candidate details: ${JSON.stringify(candidateDetails)}`
+          ? `Create a polished, ATS-friendly CV using only the candidate details below. Keep every claim factual; do not invent experience, achievements, skills, dates, qualifications, or personal/contact details. Use clear section headings and concise bullets. Return only JSON with a string documentMarkdown containing the complete document body in Markdown and a profile object containing fullName, jobTitle, email, phone, and location. Include a profile value only when that exact information is explicitly present in the candidate details; otherwise use an empty string. Preserve supplied profile values exactly. ${templateGuidance} Candidate details: ${JSON.stringify(candidateDetails)}`
           : kind === 'cover-letter'
             ? `Create a tailored, professional cover letter using only the candidate details below. Do not invent experience, achievements, skills, dates, or qualifications. ${templateGuidance} Candidate details: ${JSON.stringify(candidateDetails)}`
             : `Create a polished ${kind.replace(/-/g, ' ')} using only the user details below. Never invent experience, qualifications, skills, dates, contact details, achievements, or project results. Use clear section headings. ${templateGuidance} User details: ${JSON.stringify(candidateDetails)}`;
@@ -1716,10 +1779,14 @@ export default function DocumentStudio({
             : response?.letter || response?.answer || response?.reply || response?.content || response?.response || response?.text || ''
         ).trim();
         if (!generated) throw new Error('The AI service returned an empty document.');
-        nextContent = createEditorHtml(generated, kind === 'presentation', true);
+        const aiPayload = kind === 'cv' ? parseAiDocumentPayload(generated) : { documentText: generated, profile: {} as Partial<CvProfile> };
+        const documentText = aiPayload.documentText.trim();
+        if (!documentText) throw new Error('The AI service returned no document body.');
+        nextContent = createEditorHtml(documentText, kind === 'presentation', true);
         if (kind === 'cv' && template === 'classic') {
           nextContent = ensureClassicCvPersonalInfo(nextContent, form);
         }
+        applyAiProfile(aiPayload.profile);
         recordDocumentAIUsage();
       }
 
@@ -1925,18 +1992,37 @@ export default function DocumentStudio({
     }
 
     const draftDocumentText = editor?.getText() || '';
-    const blankDocument = !draftDocumentText.trim();
+    const starterCvText = draftDocumentText
+      .replace(/\b(?:about me|professional summary|education|experience|skills|references|additional information)\b/gi, '')
+      .replace(/\[[^\]]*\]/g, '')
+      .replace(/[\s|:·•\-–—]/g, '');
+    const blankDocument = !draftDocumentText.trim() ||
+      (kind === 'cv' && template === 'classic' && !starterCvText);
     const explicitFullRewrite = /\b(?:whole|entire|complete|full)\s+(?:document|cv|cover letter|report|proposal|plan|presentation)\b|\b(?:rewrite|replace|redraft)\b.{0,40}\b(?:whole|entire|complete|full)\s+(?:document|cv|cover letter|report|proposal|plan|presentation|thing)\b|\b(?:rewrite|replace|redraft)\b.{0,30}\beverything\b|\bstart\s+(?:over|from scratch)\b/i.test(userQuestion);
+    const explicitProfileFieldRequest = kind === 'cv' &&
+      /\b(?:full\s+name|name|professional\s+title|job\s+title|headline|email|phone|contact(?:\s+details?)?|location|address)\b/i.test(userQuestion);
     const instruction = mode === 'review'
       ? `Review this document for clarity, spelling, grammar, structure, repetition, and professionalism. Reply like a helpful writing assistant: start with a brief overall assessment, then use clear Markdown headings and concise bullets for specific strengths, recommended improvements, and missing information. Give actionable examples where useful. Focus on: ${userQuestion || 'the overall document quality'}. Never invent qualifications, skills, experience, or dates.`
       : mode === 'edit'
         ? `Improve only the selected text according to this request: ${userQuestion}. Keep all facts unchanged. Return a JSON object with string properties suggested and explanation. Selected text: ${JSON.stringify(original)}`
         : mode === 'draft'
-          ? blankDocument
-            ? `Create the complete ${kind} document from the user's request and available details. Return only a JSON object with string property replacementBody containing the complete document in Markdown and boolean wholeDocument set to true. Use clear headings and concise bullets. Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
-            : explicitFullRewrite
-              ? `The user explicitly requested a whole-document rewrite. Rewrite the complete ${kind} document using the existing facts and available details. Return only a JSON object with string property replacementBody containing the complete replacement document in Markdown and boolean wholeDocument set to true. Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
-              : `Apply the user's requested changes to one existing section of this ${kind}. Return only a JSON object with string properties targetHeading (the exact text of one existing section heading, copied exactly) and replacementBody (only that section's new body in Markdown, without repeating its heading). Do not return the whole document and do not change other sections. If no single relevant existing heading can be identified, return an empty targetHeading. Preserve all facts and never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
+          ? (() => {
+            const profileOutput = kind === 'cv'
+              ? ' Also return profile with fullName, jobTitle, email, phone, and location as strings. Include only profile facts explicitly supplied by the user or already present in the document/details; use empty strings for unknown values. Do not invent personal or contact information.'
+              : '';
+            const cvStructure = kind === 'cv' && template === 'classic'
+              ? ' Follow the active classic CV structure exactly: ABOUT ME, EDUCATION, EXPERIENCE, SKILLS, REFERENCES, and optional ADDITIONAL INFORMATION. Use two-column Markdown tables for education (dates/institution | qualification/description) and experience (dates/organisation | job title/responsibilities), four balanced skills columns, and two references columns. Keep profile details in the editable header rather than duplicating them in the body.'
+              : selectedTemplate
+                ? ` Follow the selected template "${selectedTemplate.name}" and its section order: ${selectedTemplate.description}\nTemplate structure:\n${selectedTemplate.content}`
+                : '';
+            return blankDocument
+              ? `Create the complete ${kind} document from the user's request and available details. Return only a JSON object with string property replacementBody containing the complete document in Markdown and boolean wholeDocument set to true.${profileOutput}${cvStructure} Use clear headings and concise bullets. Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
+              : explicitFullRewrite
+                ? `The user explicitly requested a whole-document rewrite. Rewrite the complete ${kind} document using the existing facts and available details. Return only a JSON object with string property replacementBody containing the complete replacement document in Markdown and boolean wholeDocument set to true.${profileOutput}${cvStructure} Never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`
+                : explicitProfileFieldRequest
+                  ? `Apply the user's request to the editable CV header fields. Return a JSON object with profile containing fullName, jobTitle, email, phone, and location as strings. Use only exact profile facts the user supplied or facts already in the document/details; preserve all unspecified existing values and use empty strings for unknown values. If the request also clearly changes a document section, include targetHeading and replacementBody for only that section. Otherwise set profileOnly to true and do not change document content. Never invent personal or contact information. User request: ${userQuestion}`
+                : `Apply the user's requested changes to one existing section of this ${kind}. Return only a JSON object with string properties targetHeading (the exact text of one existing section heading, copied exactly) and replacementBody (only that section's new body in Markdown, without repeating its heading).${profileOutput} Do not return the whole document and do not change other sections. If no single relevant existing heading can be identified, return an empty targetHeading. Preserve all facts and never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`;
+          })()
           : `Answer the user's document-writing question in a clear, conversational, helpful style. Use short paragraphs and Markdown headings or bullets when they improve readability. Never invent personal facts. Question: ${userQuestion}`;
 
     if (mode === 'edit' || mode === 'draft') trackDocumentEvent('edit', 'started');
@@ -1991,7 +2077,8 @@ export default function DocumentStudio({
         }
         trackDocumentEvent('edit', 'succeeded');
       } else if (mode === 'draft') {
-        applyAiDraft(answer, blankDocument, explicitFullRewrite);
+        const profile = applyAiDraft(answer, blankDocument, explicitFullRewrite);
+        applyAiProfile(profile, userQuestion);
         trackDocumentEvent('edit', 'succeeded');
         setCoachPrompt('');
         if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
@@ -2032,17 +2119,26 @@ export default function DocumentStudio({
     toast({ title: 'Suggestion applied', description: 'You can undo this change from the editor toolbar.' });
   };
 
-  const applyAiDraft = (responseText: string, blankDocument: boolean, explicitFullRewrite: boolean) => {
+  const applyAiDraft = (responseText: string, blankDocument: boolean, explicitFullRewrite: boolean): Partial<CvProfile> => {
     if (!editor || !responseText.trim()) throw new Error('The AI service returned an empty document update.');
     const cleanedResponse = responseText.replace(/^```(?:json|text|markdown)?\s*/i, '').replace(/\s*```$/, '').trim();
-    let parsed: Record<string, unknown> | null = null;
+    let aiPayload: ReturnType<typeof parseAiDocumentPayload>;
     try {
-      const value = JSON.parse(cleanedResponse);
-      if (value && typeof value === 'object' && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+      aiPayload = parseAiDocumentPayload(cleanedResponse);
     } catch {
-      if ((!blankDocument && !explicitFullRewrite) || cleanedResponse.startsWith('{')) {
-        throw new Error('The AI response was not valid section-edit JSON. Your document was not changed.');
+      throw new Error('The AI response was not valid section-edit JSON. Your document was not changed.');
+    }
+    const parsed = aiPayload.payload;
+    if ((!blankDocument && !explicitFullRewrite) && !parsed) {
+      throw new Error('The AI response was not valid section-edit JSON. Your document was not changed.');
+    }
+    if (parsed?.profileOnly === true) {
+      if (!Object.keys(aiPayload.profile).length) {
+        throw new Error('FaceMeX did not return any profile details to update. Your document was not changed.');
       }
+      setCoachResponse('');
+      toast({ title: 'CV details updated', description: 'FaceMeX updated the requested header fields. Review them in Document details.' });
+      return aiPayload.profile;
     }
 
     const wholeDocument = parsed?.wholeDocument === true;
@@ -2099,9 +2195,9 @@ export default function DocumentStudio({
       const html = createEditorHtml(replacementBody, kind === 'presentation', true);
       editor.chain().focus().insertContentAt({ from: start, to: end }, html).run();
     }
-
     setCoachResponse('');
     toast({ title: 'Document updated', description: 'FaceMeX applied your requested changes. Review the result and undo if needed.' });
+    return aiPayload.profile;
   };
 
   const wordCount = (editor?.getText() || '').trim().split(/\s+/).filter(Boolean).length;
@@ -2153,9 +2249,6 @@ export default function DocumentStudio({
             <span className="shrink-0 text-xs text-slate-500 lg:text-white/55" role="status" aria-live="polite">
               {syncStatus === 'loading' ? 'Loading...' : syncStatus === 'saving' ? 'Saving...' : syncStatus === 'error' ? 'Sync issue' : draftSaved ? 'Saved' : 'Unsaved'}
             </span>
-            <Button type="button" variant="outline" size="icon" onClick={() => setTemplateGalleryOpen(true)} aria-label="Browse document templates" title="Browse document templates" className="h-9 w-9 shrink-0 rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
-              <Sparkles className="h-4 w-4" />
-            </Button>
             <Button type="button" variant="outline" size="sm" onClick={handleSave} className="h-9 shrink-0 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
               <Save className="h-4 w-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Save</span>
@@ -2293,6 +2386,14 @@ export default function DocumentStudio({
                 </div>
                 {templatesOpen && (
                   <div className="mb-2 grid gap-2 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setTemplateGalleryOpen(true)}
+                      className="h-9 justify-center rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 sm:col-span-2 lg:border-white/10 lg:bg-white/[0.04] lg:text-white"
+                    >
+                      Browse document templates
+                    </Button>
                     {templates.map((item) => (
                       <button
                         key={item.key}
