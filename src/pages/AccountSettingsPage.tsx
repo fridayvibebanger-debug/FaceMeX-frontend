@@ -64,10 +64,14 @@ export default function AccountSettingsPage() {
     <main className="account-settings-page">
       <div className="account-settings-content">
         <header className="account-settings-header">
+          <div className="account-settings-heading">
+            <p>FaceMeX account</p>
+            <h1>Account</h1>
+          </div>
           <button type="button" className="account-settings-back" onClick={goBack} aria-label="Go back">
             <ArrowLeft aria-hidden="true" />
+            <span>Settings</span>
           </button>
-          <h1>Account</h1>
         </header>
 
         <section className="account-settings-card" aria-label="Account information">

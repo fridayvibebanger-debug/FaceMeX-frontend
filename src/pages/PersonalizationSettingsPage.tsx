@@ -57,6 +57,7 @@ export default function PersonalizationSettingsPage() {
       onSave={() => void save()}
       saveDisabled={!dirty || loading || !loaded}
       saving={saving}
+      variant="plus"
     >
       {loading && !loaded ? (
         <div className="fm-settings-info-card" role="status">Loading your saved personalization…</div>
