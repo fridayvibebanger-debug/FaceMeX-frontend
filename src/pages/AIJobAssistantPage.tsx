@@ -85,10 +85,14 @@ import {
   normalizeWorkspaceResponse,
   selectRelevantWorkspaceImages,
   parseWorkspacePractice,
+  parseWorkspaceUnderstanding,
+  parseWorkspaceEquationBalance,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
   selectRelevantYouTubeLessonVideos,
   type WorkspaceVisualization,
+  type WorkspaceUnderstanding,
+  type WorkspaceEquationBalance,
 } from '@/lib/workspaceResponse';
 import {
   buildLearningInstruction,
@@ -2516,13 +2520,14 @@ function renderMarkdownTable(
   onLinkClick?: (url: string, label?: string) => void
 ) {
   const columnCount = Math.max(headers.length, ...rows.map((row) => row.length));
+  const tableWidth = columnCount > 3 ? 'min-w-[520px]' : 'min-w-full';
 
   return (
     <div
       key={key}
       className="fm-markdown-table my-4 w-full max-w-full overflow-x-auto rounded-xl border border-white/10 bg-[#171717]"
     >
-      <table className="w-full min-w-[520px] border-collapse text-left text-xs sm:text-sm lg:text-white">
+      <table className={`w-full ${tableWidth} table-fixed border-collapse text-left text-xs sm:text-sm lg:text-white`}>
         <thead className="fm-markdown-table-head bg-[#222222]">
           <tr>
             {Array.from({ length: columnCount }).map((_, index) => (
@@ -2618,128 +2623,324 @@ function WorkspacePracticeCard({
   );
 }
 
+function WorkspaceUnderstandingCard({ quiz }: { quiz: WorkspaceUnderstanding }) {
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [attempted, setAttempted] = useState<Record<number, boolean>>({});
+
+  return (
+    <section className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-sky-300/20 bg-sky-300/[0.04]">
+      <div className="space-y-4 px-4 py-4">
+        <h3 className="font-semibold text-white">Test your understanding</h3>
+        {quiz.questions.map((item, questionIndex) => {
+          const selected = answers[questionIndex];
+          const hasAttempted = attempted[questionIndex] === true;
+          const correct = selected === item.correctIndex;
+          return (
+            <fieldset key={`${item.question}-${questionIndex}`} className="min-w-0 space-y-3 border-t border-white/10 pt-3">
+              <legend className="max-w-full break-words pr-2 text-sm font-medium leading-6 text-white/90">
+                {questionIndex + 1}. {renderInlineText(item.question)}
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {item.choices.map((choice, choiceIndex) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    onClick={() => {
+                      if (hasAttempted) return;
+                      setAnswers((previous) => ({ ...previous, [questionIndex]: choiceIndex }));
+                      setAttempted((previous) => ({ ...previous, [questionIndex]: true }));
+                    }}
+                    aria-pressed={selected === choiceIndex}
+                    className={`min-h-10 min-w-0 rounded-lg border px-3 py-2 text-left text-sm leading-5 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                      hasAttempted && choiceIndex === item.correctIndex
+                        ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-100'
+                        : hasAttempted && selected === choiceIndex
+                          ? 'border-rose-300/40 bg-rose-400/10 text-rose-100'
+                          : 'border-white/10 bg-black/15 text-white/80 hover:bg-white/[0.07]'
+                    }`}
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+              {hasAttempted && (
+                <div role="status" className="space-y-2 rounded-lg border border-white/10 bg-black/15 p-3 text-sm leading-5">
+                  <p className={correct ? 'font-medium text-emerald-200' : 'font-medium text-amber-100'}>
+                    {correct ? 'Correct!' : `Not quite. The correct answer is ${item.choices[item.correctIndex]}.`}
+                  </p>
+                  <p className="break-words text-white/75">{renderInlineText(item.explanation)}</p>
+                  {!correct && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setAnswers((previous) => {
+                          const next = { ...previous };
+                          delete next[questionIndex];
+                          return next;
+                        });
+                        setAttempted((previous) => {
+                          const next = { ...previous };
+                          delete next[questionIndex];
+                          return next;
+                        });
+                      }}
+                      className="min-h-9 border border-white/10 text-white/80 hover:bg-white/10"
+                    >
+                      Try again
+                    </Button>
+                  )}
+                </div>
+              )}
+            </fieldset>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function WorkspaceForceDiagram({ diagram }: { diagram: NewtonSecondLawDiagram }) {
   const arrowId = `fm-force-arrow-${useId()}`;
   const number = (value: number) => new Intl.NumberFormat(undefined, {
     maximumSignificantDigits: 6,
   }).format(value);
-  const arrowStart = diagram.direction === 'right' ? 270 : 170;
-  const arrowEnd = diagram.direction === 'right' ? 405 : 35;
+  const arrowStart = diagram.direction === 'right' ? 240 : 240;
+  const arrowEnd = diagram.direction === 'right' ? 380 : 100;
   const arrowLabelX = (arrowStart + arrowEnd) / 2;
-  const arrowLabel = `Fnet = ${number(diagram.force)} N`;
+  const arrowLabel = diagram.directionSpecified
+    ? `Net force: ${number(diagram.force)} N`
+    : `Illustrative direction · net force: ${number(diagram.force)} N`;
 
   return (
-    <figure className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-      <figcaption className="mb-3 text-sm font-semibold text-white">Newton's Second Law: net force on the car</figcaption>
-      <svg
-        viewBox="0 0 440 250"
-        role="img"
-        aria-label={`Car force diagram. Mass ${number(diagram.mass)} kilograms. Acceleration ${number(diagram.acceleration)} metres per second squared. Net force ${number(diagram.force)} newtons, pointing ${diagram.direction}.`}
-        className="h-auto w-full rounded-lg bg-slate-50"
-      >
-        <defs>
-          <marker id={arrowId} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
-          </marker>
-        </defs>
-        <text x="220" y="25" textAnchor="middle" fill="#172554" fontSize="14" fontWeight="700">
-          F = m × a = {number(diagram.mass)} × {number(diagram.acceleration)} = {number(diagram.force)} N
-        </text>
-        <line x1="30" y1="192" x2="410" y2="192" stroke="#94a3b8" strokeWidth="2" />
-        <line
-          x1={arrowStart}
-          y1="77"
-          x2={arrowEnd}
-          y2="77"
-          stroke="#2563eb"
-          strokeWidth="5"
-          markerEnd={`url(#${arrowId})`}
-        />
-        <text x={arrowLabelX} y="61" textAnchor="middle" fill="#1d4ed8" fontSize="13" fontWeight="700">
-          {arrowLabel}
-        </text>
-        <path d="M 137 151 L 157 117 Q 164 106 180 104 L 250 104 Q 265 105 278 120 L 301 145 L 301 178 L 137 178 Z" fill="#bfdbfe" stroke="#1e3a8a" strokeWidth="3" />
-        <path d="M 169 118 Q 174 111 183 111 L 207 111 L 207 139 L 155 139 Z" fill="#eff6ff" stroke="#1e3a8a" strokeWidth="2" />
-        <path d="M 214 111 L 248 111 Q 258 112 267 123 L 280 139 L 214 139 Z" fill="#eff6ff" stroke="#1e3a8a" strokeWidth="2" />
-        <circle cx="174" cy="177" r="15" fill="#1e293b" />
-        <circle cx="174" cy="177" r="6" fill="#cbd5e1" />
-        <circle cx="267" cy="177" r="15" fill="#1e293b" />
-        <circle cx="267" cy="177" r="6" fill="#cbd5e1" />
-        <text x="220" y="218" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">
-          Mass: {number(diagram.mass)} kg
-        </text>
-        <text x="220" y="237" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">
-          Acceleration: {number(diagram.acceleration)} m/s²
-        </text>
-      </svg>
-      <p className="mt-2 text-center text-xs leading-5 text-white/65">
-        {diagram.directionSpecified
-          ? `The net force points ${diagram.direction}, matching the stated acceleration.`
-          : 'The arrow shows a representative direction; the question does not specify which way the car accelerates.'}
-      </p>
+    <figure className="my-4 w-full max-w-3xl min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+      <figcaption className="mb-3 text-sm font-semibold text-white">Newton's Second Law · net force on a car</figcaption>
+      <div className="mx-auto w-full max-w-[560px] overflow-hidden rounded-xl border border-white/10 bg-[#101827] p-2 sm:p-4">
+        <svg
+          viewBox="0 0 480 250"
+          role="img"
+          aria-label={`Car force diagram. Mass ${number(diagram.mass)} kilograms. Acceleration ${number(diagram.acceleration)} metres per second squared. Net force ${number(diagram.force)} newtons${diagram.directionSpecified ? ` pointing ${diagram.direction}` : ', direction illustrative'}.`}
+          className="mx-auto block h-auto w-full"
+        >
+          <defs>
+            <marker id={arrowId} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#60a5fa" />
+            </marker>
+            <linearGradient id={`${arrowId}-car`} x1="0" x2="1">
+              <stop offset="0" stopColor="#38bdf8" />
+              <stop offset="1" stopColor="#2563eb" />
+            </linearGradient>
+          </defs>
+          <line x1="38" y1="207" x2="442" y2="207" stroke="#475569" strokeWidth="3" />
+          <line x1="50" y1="215" x2="430" y2="215" stroke="#334155" strokeWidth="2" strokeDasharray="12 10" />
+          <line
+            x1={arrowStart}
+            y1="65"
+            x2={arrowEnd}
+            y2="65"
+            stroke="#60a5fa"
+            strokeWidth="7"
+            strokeLinecap="round"
+            markerEnd={`url(#${arrowId})`}
+          />
+          <text x="240" y="42" textAnchor="middle" fill="#bfdbfe" fontSize="13" fontWeight="700">
+            {arrowLabel}
+          </text>
+          <path d="M 126 161 L 146 119 Q 153 105 171 101 L 275 101 Q 293 103 307 122 L 342 156 L 342 189 L 126 189 Z" fill={`url(#${arrowId}-car)`} stroke="#bae6fd" strokeWidth="3" strokeLinejoin="round" />
+          <path d="M 158 120 Q 164 111 175 110 L 212 110 L 212 145 L 145 145 Z" fill="#dbeafe" stroke="#0f3b67" strokeWidth="2" />
+          <path d="M 221 110 L 270 110 Q 283 112 294 126 L 310 145 L 221 145 Z" fill="#dbeafe" stroke="#0f3b67" strokeWidth="2" />
+          <path d="M 130 158 L 338 158 L 342 174 L 126 174 Z" fill="#0c4a6e" opacity=".55" />
+          <circle cx="175" cy="187" r="19" fill="#0b1220" stroke="#94a3b8" strokeWidth="4" />
+          <circle cx="175" cy="187" r="7" fill="#e2e8f0" />
+          <circle cx="294" cy="187" r="19" fill="#0b1220" stroke="#94a3b8" strokeWidth="4" />
+          <circle cx="294" cy="187" r="7" fill="#e2e8f0" />
+          <text x="240" y="238" textAnchor="middle" fill="#cbd5e1" fontSize="13" fontWeight="600">
+            Moving car · direction {diagram.directionSpecified ? `is ${diagram.direction}` : 'shown for illustration'}
+          </text>
+        </svg>
+      </div>
+      <div className="mx-auto mt-3 grid w-full max-w-[560px] grid-cols-1 gap-2 sm:grid-cols-3">
+        {[
+          ['Mass', `${number(diagram.mass)} kg`],
+          ['Acceleration', `${number(diagram.acceleration)} m/s²`],
+          ['Net force', `${number(diagram.force)} N`],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-white/10 bg-black/15 px-3 py-2 text-center">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-white/55">{label}</p>
+            <p className="mt-1 break-words text-sm font-semibold text-white">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mx-auto mt-3 w-full max-w-[560px] rounded-xl border border-sky-300/20 bg-sky-300/[0.06] px-3 py-3 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-100/65">Formula</p>
+        <p className="mt-1 break-words font-mono text-sm font-semibold text-white sm:text-base">F = m × a</p>
+        <p className="mt-1 break-words font-mono text-sm text-white/85">F = {number(diagram.mass)} × {number(diagram.acceleration)}</p>
+        <p className="mt-1 break-words font-mono text-base font-bold text-sky-100">F = {number(diagram.force)} N</p>
+      </div>
     </figure>
   );
 }
 
-function WorkspaceHydrogenWaterDiagram() {
-  const arrowId = `fm-reaction-arrow-${useId()}`;
-  const renderAtom = (key: string, x: number, y: number, element: 'H' | 'O') => (
-    <g key={key}>
-      <circle cx={x} cy={y} r="15" fill={element === 'H' ? '#dbeafe' : '#fecaca'} stroke={element === 'H' ? '#2563eb' : '#dc2626'} strokeWidth="2" />
-      <text x={x} y={y + 5} textAnchor="middle" fill="#172554" fontSize="14" fontWeight="700">{element}</text>
-    </g>
+function WorkspaceEquationBalanceCard({ equation }: { equation: WorkspaceEquationBalance }) {
+  const species = [...equation.reactants, ...equation.products];
+  const [coefficients, setCoefficients] = useState(() => species.map(() => 1));
+  const reactantCoefficients = coefficients.slice(0, equation.reactants.length);
+  const productCoefficients = coefficients.slice(equation.reactants.length);
+  const atomTotals = (side: WorkspaceEquationBalance['reactants'], sideCoefficients: number[]) =>
+    side.reduce<Record<string, number>>((totals, item, index) => {
+      for (const [element, count] of Object.entries(item.atomCounts)) {
+        totals[element] = (totals[element] || 0) + count * sideCoefficients[index];
+      }
+      return totals;
+    }, {});
+  const reactantTotals = atomTotals(equation.reactants, reactantCoefficients);
+  const productTotals = atomTotals(equation.products, productCoefficients);
+  const elements = [...new Set([...Object.keys(reactantTotals), ...Object.keys(productTotals)])].sort();
+  const balanced = elements.length > 0 && elements.every((element) =>
+    reactantTotals[element] === productTotals[element]
   );
+  const palette = ['#93c5fd', '#fca5a5', '#86efac', '#fcd34d', '#c4b5fd', '#67e8f9'];
+  const prettyFormula = (formula: string) =>
+    formatWorkspaceMath(formula.replace(/([A-Za-z)\]])(\d+)/g, '$1_{$2}'));
+  const formatSide = (
+    side: WorkspaceEquationBalance['reactants'],
+    sideCoefficients: number[],
+  ) => side.map((item, index) =>
+    `${sideCoefficients[index] > 1 ? sideCoefficients[index] : ''}${prettyFormula(item.formula)}`
+  ).join(' + ');
+  const renderMolecule = (item: WorkspaceEquationBalance['reactants'][number]) => {
+    const atoms = Object.entries(item.atomCounts).flatMap(([element, count]) =>
+      Array.from({ length: count }, () => element)
+    );
+    const columns = Math.min(3, atoms.length);
+    const rows = Math.ceil(atoms.length / columns);
+    const height = Math.max(42, rows * 28 + 12);
+    return (
+      <svg
+        viewBox={`0 0 128 ${height}`}
+        role="img"
+        aria-label={`${item.formula} molecule showing ${atoms.length} atoms`}
+        className="h-auto w-full max-w-[128px]"
+      >
+        {atoms.map((element, index) => {
+          const x = 22 + (index % columns) * 42;
+          const y = 16 + Math.floor(index / columns) * 28;
+          const elementIndex = elements.indexOf(element);
+          return (
+            <g key={`${element}-${index}`}>
+              <circle cx={x} cy={y} r="11" fill={palette[elementIndex % palette.length]} fillOpacity=".9" stroke="#0f172a" strokeWidth="1.5" />
+              <text x={x} y={y + 3.5} textAnchor="middle" fill="#111827" fontSize="8" fontWeight="700">{element}</text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+  const renderMolecules = (
+    side: WorkspaceEquationBalance['reactants'],
+    sideCoefficients: number[],
+  ) => (
+    <div className="flex min-w-0 flex-wrap items-start justify-center gap-1">
+      {side.map((item, itemIndex) => (
+        <Fragment key={`${item.formula}-${itemIndex}`}>
+          {itemIndex > 0 && <span className="self-center text-sm text-white/50" aria-hidden="true">+</span>}
+          {Array.from({ length: sideCoefficients[itemIndex] }, (_, moleculeIndex) => (
+            <div key={`${item.formula}-${moleculeIndex}`} className="flex min-w-0 flex-col items-center rounded-lg border border-white/10 bg-black/15 px-1 py-1">
+              {renderMolecule(item)}
+              <span className="text-xs font-semibold text-white/80">{prettyFormula(item.formula)}</span>
+            </div>
+          ))}
+        </Fragment>
+      ))}
+    </div>
+  );
+  const coefficientControl = (index: number, item: WorkspaceEquationBalance['reactants'][number]) => (
+    <div key={`${index}-${item.formula}`} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/15 px-2 py-1.5">
+      <span className="min-w-0 font-mono text-sm text-white">{prettyFormula(item.formula)}</span>
+      <button
+        type="button"
+        aria-label={`Decrease ${item.formula} coefficient`}
+        disabled={coefficients[index] <= 1}
+        onClick={() => setCoefficients((previous) => previous.map((value, i) => i === index ? Math.max(1, value - 1) : value))}
+        className="h-8 w-8 shrink-0 rounded-md border border-white/10 text-lg leading-none text-white/80 enabled:hover:bg-white/10 disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+      >
+        −
+      </button>
+      <output aria-label={`${item.formula} coefficient`} className="min-w-5 text-center font-mono text-sm text-white">{coefficients[index]}</output>
+      <button
+        type="button"
+        aria-label={`Increase ${item.formula} coefficient`}
+        disabled={coefficients[index] >= 6}
+        onClick={() => setCoefficients((previous) => previous.map((value, i) => i === index ? Math.min(6, value + 1) : value))}
+        className="h-8 w-8 shrink-0 rounded-md border border-white/10 text-lg leading-none text-white/80 enabled:hover:bg-white/10 disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+      >
+        +
+      </button>
+    </div>
+  );
+  const balancedCoefficients = species.map((item) => item.coefficient);
 
   return (
-    <figure className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-      <figcaption className="mb-3 text-sm font-semibold text-white">Balanced formation of water</figcaption>
-      <svg
-        viewBox="0 0 600 205"
-        role="img"
-        aria-label="Two hydrogen molecules plus one oxygen molecule form two water molecules. Four hydrogen atoms and two oxygen atoms are present on both sides."
-        className="h-auto w-full rounded-lg bg-slate-50"
-      >
-        <defs>
-          <marker id={arrowId} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
-          </marker>
-        </defs>
-        <text x="300" y="27" textAnchor="middle" fill="#172554" fontSize="17" fontWeight="700">2H₂ + O₂ → 2H₂O</text>
-        {[0, 1].map((index) => {
-          const x = 70 + index * 75;
-          return (
-            <g key={`hydrogen-molecule-${index}`}>
-              <line x1={x} y1="112" x2={x + 30} y2="112" stroke="#64748b" strokeWidth="4" />
-              {renderAtom(`h-${index}-1`, x, 112, 'H')}
-              {renderAtom(`h-${index}-2`, x + 30, 112, 'H')}
-            </g>
-          );
-        })}
-        <line x1="258" y1="112" x2="288" y2="112" stroke="#64748b" strokeWidth="4" />
-        {renderAtom('o-1', 258, 112, 'O')}
-        {renderAtom('o-2', 288, 112, 'O')}
-        <line x1="325" y1="112" x2="365" y2="112" stroke="#475569" strokeWidth="3" markerEnd={`url(#${arrowId})`} />
-        {[0, 1].map((index) => {
-          const oxygenX = 430 + index * 95;
-          return (
-            <g key={`water-molecule-${index}`}>
-              <line x1={oxygenX} y1="118" x2={oxygenX - 20} y2="92" stroke="#64748b" strokeWidth="4" />
-              <line x1={oxygenX} y1="118" x2={oxygenX + 20} y2="92" stroke="#64748b" strokeWidth="4" />
-              {renderAtom(`water-o-${index}`, oxygenX, 122, 'O')}
-              {renderAtom(`water-h-left-${index}`, oxygenX - 22, 90, 'H')}
-              {renderAtom(`water-h-right-${index}`, oxygenX + 22, 90, 'H')}
-            </g>
-          );
-        })}
-        <text x="150" y="163" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">Hydrogen molecules</text>
-        <text x="273" y="163" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">Oxygen</text>
-        <text x="477" y="163" textAnchor="middle" fill="#334155" fontSize="12" fontWeight="600">Water molecules</text>
-        <text x="300" y="192" textAnchor="middle" fill="#475569" fontSize="12">4 H atoms and 2 O atoms on each side</text>
-      </svg>
-      <p className="mt-2 text-center text-xs leading-5 text-white/65">
-        Coefficients balance the atoms; subscripts inside each molecule stay unchanged.
+    <section className="my-4 w-full max-w-3xl min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4" aria-label="Interactive equation balancing">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-white">Balance the equation</h3>
+        <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${balanced ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200' : 'border-amber-300/25 bg-amber-300/10 text-amber-100'}`} role="status">
+          {balanced ? 'Balanced' : 'Not balanced yet'}
+        </span>
+      </div>
+      <p className="mt-3 text-center text-xs font-medium uppercase tracking-wide text-white/55">Current equation</p>
+      <p className="mt-2 break-words text-center font-mono text-base font-semibold leading-7 text-white sm:text-lg">
+        {formatSide(equation.reactants, reactantCoefficients)} → {formatSide(equation.products, productCoefficients)}
       </p>
-    </figure>
+      <div className="mt-3 grid min-w-0 gap-3 md:grid-cols-2">
+        <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 p-2">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">Reactants</h4>
+          {renderMolecules(equation.reactants, reactantCoefficients)}
+          <p className="mt-2 break-words text-center text-xs text-white/75">
+            {elements.map((element) => `${element}: ${reactantTotals[element] || 0}`).join(' · ')}
+          </p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/10 bg-black/10 p-2">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">Products</h4>
+          {renderMolecules(equation.products, productCoefficients)}
+          <p className="mt-2 break-words text-center text-xs text-white/75">
+            {elements.map((element) => `${element}: ${productTotals[element] || 0}`).join(' · ')}
+          </p>
+        </div>
+      </div>
+      <fieldset className="mt-3">
+        <legend className="mb-2 text-xs font-semibold text-white/75">Adjust coefficients (1–6)</legend>
+        <div className="flex flex-wrap gap-2">
+          {species.map((item, index) => coefficientControl(index, item))}
+        </div>
+      </fieldset>
+      <div className="mt-3 rounded-lg border border-white/10 bg-black/15 p-3 text-sm leading-6 text-white/75">
+        <p>{equation.explanation}</p>
+        <p className="mt-2">Coefficients change molecule quantities; subscripts are part of each formula and must not be changed. Atoms are conserved, so each element must have the same total on both sides.</p>
+        <p className="mt-2 font-medium text-white">Balanced equation: {formatSide(equation.reactants, balancedCoefficients.slice(0, equation.reactants.length))} → {formatSide(equation.products, balancedCoefficients.slice(equation.reactants.length))}</p>
+      </div>
+      {!balanced && (
+        <Button type="button" size="sm" variant="ghost" onClick={() => setCoefficients(balancedCoefficients)} className="mt-3 min-h-9 border border-white/10 text-white/80 hover:bg-white/10">
+          Show balanced coefficients
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function WorkspaceHydrogenWaterDiagram() {
+  return (
+    <WorkspaceEquationBalanceCard
+      equation={{
+        reactants: [
+          { formula: 'H2', coefficient: 2, atomCounts: { H: 2 } },
+          { formula: 'O2', coefficient: 1, atomCounts: { O: 2 } },
+        ],
+        products: [{ formula: 'H2O', coefficient: 2, atomCounts: { H: 2, O: 1 } }],
+        explanation: 'A coefficient multiplies every atom in a molecule. Changing coefficients changes how many molecules react.',
+      }}
+    />
   );
 }
 
@@ -3179,6 +3380,15 @@ function ChatGPTStyleText({
       return <hr key={`rule-${index}`} className="my-4 border-0 border-t border-white/20" />;
     }
     if (block.type === 'code') {
+      if (block.language.toLowerCase() === 'equation-balance') {
+        const equation = parseWorkspaceEquationBalance(block.text);
+        const equationKey = equation
+          ? `${equation.reactants.map((item) => item.formula).join('+')}-${equation.products.map((item) => item.formula).join('+')}`
+          : '';
+        return equation
+          ? <WorkspaceEquationBalanceCard key={`equation-balance-${index}-${equationKey}`} equation={equation} />
+          : null;
+      }
       if (block.language.toLowerCase() === 'practice') {
         const practice = parseWorkspacePractice(block.text);
         return practice
@@ -3189,6 +3399,12 @@ function ChatGPTStyleText({
               disabled={disabled}
             />
           : <p key={`practice-error-${index}`} role="status" className="text-sm text-white/60">This practice question could not be displayed.</p>;
+      }
+      if (block.language.toLowerCase() === 'understanding') {
+        const quiz = parseWorkspaceUnderstanding(block.text);
+        return quiz
+          ? <WorkspaceUnderstandingCard key={`understanding-${index}`} quiz={quiz} />
+          : null;
       }
       if (block.language.toLowerCase() === 'chart' || block.language.toLowerCase() === 'diagram') {
         const visualization = parseWorkspaceVisualization(block.language.toLowerCase(), block.text);
@@ -3216,7 +3432,6 @@ function ChatGPTStyleText({
       <WorkspaceVisualizationCard key="quadratic-contour-fallback" visualization={automaticVisualization} />,
     );
   }
-
   return <div className={`fm-assistant-content min-w-0 w-full max-w-3xl space-y-4 break-words text-[15px] leading-7 text-white/85 sm:text-base ${mathReply ? 'fm-math-response' : ''}`}>{blocks}</div>;
 }
 
@@ -3274,42 +3489,50 @@ function WorkspaceResponseMedia({
             return (
               <figure
                 key={image.id}
-                className="group relative aspect-video min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#171717]"
+                className="group flex min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-[#171717]"
               >
                 <button
                   type="button"
                   onClick={() => setSelectedImage(image)}
                   aria-label={`Open image preview${image.alt ? `: ${image.alt}` : ''}`}
-                  className="absolute inset-0 block h-full w-full cursor-zoom-in text-left focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-white"
+                  className="relative block aspect-video w-full min-w-0 cursor-zoom-in bg-[#101010] text-left focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-white"
                 >
                   <img
                     src={image.smallUrl || image.url}
                     sizes="(max-width: 640px) 50vw, 360px"
-                    alt={image.alt}
+                    alt={image.alt || image.description || 'Relevant educational photograph'}
                     loading="lazy"
                     decoding="async"
                     onError={() => setFailedImageIds((previous) => new Set(previous).add(image.id))}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                    className="h-full w-full object-contain"
                   />
                 </button>
-                {image.attribution && (
-                  <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-4 text-right text-[10px] leading-4 text-white sm:text-xs">
-                    {isTrustedMediaUrl(image.photoUrl || '', 'unsplash.com') ||
-                      isTrustedMediaUrl(image.attributionUrl, 'unsplash.com')
-                      ? (
-                          <a
-                            href={isTrustedMediaUrl(image.photoUrl || '', 'unsplash.com')
-                              ? image.photoUrl
-                              : image.attributionUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            tabIndex={-1}
-                            className="pointer-events-auto hover:underline"
-                          >
-                            Photo by {image.attribution} on Unsplash
-                          </a>
-                        )
-                      : `Photo by ${image.attribution} on Unsplash`}
+                {(image.description || image.alt || image.attribution) && (
+                  <figcaption className="flex min-h-0 min-w-0 flex-col gap-1 px-2 py-2 text-[10px] leading-4 text-white/70 sm:text-xs">
+                    {(image.description || image.alt) && (
+                      <span className="line-clamp-2 break-words [overflow-wrap:anywhere]">
+                        {image.description || image.alt}
+                      </span>
+                    )}
+                    {image.attribution && (
+                      <span className="truncate">
+                          {isTrustedMediaUrl(image.photoUrl || '', 'unsplash.com') ||
+                          isTrustedMediaUrl(image.attributionUrl, 'unsplash.com')
+                            ? (
+                                <a
+                                  href={isTrustedMediaUrl(image.photoUrl || '', 'unsplash.com')
+                                    ? image.photoUrl
+                                    : image.attributionUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="hover:underline"
+                                >
+                                  Photo by {image.attribution} on Unsplash
+                                </a>
+                              )
+                            : `Photo by ${image.attribution} on Unsplash`}
+                        </span>
+                    )}
                   </figcaption>
                 )}
               </figure>
@@ -4197,11 +4420,18 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     const textarea = composerTextareaRef.current;
     if (!textarea) return;
 
-    textarea.style.height = 'auto';
-    const maxHeight = 120;
-    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
+    const resizeTextarea = () => {
+      textarea.style.height = 'auto';
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      const maxHeight = Math.min(240, Math.max(120, Math.floor(viewportHeight * 0.35)));
+      const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${nextHeight}px`;
+      textarea.style.maxHeight = `${maxHeight}px`;
+      textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
+    };
+    resizeTextarea();
+    window.visualViewport?.addEventListener('resize', resizeTextarea);
+    return () => window.visualViewport?.removeEventListener('resize', resizeTextarea);
   }, [prompt, selectedImages.length]);
 
   useEffect(() => () => {
@@ -10111,6 +10341,12 @@ Start with the most useful next action. Do not invent personal details, course r
                     .find((item) => item.role === 'user')?.content || '';
                 const forceDiagram = createNewtonSecondLawDiagram(previousUserText);
                 const hydrogenWaterDiagram = createHydrogenWaterReactionDiagram(previousUserText);
+                const equationBalanceBlock = message.role === 'assistant'
+                  ? message.content.match(/```equation-balance\s*\n([\s\S]*?)```/i)
+                  : null;
+                const hasValidatedEquationBalance = Boolean(
+                  equationBalanceBlock && parseWorkspaceEquationBalance(equationBalanceBlock[1])
+                );
 
                 const isJobResultsMessage = message.role === 'assistant' && Boolean(message.jobs?.length);
 
@@ -10200,7 +10436,7 @@ Start with the most useful next action. Do not invent personal details, course r
                               {forceDiagram && (
                                 <WorkspaceForceDiagram diagram={forceDiagram} />
                               )}
-                              {hydrogenWaterDiagram && (
+                              {hydrogenWaterDiagram && !hasValidatedEquationBalance && (
                                 <WorkspaceHydrogenWaterDiagram />
                               )}
                               {message.learning && (
@@ -10365,7 +10601,7 @@ Start with the most useful next action. Do not invent personal details, course r
                       }}
                       onClick={() => setComposerVisible(true)}
                       placeholder="Ask FaceMeX"
-                      className="min-h-[32px] max-h-[120px] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[15px] leading-5 text-white/90 placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                      className="min-h-[32px] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[15px] leading-5 text-white/90 placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
