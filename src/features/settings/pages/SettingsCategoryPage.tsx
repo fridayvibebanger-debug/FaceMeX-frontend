@@ -67,7 +67,11 @@ export default function SettingsCategoryPage() {
   const Category = selected.Component;
 
   return (
-    <FaceMeXSettingsPageShell title={selected.title} onBack={() => navigate('/ai/settings', { state: location.state })}>
+    <FaceMeXSettingsPageShell
+      title={selected.title}
+      onBack={() => navigate('/ai/settings', { state: location.state })}
+      variant="plus"
+    >
       {loading && !loaded ? (
         <div className="fm-settings-info-card" role="status">Loading your saved settings…</div>
       ) : error && !loaded ? (

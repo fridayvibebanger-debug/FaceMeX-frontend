@@ -2,111 +2,195 @@
   box-sizing: border-box;
   min-height: 100dvh;
   overflow-x: hidden;
-  background: #000;
-  color: #fff;
-  padding: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 32px);
+  background: #f7f7f8;
+  color: #202123;
+  padding: calc(env(safe-area-inset-top) + 24px) 0 calc(env(safe-area-inset-bottom) + 32px);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.dark .settings-home {
+  background: #0d0d0d;
+  color: #f5f5f5;
 }
 
 .settings-home-content {
-  width: min(calc(100% - 40px), 680px);
+  width: min(calc(100% - 32px), 1120px);
   margin: 0 auto;
 }
 
 .settings-home-header {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  display: flex;
   align-items: center;
-  min-height: 56px;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 16px;
+}
+
+.dark .settings-home-header {
+  border-color: #333;
+}
+
+.settings-home-heading p {
+  margin: 0;
+  color: #6b6b6b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dark .settings-home-heading p {
+  color: #aaa;
 }
 
 .settings-home-header h1 {
-  margin: 0;
-  color: #fff;
-  font-size: 20px;
+  margin: 4px 0 0;
+  color: #202123;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  text-align: center;
+  line-height: 1.3;
 }
 
-.settings-home-back,
-.settings-home-header-spacer {
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: #242424;
-  color: #fff;
+.dark .settings-home-header h1 {
+  color: #f5f5f5;
 }
 
 .settings-home-back {
+  display: inline-flex;
+  min-height: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #444;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: background-color 150ms ease;
 }
 
-.settings-home-back:hover {
-  background: #3f3f3f;
+.dark .settings-home-back {
+  color: #ddd;
 }
 
+.settings-home-back:hover {
+  background: #ededed;
+}
+
+.settings-home-back:active {
+  background: #e5e5e5;
+}
+
+.dark .settings-home-back:hover {
+  background: #222;
+}
+
+.dark .settings-home-back:active {
+  background: #292929;
+}
 .settings-home-back svg {
-  width: 21px;
-  height: 21px;
+  width: 16px;
+  height: 16px;
 }
 
 .settings-home-intro {
-  margin: 14px 0 28px;
-  color: #bdbdbd;
+  margin: 0 0 24px;
+  color: #6b6b6b;
   font-size: 14px;
   line-height: 1.55;
 }
 
+.dark .settings-home-intro {
+  color: #aaa;
+}
+
 .settings-home-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 27px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.settings-home-group {
+  min-width: 0;
 }
 
 .settings-home-group h2 {
-  margin: 0 0 11px 2px;
-  color: #f5f5f5;
-  font-size: 17px;
+  margin: 0 0 10px 2px;
+  color: #202123;
+  font-size: 16px;
   font-weight: 600;
+}
+
+.dark .settings-home-group h2 {
+  color: #f5f5f5;
 }
 
 .settings-home-card {
   overflow: hidden;
-  border-radius: 22px;
-  background: #3f3f3f;
+  border: 1px solid #dedede;
+  border-radius: 12px;
+  background: #fff;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.dark .settings-home-card {
+  border-color: #333;
+  background: #171717;
 }
 
 .settings-home-row {
   display: flex;
-  min-height: 72px;
+  min-height: 68px;
   align-items: center;
-  gap: 14px;
-  border-bottom: 1px solid #555;
-  color: #fff;
-  padding: 12px 16px;
+  gap: 12px;
+  border-bottom: 1px solid #ededed;
+  color: #202123;
+  padding: 12px 14px;
   text-decoration: none;
   transition: background-color 150ms ease;
 }
 
-.settings-home-row:hover {
-  background: #484848;
+.dark .settings-home-row {
+  border-color: #303030;
+  color: #f5f5f5;
 }
 
+.settings-home-row:hover {
+  background: #f5f5f5;
+}
+
+.settings-home-row:active {
+  background: #ededed;
+}
+
+.dark .settings-home-row:hover {
+  background: #202020;
+}
+
+.dark .settings-home-row:active {
+  background: #282828;
+}
 .settings-home-row-last {
   border-bottom: 0;
 }
 
 .settings-home-icon {
-  width: 21px;
-  height: 21px;
-  flex: 0 0 21px;
-  color: #d0c4ff;
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: #555;
   stroke-width: 1.8;
+}
+
+.dark .settings-home-icon {
+  color: #ddd;
 }
 
 .settings-home-row-copy {
@@ -118,48 +202,96 @@
 }
 
 .settings-home-row-title {
-  color: #fff;
+  color: inherit;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.35;
 }
 
 .settings-home-row-description {
-  color: #c2c2c2;
+  color: #6b6b6b;
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
+.dark .settings-home-row-description {
+  color: #aaa;
+}
+
 .settings-home-chevron {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-  color: #c2c2c2;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  color: #888;
+}
+
+.dark .settings-home-chevron {
+  color: #aaa;
 }
 
 .settings-home :focus-visible {
-  outline: 2px solid #c4b5fd;
+  outline: 2px solid #777;
   outline-offset: 3px;
 }
 
-@media (min-width: 768px) {
+.dark .settings-home :focus-visible {
+  outline-color: #ccc;
+}
+
+@media (min-width: 640px) {
+  .settings-home {
+    padding-top: max(32px, calc(env(safe-area-inset-top) + 24px));
+    padding-bottom: calc(env(safe-area-inset-bottom) + 40px);
+  }
+
   .settings-home-content {
-    width: min(calc(100% - 64px), 680px);
+    width: min(calc(100% - 48px), 1120px);
+  }
+
+  .settings-home-header {
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+  }
+
+  .settings-home-heading p {
+    font-size: 14px;
+  }
+
+  .settings-home-header h1 {
+    font-size: 26px;
+  }
+
+  .settings-home-back {
+    font-size: 14px;
   }
 
   .settings-home-intro {
-    margin-top: 18px;
-    margin-bottom: 34px;
+    margin-bottom: 30px;
   }
 
   .settings-home-groups {
-    gap: 32px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+}
+
+@media (max-width: 380px) {
+  .settings-home-content {
+    width: min(calc(100% - 24px), 1120px);
+  }
+
+  .settings-home-back {
+    gap: 5px;
+    padding: 0 6px;
+    font-size: 12px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .settings-home,
   .settings-home-back,
+  .settings-home-card,
   .settings-home-row {
     transition: none;
   }

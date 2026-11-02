@@ -38,7 +38,7 @@ const groups: Array<{ title: string; items: SettingsItem[] }> = [
     title: 'Preferences',
     items: [
       { title: 'Personalization', description: 'Set response style and instructions', to: '/ai/settings/personalization', icon: Settings2 },
-      { title: 'General', description: 'Appearance and language', to: '/ai/settings/general', icon: Palette },
+      { title: 'General', description: 'Accent color and language', to: '/ai/settings/general', icon: Palette },
       { title: 'Notifications', description: 'Choose which activity to hear about', to: '/ai/settings/notifications', icon: Bell },
       { title: 'Memory', description: 'Manage saved memory preferences', to: '/ai/settings/memory', icon: Brain },
       { title: 'Voice', description: 'Voice input and speech options', to: '/ai/settings/voice', icon: Mic },
@@ -80,16 +80,18 @@ export default function SettingsHomePage() {
     <main className="settings-home">
       <div className="settings-home-content">
         <header className="settings-home-header">
+          <div className="settings-home-heading">
+            <p>FaceMeX account</p>
+            <h1>Settings</h1>
+          </div>
           <button
             type="button"
             className="settings-home-back"
-            aria-label="Back to previous page"
             onClick={() => navigate(getReturnPath(from), { replace: true })}
           >
             <ArrowLeft aria-hidden="true" />
+            <span>Back to chat</span>
           </button>
-          <h1>Settings</h1>
-          <span className="settings-home-header-spacer" aria-hidden="true" />
         </header>
 
         <p className="settings-home-intro">Manage your FaceMeX account, preferences, privacy, and workspace.</p>
