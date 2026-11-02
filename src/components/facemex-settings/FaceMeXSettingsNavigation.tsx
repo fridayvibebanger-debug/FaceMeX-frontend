@@ -25,7 +25,7 @@ const groups: Array<{ title: string; items: Array<{ title: SettingsCategory; des
   { title: 'Preferences', items: [
     { title: 'Personalization', description: 'Help FaceMeX tailor its responses', icon: Settings2 },
     { title: 'Memory', description: 'Manage your saved memory preference', icon: Brain },
-    { title: 'General', description: 'Appearance and language', icon: Palette },
+    { title: 'General', description: 'Accent color and language', icon: Palette },
     { title: 'Voice', description: 'Voice input and speech options', icon: Mic },
   ] },
   { title: 'Controls', items: [
