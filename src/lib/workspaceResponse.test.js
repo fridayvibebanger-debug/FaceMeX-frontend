@@ -12,11 +12,94 @@ import {
   normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
   parseWorkspaceFollowUp,
+  parseWorkspaceEquationBalance,
   parseWorkspacePractice,
+  parseWorkspaceUnderstanding,
   parseWorkspaceVisualization,
   selectRelevantWorkspaceImages,
   selectRelevantYouTubeLessonVideos,
 } from './workspaceResponse.js';
+
+test('validates grounded understanding quizzes before rendering', () => {
+  const quiz = {
+    questions: [
+      {
+        question: 'How many hydrogen atoms are in H₂O?',
+        choices: ['1', '2', '3'],
+        correctIndex: 1,
+        explanation: 'The subscript 2 means there are two hydrogen atoms.',
+      },
+      {
+        question: 'Which change balances an equation?',
+        choices: ['Change coefficients', 'Change subscripts'],
+        correctIndex: 0,
+        explanation: 'Coefficients change molecule counts without changing substances.',
+      },
+    ],
+  };
+  assert.deepEqual(parseWorkspaceUnderstanding(JSON.stringify(quiz)), quiz);
+  assert.equal(parseWorkspaceUnderstanding('{'), null);
+  assert.equal(parseWorkspaceUnderstanding(JSON.stringify({ questions: [quiz.questions[0]] })), null);
+  assert.equal(parseWorkspaceUnderstanding(JSON.stringify({
+    questions: quiz.questions.map((question) => ({ ...question, correctIndex: 10 })),
+  })), null);
+  assert.equal(parseWorkspaceUnderstanding(JSON.stringify({
+    questions: quiz.questions.map((question) => ({ ...question, choices: ['same', 'same'] })),
+  })), null);
+
+  const rendered = normalizeWorkspaceAnswerForDisplay(
+    `A water molecule has two hydrogen atoms.\n\n\`\`\`understanding\n${JSON.stringify(quiz)}\n\`\`\``,
+    'Explain how water molecules form.',
+  );
+  assert.match(rendered, /```understanding/);
+  assert.doesNotMatch(normalizeWorkspaceAnswerForDisplay(
+    'Text.\n\n```understanding\n{"questions":[{"question":"Only one"}]}\n```',
+    'Explain water.',
+  ), /```understanding/);
+});
+
+test('validates equation-balancing data against parsed atom counts and coefficients', () => {
+  const equation = {
+    reactants: [
+      { formula: 'Ca(OH)2', coefficient: 1 },
+      { formula: 'HCl', coefficient: 2 },
+    ],
+    products: [
+      { formula: 'CaCl2', coefficient: 1 },
+      { formula: 'H2O', coefficient: 2 },
+    ],
+    explanation: 'Coefficients change molecule quantities; subscripts stay fixed because atoms are conserved.',
+  };
+  assert.deepEqual(parseWorkspaceEquationBalance(JSON.stringify(equation)), {
+    reactants: [
+      { formula: 'Ca(OH)2', coefficient: 1, atomCounts: { Ca: 1, O: 2, H: 2 } },
+      { formula: 'HCl', coefficient: 2, atomCounts: { H: 1, Cl: 1 } },
+    ],
+    products: [
+      { formula: 'CaCl2', coefficient: 1, atomCounts: { Ca: 1, Cl: 2 } },
+      { formula: 'H2O', coefficient: 2, atomCounts: { H: 2, O: 1 } },
+    ],
+    explanation: equation.explanation,
+  });
+  assert.equal(parseWorkspaceEquationBalance(JSON.stringify({
+    ...equation,
+    products: equation.products.map((item) => ({ ...item, coefficient: 1 })),
+  })), null);
+  assert.equal(parseWorkspaceEquationBalance(JSON.stringify({
+    ...equation,
+    reactants: [{ formula: 'Ca(OH]', coefficient: 1 }, equation.reactants[1]],
+  })), null);
+  assert.equal(parseWorkspaceEquationBalance(JSON.stringify({
+    ...equation,
+    reactants: equation.reactants.map((item) => ({ ...item, coefficient: 2 })),
+    products: equation.products.map((item) => ({ ...item, coefficient: 2 })),
+  })), null);
+  const formatted = normalizeWorkspaceAnswerForDisplay(
+    `Balanced reaction:\n\n\`\`\`equation-balance\n${JSON.stringify(equation)}\n\`\`\``,
+    'Balance the equation.',
+  );
+  assert.match(formatted, /```equation-balance/);
+});
 
 test('validates structured chart data without inventing values', () => {
   assert.deepEqual(

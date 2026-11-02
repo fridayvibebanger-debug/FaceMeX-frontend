@@ -70,6 +70,31 @@ export type WorkspacePractice = {
 
 export function parseWorkspacePractice(source: string): WorkspacePractice | null;
 
+export type WorkspaceUnderstanding = {
+  questions: Array<{
+    question: string;
+    choices: string[];
+    correctIndex: number;
+    explanation: string;
+  }>;
+};
+
+export function parseWorkspaceUnderstanding(source: string): WorkspaceUnderstanding | null;
+
+export type WorkspaceEquationSpecies = {
+  formula: string;
+  coefficient: number;
+  atomCounts: Record<string, number>;
+};
+
+export type WorkspaceEquationBalance = {
+  reactants: WorkspaceEquationSpecies[];
+  products: WorkspaceEquationSpecies[];
+  explanation: string;
+};
+
+export function parseWorkspaceEquationBalance(source: string): WorkspaceEquationBalance | null;
+
 export function extractYouTubeVideoId(input: string): string | null;
 
 export function extractYouTubeUrlFromText(input: string): string | null;

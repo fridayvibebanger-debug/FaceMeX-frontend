@@ -110,6 +110,18 @@ test('preserves unsupported LaTeX as readable plain text rather than delimiters'
   assert.equal(formatWorkspaceMath('$\\frac{a}{b} \\approx \\sqrt{x}$'), '(a)/(b) ≈ √(x)');
 });
 
+test('formats chemical equations and renders brace annotations without leaking LaTeX commands', () => {
+  const equation = String.raw`2H_{2} + O_{2} \rightarrow 2H_{2}O`;
+  assert.equal(formatWorkspaceMath(equation), '2H₂ + O₂ → 2H₂O');
+  assert.equal(formatWorkspaceMath(String.raw`\frac{1}{2}O_{2} + [H_{2}O]^{+}`), '(1)/(2)O₂ + [H₂O]⁺');
+
+  const braceExpression = String.raw`\underbrace{2H_{2}}_{\text{four hydrogen atoms}} + O_{2} \rightarrow 2H_{2}O`;
+  const markup = renderWorkspaceMathML(braceExpression);
+  assert.match(markup, /<munder accentunder="true">/);
+  assert.doesNotMatch(markup, /underbrace|text\{/);
+  assert.equal(formatWorkspaceMath(braceExpression), '2H₂ + O₂ → 2H₂O');
+});
+
 test('preserves escaped table pipes and escaped inline math delimiters', () => {
   const [table] = parseWorkspaceMarkdown([
     '| Item | Note |',

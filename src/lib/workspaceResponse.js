@@ -174,6 +174,138 @@ export function parseWorkspacePractice(source) {
   return question && solution ? { question, solution } : null;
 }
 
+export function parseWorkspaceUnderstanding(source) {
+  if (typeof source !== 'string' || source.length > 10_000) return null;
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    !Array.isArray(value.questions) || value.questions.length < 2 || value.questions.length > 3) return null;
+
+  const questions = value.questions.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+      !Array.isArray(item.choices) || item.choices.length < 2 || item.choices.length > 5 ||
+      !Number.isInteger(item.correctIndex) || item.correctIndex < 0 ||
+      item.correctIndex >= item.choices.length) return null;
+    const question = safeLabel(item.question, 300);
+    const explanation = safeLabel(item.explanation, 500);
+    const choices = item.choices.map((choice) => safeLabel(choice, 180));
+    if (!question || !explanation || choices.some((choice) => !choice) ||
+      new Set(choices).size !== choices.length) return null;
+    return { question, choices, correctIndex: item.correctIndex, explanation };
+  });
+  return questions.some((question) => question === null) ? null : { questions };
+}
+
+const CHEMICAL_ELEMENTS = new Set(
+  'H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og'.split(' ')
+);
+
+function parseChemicalFormula(formula) {
+  const counts = {};
+  const groups = [{ counts, opener: null }];
+  for (let index = 0; index < formula.length;) {
+    const character = formula[index];
+    if (character === '(' || character === '[') {
+      groups.push({ counts: {}, opener: character });
+      index += 1;
+      continue;
+    }
+    if (character === ')' || character === ']') {
+      const group = groups.pop();
+      if (!group || !group.opener ||
+        Object.keys(group.counts).length === 0 ||
+        (character === ')' && group.opener !== '(') ||
+        (character === ']' && group.opener !== '[')) return null;
+      index += 1;
+      const multiplierMatch = formula.slice(index).match(/^\d+/);
+      const multiplier = multiplierMatch ? Number(multiplierMatch[0]) : 1;
+      if (!Number.isSafeInteger(multiplier) || multiplier < 1 || multiplier > 24) return null;
+      index += multiplierMatch?.[0].length || 0;
+      const parent = groups.at(-1).counts;
+      for (const [element, count] of Object.entries(group.counts)) {
+        const total = (parent[element] || 0) + count * multiplier;
+        if (!Number.isSafeInteger(total) || total > 24) return null;
+        parent[element] = total;
+      }
+      if (Object.values(parent).reduce((sum, count) => sum + count, 0) > 24) return null;
+      continue;
+    }
+    const elementMatch = formula.slice(index).match(/^[A-Z][a-z]?/);
+    if (!elementMatch) return null;
+    const element = elementMatch[0];
+    if (!CHEMICAL_ELEMENTS.has(element)) return null;
+    index += element.length;
+    const countMatch = formula.slice(index).match(/^\d+/);
+    const count = countMatch ? Number(countMatch[0]) : 1;
+    if (!Number.isSafeInteger(count) || count < 1 || count > 24) return null;
+    index += countMatch?.[0].length || 0;
+    const current = groups.at(-1).counts;
+    const total = (current[element] || 0) + count;
+    if (!Number.isSafeInteger(total) || total > 24) return null;
+    current[element] = total;
+    if (Object.values(current).reduce((sum, atomCount) => sum + atomCount, 0) > 24) return null;
+  }
+  return groups.length === 1 && Object.keys(counts).length > 0 &&
+    Object.values(counts).every((count) => count <= 24) &&
+    Object.values(counts).reduce((sum, count) => sum + count, 0) <= 24
+    ? counts
+    : null;
+}
+
+export function parseWorkspaceEquationBalance(source) {
+  if (typeof source !== 'string' || source.length > 5000) return null;
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    !Array.isArray(value.reactants) || !Array.isArray(value.products) ||
+    value.reactants.length < 1 || value.reactants.length > 4 ||
+    value.products.length < 1 || value.products.length > 4) return null;
+
+  const parseSide = (side) => side.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+      !Number.isInteger(item.coefficient) || item.coefficient < 1 || item.coefficient > 6) return null;
+    const formula = typeof item.formula === 'string' && item.formula.length <= 60
+      ? item.formula
+      : '';
+    const atomCounts = formula ? parseChemicalFormula(formula) : null;
+    return atomCounts ? { formula, coefficient: item.coefficient, atomCounts } : null;
+  });
+  const reactants = parseSide(value.reactants);
+  const products = parseSide(value.products);
+  if (reactants.some((item) => item === null) || products.some((item) => item === null) ||
+    new Set(reactants.map((item) => item.formula)).size !== reactants.length ||
+    new Set(products.map((item) => item.formula)).size !== products.length) return null;
+
+  const totals = (side) => side.reduce((result, item) => {
+    for (const [element, count] of Object.entries(item.atomCounts)) {
+      result[element] = (result[element] || 0) + count * item.coefficient;
+    }
+    return result;
+  }, {});
+  const reactantTotals = totals(reactants);
+  const productTotals = totals(products);
+  const elements = new Set([...Object.keys(reactantTotals), ...Object.keys(productTotals)]);
+  if (!elements.size || [...elements].some((element) =>
+    reactantTotals[element] !== productTotals[element]
+  )) return null;
+  const gcd = (left, right) => right ? gcd(right, left % right) : left;
+  const commonFactor = [...reactants, ...products]
+    .reduce((factor, item) => gcd(factor, item.coefficient), 0);
+  if (commonFactor !== 1) return null;
+
+  const explanation = safeLabel(value.explanation, 1200);
+  if (!explanation) return null;
+  return { reactants, products, explanation };
+}
+
 export function extractYouTubeVideoId(input) {
   if (typeof input !== 'string' || input.length > 2048) return null;
   let url;
@@ -675,6 +807,12 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
     const language = String(rawLanguage || '').trim().toLowerCase();
     if (['chart', 'diagram'].includes(language)) {
       return parseWorkspaceVisualization(language, body) ? block : '';
+    }
+    if (language === 'equation-balance') {
+      return parseWorkspaceEquationBalance(body.trim()) ? block : '';
+    }
+    if (language === 'understanding') {
+      return parseWorkspaceUnderstanding(body.trim()) ? block : '';
     }
     const isCode = (
       CODE_LANGUAGE_PATTERN.test(language) &&

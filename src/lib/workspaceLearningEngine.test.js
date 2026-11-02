@@ -114,6 +114,14 @@ test('selects a balanced water-formation visual only for a matching chemistry qu
   assert.equal(createHydrogenWaterReactionDiagram('Explain how water evaporates.'), false);
 });
 
+test('requests validated interactive balancing cards for chemical-equation questions', () => {
+  const profile = createLearningContext('Balance Fe + O2 -> Fe2O3.');
+  const instruction = buildLearningInstruction(profile);
+  assert.equal(profile.subject, 'Chemistry');
+  assert.match(instruction, /equation-balance/);
+  assert.match(instruction, /smallest whole-number balanced coefficients/);
+});
+
 test('derives and renders the stationary point of an isotropic quadratic surface', () => {
   const prompt = 'Find and classify the stationary points of f(x) = x² + y² - 4x - 6y.';
   assert.deepEqual(createQuadraticStationaryPointDiagram(prompt), {
@@ -172,6 +180,8 @@ test('builds adaptive instructions and asks for evidence-grounded visuals', () =
   assert.match(instruction, /reliable source/);
   assert.match(instruction, /do not invent facts or data/i);
   assert.match(instruction, /Never require a grade, level, or previous attempt/i);
+  assert.match(instruction, /Test your understanding/);
+  assert.match(instruction, /2–3 short multiple-choice questions/);
   assert.match(instruction, /multi-line/);
   assert.match(instruction, /Never emit \[\[VISUAL_REFERENCE\]\]/);
 });
@@ -195,4 +205,13 @@ test('validates structured visuals and practice while preserving the textual ans
   assert.equal(validateLearningResponse(
     'Demand falls as price rises.\n\n```chart\n{"type":"multi-line","title":"Illustrative supply and demand","xLabel":"Quantity","yLabel":"Price","illustrative":true,"series":[{"label":"Demand","data":[{"x":0,"y":10},{"x":5,"y":5}]},{"label":"Supply","data":[{"x":0,"y":0},{"x":5,"y":5}]}]}\n```',
   ).valid, true);
+
+  const equationBalance = validateLearningResponse(
+    'Iron reacts with oxygen to form iron oxide.\n\n```equation-balance\n{"reactants":[{"formula":"Fe","coefficient":4},{"formula":"O2","coefficient":3}],"products":[{"formula":"Fe2O3","coefficient":2}],"explanation":"Balance iron first, then oxygen."}\n```',
+  );
+  assert.equal(equationBalance.valid, true);
+  assert.match(equationBalance.answer, /```equation-balance/);
+  assert.deepEqual(validateLearningResponse(
+    'Equation.\n\n```equation-balance\n{"reactants":[{"formula":"H2","coefficient":1}],"products":[{"formula":"H2O","coefficient":1}],"explanation":"Invalid."}\n```',
+  ).issues, ['invalid-equation-balance']);
 });

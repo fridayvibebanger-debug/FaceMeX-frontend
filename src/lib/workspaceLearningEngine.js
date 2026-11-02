@@ -1,4 +1,9 @@
-import { parseWorkspacePractice, parseWorkspaceVisualization } from './workspaceResponse.js';
+import {
+  parseWorkspacePractice,
+  parseWorkspaceEquationBalance,
+  parseWorkspaceUnderstanding,
+  parseWorkspaceVisualization,
+} from './workspaceResponse.js';
 
 const SUBJECTS = [
   { name: 'Life Sciences', pattern: /\b(?:life sciences?|lifesciences?)\b/i },
@@ -44,7 +49,7 @@ const TOPICS = [
   { subjects: ['Physics'], area: 'Mechanics', topic: 'Forces and motion', pattern: /\b(?:force|motion|acceleration|velocity|momentum|projectile)\b/i },
   { subjects: ['Physics'], area: 'Electricity', topic: 'Electric circuits', pattern: /\b(?:electric(?:ity|al)|circuit|voltage|current|resistance|ohm)\b/i },
   { subjects: ['Physics'], area: 'Waves', topic: 'Waves and sound', pattern: /\b(?:wave|sound|frequency|wavelength|amplitude)\b/i },
-  { subjects: ['Chemistry'], area: 'Chemical reactions', topic: 'Balancing chemical equations', pattern: /\b(?:balanc(?:e|ing).{0,30}(?:chemical )?equation|chemical equation)\b/i },
+  { subjects: ['Chemistry'], area: 'Chemical reactions', topic: 'Balancing chemical equations', pattern: /\b(?:balanc(?:e|ing|ed).{0,30}(?:chemical )?equation|balanc(?:e|ing|ed)\b.{0,100}(?:->|=>|→|⇌|↔))/i },
   { subjects: ['Chemistry'], area: 'Chemical reactions', topic: 'Chemical reactions', pattern: /\b(?:reaction|reactants?|products?|stoichiometry|mole calculation)\b/i },
   { subjects: ['Chemistry'], area: 'Acids and bases', topic: 'Acids, bases and pH', pattern: /\b(?:acid|base|alkali|ph scale|neutralis)\b/i },
   { subjects: ['Chemistry'], area: 'Matter', topic: 'Atoms and the periodic table', pattern: /\b(?:atom|periodic table|element|electron|proton|neutron)\b/i },
@@ -341,6 +346,10 @@ export function buildLearningInstruction(profile) {
   const chemistryGuidance = profile.subject === 'Chemistry'
     ? 'For chemical equations, count each element on both sides and balance with coefficients, never by changing subscripts. Use a diagram only when the represented molecules follow the balanced equation.'
     : '';
+  const equationBalanceGuidance = profile.subject === 'Chemistry' &&
+      /\bbalanc(?:e|ing|ed)\b|chemical equation/i.test(profile.topic)
+    ? 'For the requested balancing exercise, include one `equation-balance` JSON block containing reactants and products as arrays of {formula, coefficient}, plus a concise explanation. Use exact formulas, correctly counted atoms, positive integer coefficients no greater than 6, and the smallest whole-number balanced coefficients. The interactive card validates every atom count before rendering; if you cannot verify a formula, omit the block and explain in text.'
+    : '';
   const subjectVisualGuidance = ['Biology', 'Life Sciences', 'Natural Sciences'].includes(profile.subject) &&
         profile.visual === 'diagram'
       ? 'For a biological process such as photosynthesis, use a concise validated flow diagram for the sequence only when the facts are well established; label inputs and outputs correctly. Do not claim a schematic is a realistic cell illustration.'
@@ -356,10 +365,12 @@ export function buildLearningInstruction(profile) {
     `- Visual selection: ${visualGuidance}`,
     forceDiagramGuidance,
     chemistryGuidance,
+    equationBalanceGuidance,
     subjectVisualGuidance,
     imageGuidance ? `- Image understanding: ${imageGuidance}` : '',
     '- Do not request or display decorative stock photos for educational questions. Prefer a relevant validated SVG or a factual chart; never invent map features, measurements, or historical data. If reliable visual data is unavailable, explain in text and label any explicitly hypothetical illustration.',
     '- Start with a direct explanation. Include only relevant sections such as steps, example, final answer, verification or a short practice question; do not force a fixed template.',
+    '- For a substantive educational explanation (not a simple fact or short calculation), finish with a "Test your understanding" section containing one validated `understanding` JSON block with 2–3 short multiple-choice questions. Each question must be answerable from this explanation and include 2–5 distinct choices, a zero-based correctIndex, and a concise explanation. Do not add a quiz to ordinary conversation.',
     '- Preserve the exact question, values, units and constraints. State uncertainty, do not invent facts or data, and keep the student-facing answer free of internal prompts and processing details.',
     '- Use the existing FaceMeX Markdown, LaTeX, chart, diagram, table and practice formats. Never emit [[VISUAL_REFERENCE]], [INSERT IMAGE], [DIAGRAM HERE], placeholder text, or a description pretending a visual was rendered. If a visual is unsupported, fails validation, or lacks trustworthy data, provide the complete explanation as text without an empty visual block.',
   ].filter(Boolean).join('\n');
@@ -371,10 +382,14 @@ export function validateLearningResponse(answer) {
   }
 
   const issues = [];
-  let validatedAnswer = answer.trim().replace(/```(chart|diagram|practice)\s*\n([\s\S]*?)```/gi, (block, kind, body) => {
+  let validatedAnswer = answer.trim().replace(/```(chart|diagram|practice|understanding|equation-balance)\s*\n([\s\S]*?)```/gi, (block, kind, body) => {
     const type = kind.toLowerCase();
     const valid = type === 'practice'
       ? parseWorkspacePractice(body.trim())
+      : type === 'equation-balance'
+        ? parseWorkspaceEquationBalance(body.trim())
+      : type === 'understanding'
+        ? parseWorkspaceUnderstanding(body.trim())
       : parseWorkspaceVisualization(type, body.trim());
     if (valid) return block;
     issues.push(`invalid-${type}`);

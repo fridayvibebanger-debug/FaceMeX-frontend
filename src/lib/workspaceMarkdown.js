@@ -196,6 +196,8 @@ export function formatWorkspaceMath(source) {
   let value = String(source || '')
     .replace(/^\s*(?:\$\$|\$|\\\[|\\\()/, '')
     .replace(/(?:\$\$|\$|\\\]|\\\))\s*$/, '')
+    .replace(/\\(?:underbrace|overbrace)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\s*[_^]\s*\{(?:\\text\s*\{[^{}]*\}|[^{}]*)\}/g, '$1')
+    .replace(/\\(?:underbrace|overbrace)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '$1')
     .replace(/\\(?:mathrm|mathbf|mathit|text|operatorname)\s*\{([^{}]*)\}/g, '$1')
     .replace(/\\(?:ce|pu)\s*\{([^{}]*)\}/g, '$1')
     .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
@@ -406,6 +408,15 @@ function parseMathAtom(source, start, depth = 0) {
           : `<msqrt>${radicand.markup}</msqrt>`,
         next: radicand.next,
       };
+    }
+    if (command === 'underbrace' || command === 'overbrace') {
+      const group = readMathGroup(source, next);
+      const expression = mathNode('mrow', renderMathSequence(group.value, depth + 1));
+      const brace = command === 'underbrace' ? '⏟' : '⏞';
+      const markup = command === 'underbrace'
+        ? `<munder accentunder="true">${expression}<mo>${brace}</mo></munder>`
+        : `<mover accent="true">${expression}<mo>${brace}</mo></mover>`;
+      return { markup, next: group.next };
     }
     if (command === 'boxed' || command === 'cancel') {
       const group = readMathGroup(source, next);
