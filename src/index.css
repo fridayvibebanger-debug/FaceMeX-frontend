@@ -1147,6 +1147,10 @@
       -ms-text-size-adjust: 100%;
       text-size-adjust: 100%;
     }
+    html.dark {
+      color-scheme: dark;
+      background-color: #0d0d0d;
+    }
     @media (max-width: 640px) {
       html {
         font-size: 16px;
@@ -1166,6 +1170,9 @@
       -moz-osx-font-smoothing: grayscale;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+    }
+    html.dark body {
+      background-color: #0d0d0d;
     }
     #root {
       width: 100%;
