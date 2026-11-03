@@ -76,6 +76,8 @@ export function createLearningContext(
   options?: { context?: string; hasImage?: boolean },
 ): LearningContext;
 export function buildLearningInstruction(profile: LearningContext): string;
+export function createLearningClarification(question: string): string | null;
+export function createDeterministicCalculusAnswer(question: string): string | null;
 export function validateLearningResponse(answer: string): {
   valid: boolean;
   answer: string;
