@@ -84,9 +84,6 @@ export default function SettingsHomePage() {
       backLabel="Back to chat"
     >
       <div className="settings-home">
-        <p className="settings-home-intro">
-          FaceMeX is an AI-powered educational and career platform. Manage your account, learning and career workspace, and preferences here.
-        </p>
         <div className="settings-home-groups">
           {groups.map((group) => (
             <section className="settings-home-group" key={group.title} aria-labelledby={`settings-group-${group.title.replace(/ /g, '-')}`}>

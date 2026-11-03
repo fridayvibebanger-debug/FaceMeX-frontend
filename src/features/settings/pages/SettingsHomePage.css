@@ -4,17 +4,6 @@
   margin: 0 auto;
 }
 
-.settings-home-intro {
-  margin: 0 0 22px;
-  color: #6b6b6b;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.dark .settings-home-intro {
-  color: #aaa;
-}
-
 .settings-home-groups {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -137,10 +126,6 @@
 }
 
 @media (min-width: 640px) {
-  .settings-home-intro {
-    margin-bottom: 26px;
-  }
-
   .settings-home-groups {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px;
