@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import WorkspaceSmartboard from '@/components/WorkspaceSmartboard';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
@@ -6635,6 +6636,44 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     }
   };
 
+  const recognizeSmartboardDrawing = async (imageDataUrl: string) => {
+    if (!canUseAI || aiUsageLimitReached) {
+      toast({
+        title: 'AI access unavailable',
+        description: 'Sign in or wait for your AI usage allowance to refresh before recognizing handwriting.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const imageResponse = await fetch(imageDataUrl);
+    if (!imageResponse.ok) throw new Error('Could not prepare the drawing for FaceMeX vision.');
+    const imageBlob = await imageResponse.blob();
+    const imageFile = new File([imageBlob], 'smartboard-handwriting.png', {
+      type: imageBlob.type || 'image/png',
+    });
+    const image = await imageFileToWorkspaceImage(imageFile);
+    const response = await sendPrompt(
+      'Read the handwritten mathematical or scientific notation in this image and transcribe it exactly. Do not solve or explain it yet. Preserve symbols, exponents, signs, numbers, and units. If any essential mark is unclear, identify only the uncertain part and ask me to correct it; do not guess.',
+      { images: [image] },
+    );
+    if (!response) throw new Error('FaceMeX could not recognize the handwriting. Please try a clearer image.');
+    return response;
+  };
+
+  const solveSmartboardExpression = (expression: string) => {
+    if (!expression.trim()) return;
+    if (!canUseAI || aiUsageLimitReached) {
+      toast({
+        title: 'AI access unavailable',
+        description: 'Sign in or wait for your AI usage allowance to refresh before asking FaceMeX to solve this.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    sendPrompt(`Please explain and solve this learner-provided mathematical or scientific expression step by step. Preserve the expression exactly, show formulas and substitutions, explain any corrections, and do not invent missing information:\n\n${expression.trim()}`);
+  };
+
   const quickAsk = (text: string) => {
     if (text === BUILD_CV_QUICK_ACTION) {
       trackButtonClick('workspace_quick_open_cv_builder', undefined, {
@@ -10651,6 +10690,10 @@ Start with the most useful next action. Do not invent personal details, course r
 
               <div className="fm-composer-card rounded-full lg:order-3">
                 <div className="flex min-h-8 items-center gap-2">
+                  <WorkspaceSmartboard
+                    onRecognizeDrawing={recognizeSmartboardDrawing}
+                    onSolve={solveSmartboardExpression}
+                  />
                   <button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
