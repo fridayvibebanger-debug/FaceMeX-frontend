@@ -97,6 +97,8 @@ import {
 import {
   buildLearningInstruction,
   createLearningContext,
+  createLearningClarification,
+  createDeterministicCalculusAnswer,
   createHydrogenWaterReactionDiagram,
   createNewtonSecondLawDiagram,
   createQuadraticStationaryPointDiagram,
@@ -3210,6 +3212,14 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
           })}
           <line x1={xAxis} y1={plot.y} x2={xAxis} y2={plot.y + plot.height} stroke="rgba(255,255,255,.4)" />
           <line x1={plot.x} y1={baseline} x2={plot.x + plot.width} y2={baseline} stroke="rgba(255,255,255,.4)" />
+          {isMultiLine && xMinimum <= 0 && xMaximum >= 0 && minimum <= 0 && maximum >= 0 && (
+            <g aria-label="Origin">
+              <circle cx={xFor(0)} cy={yFor(0)} r="3.5" fill="#fff" stroke="#171717" strokeWidth="1.5">
+                <title>Origin (0, 0)</title>
+              </circle>
+              <text x={xFor(0) + 6} y={yFor(0) - 6} fill="rgba(255,255,255,.9)" fontSize="10">O</text>
+            </g>
+          )}
           {visualization.chartType === 'bar' ? visualization.data.map((point, index) => {
             const x = plot.x + (index + 0.5) * (plot.width / visualization.data.length) - barWidth / 2;
             const y = yFor(point.value);
@@ -3238,7 +3248,7 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
                 return (
                   <g key={series.label}>
                     <polyline points={seriesPoints} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                    {series.data.map((point, index) => (
+                    {series.data.length <= 12 && series.data.map((point, index) => (
                       <circle key={`${series.label}-${point.x}-${index}`} cx={xFor(point.x)} cy={yFor(point.y)} r="4.5" fill={color} stroke="#172554" strokeWidth="2">
                         <title>{`${series.label}: ${visualization.xLabel} = ${formatValue(point.x)}, ${visualization.yLabel} = ${formatValue(point.y)}`}</title>
                       </circle>
@@ -6074,7 +6084,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     const trimmedPrompt = finalPrompt.trim();
     const isLearningFollowUp =
       /^(?:(?:why|how|what|can you explain|please explain|explain)\b.*\b(?:that|it|this|those|these|step|example|method)\b|make it (?:simpler|clearer|more advanced)\b|explain (?:more simply|more clearly|simply)\b|go deeper\b|give me a more advanced explanation of that topic\b|my answer\b|i tried this practice\b)/i.test(trimmedPrompt) ||
-      /^(?:why|how|what|again)\??$/i.test(trimmedPrompt);
+      /^(?:why|how|what|again)\??$/i.test(trimmedPrompt) ||
+      /^f\s*\(\s*x\s*\)\s*=/i.test(trimmedPrompt);
     const recentLearningContext = isLearningFollowUp
       ? promptHistory
           .filter((message) => message.role === 'user')
@@ -6133,6 +6144,27 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       });
     }
 
+    const clarification = createLearningClarification(finalPrompt);
+    if (clarification) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: safeId(),
+          role: 'assistant',
+          content: clarification,
+          createdAt: new Date().toISOString(),
+          intent,
+        },
+      ]);
+      trackWorkspaceResponse({
+        intent,
+        source: 'incomplete_math_clarification',
+        answer_length: clarification.length,
+      });
+      setBusy(false);
+      return;
+    }
+
     const shouldAutoSearchJobs =
       intent === 'job-search' &&
       !hasImages &&
@@ -6171,6 +6203,45 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }
 
     if (!canUseAI || aiUsageLimitReached) {
+      setBusy(false);
+      return;
+    }
+
+    const previousAssistantResponse = [...promptHistory]
+      .reverse()
+      .find((message) => message.role === 'assistant')?.content || '';
+    const previousUserPrompt = [...promptHistory]
+      .reverse()
+      .find((message) => message.role === 'user')?.content || '';
+    const isDerivativeClarificationReply = isLearningFollowUp &&
+      /which function would you like to differentiate/i.test(previousAssistantResponse);
+    const deterministicMathPrompt = isDerivativeClarificationReply
+      ? `${previousUserPrompt}\n${finalPrompt}`
+      : finalPrompt;
+    const deterministicMathAnswer = createDeterministicCalculusAnswer(deterministicMathPrompt);
+    const validatedMathAnswer = deterministicMathAnswer
+      ? validateLearningResponse(deterministicMathAnswer)
+      : null;
+    if (deterministicMathAnswer && validatedMathAnswer?.valid) {
+      const answer = normalizeWorkspaceAnswerForDisplay(validatedMathAnswer.answer, finalPrompt);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: safeId(),
+          role: 'assistant',
+          content: answer,
+          createdAt: new Date().toISOString(),
+          saved: shouldAutoSaveEducation,
+          savedCategory: suggestedSavedCategory,
+          intent,
+          learning: activeLearningContext,
+        },
+      ]);
+      trackWorkspaceResponse({
+        intent,
+        source: 'verified_calculus_response',
+        answer_length: answer.length,
+      });
       setBusy(false);
       return;
     }
@@ -6281,8 +6352,8 @@ Mathematics learning response:
 - Use beginner-friendly language unless the learner asks for advanced detail. Identify the topic and define important variables or symbols briefly.
 - Explain the method in small, ordered steps. Show the formula, substitute the actual values, include every important calculation, and explain why key operations are valid.
 - Use properly delimited LaTeX for equations: \\( ... \\) inline and $$ ... $$ on separate lines for display equations. Never expose raw LaTeX when it should be rendered.
-- Use concise sections such as "Understanding the question", "Step-by-step solution", "Final answer", "Check your answer", and "Help you understand"; omit sections that add no value and keep straightforward answers concise.
-- Verify arithmetic by substitution or an independent check where possible. State relevant restrictions and distinguish local from global extrema. For stationary-point questions, solve for every point, show the Hessian, and classify each point using the Hessian test.
+- Use concise sections such as "Understanding the question", "Step-by-step solution", "Final answer", "Check your answer", and "What this means"; omit sections that add no value and keep straightforward answers concise.
+- Verify arithmetic by substitution or an independent check where possible. State relevant restrictions and distinguish local from global extrema. For one-variable stationary-point questions, solve f'(x) = 0 and classify with f''(x); use the Hessian test only for multivariable functions.
 - Use a mathematical visual only when it directly helps. For a right triangle, provide a labelled diagram JSON block only when the side lengths satisfy the Pythagorean theorem, for example:
 \`\`\`diagram
 {"type":"triangle","title":"Right-angled triangle","legA":6,"legB":8,"hypotenuse":10,"unit":"cm"}
