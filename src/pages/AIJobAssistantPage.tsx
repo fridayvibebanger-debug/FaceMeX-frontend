@@ -3459,8 +3459,8 @@ function WorkspaceResponseMedia({
 
   if (modeStatus === 'loading') {
     return (
-      <div className="my-3 w-full max-w-3xl">
-        <h3 className="mb-2 text-xs font-semibold text-white/85">
+      <div className="my-6 w-full max-w-3xl">
+        <h3 className="mb-2 text-sm font-semibold text-white/90">
           {mode === 'images' ? 'Relevant images' : 'Relevant YouTube lessons'}
         </h3>
         <div className="flex items-center gap-2 text-xs text-white/55" role="status">
@@ -3477,19 +3477,19 @@ function WorkspaceResponseMedia({
     );
     if (!images.length) return null;
     return (
-      <section className="my-3 min-w-0 w-full max-w-3xl" aria-label="Relevant images">
-        <h3 className="mb-2 text-xs font-semibold text-white/85">
+      <section className="my-6 min-w-0 w-full max-w-3xl" aria-label="Relevant images">
+        <h3 className="mb-1.5 text-sm font-semibold leading-5 text-white/90">
           {media.imageTopic ? `Photo example: ${media.imageTopic}` : 'Relevant images'}
         </h3>
         {media.imagePurpose && (
-          <p className="mb-2 text-xs leading-5 text-white/55">{media.imagePurpose}</p>
+          <p className="mb-3 text-xs leading-5 text-white/55">{media.imagePurpose}</p>
         )}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           {images.map((image) => {
             return (
               <figure
                 key={image.id}
-                className="group flex min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-[#171717]"
+                className="group flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#171717]"
               >
                 <button
                   type="button"
@@ -3499,23 +3499,23 @@ function WorkspaceResponseMedia({
                 >
                   <img
                     src={image.smallUrl || image.url}
-                    sizes="(max-width: 640px) 50vw, 360px"
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 360px"
                     alt={image.alt || image.description || 'Relevant educational photograph'}
                     loading="lazy"
                     decoding="async"
                     onError={() => setFailedImageIds((previous) => new Set(previous).add(image.id))}
-                    className="h-full w-full object-contain"
+                    className="h-full w-full object-cover"
                   />
                 </button>
                 {(image.description || image.alt || image.attribution) && (
-                  <figcaption className="flex min-h-0 min-w-0 flex-col gap-1 px-2 py-2 text-[10px] leading-4 text-white/70 sm:text-xs">
+                  <figcaption className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 px-3 py-2.5 text-[11px] leading-4 text-white/70 sm:text-xs">
                     {(image.description || image.alt) && (
                       <span className="line-clamp-2 break-words [overflow-wrap:anywhere]">
                         {image.description || image.alt}
                       </span>
                     )}
                     {image.attribution && (
-                      <span className="truncate">
+                      <span className="mt-auto min-w-0 truncate pt-1" title={`Photo by ${image.attribution} on Unsplash`}>
                           {isTrustedMediaUrl(image.photoUrl || '', 'unsplash.com') ||
                           isTrustedMediaUrl(image.attributionUrl, 'unsplash.com')
                             ? (
