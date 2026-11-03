@@ -449,7 +449,7 @@ const EDUCATIONAL_PHOTO_PLANS = [
     mainObject: 'car moving on a road',
     photoType: 'vehicle in motion',
     purpose: 'relate mass and acceleration to a familiar moving vehicle',
-    query: 'car accelerating on road vehicle motion physics',
+    query: 'car acceleration demonstration driving physics motion blur',
     keywordGroups: [['car', 'vehicle', 'automobile'], ['road', 'driving', 'motion', 'moving'], ['acceleration', 'force', 'physics']],
   },
   {
@@ -635,6 +635,9 @@ export function selectRelevantWorkspaceImages(images, plan, limit = 2) {
       (isUnsplashPageUrl(image.photoUrl) || isUnsplashPageUrl(image.attributionUrl));
     if (!metadata || !hasCredit || (!plan?.allowPortrait && portraitPattern.test(metadata)) ||
       (!plan?.allowPeople && peoplePattern.test(metadata))) return [];
+    if (plan?.topic === "Newton's second law of motion" &&
+      /\b(?:mountains?|scenery|landscape|sunset)\b/i.test(metadata) &&
+      !/\b(?:accelerat\w*|force|motion\s*blur|speed(?:ing)?)\b/i.test(metadata)) return [];
     const matchingGroups = keywordGroups.filter((group) => group.some((term) =>
       new RegExp(`\\b${String(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(metadata)
     )).length;

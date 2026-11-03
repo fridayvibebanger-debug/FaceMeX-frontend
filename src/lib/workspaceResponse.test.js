@@ -594,7 +594,7 @@ test('plans images and videos when the request makes them relevant', () => {
 test('builds topic-specific educational photo queries from the requested concept', () => {
   const examples = [
     ['Explain photosynthesis.', /green plant leaves sunlight photosynthesis/i, 'Photosynthesis', 'green plant leaves'],
-    ['Explain Newton’s second law.', /car accelerating on road vehicle motion physics/i, "Newton's second law of motion", 'car moving on a road'],
+    ['Explain Newton’s second law.', /car acceleration demonstration driving physics motion blur/i, "Newton's second law of motion", 'car moving on a road'],
     ['Explain water pollution.', /water pollution contaminated river environmental/i, 'Water pollution', 'polluted waterway'],
     ['Explain drought in Limpopo.', /Limpopo South Africa drought dry agricultural land/i, 'Drought in Limpopo', 'dry agricultural land in Limpopo'],
     ['Explain how solar panels generate electricity.', /solar panels sunlight photovoltaic electricity generation/i, 'Solar energy', 'solar panels in sunlight'],
@@ -638,6 +638,19 @@ test('ranks educational Unsplash images by topic metadata and rejects portraits 
     attribution: 'Photographer',
     photoUrl: 'https://unsplash.com/photos/empty',
   }], plan), []);
+});
+
+test('rejects Newton-law stock photos focused on generic scenery', () => {
+  const plan = createWorkspaceMediaPlan('Explain Newton’s second law.');
+  const result = selectRelevantWorkspaceImages([{
+    id: 'scenery',
+    url: 'https://images.unsplash.com/scenery',
+    alt: 'Mountain scenery with a small car on a winding road',
+    tags: ['vehicle', 'road', 'motion'],
+    attribution: 'Photographer',
+    photoUrl: 'https://unsplash.com/photos/scenery',
+  }], plan);
+  assert.deepEqual(result, []);
 });
 
 test('requires on-topic metadata for each requested educational photograph', () => {
