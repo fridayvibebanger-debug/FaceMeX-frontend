@@ -11482,7 +11482,7 @@ Start with the most useful next action. Do not invent personal details, course r
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  openSchedulePanel();
+                  navigate('/facemex-plus');
                 }}
                 className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
               >

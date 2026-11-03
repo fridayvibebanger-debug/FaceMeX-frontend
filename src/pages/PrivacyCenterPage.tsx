@@ -26,7 +26,7 @@ const privacyCards = [
   {
     icon: Shield,
     title: 'Privacy is part of the design',
-    text: 'FaceMeX uses account authentication and database access controls for supported services. No online service can promise absolute security.',
+    text: 'FaceMeX uses account sign-in and access controls to help protect your information. No online service can promise absolute security.',
   },
 ];
 

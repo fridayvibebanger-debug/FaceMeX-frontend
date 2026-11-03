@@ -63,7 +63,7 @@ export default function PersonalizationSettingsPage() {
         <div className="fm-settings-info-card" role="status">Loading your saved personalization…</div>
       ) : loadingError ? (
         <div className="fm-settings-control-section">
-          <p className="fm-settings-error" role="alert">{error}</p>
+          <p className="fm-settings-error" role="alert">Your personalization settings couldn’t be loaded. Please try again.</p>
           <button type="button" className="fm-settings-action" onClick={() => void reload()}>Try again</button>
         </div>
       ) : (
@@ -136,7 +136,7 @@ export default function PersonalizationSettingsPage() {
               aria-label="Custom instructions"
             />
             <p className="fm-settings-explainer">
-              Saved to your FaceMeX account and included as context in supported AI workspace requests.
+              Your custom instructions help personalize FaceMeX responses.
               {draft.preferences.length}/2000
             </p>
           </section>
@@ -223,10 +223,7 @@ export default function PersonalizationSettingsPage() {
             )}
           </section>
 
-          <p className="fm-settings-notice">
-            Fast answers and rich-response controls are not available as account preferences in the current FaceMeX AI settings.
-          </p>
-          {error && <p className="fm-settings-error" role="alert">{error}</p>}
+          {error && <p className="fm-settings-error" role="alert">Your changes couldn’t be saved. Please try again.</p>}
           <p className="fm-settings-status" role="status" aria-live="polite">
             {saving ? 'Saving your changes…' : saved && !dirty ? 'Your changes are saved.' : ''}
           </p>

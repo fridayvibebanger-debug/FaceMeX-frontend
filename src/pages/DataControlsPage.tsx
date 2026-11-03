@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Download, Trash2 } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createFaceMeXDataExport } from '@/services/facemexDataExport';
+import FaceMeXSettingsPageShell from '@/components/facemex-settings/FaceMeXSettingsPageShell';
 import './DataControlsPage.css';
 
 type LocationPermission = 'checking' | 'granted' | 'denied' | 'prompt' | 'unknown' | 'unavailable';
@@ -90,7 +91,7 @@ export default function DataControlsPage() {
         : 'Export downloaded. No saved workspace records were found; available profile and settings data are included.');
     } catch (error) {
       console.error('FaceMeX data export failed', error);
-      setExportError(error instanceof Error ? error.message : 'Could not export your data. Please try again.');
+      setExportError('Your data couldn’t be exported. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -107,16 +108,7 @@ export default function DataControlsPage() {
           : 'Unavailable';
 
   return (
-    <main className="dc-page">
-      <div className="dc-content">
-        <header className="dc-header">
-          <button type="button" className="dc-back" onClick={goBack} aria-label="Go back">
-            <ArrowLeft aria-hidden="true" />
-          </button>
-          <h1>Data controls</h1>
-          <span className="dc-header-spacer" aria-hidden="true" />
-        </header>
-
+    <FaceMeXSettingsPageShell title="Data controls" onBack={goBack} variant="plus">
         <div className="dc-sections">
           <section className="dc-section" aria-labelledby="dc-model-title">
             <div className="dc-row">
@@ -129,7 +121,7 @@ export default function DataControlsPage() {
               </button>
             </div>
             <p className="dc-description">
-              FaceMeX does not currently offer a backend-enforced preference for model improvement. This control is disabled and does not change how configured AI providers process requests.
+              This preference is not available right now.
             </p>
           </section>
 
@@ -144,16 +136,16 @@ export default function DataControlsPage() {
               </span>
             </div>
             <p className="dc-description">
-              Browser permission status only. FaceMeX has no location-aware feature using device location. This page does not request or store your coordinates; change site access in your browser settings.
+              Location access is managed by your browser. FaceMeX only uses your location when you choose a feature that requests it.
             </p>
           </section>
 
           <section className="dc-section" aria-labelledby="dc-export-heading">
             <h2 id="dc-export-heading" className="dc-section-heading">Export Data</h2>
             <p className="dc-description">
-              Download available account profile, FaceMeX settings, projects, conversations, messages, and documents as JSON. Social-feed activity and data held by other services are not included.
+              Download available account profile, FaceMeX settings, projects, conversations, messages, and documents as JSON. Activity from other areas of FaceMeX and data held by external services are not included.
             </p>
-            <button type="button" className="dc-action" onClick={() => void exportData()} disabled={exporting}>
+            <button type="button" className="fm-settings-action" onClick={() => void exportData()} disabled={exporting}>
               <Download aria-hidden="true" />
               {exporting ? 'Preparing export…' : 'Export Data'}
             </button>
@@ -163,7 +155,7 @@ export default function DataControlsPage() {
 
           <section className="dc-section" aria-labelledby="dc-delete-heading">
             <h2 id="dc-delete-heading" className="dc-section-heading">Delete FaceMeX account</h2>
-            <button type="button" className="dc-action dc-delete" onClick={() => setDeleteDialogOpen(true)}>
+            <button type="button" className="fm-settings-action fm-settings-action-destructive" onClick={() => setDeleteDialogOpen(true)}>
               <Trash2 aria-hidden="true" />
               Delete FaceMeX account
             </button>
@@ -181,19 +173,17 @@ export default function DataControlsPage() {
               </button>
             </div>
             <p className="dc-description">
-              FaceMeX does not provide an account-wide audio retention or training preference. Microphone access is requested by individual features when used; this page cannot change their processing or retention.
+              Voice features ask for microphone access when you choose to use them. You can manage that permission in your browser.
             </p>
           </section>
 
           <section className="dc-section" aria-labelledby="dc-apps-heading">
             <h2 id="dc-apps-heading" className="dc-section-heading">Apps with access</h2>
             <div className="dc-empty-card">
-              Connected-app authorization is not currently supported by FaceMeX.
+              No apps are connected to your FaceMeX account.
             </div>
           </section>
         </div>
-      </div>
-
       {deleteDialogOpen && (
         <div className="dc-dialog-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setDeleteDialogOpen(false);
@@ -207,7 +197,7 @@ export default function DataControlsPage() {
           >
             <h2 id="dc-dialog-title">Account deletion isn’t available yet</h2>
             <p id="dc-dialog-description">
-              Deleting an account can permanently remove account data. FaceMeX does not currently have a secure deletion endpoint, so no deletion can be performed here and nothing has been changed. Please review the Privacy Policy for the current request process.
+              Account deletion can’t be completed from Settings right now. Visit the Privacy Policy for information about requesting help.
             </p>
             <div className="dc-dialog-actions">
               <button type="button" onClick={() => setDeleteDialogOpen(false)}>Close</button>
@@ -221,6 +211,6 @@ export default function DataControlsPage() {
           </section>
         </div>
       )}
-    </main>
+    </FaceMeXSettingsPageShell>
   );
 }

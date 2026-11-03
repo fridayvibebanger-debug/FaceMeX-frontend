@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, LogOut, Mail, Sparkles, SquarePlus, UserRound } from 'lucide-react';
+import { LogOut, Mail, Sparkles, SquarePlus, UserRound } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
+import FaceMeXSettingsPageShell from '@/components/facemex-settings/FaceMeXSettingsPageShell';
 import './AccountSettingsPage.css';
 
 function formatPlan(tier: string) {
@@ -61,19 +62,8 @@ export default function AccountSettingsPage() {
     : paidPlan ? 'Manage subscription' : 'Get FaceMeX Plus';
 
   return (
-    <main className="account-settings-page">
+    <FaceMeXSettingsPageShell title="Account" onBack={goBack} variant="plus">
       <div className="account-settings-content">
-        <header className="account-settings-header">
-          <div className="account-settings-heading">
-            <p>FaceMeX account</p>
-            <h1>Account</h1>
-          </div>
-          <button type="button" className="account-settings-back" onClick={goBack} aria-label="Go back">
-            <ArrowLeft aria-hidden="true" />
-            <span>Settings</span>
-          </button>
-        </header>
-
         <section className="account-settings-card" aria-label="Account information">
           <div className="account-settings-row">
             <Mail className="account-settings-icon" aria-hidden="true" />
@@ -130,6 +120,6 @@ export default function AccountSettingsPage() {
           {logoutError && <p className="account-settings-error" role="alert">{logoutError}</p>}
         </div>
       </div>
-    </main>
+    </FaceMeXSettingsPageShell>
   );
 }

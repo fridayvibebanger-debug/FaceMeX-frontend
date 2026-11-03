@@ -19,11 +19,11 @@ const guides: Record<string, Guide> = {
     sections: [
       {
         title: 'Account and preferences',
-        text: 'FaceMeX uses your authenticated account to provide account features. Settings and personalization preferences are stored with your user ID in the configured Supabase database, with row-level policies intended to limit access to the signed-in user.',
+        text: 'Your settings and personalization preferences are associated with your FaceMeX account and protected by account access controls.',
       },
       {
         title: 'Workspace content',
-        text: 'When workspace sync is available, projects, conversations, messages, and documents are stored in workspace tables. Data Controls can export those available records alongside profile and settings information. The export does not include social-feed activity or data held by other services.',
+        text: 'When workspace sync is available, saved projects, conversations, messages, and documents can be included in a Data Controls export. The export does not include social-feed activity or information held by other services.',
       },
       {
         title: 'Choices and current limits',
@@ -39,7 +39,7 @@ const guides: Record<string, Guide> = {
     sections: [
       {
         title: 'Keep your sign-in details private',
-        text: 'Use a unique password for your account. Do not share passwords, one-time codes, or sign-in links. FaceMeX authentication is handled by the configured account provider.',
+        text: 'Use a unique password for your account. Do not share passwords, one-time codes, or sign-in links.',
       },
       {
         title: 'Check your account details',
@@ -47,7 +47,7 @@ const guides: Record<string, Guide> = {
       },
       {
         title: 'Understand current security controls',
-        text: 'FaceMeX uses authenticated sessions and access policies for supported database-backed features. The app does not currently provide a self-service active-session dashboard or account-deletion endpoint. We do not claim that any control guarantees absolute security.',
+        text: 'FaceMeX uses account sign-in and access controls to help protect your information. An active-session dashboard and self-service account deletion are not currently available. No control can guarantee absolute security.',
       },
     ],
     links: [{ label: 'Account settings', to: '/ai/settings/account' }, { label: 'Security and login settings', to: '/ai/settings/security-and-login' }],
@@ -63,11 +63,11 @@ const guides: Record<string, Guide> = {
       },
       {
         title: 'Provider processing',
-        text: 'AI requests may be handled by third-party providers configured for the relevant FaceMeX feature. Provider and configuration can vary, and provider-specific processing or retention terms are not represented by a single FaceMeX setting on this page.',
+        text: 'Some AI features may send your request to an external AI service. The services involved can vary by feature, so review their privacy information when deciding what to share.',
       },
       {
         title: 'Model improvement',
-        text: 'FaceMeX does not currently offer an account-level, backend-enforced preference for using chats to improve models. This guide does not claim that FaceMeX trains its own models or that every provider follows the same data practices.',
+        text: 'FaceMeX does not currently offer an account-level setting for whether chats are used to improve AI models. Data practices may vary between external AI services.',
       },
       {
         title: 'Personalization controls',
