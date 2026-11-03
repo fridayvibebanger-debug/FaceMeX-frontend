@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import {
   buildLearningInstruction,
   createLearningContext,
+  createLearningClarification,
+  createDeterministicCalculusAnswer,
   createHydrogenWaterReactionDiagram,
   createNewtonSecondLawDiagram,
   createQuadraticStationaryPointDiagram,
@@ -10,6 +12,7 @@ import {
   selectLearningVisual,
   validateLearningResponse,
 } from './workspaceLearningEngine.js';
+import { parseWorkspaceVisualization } from './workspaceResponse.js';
 
 test('detects subjects and topics from two representative questions per subject', () => {
   const examples = [
@@ -180,10 +183,53 @@ test('builds adaptive instructions and asks for evidence-grounded visuals', () =
   assert.match(instruction, /reliable source/);
   assert.match(instruction, /do not invent facts or data/i);
   assert.match(instruction, /Never require a grade, level, or previous attempt/i);
+  assert.match(instruction, /Make the explanation specific to the subject and question/i);
+  assert.match(instruction, /never expose bare JSON/i);
   assert.match(instruction, /Test your understanding/);
   assert.match(instruction, /2–3 short multiple-choice questions/);
   assert.match(instruction, /multi-line/);
   assert.match(instruction, /Never emit \[\[VISUAL_REFERENCE\]\]/);
+});
+
+test('clarifies missing derivative inputs and solves the requested cubic and quadratic regressions exactly', () => {
+  assert.equal(
+    createLearningClarification('Find the derivative of.'),
+    'Which function would you like to differentiate? For example, f(x) = x³.',
+  );
+  assert.equal(createLearningClarification('Find the derivative of f(x) = x³.'), null);
+  assert.equal(createLearningClarification('What does a derivative represent?'), null);
+  assert.equal(createDeterministicCalculusAnswer('Find the derivative of x^4.'), null);
+  const conciseDerivative = createDeterministicCalculusAnswer('Find the derivative of x³.');
+  assert.match(conciseDerivative, /Final answer/);
+  assert.doesNotMatch(conciseDerivative, /```chart/);
+
+  const derivative = createDeterministicCalculusAnswer(
+    'Find the derivative of f(x) = x³. Explain every step and show a simple graph.',
+  );
+  assert.match(derivative, /Power Rule/);
+  assert.match(derivative, /f'\(x\) = 3x\^\{3-1\}/);
+  assert.match(derivative, /f'\(x\) = 3x\^2/);
+  assert.match(derivative, /at x = 1 the slope is 3/i);
+  const chartSource = derivative.match(/```chart\n([\s\S]*?)\n```/)?.[1];
+  assert.ok(chartSource);
+  const chart = parseWorkspaceVisualization('chart', chartSource);
+  assert.equal(chart.chartType, 'multi-line');
+  assert.equal(chart.series[0].label, 'f(x) = x³');
+  assert.equal(chart.series[1].label, 'f′(x) = 3x²');
+  assert.equal(chart.series[0].data.length, 33);
+  assert.deepEqual(chart.series[0].data[16], { x: 0, y: 0 });
+  assert.deepEqual(chart.series[1].data[16], { x: 0, y: 0 });
+  assert.deepEqual(chart.series[0].data[24], { x: 1, y: 1 });
+  assert.deepEqual(chart.series[1].data[24], { x: 1, y: 3 });
+  assert.equal(validateLearningResponse(derivative).valid, true);
+
+  const stationary = createDeterministicCalculusAnswer(
+    'Find the stationary points of f(x) = x² - 4x + 3.',
+  );
+  assert.match(stationary, /f'\(x\) = 2x - 4/);
+  assert.match(stationary, /f''\(x\) = 2/);
+  assert.match(stationary, /minimum stationary point is \$\$\(2, -1\)\$\$/);
+  assert.equal(createDeterministicCalculusAnswer('Find stationary points of f(x) = x^2 +.'), null);
 });
 
 test('validates structured visuals and practice while preserving the textual answer', () => {

@@ -170,6 +170,19 @@ test('formats inline math and keeps unsafe link schemes as ordinary text', () =>
   ]);
 });
 
+test('does not interpret ordinary currency amounts as inline mathematics', () => {
+  const prices = tokenizeWorkspaceInline('Tickets cost $5 and $10 per person.');
+  assert.deepEqual(prices, [{ type: 'text', text: 'Tickets cost $5 and $10 per person.' }]);
+  assert.deepEqual(tokenizeWorkspaceInline('The sale costs $5 + $10 total.'), [
+    { type: 'text', text: 'The sale costs $5 + $10 total.' },
+  ]);
+  assert.deepEqual(tokenizeWorkspaceInline('The expression is $x^2 + 1$.'), [
+    { type: 'text', text: 'The expression is ' },
+    { type: 'math', text: 'x² + 1', latex: 'x^2 + 1', display: false },
+    { type: 'text', text: '.' },
+  ]);
+});
+
 test('parses multiline display equations without exposing their delimiters', () => {
   const blocks = parseWorkspaceMarkdown([
     'Use the Pythagorean theorem:',
@@ -187,6 +200,9 @@ test('parses multiline display equations without exposing their delimiters', () 
     { type: 'text', text: 'The result is ' },
     { type: 'math', text: 'x² + 1', latex: 'x^2 + 1', display: true },
     { type: 'text', text: '.' },
+  ]);
+  assert.deepEqual(parseWorkspaceMarkdown(['$$', 'f(x) = x^3', '$$'].join('\n')), [
+    { type: 'math', latex: 'f(x) = x^3' },
   ]);
 });
 

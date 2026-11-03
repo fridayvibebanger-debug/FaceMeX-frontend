@@ -104,6 +104,141 @@ const TEACHING_METHODS = {
   Other: ['identify the core idea and explain it in clear steps', 'use a relevant example without inventing facts', 'check that the conclusion follows from the information given'],
 };
 
+function getSingleVariableFunctionExpression(question) {
+  const text = String(question || '').replace(/[−–]/g, '-').replace(/²/g, '^2').replace(/³/g, '^3');
+  const assigned = text.match(/\bf\s*\(\s*x\s*\)\s*=\s*([^,\n;.]+)/i);
+  const requested = text.match(/\b(?:derivative|stationary points?)\b.{0,50}?\b(?:of|for)\s+([^,\n;.]+)/i);
+  const expression = (assigned?.[1] || requested?.[1] || '')
+    .replace(/[?.!]+$/g, '')
+    .replace(/\s+/g, '')
+    .replace(/\*\*/g, '^');
+  return expression.replace(/^f\(x\)=/i, '');
+}
+
+export function createLearningClarification(question) {
+  const text = String(question || '').trim();
+  const requestsDerivative = /\b(?:find|calculate|determine|work out)\b.{0,50}\bderivative\b/i.test(text);
+  const endsBeforeFunction = /\b(?:derivative|differentiation)\b\s*(?:(?:of|for)\s*(?:the\s+)?(?:function\s*)?)?[?.!]*$/i.test(text);
+  if (requestsDerivative && endsBeforeFunction && !/[a-z]\s*(?:\^|\*\*)\s*\d|[a-z]\s*[=+\-*/]/i.test(text)) {
+    return 'Which function would you like to differentiate? For example, f(x) = x³.';
+  }
+  return null;
+}
+
+export function createDeterministicCalculusAnswer(question) {
+  const text = String(question || '');
+  const expression = getSingleVariableFunctionExpression(text);
+  if (!expression) return null;
+
+  if (/\b(?:find|calculate|differentiate|derivative)\b/i.test(text) &&
+    /^(?:\+?1\*?)?x(?:\^3)$/i.test(expression)) {
+    const wantsGraph = /\b(?:graph|plot)\b/i.test(text);
+    const graph = wantsGraph
+      ? `\n\n### Graph\n\nThe derivative curve gives the slope of the original curve at each x-value. The two curves meet at the origin; at x = 1 the slope is 3, and at x = 2 it is 12.\n\n\`\`\`chart\n${JSON.stringify({
+          type: 'multi-line',
+          title: 'f(x) = x³ and f′(x) = 3x²',
+          xLabel: 'x',
+          yLabel: 'y',
+          series: [
+            {
+              label: 'f(x) = x³',
+              data: Array.from({ length: 33 }, (_, index) => {
+                const x = -2 + index / 8;
+                return { x, y: x ** 3 };
+              }),
+            },
+            {
+              label: 'f′(x) = 3x²',
+              data: Array.from({ length: 33 }, (_, index) => {
+                const x = -2 + index / 8;
+                return { x, y: 3 * x ** 2 };
+              }),
+            },
+          ],
+        })}\n\`\`\``
+      : '';
+    return [
+      '## Derivative of f(x) = x³',
+      '',
+      '**Step 1: Identify the function**',
+      '',
+      '$$f(x) = x^3$$',
+      '',
+      '**Step 2: Apply the Power Rule**',
+      '',
+      'The Power Rule is:',
+      '',
+      '$$\\frac{d}{dx}(x^n) = nx^{n-1}$$',
+      '',
+      'It brings the exponent down as a coefficient and reduces the exponent by one.',
+      '',
+      '**Step 3: Substitute the exponent**',
+      '',
+      'Here, n = 3:',
+      '',
+      "$$f'(x) = 3x^{3-1}$$",
+      '',
+      '**Step 4: Simplify**',
+      '',
+      "$$f'(x) = 3x^2$$",
+      '',
+      '**Final answer:**',
+      '',
+      "$$f'(x) = 3x^2$$",
+      '',
+      '**What this means:** The derivative gives the slope of the original curve at each point. At x = 0 the slope is 0; at x = 1 it is 3; and at x = 2 it is 12.',
+      graph,
+    ].filter(Boolean).join('\n');
+  }
+
+  if (/\bstationary points?\b/i.test(text)) {
+    const normalized = expression.replace(/\*/g, '');
+    const terms = normalized.match(/[+-]?[^+-]+/g);
+    if (!terms || terms.join('') !== normalized || !normalized.includes('x^2')) return null;
+
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    for (const term of terms) {
+      if (/x\^2$/i.test(term)) {
+        const coefficient = term.slice(0, -3);
+        a += coefficient === '' || coefficient === '+' ? 1 : coefficient === '-' ? -1 : Number(coefficient);
+      } else if (/x$/i.test(term)) {
+        const coefficient = term.slice(0, -1);
+        b += coefficient === '' || coefficient === '+' ? 1 : coefficient === '-' ? -1 : Number(coefficient);
+      } else if (/^[+-]?\d+(?:\.\d+)?$/.test(term)) {
+        c += Number(term);
+      } else {
+        return null;
+      }
+    }
+    if (![a, b, c].every(Number.isFinite) || a === 0) return null;
+
+    const x = -b / (2 * a);
+    const y = a * x ** 2 + b * x + c;
+    const format = (value) => Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(8)));
+    const derivative = `${format(2 * a)}x${b < 0 ? ' - ' + format(Math.abs(b)) : b > 0 ? ' + ' + format(b) : ''}`;
+    const classification = a > 0 ? 'minimum' : 'maximum';
+    const substitutedY = `${format(a)}(${format(x)})² ${b < 0 ? '- ' + format(Math.abs(b)) + '(' + format(x) + ')' : b > 0 ? '+ ' + format(b) + '(' + format(x) + ')' : ''} ${c < 0 ? '- ' + format(Math.abs(c)) : c > 0 ? '+ ' + format(c) : ''} = ${format(y)}`;
+
+    return [
+      `## Stationary point of f(x) = ${expression}`,
+      '',
+      `**1. Differentiate:** $f'(x) = ${derivative}$`,
+      '',
+      `**2. Set the derivative to zero:** A stationary point has a horizontal tangent, so its slope is zero: $${derivative} = 0$, giving $x = ${format(x)}$.`,
+      '',
+      `**3. Find the function value:** $f(${format(x)}) = ${substitutedY}$.`,
+      '',
+      `**4. Classify the point:** $f''(x) = ${format(2 * a)}$. Since this is ${a > 0 ? 'positive' : 'negative'}, the point is a ${classification}.`,
+      '',
+      `**Final answer:** The ${classification} stationary point is $(${format(x)}, ${format(y)})$.`,
+    ].join('\n');
+  }
+
+  return null;
+}
+
 function inferLevel(text) {
   if (/\b(?:university|undergraduate|postgraduate|tertiary|degree level)\b/i.test(text)) return 'university';
   if (/\b(?:advanced|expert|graduate level|prove rigorously)\b/i.test(text)) return 'advanced';
@@ -362,6 +497,7 @@ export function buildLearningInstruction(profile) {
     '- Answer a clear, solvable question immediately. Never require a grade, level, or previous attempt before helping. Ask one focused question only if essential information is missing or unreadable.',
     profile.struggling ? '- The learner appears stuck: use smaller steps, check one concept at a time, and avoid skipping algebra or reasoning.' : '',
     `- Teaching approach: ${profile.teachingMethods.join('; ')}.`,
+    '- Make the explanation specific to the subject and question. For calculations, show substitutions, units and meaningful reasoning; for processes, explain the sequence and cause-and-effect; for comparisons, state the criteria. Explain why non-obvious steps follow, and avoid filler or repeated claims.',
     `- Visual selection: ${visualGuidance}`,
     forceDiagramGuidance,
     chemistryGuidance,
@@ -372,7 +508,7 @@ export function buildLearningInstruction(profile) {
     '- Start with a direct explanation. Include only relevant sections such as steps, example, final answer, verification or a short practice question; do not force a fixed template.',
     '- For a substantive educational explanation (not a simple fact or short calculation), finish with a "Test your understanding" section containing one validated `understanding` JSON block with 2–3 short multiple-choice questions. Each question must be answerable from this explanation and include 2–5 distinct choices, a zero-based correctIndex, and a concise explanation. Do not add a quiz to ordinary conversation.',
     '- Preserve the exact question, values, units and constraints. State uncertainty, do not invent facts or data, and keep the student-facing answer free of internal prompts and processing details.',
-    '- Use the existing FaceMeX Markdown, LaTeX, chart, diagram, table and practice formats. Never emit [[VISUAL_REFERENCE]], [INSERT IMAGE], [DIAGRAM HERE], placeholder text, or a description pretending a visual was rendered. If a visual is unsupported, fails validation, or lacks trustworthy data, provide the complete explanation as text without an empty visual block.',
+    '- Use the existing FaceMeX Markdown, LaTeX, chart, diagram, table and practice formats. Emit structured output only in its matching fenced format; never expose bare JSON, schemas, or implementation metadata. Never emit [[VISUAL_REFERENCE]], [INSERT IMAGE], [DIAGRAM HERE], placeholder text, or a description pretending a visual was rendered. If a visual is unsupported, fails validation, or lacks trustworthy data, provide the complete explanation as text without an empty visual block.',
   ].filter(Boolean).join('\n');
 }
 

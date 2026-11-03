@@ -1,4 +1,5 @@
 const MAX_CHART_POINTS = 12;
+const MAX_MULTI_LINE_POINTS = 64;
 const MAX_FLOW_STEPS = 8;
 const MAX_FOLLOW_UP_OPTIONS = 5;
 
@@ -30,7 +31,7 @@ export function parseWorkspaceVisualization(kind, source) {
         if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
         const label = safeLabel(item.label, 48);
         if (!label || !Array.isArray(item.data) || item.data.length < 2 ||
-          item.data.length > MAX_CHART_POINTS) return null;
+          item.data.length > MAX_MULTI_LINE_POINTS) return null;
         const data = item.data.map((point) => {
           if (!point || typeof point !== 'object' || Array.isArray(point) ||
             typeof point.x !== 'number' || !Number.isFinite(point.x) ||
@@ -769,6 +770,101 @@ const CODE_LANGUAGE_PATTERN = /^(?:[a-z][\w+-]*|)$/i;
 const CODE_SYNTAX_PATTERN = /(?:^|\n)\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|<\/?[a-z][^>]*>|[\w$]+\s*=>)/i;
 const CODE_LINE_PATTERN = /^\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|console\.(?:log|error|warn)\s*\(|\/\/|#include\b|<\/?[a-z][^>]*>)/i;
 const INTERNAL_OUTPUT_PATTERN = /(?:\b(?:system prompt|hidden instructions|developer message|internal reasoning|stack trace|traceback)\b|^\s*at\s+[\w.$]+\s*\(|\b(?:TypeError|ReferenceError|SyntaxError):\s)/im;
+const INTERNAL_JSON_MARKER = /"(?:questions|correctIndex|choices|provider|model|task|reactants|products|solution)"\s*:|"(?:type)"\s*:\s*"(?:chart|diagram|multi-line|scatter|bar|line|triangle|contour|flow|timeline)"|"series"\s*:/i;
+
+function formatStructuredObject(value) {
+  const source = JSON.stringify(value);
+  const type = parseWorkspaceUnderstanding(source)
+    ? 'understanding'
+    : parseWorkspaceVisualization('chart', source)
+      ? 'chart'
+      : parseWorkspaceVisualization('diagram', source)
+        ? 'diagram'
+        : parseWorkspaceEquationBalance(source)
+          ? 'equation-balance'
+          : parseWorkspacePractice(source)
+            ? 'practice'
+            : null;
+  return type ? `\`\`\`${type}\n${source}\n\`\`\`` : null;
+}
+
+function stripInternalStructuredObjects(source) {
+  let output = '';
+  let index = 0;
+  while (index < source.length) {
+    if (source.startsWith('```', index)) {
+      const closingIndex = source.indexOf('```', index + 3);
+      if (closingIndex < 0) {
+        output += source.slice(index);
+        break;
+      }
+      output += source.slice(index, closingIndex + 3);
+      index = closingIndex + 3;
+      continue;
+    }
+
+    if (source[index] !== '{' && source[index] !== '[') {
+      output += source[index];
+      index += 1;
+      continue;
+    }
+
+    let objectDepth = 0;
+    let arrayDepth = 0;
+    let inString = false;
+    let escaped = false;
+    let end = -1;
+    for (let cursor = index; cursor < source.length; cursor += 1) {
+      const character = source[cursor];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === '\\') escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') inString = true;
+      else if (character === '{') objectDepth += 1;
+      else if (character === '}') objectDepth -= 1;
+      else if (character === '[') arrayDepth += 1;
+      else if (character === ']') arrayDepth -= 1;
+      if (objectDepth === 0 && arrayDepth === 0) {
+        end = cursor + 1;
+        break;
+      }
+    }
+
+    if (end < 0) {
+      const remainder = source.slice(index);
+      if (INTERNAL_JSON_MARKER.test(remainder)) break;
+      output += source[index];
+      index += 1;
+      continue;
+    }
+
+    const candidate = source.slice(index, end);
+    try {
+      const value = JSON.parse(candidate);
+      const formatted = formatStructuredObject(value);
+      if (formatted) {
+        output += `\n\n${formatted}\n\n`;
+        index = end;
+        continue;
+      }
+      if (value && typeof value === 'object') {
+        index = end;
+        continue;
+      }
+    } catch {
+      if (INTERNAL_JSON_MARKER.test(candidate)) {
+        index = end;
+        continue;
+      }
+    }
+    output += candidate;
+    index = end;
+  }
+  return output.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 
 export function isExplicitTechnicalRequest(prompt) {
   const text = String(prompt || '');
@@ -797,6 +893,13 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
   );
   text = text.replace(/```[^\n`]*\n\s*```/g, '');
   if (isExplicitTechnicalRequest(prompt)) return text.trim();
+  try {
+    const rawValue = JSON.parse(text);
+    const formatted = formatStructuredObject(rawValue);
+    if (formatted) return formatted;
+  } catch {
+    // Mixed prose and structured output are handled below.
+  }
   if (
     INTERNAL_OUTPUT_PATTERN.test(text) ||
     /^\s*(?:system|developer)\s*:/im.test(text) ||
@@ -823,6 +926,7 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
     ) || CODE_SYNTAX_PATTERN.test(body);
     return isCode ? '' : block;
   });
+  text = stripInternalStructuredObjects(text);
   text = text.replace(/`([^`\n]+)`/g, (inlineCode, body) =>
     CODE_SYNTAX_PATTERN.test(body) ? '' : inlineCode
   );

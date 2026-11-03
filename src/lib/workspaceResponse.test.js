@@ -179,6 +179,20 @@ test('validates multi-series numeric graphs and requires factual data to stay di
       data: [{ x: 1, y: 1 }, { x: 1, y: 2 }],
     })),
   })), null);
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...graph,
+    series: graph.series.map((series) => ({
+      ...series,
+      data: Array.from({ length: 33 }, (_, index) => ({ x: index / 8, y: (index / 8) ** 2 })),
+    })),
+  })).series[0].data.length, 33);
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...graph,
+    series: graph.series.map((series) => ({
+      ...series,
+      data: Array.from({ length: 65 }, (_, index) => ({ x: index, y: index ** 2 })),
+    })),
+  })), null);
 });
 
 test('rejects malformed, unsafe, and oversized visualizations', () => {
@@ -747,12 +761,45 @@ test('keeps accidental code and machine output out of everyday replies but prese
     normalizeWorkspaceAnswerForDisplay('{"choices":[{"message":{"content":"internal"}}]}', cookingQuestion),
     /plain language/i,
   );
+  const mixedQuizJson = normalizeWorkspaceAnswerForDisplay(
+    'Water contains hydrogen and oxygen.\n\n{"questions":[{"question":"How many hydrogen atoms?","choices":["1","2"],"correctIndex":1,"explanation":"The subscript gives the count."},{"question":"How many oxygen atoms?","choices":["1","2"],"correctIndex":0,"explanation":"There is one oxygen atom."}]}\n\nEach water molecule has two hydrogen atoms.',
+    cookingQuestion,
+  );
+  assert.match(mixedQuizJson, /Water contains hydrogen and oxygen/);
+  assert.match(mixedQuizJson, /Each water molecule has two hydrogen atoms/);
+  const mixedQuizBlock = mixedQuizJson.match(/```understanding\n([\s\S]*?)\n```/)?.[1];
+  assert.ok(mixedQuizBlock);
+  assert.equal(parseWorkspaceUnderstanding(mixedQuizBlock).questions.length, 1);
+  const rawQuizJson = normalizeWorkspaceAnswerForDisplay(
+    JSON.stringify({ questions: [{ question: 'Choose two', choices: ['1', '2'], correctIndex: 1, explanation: 'Two.' }, { question: 'Choose one', choices: ['1', '2'], correctIndex: 0, explanation: 'One.' }] }),
+    cookingQuestion,
+  );
+  assert.match(rawQuizJson, /^```understanding/);
+  assert.equal(parseWorkspaceUnderstanding(rawQuizJson.match(/```understanding\n([\s\S]*?)\n```/)?.[1]).questions.length, 2);
+  const malformedQuizJson = normalizeWorkspaceAnswerForDisplay(
+    'The answer is explained below.\n{"questions":[{"correctIndex": 1, "choices": [',
+    cookingQuestion,
+  );
+  assert.match(malformedQuizJson, /The answer is explained below/);
+  assert.doesNotMatch(malformedQuizJson, /correctIndex|"choices"|questions/);
+  const malformedChartJson = normalizeWorkspaceAnswerForDisplay(
+    'A chart would help.\n{"type":"multi-line","title":"Derivative","series":[',
+    cookingQuestion,
+  );
+  assert.match(malformedChartJson, /A chart would help/);
+  assert.doesNotMatch(malformedChartJson, /multi-line|"series"/);
   assert.match(
     normalizeWorkspaceAnswerForDisplay('Traceback (most recent call last):\n  File \"app.py\"', cookingQuestion),
     /plain language/i,
   );
   const validChart = '```chart\n{\"type\":\"bar\",\"title\":\"Totals\",\"xLabel\":\"Month\",\"yLabel\":\"Count\",\"data\":[{\"label\":\"May\",\"value\":2}]}\n```';
   assert.equal(normalizeWorkspaceAnswerForDisplay(validChart, cookingQuestion), validChart);
+  const rawChart = normalizeWorkspaceAnswerForDisplay(
+    '{"type":"scatter","title":"A line","xLabel":"x","yLabel":"y","data":[{"x":0,"y":0},{"x":1,"y":1}]}',
+    cookingQuestion,
+  );
+  assert.match(rawChart, /^```chart/);
+  assert.equal(parseWorkspaceVisualization('chart', rawChart.match(/```chart\n([\s\S]*?)\n```/)?.[1]).chartType, 'scatter');
   const validPractice = 'Try one yourself:\n\n```practice\n{\"question\":\"2x + 3 = ?\",\"solution\":\"5\"}\n```';
   assert.equal(normalizeWorkspaceAnswerForDisplay(validPractice, cookingQuestion), validPractice);
   assert.doesNotMatch(

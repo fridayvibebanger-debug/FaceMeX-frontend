@@ -89,7 +89,8 @@ export function parseWorkspaceMarkdown(source) {
     if (mathStart) {
       const remainder = trimmed.slice(mathStart.opening.length);
       const closingIndex = remainder.indexOf(mathStart.closing);
-      if (closingIndex >= 0 && !remainder.slice(closingIndex + mathStart.closing.length).trim()) {
+      if (closingIndex >= 0 && remainder.slice(0, closingIndex).trim() &&
+        !remainder.slice(closingIndex + mathStart.closing.length).trim()) {
         blocks.push({ type: 'math', latex: remainder.slice(0, closingIndex).trim() });
         index += 1;
         continue;
@@ -504,6 +505,12 @@ export function renderWorkspaceMathML(source, display = false) {
   return `<math xmlns="http://www.w3.org/1998/Math/MathML"${display ? ' display="block"' : ''}><mrow>${body}</mrow></math>`;
 }
 
+function isLikelyDollarMath(expression) {
+  if (/\b(?:and|or|cost|costs|price|prices|dollar|dollars|usd|eur|gbp)\b/i.test(expression)) return false;
+  if (/^\s*\d+(?:\.\d+)?\s*[+\-*/]\s*$/.test(expression)) return false;
+  return /[=+\-*\/^_{}()\[\]<>×÷√∑∫]|\\[a-zA-Z]+|\b[a-zA-Z]\b/.test(expression);
+}
+
 export function tokenizeWorkspaceInline(source) {
   const text = String(source || '');
   const tokens = [];
@@ -521,12 +528,16 @@ export function tokenizeWorkspaceInline(source) {
       const delimiterLength = value.startsWith('$$') ? 2 : value.startsWith('\\[') || value.startsWith('\\(') ? 2 : 1;
       const closingLength = value.startsWith('$$') ? 2 : value.endsWith('\\]') || value.endsWith('\\)') ? 2 : 1;
       const latex = value.slice(delimiterLength, value.length - closingLength);
-      tokens.push({
-        type: 'math',
-        text: formatWorkspaceMath(value),
-        latex,
-        display: value.startsWith('$$') || value.startsWith('\\['),
-      });
+      if (!value.startsWith('$') || value.startsWith('$$') || isLikelyDollarMath(latex)) {
+        tokens.push({
+          type: 'math',
+          text: formatWorkspaceMath(value),
+          latex,
+          display: value.startsWith('$$') || value.startsWith('\\['),
+        });
+      } else {
+        tokens.push({ type: 'text', text: value });
+      }
     } else if (value.startsWith('`')) {
       tokens.push({ type: 'code', text: value.slice(1, -1) });
     } else if (value.startsWith('**') || value.startsWith('__')) {
