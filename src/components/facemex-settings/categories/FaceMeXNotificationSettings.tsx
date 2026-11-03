@@ -19,8 +19,8 @@ export default function FaceMeXNotificationSettings({ settings, onSave, saving }
     <FaceMeXSettingsLayout title="Notifications" description="Choose which FaceMeX activity appears in your notification center.">
       <FaceMeXSettingsSection title="FaceMeX activity">
         {notificationOptions.map(({ type, label, detail }) => (
-          <label key={type} className="flex min-h-[68px] items-center gap-3 rounded-2xl border border-[#e7e7e7] bg-[#f1f1f1] px-4 py-3 dark:border-[#343434] dark:bg-[#1d1d1d]">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#555] dark:bg-[#292929] dark:text-[#ddd]">
+          <label key={type} className="flex min-h-[68px] items-center gap-3 rounded-xl border border-[#dedede] bg-white px-4 py-3 dark:border-[#333] dark:bg-[#171717]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#f1f1f1] text-[#555] dark:bg-[#202020] dark:text-[#ddd]">
               <Bell className="h-[18px] w-[18px]" />
             </span>
             <span className="min-w-0 flex-1">

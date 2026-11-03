@@ -1,7 +1,6 @@
-import { Check, Moon, Sun } from 'lucide-react';
+import { Check } from 'lucide-react';
 import FaceMeXSettingsLayout from '../FaceMeXSettingsLayout';
 import type { FaceMeXSettingsCategoryProps } from '../FaceMeXSettingsCategoryProps';
-import { applyAppearanceMode } from '@/lib/appearance';
 
 const languages = [
   ['en', 'English'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'],
@@ -9,17 +8,7 @@ const languages = [
 ];
 
 export default function FaceMeXGeneralSettings({ settings, onSave, saving }: FaceMeXSettingsCategoryProps) {
-  const update = async (general: typeof settings.general) => {
-    const appearanceChanged = general.appearance !== settings.general.appearance;
-    if (appearanceChanged) applyAppearanceMode(general.appearance);
-    const saved = await onSave({ ...settings, general });
-    if (!saved && appearanceChanged) applyAppearanceMode(settings.general.appearance);
-    return saved;
-  };
-  const appearanceOptions = [
-    { mode: 'light', label: 'Light', Icon: Sun },
-    { mode: 'dark', label: 'Dark', Icon: Moon },
-  ] as const;
+  const update = (general: typeof settings.general) => onSave({ ...settings, general });
   const accentOptions = [
     { color: 'blue', label: 'Blue', value: '221 83% 53%' },
     { color: 'violet', label: 'Violet', value: '262 83% 58%' },
@@ -28,31 +17,7 @@ export default function FaceMeXGeneralSettings({ settings, onSave, saving }: Fac
   ] as const;
 
   return (
-    <FaceMeXSettingsLayout title="General" description="Adjust how FaceMeX looks and the language used by AI Translator.">
-      <section>
-        <h3 className="mb-3 text-sm font-medium">Appearance</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {appearanceOptions.map(({ mode, label, Icon }) => {
-            const selected = settings.general.appearance === mode;
-            return (
-              <button
-                key={label}
-                type="button"
-                disabled={saving}
-                aria-pressed={selected}
-                onClick={() => void update({ ...settings.general, appearance: mode })}
-                className={`flex min-h-16 items-center gap-3 rounded-2xl border p-4 text-left transition disabled:opacity-50 ${selected
-                  ? 'border-[#d6d6d6] bg-[#f1f1f1] dark:border-[#414141] dark:bg-[#292929]'
-                  : 'border-[#e8e8e8] bg-white hover:bg-[#f5f5f5] dark:border-[#414141] dark:bg-[#1d1d1d]'}`}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="text-sm font-medium">{label}</span>
-                {selected && <Check className="ml-auto h-4 w-4" />}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+    <FaceMeXSettingsLayout title="General" description="Choose an accent color and the language used by AI Translator.">
       <section>
         <h3 className="mb-3 text-sm font-medium">Accent color</h3>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -65,7 +30,7 @@ export default function FaceMeXGeneralSettings({ settings, onSave, saving }: Fac
                 disabled={saving}
                 aria-pressed={selected}
                 onClick={() => void update({ ...settings.general, accentColor: color })}
-                className={`flex min-h-12 items-center gap-2 rounded-xl border px-3 text-sm transition disabled:opacity-50 ${selected
+                className={`flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#777] disabled:opacity-50 dark:focus-visible:outline-[#ccc] ${selected
                   ? 'border-[#999] bg-[#f1f1f1] dark:border-[#666] dark:bg-[#292929]'
                   : 'border-[#e8e8e8] bg-white hover:bg-[#f5f5f5] dark:border-[#414141] dark:bg-[#1d1d1d]'}`}
               >
