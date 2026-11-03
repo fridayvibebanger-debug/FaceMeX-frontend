@@ -76,12 +76,12 @@ export default function SettingsCategoryPage() {
         <div className="fm-settings-info-card" role="status">Loading your saved settings…</div>
       ) : error && !loaded ? (
         <section className="fm-settings-control-section">
-          <p className="fm-settings-error" role="alert">{error}</p>
+          <p className="fm-settings-error" role="alert">Your settings couldn’t be loaded. Please try again.</p>
           <button type="button" className="fm-settings-action" onClick={() => void reload()}>Try again</button>
         </section>
       ) : (
         <>
-          {error && <p className="fm-settings-error" role="alert">Couldn’t save your settings. {error}</p>}
+          {error && <p className="fm-settings-error" role="alert">Your changes couldn’t be saved. Please try again.</p>}
           <Category {...props} />
         </>
       )}

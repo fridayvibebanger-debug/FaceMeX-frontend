@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   Bell,
   Brain,
   BriefcaseBusiness,
@@ -17,6 +16,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import FaceMeXSettingsPageShell from '@/components/facemex-settings/FaceMeXSettingsPageShell';
 import './SettingsHomePage.css';
 
 type SettingsItem = {
@@ -77,25 +77,16 @@ export default function SettingsHomePage() {
   const from = (location.state as { from?: unknown } | null)?.from;
 
   return (
-    <main className="settings-home">
-      <div className="settings-home-content">
-        <header className="settings-home-header">
-          <div className="settings-home-heading">
-            <p>FaceMeX account</p>
-            <h1>Settings</h1>
-          </div>
-          <button
-            type="button"
-            className="settings-home-back"
-            onClick={() => navigate(getReturnPath(from), { replace: true })}
-          >
-            <ArrowLeft aria-hidden="true" />
-            <span>Back to chat</span>
-          </button>
-        </header>
-
-        <p className="settings-home-intro">Manage your FaceMeX account, preferences, privacy, and workspace.</p>
-
+    <FaceMeXSettingsPageShell
+      title="Settings"
+      onBack={() => navigate(getReturnPath(from), { replace: true })}
+      variant="plus"
+      backLabel="Back to chat"
+    >
+      <div className="settings-home">
+        <p className="settings-home-intro">
+          FaceMeX is an AI-powered educational and career platform. Manage your account, learning and career workspace, and preferences here.
+        </p>
         <div className="settings-home-groups">
           {groups.map((group) => (
             <section className="settings-home-group" key={group.title} aria-labelledby={`settings-group-${group.title.replace(/ /g, '-')}`}>
@@ -121,6 +112,6 @@ export default function SettingsHomePage() {
           ))}
         </div>
       </div>
-    </main>
+    </FaceMeXSettingsPageShell>
   );
 }
