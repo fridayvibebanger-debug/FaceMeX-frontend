@@ -135,12 +135,12 @@ export default function MobileBottomNav() {
   return (
     <nav
       className={cn(
-        'md:hidden fixed bottom-0 left-0 right-0 z-50 transition-transform duration-200 ease-out',
+        'md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)] transition-transform duration-200 ease-out',
         visible ? 'translate-y-0' : 'translate-y-[110%]'
       )}
     >
       <div className="mx-auto max-w-5xl px-2 pb-2">
-        <div className="relative rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-background/95 backdrop-blur-xl shadow-lg">
+        <div className="relative rounded-2xl border border-[#2b2b2b] bg-[#111111]/95 text-white shadow-lg backdrop-blur-xl">
           <div
             ref={scrollRef}
             className="flex gap-1 overflow-x-auto whitespace-nowrap scroll-smooth no-scrollbar px-1"
@@ -157,29 +157,29 @@ export default function MobileBottomNav() {
                   key={to}
                   to={to}
                   className={cn(
-                    'relative flex flex-col items-center justify-center py-1.5 text-[9px] transition-colors flex-none w-[64px]',
+                    'relative flex min-h-12 flex-col items-center justify-center py-1.5 text-[9px] transition-colors flex-none w-[64px] focus-visible:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white',
                     active
-                      ? 'text-slate-900 dark:text-slate-50'
-                      : 'text-slate-500 dark:text-slate-400'
+                      ? 'text-white'
+                      : 'text-white/60 hover:text-white/90'
                   )}
                 >
                   {active && (
                     <motion.div
                       layoutId="mobile-bottom-nav-active"
-                      className="absolute inset-x-1 top-1.5 bottom-1.5 rounded-xl bg-slate-100 dark:bg-slate-900"
+                      className="absolute inset-x-1 top-1.5 bottom-1.5 rounded-xl bg-[#292929]"
                       transition={{ type: 'spring', stiffness: 500, damping: 40 }}
                     />
                   )}
 
                   <div className="relative z-10">
-                    <Icon className={cn('h-5 w-5 mb-0.5', active ? 'text-slate-900 dark:text-slate-50' : '')} />
+                    <Icon className="mb-0.5 h-5 w-5" />
                     {showBadge && (
                       <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center">
                         {unreadCount > 99 ? '99+' : unreadCount}
                       </span>
                     )}
                   </div>
-                  <span className={cn('relative z-10 font-medium', active ? 'text-slate-900 dark:text-slate-50' : '')}>
+                  <span className="relative z-10 font-medium">
                     {label}
                   </span>
                 </Link>
