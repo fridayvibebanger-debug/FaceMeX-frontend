@@ -6664,7 +6664,10 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     return response;
   };
 
-  const analyzeSmartboardDrawing = async (imageDataUrl: string, instruction: string) => {
+  const analyzeSmartboardDrawing = async (
+    imageDataUrl: string,
+    instruction: string,
+  ): Promise<string | undefined> => {
     if (!canUseAI || aiUsageLimitReached) {
       toast({
         title: 'AI access unavailable',
@@ -6686,6 +6689,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       { images: [image] },
     );
     if (!response) throw new Error('FaceMeX could not analyze the current board. Please try again.');
+    return response;
   };
 
   const saveSmartboardLesson = (lesson: WorkspaceSmartboardLessonDraft) =>
