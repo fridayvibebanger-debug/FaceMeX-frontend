@@ -13,6 +13,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import WorkspaceLearningModels from '@/components/WorkspaceLearningModels';
 import {
   Dialog,
   DialogContent,
@@ -492,6 +493,8 @@ export default function WorkspaceSmartboard({
               <p className="mt-2 text-sm text-white/60">Enter a supported quadratic such as y = x² - 3. Other forms are not graphed yet.</p>
             )}
           </section>
+
+          <WorkspaceLearningModels onExplain={solveExpression} />
         </DialogContent>
       </Dialog>
     </>
