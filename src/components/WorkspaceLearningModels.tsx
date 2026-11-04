@@ -15,13 +15,14 @@ import {
 } from '@/lib/workspaceLearningModels.js';
 
 type Rotation = { yaw: number; pitch: number; roll: number };
-type ModelId = 'water' | 'cube' | 'newton' | 'photosynthesis' | 'economics' | 'solar';
+export type WorkspaceLearningModelId = 'water' | 'cube' | 'newton' | 'photosynthesis' | 'economics' | 'solar';
 
 type WorkspaceLearningModelsProps = {
   onExplain: (prompt: string) => void;
+  initialModel?: WorkspaceLearningModelId;
 };
 
-const MODEL_OPTIONS: Array<{ id: ModelId; label: string; subject: string; prompt: string }> = [
+const MODEL_OPTIONS: Array<{ id: WorkspaceLearningModelId; label: string; subject: string; prompt: string }> = [
   {
     id: 'water',
     label: 'Water molecule (Chemistry)',
@@ -353,8 +354,8 @@ function SolarEnergyDiagram() {
   );
 }
 
-export default function WorkspaceLearningModels({ onExplain }: WorkspaceLearningModelsProps) {
-  const [modelId, setModelId] = useState<ModelId>('water');
+export default function WorkspaceLearningModels({ onExplain, initialModel = 'water' }: WorkspaceLearningModelsProps) {
+  const [modelId, setModelId] = useState<WorkspaceLearningModelId>(initialModel);
   const [rotation, setRotation] = useState<Rotation>({ yaw: -0.45, pitch: 0.3, roll: 0 });
   const [mass, setMass] = useState(1200);
   const [acceleration, setAcceleration] = useState(4);
