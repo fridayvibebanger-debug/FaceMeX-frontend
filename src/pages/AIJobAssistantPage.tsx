@@ -6671,7 +6671,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       });
       return;
     }
-    sendPrompt(`Please explain and solve this learner-provided mathematical or scientific expression step by step. Preserve the expression exactly, show formulas and substitutions, explain any corrections, and do not invent missing information:\n\n${expression.trim()}`);
+    sendPrompt(`Tutor me through this learner-provided mathematical or scientific question. Preserve the expression, values, units and labels exactly. Identify what it is asking, then explain the relevant principle and work through the solution in ordered steps, explaining why each important step is valid. Show formulas and substitutions where relevant, check the result, and interpret it in context. For a scientific concept, explain the process and cause-and-effect using accurate terminology. Include a validated visual only if it materially helps; do not claim a visual is shown unless it is actually rendered. If essential information is unclear or missing, ask one focused clarification question instead of guessing:\n\n${expression.trim()}`);
   };
 
   const quickAsk = (text: string) => {
