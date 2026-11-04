@@ -16,6 +16,7 @@ import {
   Presentation,
   Redo2,
   Save,
+  Sparkles,
   Square,
   Trash2,
   Triangle,
@@ -41,7 +42,8 @@ import type {
   WorkspaceSmartboardLessonDraft,
 } from '@/lib/projects';
 
-type DrawingTool = 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'triangle' | 'polygon';
+type DrawingTool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'triangle' | 'polygon';
+type CanvasStyle = 'whiteboard' | 'blackboard' | 'grid' | 'graph' | 'transparent';
 type Stroke = {
   points: Array<{ x: number; y: number }>;
   color: string;
@@ -59,7 +61,7 @@ type BoardLabel = {
 function isBoardStroke(value: unknown): value is Stroke {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const stroke = value as Partial<Stroke>;
-  const validTools: DrawingTool[] = ['pen', 'highlighter', 'eraser', 'line', 'arrow', 'rectangle', 'ellipse', 'triangle', 'polygon'];
+  const validTools: DrawingTool[] = ['select', 'pen', 'highlighter', 'eraser', 'line', 'arrow', 'rectangle', 'ellipse', 'triangle', 'polygon'];
   return typeof stroke.color === 'string' && /^#[\da-f]{6}$/i.test(stroke.color) &&
     typeof stroke.width === 'number' && Number.isFinite(stroke.width) && stroke.width > 0 && stroke.width <= 100 &&
     (stroke.tool === undefined || validTools.includes(stroke.tool)) &&
@@ -80,7 +82,7 @@ function isBoardLabel(value: unknown): value is BoardLabel {
 type WorkspaceSmartboardProps = {
   onRecognizeDrawing: (imageDataUrl: string) => Promise<string | undefined>;
   onSolve: (expression: string) => void;
-  onAnalyzeDrawing: (imageDataUrl: string, instruction: string) => Promise<void>;
+  onAnalyzeDrawing: (imageDataUrl: string, instruction: string) => Promise<string | undefined>;
   onSaveLesson: (lesson: WorkspaceSmartboardLessonDraft) => Promise<WorkspaceSmartboardLesson>;
   onListLessons: () => Promise<WorkspaceSmartboardLesson[]>;
 };
@@ -274,6 +276,7 @@ export default function WorkspaceSmartboard({
   const [penColor, setPenColor] = useState('#111827');
   const [strokeWidth, setStrokeWidth] = useState(4);
   const [tool, setTool] = useState<DrawingTool>('pen');
+  const [canvasStyle, setCanvasStyle] = useState<CanvasStyle>('whiteboard');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [recognition, setRecognition] = useState('');
   const [recognizing, setRecognizing] = useState(false);
@@ -292,11 +295,18 @@ export default function WorkspaceSmartboard({
   const [lessonMessage, setLessonMessage] = useState('');
   const [lessonError, setLessonError] = useState('');
   const [presentationMode, setPresentationMode] = useState(false);
+  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
+  const [autoImproveWriting, setAutoImproveWriting] = useState(true);
+  const [writingSuggestion, setWritingSuggestion] = useState('');
+  const [suggestionError, setSuggestionError] = useState('');
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(15 * 60);
   const [timerRunning, setTimerRunning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const activeStrokeRef = useRef<Stroke | null>(null);
+  const lastSuggestionSignatureRef = useRef('');
+  const onAnalyzeDrawingRef = useRef(onAnalyzeDrawing);
   const graphCoefficients = useMemo(() => parseQuadraticEquation(equation), [equation]);
   const effectiveCoefficients = graphCoefficients && coefficientA !== null
     ? { ...graphCoefficients, a: coefficientA }
@@ -315,14 +325,35 @@ export default function WorkspaceSmartboard({
       canvas.width = Math.round(bounds.width * ratio);
       canvas.height = Math.round(bounds.height * ratio);
       context.scale(ratio, ratio);
-      context.fillStyle = '#ffffff';
-      context.fillRect(0, 0, bounds.width, bounds.height);
+      if (canvasStyle === 'transparent') {
+        context.clearRect(0, 0, bounds.width, bounds.height);
+      } else {
+        context.fillStyle = canvasStyle === 'blackboard' ? '#17231d' : '#ffffff';
+        context.fillRect(0, 0, bounds.width, bounds.height);
+        if (canvasStyle === 'grid' || canvasStyle === 'graph') {
+          const spacing = canvasStyle === 'graph' ? 24 : 30;
+          context.beginPath();
+          context.strokeStyle = canvasStyle === 'graph' ? 'rgba(80,125,190,.22)' : 'rgba(80,90,110,.12)';
+          context.lineWidth = 1;
+          for (let x = spacing; x < bounds.width; x += spacing) {
+            context.moveTo(x, 0);
+            context.lineTo(x, bounds.height);
+          }
+          for (let y = spacing; y < bounds.height; y += spacing) {
+            context.moveTo(0, y);
+            context.lineTo(bounds.width, y);
+          }
+          context.stroke();
+        }
+      }
       context.lineCap = 'round';
       context.lineJoin = 'round';
       for (const stroke of strokes) {
         if (!stroke.points.length) continue;
         context.beginPath();
-        context.strokeStyle = stroke.color;
+        context.strokeStyle = stroke.tool === 'eraser'
+          ? canvasStyle === 'blackboard' ? '#17231d' : '#ffffff'
+          : stroke.color;
         context.lineWidth = stroke.width;
         const firstPoint = stroke.points[0];
         const lastPoint = stroke.points[stroke.points.length - 1];
@@ -354,7 +385,7 @@ export default function WorkspaceSmartboard({
           const radiusY = Math.abs(endY - startY) / 2;
           if (stroke.tool === 'ellipse') {
             context.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
-          } else {
+          } else if (stroke.tool !== 'select') {
             const sides = stroke.tool === 'triangle' ? 3 : 6;
             for (let side = 0; side <= sides; side += 1) {
               const angle = -Math.PI / 2 + (side * Math.PI * 2) / sides;
@@ -389,7 +420,63 @@ export default function WorkspaceSmartboard({
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [strokes, labels, open]);
+  }, [strokes, labels, canvasStyle, open]);
+
+  useEffect(() => {
+    onAnalyzeDrawingRef.current = onAnalyzeDrawing;
+  }, [onAnalyzeDrawing]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleBoardShortcuts = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+      } else if (event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleBoardShortcuts);
+    return () => window.removeEventListener('keydown', handleBoardShortcuts);
+  }, [open, strokes, redoStack]);
+
+  useEffect(() => {
+    if (!open || !autoImproveWriting || uploadedImage || !strokes.length || presentationMode) return;
+    const signature = strokes
+      .map((stroke) => {
+        const lastPoint = stroke.points[stroke.points.length - 1];
+        return `${stroke.tool || 'pen'}:${stroke.points.length}:${lastPoint?.x.toFixed(3)}:${lastPoint?.y.toFixed(3)}`;
+      })
+      .join('|');
+    if (!signature || signature === lastSuggestionSignatureRef.current) return;
+
+    const timeoutId = window.setTimeout(async () => {
+      if (activeStrokeRef.current || !canvasRef.current || signature === lastSuggestionSignatureRef.current) return;
+      lastSuggestionSignatureRef.current = signature;
+      setSuggestionDismissed(false);
+      setWritingSuggestion('');
+      setSuggestionError('');
+      setAnalyzingDrawing(true);
+      try {
+        const response = await onAnalyzeDrawingRef.current(
+          canvasRef.current.toDataURL('image/png'),
+          'Review the handwritten text or notes on this whiteboard. If legible ordinary-language notes are present, return one polished, accurate sentence that preserves their meaning. Do not solve equations or invent missing content. If this is mainly a drawing, diagram, or equation rather than prose, return one short sentence identifying its visible subject and a useful next learning action. If essential marks are genuinely unreadable, ask one focused clarification. Return only the suggested sentence or question, without headings or markdown.',
+        );
+        if (response?.trim()) setWritingSuggestion(response.trim());
+      } catch {
+        setWritingSuggestion('');
+        setSuggestionError('FaceMeX could not suggest an improvement. You can try Explain board.');
+      } finally {
+        setAnalyzingDrawing(false);
+      }
+    }, 1000);
+    return () => window.clearTimeout(timeoutId);
+  }, [open, autoImproveWriting, uploadedImage, strokes, presentationMode]);
 
   useEffect(() => {
     if (!timerRunning) return;
@@ -420,6 +507,9 @@ export default function WorkspaceSmartboard({
   const beginStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    setWritingSuggestion('');
+    setSuggestionError('');
+    setSuggestionDismissed(false);
     const stroke = {
       points: [pointFromEvent(event)],
       color: tool === 'eraser' ? '#ffffff' : penColor,
@@ -500,8 +590,13 @@ export default function WorkspaceSmartboard({
     }
     setAnalyzingDrawing(true);
     setImageError('');
+    setSuggestionError('');
     try {
-      await onAnalyzeDrawing(image, instruction);
+      const response = await onAnalyzeDrawing(image, instruction);
+      if (response?.trim()) {
+        setWritingSuggestion(response.trim());
+        setSuggestionDismissed(false);
+      }
     } catch (error) {
       setImageError(error instanceof Error ? error.message : 'FaceMeX could not analyze the board.');
     } finally {
@@ -561,6 +656,7 @@ export default function WorkspaceSmartboard({
       labels,
       equation,
       learningObjectives,
+      canvasStyle,
     };
     try {
       const saved = await onSaveLesson({
@@ -604,6 +700,13 @@ export default function WorkspaceSmartboard({
     setLabels(Array.isArray(scene.labels) ? scene.labels.filter(isBoardLabel) : []);
     setEquation(typeof scene.equation === 'string' ? scene.equation : '');
     setLearningObjectives(typeof scene.learningObjectives === 'string' ? scene.learningObjectives : '');
+    const savedCanvasStyle = scene.canvasStyle;
+    setCanvasStyle(
+      savedCanvasStyle === 'blackboard' || savedCanvasStyle === 'grid' ||
+        savedCanvasStyle === 'graph' || savedCanvasStyle === 'transparent'
+        ? savedCanvasStyle
+        : 'whiteboard',
+    );
     setLessonTitle(lesson.title);
     setUploadedImage(lesson.image?.dataUrl || null);
     setSavedLesson(lesson);
@@ -629,7 +732,7 @@ export default function WorkspaceSmartboard({
         <span className="hidden sm:inline">Smartboard</span>
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto border-white/10 bg-[#101010] p-3 text-white sm:p-5 [&>button]:text-white">
+        <DialogContent className={`flex max-h-[96dvh] w-[98vw] max-w-none flex-col gap-3 overflow-y-auto border-white/10 bg-[#101010] p-3 text-white sm:p-5 [&>button]:text-white ${presentationMode ? 'h-[100dvh] max-h-[100dvh] w-screen rounded-none' : 'h-[96dvh] sm:w-[96vw]'}`}>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <DialogTitle>AI Smartboard</DialogTitle>
@@ -647,10 +750,28 @@ export default function WorkspaceSmartboard({
               <Presentation className="h-4 w-4" />
               {presentationMode ? 'Exit presentation' : 'Present'}
             </Button>
+            {!presentationMode && (
+              <>
+                <Button type="button" size="icon" variant="ghost" aria-label="Save lesson" title="Save lesson" className="h-10 w-10 text-white/80 hover:bg-white/10" disabled={savingLesson} onClick={() => void saveLesson()}>
+                  <Save className="h-4 w-4" />
+                </Button>
+                <Button type="button" size="icon" variant="ghost" aria-label="Export board as PNG" title="Export board as PNG" className="h-10 w-10 text-white/80 hover:bg-white/10" disabled={!strokes.length && !labels.length} onClick={downloadDrawing}>
+                  <Download className="h-4 w-4" />
+                </Button>
+              </>
+            )}
           </div>
 
+          {!presentationMode && !strokes.length && !uploadedImage && (
+            <p className="text-center text-xs text-white/55">
+              Draw, write or describe anything. FaceMeX can help turn your ideas into clear explanations, diagrams and supported interactive models.
+            </p>
+          )}
+
           {!presentationMode && (
-            <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3" aria-label="Lesson setup">
+            <details className="rounded-xl border border-white/10 bg-white/[0.035] p-3" aria-label="Lesson details and saved lessons">
+              <summary className="cursor-pointer text-sm font-medium text-white/80">Lesson details and saved lessons</summary>
+              <div className="pt-3">
               <label htmlFor="smartboard-lesson-title" className="text-xs font-medium text-white/70">Lesson title</label>
               <input
                 id="smartboard-lesson-title"
@@ -718,20 +839,27 @@ export default function WorkspaceSmartboard({
                   {lessonError || lessonMessage}
                 </p>
               )}
-            </section>
+              </div>
+            </details>
           )}
 
           {!presentationMode && (
-          <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Drawing tools">
-            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'pen' ? 'bg-white/10' : ''}`} aria-label="Pen tool" aria-pressed={tool === 'pen'} onClick={() => setTool('pen')}>
+          <div className="sticky top-0 z-20 flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-[#171717]/95 p-2 shadow-lg sm:gap-2" role="toolbar" aria-label="Whiteboard tools">
+            <Button type="button" variant="ghost" size="icon" className={`h-11 w-11 text-white/80 hover:bg-white/10 ${tool === 'pen' ? 'bg-white/10' : ''}`} aria-label="Pen tool" aria-pressed={tool === 'pen'} onClick={() => setTool('pen')}>
               <Pencil className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'highlighter' ? 'bg-white/10' : ''}`} aria-label="Highlighter tool" aria-pressed={tool === 'highlighter'} onClick={() => setTool('highlighter')}>
+            <Button type="button" variant="ghost" size="icon" className={`h-11 w-11 text-white/80 hover:bg-white/10 ${tool === 'highlighter' ? 'bg-white/10' : ''}`} aria-label="Highlighter tool" aria-pressed={tool === 'highlighter'} onClick={() => setTool('highlighter')}>
               <Highlighter className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'eraser' ? 'bg-white/10' : ''}`} aria-label="Eraser tool" aria-pressed={tool === 'eraser'} onClick={() => setTool('eraser')}>
+            <Button type="button" variant="ghost" size="icon" className={`h-11 w-11 text-white/80 hover:bg-white/10 ${tool === 'eraser' ? 'bg-white/10' : ''}`} aria-label="Eraser tool" aria-pressed={tool === 'eraser'} onClick={() => setTool('eraser')}>
               <Eraser className="h-4 w-4" />
             </Button>
+            <span className="mx-0.5 h-7 w-px bg-white/10" />
+            <details className="relative">
+              <summary className="flex h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-sm text-white/75 hover:bg-white/10">
+                <Square className="h-4 w-4" />Shapes
+              </summary>
+              <div className="absolute left-0 top-full z-20 mt-2 flex gap-1 rounded-xl border border-white/10 bg-[#171717] p-2 shadow-xl">
             <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'line' ? 'bg-white/10' : ''}`} aria-label="Line tool" aria-pressed={tool === 'line'} onClick={() => setTool('line')}>
               <Minus className="h-4 w-4" />
             </Button>
@@ -750,6 +878,11 @@ export default function WorkspaceSmartboard({
             <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'polygon' ? 'bg-white/10' : ''}`} aria-label="Hexagon polygon tool" aria-pressed={tool === 'polygon'} onClick={() => setTool('polygon')}>
               <Hexagon className="h-4 w-4" />
             </Button>
+              </div>
+            </details>
+            <details className="relative">
+              <summary className="flex h-11 cursor-pointer list-none items-center rounded-lg px-3 text-sm text-white/75 hover:bg-white/10">Style</summary>
+              <div className="absolute left-0 top-full z-20 mt-2 grid min-w-56 gap-3 rounded-xl border border-white/10 bg-[#171717] p-3 shadow-xl">
             <label className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-2 text-xs text-white/70">
               Pen colour
               <input type="color" value={penColor} onChange={(event) => setPenColor(event.target.value)} aria-label="Pen colour" className="h-7 w-8 cursor-pointer rounded border-0 bg-transparent p-0" />
@@ -758,29 +891,64 @@ export default function WorkspaceSmartboard({
               Width
               <input type="range" min="2" max="14" value={strokeWidth} onChange={(event) => setStrokeWidth(Number(event.target.value))} aria-label="Stroke width" className="min-w-16 accent-[#9bb9ff]" />
             </label>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Undo stroke" disabled={!strokes.length} onClick={undo}><Undo2 className="h-4 w-4" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Redo stroke" disabled={!redoStack.length} onClick={redo}><Redo2 className="h-4 w-4" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Clear canvas" onClick={clearCanvas}><Trash2 className="h-4 w-4" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Download drawing" disabled={!strokes.length && !labels.length} onClick={downloadDrawing}><Download className="h-4 w-4" /></Button>
+                <label className="grid gap-1 text-xs text-white/70">
+                  Board surface
+                  <select value={canvasStyle} onChange={(event) => setCanvasStyle(event.target.value as CanvasStyle)} className="h-10 rounded-lg border border-white/10 bg-black/30 px-2 text-white">
+                    <option value="whiteboard">Whiteboard</option>
+                    <option value="blackboard">Blackboard</option>
+                    <option value="grid">Grid paper</option>
+                    <option value="graph">Graph paper</option>
+                    <option value="transparent">Transparent</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+            <Button type="button" variant="ghost" size="icon" className="h-11 w-11 text-white/80 hover:bg-white/10" aria-label="Undo stroke" disabled={!strokes.length} onClick={undo}><Undo2 className="h-4 w-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="h-11 w-11 text-white/80 hover:bg-white/10" aria-label="Redo stroke" disabled={!redoStack.length} onClick={redo}><Redo2 className="h-4 w-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="h-11 w-11 text-white/80 hover:bg-white/10" aria-label="Ask FaceMeX to explain the board" title="Ask FaceMeX to explain the board" disabled={analyzingDrawing} onClick={() => void analyzeDrawing('Explain the current whiteboard clearly and step by step for a learner. Preserve all visible content and ask one focused clarification if an essential part is unreadable.')}>
+              <Sparkles className="h-4 w-4" />
+            </Button>
             <Button type="button" variant="outline" className="h-10 gap-2 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => imageInputRef.current?.click()}>
-              <Upload className="h-4 w-4" /> Upload handwriting
+              <Upload className="h-4 w-4" /><span className="hidden sm:inline">Image</span>
             </Button>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void readUploadedImage(event)} />
+            <Button type="button" variant="ghost" size="icon" className="h-11 w-11 text-white/80 hover:bg-white/10" aria-label="Clear board" onClick={clearCanvas}><Trash2 className="h-4 w-4" /></Button>
           </div>
           )}
 
+          <div className="relative min-h-[52dvh] flex-1 overflow-hidden rounded-2xl border border-white/15 bg-[linear-gradient(45deg,#d9d9d9_25%,transparent_25%),linear-gradient(-45deg,#d9d9d9_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#d9d9d9_75%),linear-gradient(-45deg,transparent_75%,#d9d9d9_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0px] sm:min-h-[60dvh]">
           {uploadedImage ? (
             <img src={uploadedImage} alt="Uploaded handwritten work" className="max-h-64 w-full rounded-xl border border-white/10 bg-white object-contain" />
           ) : (
             <canvas
               ref={canvasRef}
-              className="h-56 w-full touch-none rounded-xl border border-white/15 bg-white sm:h-64"
+              className={`block h-[52dvh] max-h-[78dvh] min-h-[360px] w-full touch-none sm:h-[60dvh] ${canvasStyle === 'transparent' ? 'bg-transparent' : canvasStyle === 'blackboard' ? 'bg-[#17231d]' : 'bg-white'}`}
               onPointerDown={beginStroke}
               onPointerMove={continueStroke}
               onPointerUp={finishStroke}
               onPointerCancel={finishStroke}
               aria-label="Drawing canvas. Use a finger, stylus or mouse to write mathematics."
             />
+          )}
+          {writingSuggestion && !suggestionDismissed && !presentationMode && (
+            <section className="absolute bottom-3 left-3 right-3 z-10 rounded-xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-xl sm:bottom-4 sm:left-auto sm:right-4 sm:max-w-md" aria-live="polite">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">FaceMeX suggestion</p>
+              <p className="mt-1 text-sm leading-5">{writingSuggestion}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" className="min-h-9 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white" onClick={() => {
+                  setLabels((previous) => [...previous, { text: writingSuggestion.slice(0, 120), x: 0.5, y: 0.25, color: '#111827' }]);
+                  setSuggestionDismissed(true);
+                }}>Add as text</button>
+                <button type="button" className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs" onClick={() => void analyzeDrawing('Explain the current whiteboard in simple, step-by-step language. Preserve all visible content and ask one focused clarification if an essential part is unreadable.')}>Explain</button>
+                <button type="button" className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs" onClick={() => void analyzeDrawing('Identify the subject and topic shown on this board. Return a validated, renderable FaceMeX diagram or chart block only when you can create it accurately from the visible content. Otherwise, state clearly that no matching generated visual is supported yet and provide the best factual textual guidance. Do not claim to insert a graphic into the board.')}>Turn into diagram</button>
+                <button type="button" aria-label="Dismiss suggestion" className="min-h-9 rounded-lg px-3 text-xs text-slate-600" onClick={() => setSuggestionDismissed(true)}>Dismiss</button>
+              </div>
+            </section>
+          )}
+          </div>
+
+          {!presentationMode && writingSuggestion === '' && !suggestionDismissed && !analyzingDrawing && (
+            <p className="text-center text-xs text-white/45">Write on the board and pause briefly for a suggestion. Your drawing will never be replaced automatically.</p>
           )}
 
           {!presentationMode && (
@@ -805,7 +973,19 @@ export default function WorkspaceSmartboard({
                   <Type className="h-4 w-4" /> Add label
                 </Button>
               </section>
-              <div className="flex flex-wrap items-center gap-2">
+              <details className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+                <summary className="cursor-pointer text-sm font-medium text-white/80">
+                  <Sparkles className="mr-2 inline h-4 w-4" />AI teaching tools
+                </summary>
+                <div className="flex flex-wrap items-center gap-2 pt-3">
+                  <label className="flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-xs text-white/70">
+                    <input type="checkbox" checked={autoImproveWriting} onChange={(event) => {
+                      setAutoImproveWriting(event.target.checked);
+                      setWritingSuggestion('');
+                      setSuggestionDismissed(false);
+                    }} className="accent-[#9bb9ff]" />
+                    Suggest after a pause
+                  </label>
                 <Button type="button" onClick={() => void recognize()} disabled={recognizing || (!uploadedImage && !strokes.length)} className="min-h-10 gap-2 rounded-xl bg-[#252525] text-white hover:bg-[#333] disabled:opacity-50">
                   <Pencil className="h-4 w-4" />{recognizing ? 'Recognizing…' : 'Recognize writing'}
                 </Button>
@@ -824,7 +1004,8 @@ export default function WorkspaceSmartboard({
                 <Button type="button" variant="outline" disabled={analyzingDrawing} className="min-h-10 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => void analyzeDrawing('Suggest a clean, accurate 2D diagram based on the visible drawing. Use a supported FaceMeX diagram format only if it represents the concept accurately; otherwise describe a practical set of corrections. Do not claim to alter the board or generate a 3D model.')}>
                   Improve 2D (AI advice)
                 </Button>
-              </div>
+                </div>
+              </details>
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-3">
                 <span className="text-xs font-medium text-white/70">Teaching timer</span>
                 <span className="min-w-14 font-mono text-lg tabular-nums text-white" aria-live="polite">{formatTimer(timerSeconds)}</span>
@@ -840,6 +1021,9 @@ export default function WorkspaceSmartboard({
           )}
 
           {imageError && <p role="alert" className="text-sm text-rose-300">{imageError}</p>}
+          {suggestionError && !suggestionDismissed && !writingSuggestion && (
+            <p role="status" className="text-center text-xs text-white/55">{suggestionError}</p>
+          )}
 
           {recognition && (
             <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
@@ -857,7 +1041,9 @@ export default function WorkspaceSmartboard({
             </section>
           )}
 
-          {!presentationMode && <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+          {!presentationMode && <details className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+            <summary className="cursor-pointer text-sm font-medium text-white/80">Equations and subject models</summary>
+            <div className="pt-3">
             <label htmlFor="smartboard-equation" className="text-sm font-medium text-white">Explore or solve a quadratic equation</label>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <input
@@ -889,9 +1075,13 @@ export default function WorkspaceSmartboard({
             ) : (
               <p className="mt-2 text-sm text-white/60">Enter a supported quadratic function or equation, such as y = x² - 3 or x² - 5x + 6 = 0. Higher-degree equations and other forms are not graphed yet.</p>
             )}
-          </section>}
+            </div>
+          </details>}
 
-          {!presentationMode && <WorkspaceLearningModels onExplain={solveExpression} />}
+          {!presentationMode && <details className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+            <summary className="cursor-pointer text-sm font-medium text-white/80">Explore interactive subject models</summary>
+            <div className="pt-3"><WorkspaceLearningModels onExplain={solveExpression} /></div>
+          </details>}
         </DialogContent>
       </Dialog>
     </>
