@@ -385,7 +385,7 @@ export default function WorkspaceSmartboard({
           const radiusY = Math.abs(endY - startY) / 2;
           if (stroke.tool === 'ellipse') {
             context.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
-          } else if (stroke.tool !== 'select') {
+          } else {
             const sides = stroke.tool === 'triangle' ? 3 : 6;
             for (let side = 0; side <= sides; side += 1) {
               const angle = -Math.PI / 2 + (side * Math.PI * 2) / sides;
