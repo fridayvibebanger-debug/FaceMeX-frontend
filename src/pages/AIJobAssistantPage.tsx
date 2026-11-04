@@ -62,12 +62,15 @@ import {
   listProjectConversations,
   listProjectMessages,
   listProjects,
+  listWorkspaceSmartboardLessons,
   listWorkspaceConversationSessions,
   renameProject as renameProjectRecord,
   searchProjectContext,
   saveProjectMessage,
+  saveWorkspaceSmartboardLesson,
   updateProjectConversationTitle,
   type ProjectConversation,
+  type WorkspaceSmartboardLessonDraft,
   type WorkspaceProject,
 } from '@/lib/projects';
 import { toast } from '@/components/ui/use-toast';
@@ -6661,6 +6664,35 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     return response;
   };
 
+  const analyzeSmartboardDrawing = async (imageDataUrl: string, instruction: string) => {
+    if (!canUseAI || aiUsageLimitReached) {
+      toast({
+        title: 'AI access unavailable',
+        description: 'Sign in or wait for your AI usage allowance to refresh before analyzing the board.',
+        variant: 'destructive',
+      });
+      throw new Error('AI access is currently unavailable.');
+    }
+
+    const imageResponse = await fetch(imageDataUrl);
+    if (!imageResponse.ok) throw new Error('Could not prepare the board image for FaceMeX vision.');
+    const imageBlob = await imageResponse.blob();
+    const imageFile = new File([imageBlob], 'smartboard-board.png', {
+      type: imageBlob.type || 'image/png',
+    });
+    const image = await imageFileToWorkspaceImage(imageFile);
+    const response = await sendPrompt(
+      `${instruction}\n\nTreat the attached image as the current teaching board. Be specific to the visible subject and content, preserve the exact notation and labels, and ask only one focused clarification if essential information cannot be read. Do not claim to edit the board, generate a professional image, or create a 3D model unless that output is actually available.`,
+      { images: [image] },
+    );
+    if (!response) throw new Error('FaceMeX could not analyze the current board. Please try again.');
+  };
+
+  const saveSmartboardLesson = (lesson: WorkspaceSmartboardLessonDraft) =>
+    saveWorkspaceSmartboardLesson(lesson);
+
+  const listSmartboardLessons = () => listWorkspaceSmartboardLessons();
+
   const solveSmartboardExpression = (expression: string) => {
     if (!expression.trim()) return;
     if (!canUseAI || aiUsageLimitReached) {
@@ -10693,6 +10725,9 @@ Start with the most useful next action. Do not invent personal details, course r
                   <WorkspaceSmartboard
                     onRecognizeDrawing={recognizeSmartboardDrawing}
                     onSolve={solveSmartboardExpression}
+                    onAnalyzeDrawing={analyzeSmartboardDrawing}
+                    onSaveLesson={saveSmartboardLesson}
+                    onListLessons={listSmartboardLessons}
                   />
                   <button
                     type="button"
