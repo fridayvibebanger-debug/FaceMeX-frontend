@@ -6676,6 +6676,9 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       });
       throw new Error('AI access is currently unavailable.');
     }
+    if (busy || promptSubmissionRef.current) {
+      throw new Error('FaceMeX is responding to another request. Retry the Smartboard analysis when it is ready.');
+    }
 
     const imageResponse = await fetch(imageDataUrl);
     if (!imageResponse.ok) throw new Error('Could not prepare the board image for FaceMeX vision.');
@@ -6707,7 +6710,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       });
       return;
     }
-    sendPrompt(`Tutor me through this learner-provided mathematical or scientific question. Preserve the expression, values, units and labels exactly. Identify what it is asking, then explain the relevant principle and work through the solution in ordered steps, explaining why each important step is valid. Show formulas and substitutions where relevant, check the result, and interpret it in context. For a scientific concept, explain the process and cause-and-effect using accurate terminology. Include a validated visual only if it materially helps; do not claim a visual is shown unless it is actually rendered. If essential information is unclear or missing, ask one focused clarification question instead of guessing:\n\n${expression.trim()}`);
+    sendPrompt(`Tutor me through this learner-provided mathematical or scientific question. Preserve the expression, values, units and labels exactly. Identify what it is asking, then explain the relevant principle and work through the solution in ordered steps, explaining why each important step is valid. Show formulas and substitutions where relevant, check the result, and interpret it in context. If the expression is quadratic, find and explain its vertex and axis of symmetry. For a scientific concept, explain the process and cause-and-effect using accurate terminology. Include a validated visual only if it materially helps; do not claim a visual is shown unless it is actually rendered. If essential information is unclear or missing, ask one focused clarification question instead of guessing:\n\n${expression.trim()}`);
   };
 
   const quickAsk = (text: string) => {
