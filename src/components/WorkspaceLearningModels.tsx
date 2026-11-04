@@ -100,6 +100,7 @@ function InteractiveModel({
     onRotationChange((previous) => ({
       yaw: previous.yaw + deltaX * 0.009,
       pitch: Math.max(-1.35, Math.min(1.35, previous.pitch + deltaY * 0.009)),
+      roll: previous.roll,
     }));
   };
 

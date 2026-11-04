@@ -277,6 +277,7 @@ export default function WorkspaceSmartboard({
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [recognition, setRecognition] = useState('');
   const [recognizing, setRecognizing] = useState(false);
+  const [analyzingDrawing, setAnalyzingDrawing] = useState(false);
   const [equation, setEquation] = useState('y = x² - 3');
   const [coefficientA, setCoefficientA] = useState<number | null>(null);
   const [imageError, setImageError] = useState('');
