@@ -1,16 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
+  ArrowRight,
   BarChart3,
+  BookOpen,
+  Circle,
   Download,
   Eraser,
+  FolderOpen,
+  Hexagon,
+  Highlighter,
+  Minus,
   Pencil,
+  Play,
+  Presentation,
   Redo2,
+  Save,
+  Square,
   Trash2,
+  Triangle,
+  Type,
   Undo2,
   Upload,
   ZoomIn,
   ZoomOut,
+  Pause,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import WorkspaceLearningModels from '@/components/WorkspaceLearningModels';
@@ -20,17 +35,54 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { parseQuadraticEquation, sampleQuadratic } from '@/lib/workspaceGraph';
+import { parseQuadraticEquation, sampleQuadratic, solveQuadraticEquation } from '@/lib/workspaceGraph';
+import type {
+  WorkspaceSmartboardLesson,
+  WorkspaceSmartboardLessonDraft,
+} from '@/lib/projects';
 
+type DrawingTool = 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'triangle' | 'polygon';
 type Stroke = {
   points: Array<{ x: number; y: number }>;
   color: string;
   width: number;
+  tool?: DrawingTool;
 };
+
+type BoardLabel = {
+  text: string;
+  x: number;
+  y: number;
+  color: string;
+};
+
+function isBoardStroke(value: unknown): value is Stroke {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const stroke = value as Partial<Stroke>;
+  const validTools: DrawingTool[] = ['pen', 'highlighter', 'eraser', 'line', 'arrow', 'rectangle', 'ellipse', 'triangle', 'polygon'];
+  return typeof stroke.color === 'string' && /^#[\da-f]{6}$/i.test(stroke.color) &&
+    typeof stroke.width === 'number' && Number.isFinite(stroke.width) && stroke.width > 0 && stroke.width <= 100 &&
+    (stroke.tool === undefined || validTools.includes(stroke.tool)) &&
+    Array.isArray(stroke.points) && stroke.points.length > 0 &&
+    stroke.points.every((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y) &&
+      point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1);
+}
+
+function isBoardLabel(value: unknown): value is BoardLabel {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const label = value as Partial<BoardLabel>;
+  return typeof label.text === 'string' && label.text.length <= 120 &&
+    typeof label.x === 'number' && Number.isFinite(label.x) && label.x >= 0 && label.x <= 1 &&
+    typeof label.y === 'number' && Number.isFinite(label.y) && label.y >= 0 && label.y <= 1 &&
+    typeof label.color === 'string' && /^#[\da-f]{6}$/i.test(label.color);
+}
 
 type WorkspaceSmartboardProps = {
   onRecognizeDrawing: (imageDataUrl: string) => Promise<string | undefined>;
   onSolve: (expression: string) => void;
+  onAnalyzeDrawing: (imageDataUrl: string, instruction: string) => Promise<void>;
+  onSaveLesson: (lesson: WorkspaceSmartboardLessonDraft) => Promise<WorkspaceSmartboardLesson>;
+  onListLessons: () => Promise<WorkspaceSmartboardLesson[]>;
 };
 
 function readImageFile(file: File) {
@@ -211,19 +263,36 @@ function QuadraticGraph({
 export default function WorkspaceSmartboard({
   onRecognizeDrawing,
   onSolve,
+  onAnalyzeDrawing,
+  onSaveLesson,
+  onListLessons,
 }: WorkspaceSmartboardProps) {
   const [open, setOpen] = useState(false);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [labels, setLabels] = useState<BoardLabel[]>([]);
   const [redoStack, setRedoStack] = useState<Stroke[]>([]);
   const [penColor, setPenColor] = useState('#111827');
   const [strokeWidth, setStrokeWidth] = useState(4);
-  const [eraser, setEraser] = useState(false);
+  const [tool, setTool] = useState<DrawingTool>('pen');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [recognition, setRecognition] = useState('');
   const [recognizing, setRecognizing] = useState(false);
   const [equation, setEquation] = useState('y = x² - 3');
   const [coefficientA, setCoefficientA] = useState<number | null>(null);
   const [imageError, setImageError] = useState('');
+  const [lessonTitle, setLessonTitle] = useState('Untitled lesson');
+  const [learningObjectives, setLearningObjectives] = useState('');
+  const [textLabel, setTextLabel] = useState('');
+  const [savedLesson, setSavedLesson] = useState<WorkspaceSmartboardLesson | null>(null);
+  const [savedLessons, setSavedLessons] = useState<WorkspaceSmartboardLesson[]>([]);
+  const [showSavedLessons, setShowSavedLessons] = useState(false);
+  const [savingLesson, setSavingLesson] = useState(false);
+  const [loadingLessons, setLoadingLessons] = useState(false);
+  const [lessonMessage, setLessonMessage] = useState('');
+  const [lessonError, setLessonError] = useState('');
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(15 * 60);
+  const [timerRunning, setTimerRunning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const activeStrokeRef = useRef<Stroke | null>(null);
@@ -231,6 +300,7 @@ export default function WorkspaceSmartboard({
   const effectiveCoefficients = graphCoefficients && coefficientA !== null
     ? { ...graphCoefficients, a: coefficientA }
     : graphCoefficients;
+  const equationSolution = coefficientA === null ? solveQuadraticEquation(equation) : null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -253,14 +323,64 @@ export default function WorkspaceSmartboard({
         context.beginPath();
         context.strokeStyle = stroke.color;
         context.lineWidth = stroke.width;
-        context.moveTo(stroke.points[0].x * bounds.width, stroke.points[0].y * bounds.height);
-        for (const point of stroke.points.slice(1)) {
-          context.lineTo(point.x * bounds.width, point.y * bounds.height);
+        const firstPoint = stroke.points[0];
+        const lastPoint = stroke.points[stroke.points.length - 1];
+        const startX = firstPoint.x * bounds.width;
+        const startY = firstPoint.y * bounds.height;
+        const endX = lastPoint.x * bounds.width;
+        const endY = lastPoint.y * bounds.height;
+        if (stroke.tool === 'highlighter') context.globalAlpha = 0.3;
+        if (stroke.tool === 'line' || stroke.tool === 'arrow') {
+          context.moveTo(startX, startY);
+          context.lineTo(endX, endY);
+          context.stroke();
+          if (stroke.tool === 'arrow') {
+            const angle = Math.atan2(endY - startY, endX - startX);
+            const headSize = Math.max(10, stroke.width * 3);
+            context.beginPath();
+            context.moveTo(endX, endY);
+            context.lineTo(endX - headSize * Math.cos(angle - Math.PI / 6), endY - headSize * Math.sin(angle - Math.PI / 6));
+            context.moveTo(endX, endY);
+            context.lineTo(endX - headSize * Math.cos(angle + Math.PI / 6), endY - headSize * Math.sin(angle + Math.PI / 6));
+            context.stroke();
+          }
+        } else if (stroke.tool === 'rectangle') {
+          context.strokeRect(startX, startY, endX - startX, endY - startY);
+        } else if (stroke.tool === 'ellipse' || stroke.tool === 'triangle' || stroke.tool === 'polygon') {
+          const centerX = (startX + endX) / 2;
+          const centerY = (startY + endY) / 2;
+          const radiusX = Math.abs(endX - startX) / 2;
+          const radiusY = Math.abs(endY - startY) / 2;
+          if (stroke.tool === 'ellipse') {
+            context.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+          } else {
+            const sides = stroke.tool === 'triangle' ? 3 : 6;
+            for (let side = 0; side <= sides; side += 1) {
+              const angle = -Math.PI / 2 + (side * Math.PI * 2) / sides;
+              const x = centerX + radiusX * Math.cos(angle);
+              const y = centerY + radiusY * Math.sin(angle);
+              if (side === 0) context.moveTo(x, y);
+              else context.lineTo(x, y);
+            }
+          }
+          context.stroke();
+        } else {
+          context.moveTo(startX, startY);
+          for (const point of stroke.points.slice(1)) {
+            context.lineTo(point.x * bounds.width, point.y * bounds.height);
+          }
+          if (stroke.points.length === 1) {
+            context.lineTo(startX + 0.1, startY + 0.1);
+          }
+          context.stroke();
         }
-        if (stroke.points.length === 1) {
-          context.lineTo(stroke.points[0].x * bounds.width + 0.1, stroke.points[0].y * bounds.height + 0.1);
-        }
-        context.stroke();
+        context.globalAlpha = 1;
+      }
+      context.font = '600 18px system-ui, sans-serif';
+      context.textBaseline = 'middle';
+      for (const label of labels) {
+        context.fillStyle = label.color;
+        context.fillText(label.text, label.x * bounds.width, label.y * bounds.height);
       }
     };
     draw();
@@ -268,7 +388,21 @@ export default function WorkspaceSmartboard({
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [strokes, open]);
+  }, [strokes, labels, open]);
+
+  useEffect(() => {
+    if (!timerRunning) return;
+    const timerId = window.setInterval(() => {
+      setTimerSeconds((seconds) => {
+        if (seconds <= 1) {
+          setTimerRunning(false);
+          return 0;
+        }
+        return seconds - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [timerRunning]);
 
   useEffect(() => {
     setCoefficientA(null);
@@ -287,8 +421,9 @@ export default function WorkspaceSmartboard({
     event.currentTarget.setPointerCapture(event.pointerId);
     const stroke = {
       points: [pointFromEvent(event)],
-      color: eraser ? '#ffffff' : penColor,
-      width: eraser ? Math.max(strokeWidth * 4, 18) : strokeWidth,
+      color: tool === 'eraser' ? '#ffffff' : penColor,
+      width: tool === 'eraser' ? Math.max(strokeWidth * 4, 18) : strokeWidth,
+      tool,
     };
     activeStrokeRef.current = stroke;
     setRedoStack([]);
@@ -298,7 +433,15 @@ export default function WorkspaceSmartboard({
   const continueStroke = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const activeStroke = activeStrokeRef.current;
     if (!activeStroke) return;
-    const nextStroke = { ...activeStroke, points: [...activeStroke.points, pointFromEvent(event)] };
+    const nextPoint = pointFromEvent(event);
+    const nextStroke = {
+      ...activeStroke,
+      points: activeStroke.tool === 'line' || activeStroke.tool === 'arrow' ||
+        activeStroke.tool === 'rectangle' || activeStroke.tool === 'ellipse' ||
+        activeStroke.tool === 'triangle' || activeStroke.tool === 'polygon'
+        ? [activeStroke.points[0], nextPoint]
+        : [...activeStroke.points, nextPoint],
+    };
     activeStrokeRef.current = nextStroke;
     setStrokes((previous) => [...previous.slice(0, -1), nextStroke]);
   };
@@ -330,7 +473,7 @@ export default function WorkspaceSmartboard({
 
   const recognize = async () => {
     const canvas = canvasRef.current;
-    const image = uploadedImage || (strokes.length ? canvas?.toDataURL('image/png') : null);
+    const image = uploadedImage || (strokes.length || labels.length ? canvas?.toDataURL('image/png') : null);
     if (!image) return;
     setRecognizing(true);
     setRecognition('');
@@ -344,6 +487,24 @@ export default function WorkspaceSmartboard({
       setImageError(error instanceof Error ? error.message : 'Handwriting recognition failed.');
     } finally {
       setRecognizing(false);
+    }
+  };
+
+  const analyzeDrawing = async (instruction: string) => {
+    const canvas = canvasRef.current;
+    const image = uploadedImage || (strokes.length || labels.length ? canvas?.toDataURL('image/png') : null);
+    if (!image) {
+      setImageError('Draw or upload something on the board first.');
+      return;
+    }
+    setAnalyzingDrawing(true);
+    setImageError('');
+    try {
+      await onAnalyzeDrawing(image, instruction);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'FaceMeX could not analyze the board.');
+    } finally {
+      setAnalyzingDrawing(false);
     }
   };
 
@@ -371,6 +532,7 @@ export default function WorkspaceSmartboard({
 
   const clearCanvas = () => {
     setStrokes([]);
+    setLabels([]);
     setRedoStack([]);
     setUploadedImage(null);
     setRecognition('');
@@ -381,6 +543,77 @@ export default function WorkspaceSmartboard({
     onSolve(expression.trim());
     setOpen(false);
   };
+
+  const addLabel = () => {
+    const value = textLabel.trim();
+    if (!value) return;
+    setLabels((previous) => [...previous, { text: value, x: 0.5, y: 0.5, color: penColor }]);
+    setTextLabel('');
+  };
+
+  const saveLesson = async () => {
+    setSavingLesson(true);
+    setLessonError('');
+    setLessonMessage('');
+    const scene: Record<string, unknown> = {
+      strokes,
+      labels,
+      equation,
+      learningObjectives,
+    };
+    try {
+      const saved = await onSaveLesson({
+        ...(savedLesson ? { id: savedLesson.id, conversationId: savedLesson.conversationId, createdAt: savedLesson.createdAt } : {}),
+        title: lessonTitle,
+        scene,
+        ...(uploadedImage ? {
+          image: {
+            id: crypto.randomUUID(),
+            name: 'Smartboard image',
+            dataUrl: uploadedImage,
+          },
+        } : {}),
+      });
+      setSavedLesson(saved);
+      setLessonTitle(saved.title);
+      setLessonMessage('Lesson saved to your FaceMeX account.');
+    } catch (error) {
+      setLessonError(error instanceof Error ? error.message : 'The lesson could not be saved.');
+    } finally {
+      setSavingLesson(false);
+    }
+  };
+
+  const loadSavedLessons = async () => {
+    setLoadingLessons(true);
+    setLessonError('');
+    try {
+      setSavedLessons(await onListLessons());
+      setShowSavedLessons(true);
+    } catch (error) {
+      setLessonError(error instanceof Error ? error.message : 'Saved lessons could not be loaded.');
+    } finally {
+      setLoadingLessons(false);
+    }
+  };
+
+  const restoreLesson = (lesson: WorkspaceSmartboardLesson) => {
+    const scene = lesson.scene;
+    setStrokes(Array.isArray(scene.strokes) ? scene.strokes.filter(isBoardStroke) : []);
+    setLabels(Array.isArray(scene.labels) ? scene.labels.filter(isBoardLabel) : []);
+    setEquation(typeof scene.equation === 'string' ? scene.equation : '');
+    setLearningObjectives(typeof scene.learningObjectives === 'string' ? scene.learningObjectives : '');
+    setLessonTitle(lesson.title);
+    setUploadedImage(lesson.image?.dataUrl || null);
+    setSavedLesson(lesson);
+    setShowSavedLessons(false);
+    setRedoStack([]);
+    setRecognition('');
+    setLessonMessage(`Opened “${lesson.title}”.`);
+  };
+
+  const formatTimer = (seconds: number) =>
+    `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
 
   return (
     <>
@@ -396,17 +629,125 @@ export default function WorkspaceSmartboard({
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto border-white/10 bg-[#101010] p-3 text-white sm:p-5 [&>button]:text-white">
-          <DialogTitle>AI Smartboard</DialogTitle>
-          <DialogDescription className="text-sm text-white/60">
-            Write or upload a question, check the recognized expression, then solve it or explore its graph.
-          </DialogDescription>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <DialogTitle>AI Smartboard</DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-white/60">
+                Draw, teach, visualize and save lessons inside your FaceMeX workspace.
+              </DialogDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-10 gap-2 border-white/15 bg-transparent text-white hover:bg-white/10"
+              aria-pressed={presentationMode}
+              onClick={() => setPresentationMode((value) => !value)}
+            >
+              <Presentation className="h-4 w-4" />
+              {presentationMode ? 'Exit presentation' : 'Present'}
+            </Button>
+          </div>
 
+          {!presentationMode && (
+            <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3" aria-label="Lesson setup">
+              <label htmlFor="smartboard-lesson-title" className="text-xs font-medium text-white/70">Lesson title</label>
+              <input
+                id="smartboard-lesson-title"
+                value={lessonTitle}
+                onChange={(event) => setLessonTitle(event.target.value)}
+                maxLength={120}
+                className="mt-1 min-h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              />
+              <label htmlFor="smartboard-learning-objectives" className="mt-3 block text-xs font-medium text-white/70">Learning objectives (optional)</label>
+              <textarea
+                id="smartboard-learning-objectives"
+                value={learningObjectives}
+                onChange={(event) => setLearningObjectives(event.target.value)}
+                rows={2}
+                maxLength={1000}
+                placeholder="What should learners understand by the end?"
+                className="mt-1 w-full resize-y rounded-lg border border-white/10 bg-black/30 p-3 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button type="button" className="min-h-10 gap-2 rounded-xl bg-[#252525] text-white hover:bg-[#333]" disabled={savingLesson} onClick={() => void saveLesson()}>
+                  <Save className="h-4 w-4" />{savingLesson ? 'Saving…' : 'Save lesson'}
+                </Button>
+                <Button type="button" variant="outline" className="min-h-10 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => {
+                  setSavedLesson(null);
+                  setLessonTitle('Untitled lesson');
+                  setLearningObjectives('');
+                  setStrokes([]);
+                  setLabels([]);
+                  setRedoStack([]);
+                  setUploadedImage(null);
+                  setRecognition('');
+                  setEquation('y = x² - 3');
+                  setCoefficientA(null);
+                  setLessonMessage('');
+                  setLessonError('');
+                }}>
+                  New lesson
+                </Button>
+                <Button type="button" variant="outline" className="min-h-10 gap-2 border-white/15 bg-transparent text-white hover:bg-white/10" disabled={loadingLessons} onClick={() => void loadSavedLessons()}>
+                  <FolderOpen className="h-4 w-4" />{loadingLessons ? 'Loading…' : 'Open saved lesson'}
+                </Button>
+                {savedLesson && <span className="text-xs text-white/50">Editing a saved lesson</span>}
+              </div>
+              {showSavedLessons && (
+                <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-2" aria-label="Saved Smartboard lessons">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-white/70">Saved lessons</p>
+                    <button type="button" className="min-h-8 px-2 text-xs text-white/60 hover:text-white" onClick={() => setShowSavedLessons(false)}>Close</button>
+                  </div>
+                  {savedLessons.length ? savedLessons.map((lesson) => (
+                    <button
+                      key={lesson.id}
+                      type="button"
+                      onClick={() => restoreLesson(lesson)}
+                      className="mt-1 block min-h-10 w-full rounded-md px-2 text-left text-sm text-white/85 hover:bg-white/10"
+                    >
+                      {lesson.title}
+                      <span className="ml-2 text-xs text-white/45">{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                    </button>
+                  )) : <p className="py-2 text-xs text-white/50">No saved lessons yet.</p>}
+                </div>
+              )}
+              {(lessonMessage || lessonError) && (
+                <p role={lessonError ? 'alert' : 'status'} className={`mt-2 text-xs ${lessonError ? 'text-rose-300' : 'text-emerald-200'}`}>
+                  {lessonError || lessonMessage}
+                </p>
+              )}
+            </section>
+          )}
+
+          {!presentationMode && (
           <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Drawing tools">
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Pen tool" aria-pressed={!eraser} onClick={() => setEraser(false)}>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'pen' ? 'bg-white/10' : ''}`} aria-label="Pen tool" aria-pressed={tool === 'pen'} onClick={() => setTool('pen')}>
               <Pencil className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${eraser ? 'bg-white/10' : ''}`} aria-label="Eraser tool" aria-pressed={eraser} onClick={() => setEraser(true)}>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'highlighter' ? 'bg-white/10' : ''}`} aria-label="Highlighter tool" aria-pressed={tool === 'highlighter'} onClick={() => setTool('highlighter')}>
+              <Highlighter className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'eraser' ? 'bg-white/10' : ''}`} aria-label="Eraser tool" aria-pressed={tool === 'eraser'} onClick={() => setTool('eraser')}>
               <Eraser className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'line' ? 'bg-white/10' : ''}`} aria-label="Line tool" aria-pressed={tool === 'line'} onClick={() => setTool('line')}>
+              <Minus className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'arrow' ? 'bg-white/10' : ''}`} aria-label="Arrow tool" aria-pressed={tool === 'arrow'} onClick={() => setTool('arrow')}>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'rectangle' ? 'bg-white/10' : ''}`} aria-label="Rectangle tool" aria-pressed={tool === 'rectangle'} onClick={() => setTool('rectangle')}>
+              <Square className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'ellipse' ? 'bg-white/10' : ''}`} aria-label="Ellipse tool" aria-pressed={tool === 'ellipse'} onClick={() => setTool('ellipse')}>
+              <Circle className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'triangle' ? 'bg-white/10' : ''}`} aria-label="Triangle tool" aria-pressed={tool === 'triangle'} onClick={() => setTool('triangle')}>
+              <Triangle className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className={`h-10 w-10 text-white/80 hover:bg-white/10 ${tool === 'polygon' ? 'bg-white/10' : ''}`} aria-label="Hexagon polygon tool" aria-pressed={tool === 'polygon'} onClick={() => setTool('polygon')}>
+              <Hexagon className="h-4 w-4" />
             </Button>
             <label className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-2 text-xs text-white/70">
               Pen colour
@@ -419,12 +760,13 @@ export default function WorkspaceSmartboard({
             <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Undo stroke" disabled={!strokes.length} onClick={undo}><Undo2 className="h-4 w-4" /></Button>
             <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Redo stroke" disabled={!redoStack.length} onClick={redo}><Redo2 className="h-4 w-4" /></Button>
             <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Clear canvas" onClick={clearCanvas}><Trash2 className="h-4 w-4" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Download drawing" disabled={!strokes.length} onClick={downloadDrawing}><Download className="h-4 w-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-white/80 hover:bg-white/10" aria-label="Download drawing" disabled={!strokes.length && !labels.length} onClick={downloadDrawing}><Download className="h-4 w-4" /></Button>
             <Button type="button" variant="outline" className="h-10 gap-2 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => imageInputRef.current?.click()}>
               <Upload className="h-4 w-4" /> Upload handwriting
             </Button>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void readUploadedImage(event)} />
           </div>
+          )}
 
           {uploadedImage ? (
             <img src={uploadedImage} alt="Uploaded handwritten work" className="max-h-64 w-full rounded-xl border border-white/10 bg-white object-contain" />
@@ -440,17 +782,63 @@ export default function WorkspaceSmartboard({
             />
           )}
 
+          {!presentationMode && (
+            <>
+              <section className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:flex-row">
+                <label htmlFor="smartboard-label-text" className="sr-only">Text label to add to board</label>
+                <input
+                  id="smartboard-label-text"
+                  value={textLabel}
+                  onChange={(event) => setTextLabel(event.target.value)}
+                  maxLength={120}
+                  placeholder="Add a text label"
+                  className="min-h-10 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      addLabel();
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" className="min-h-10 gap-2 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={addLabel} disabled={!textLabel.trim()}>
+                  <Type className="h-4 w-4" /> Add label
+                </Button>
+              </section>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" onClick={() => void recognize()} disabled={recognizing || (!uploadedImage && !strokes.length)} className="min-h-10 gap-2 rounded-xl bg-[#252525] text-white hover:bg-[#333] disabled:opacity-50">
+                  <Pencil className="h-4 w-4" />{recognizing ? 'Recognizing…' : 'Recognize writing'}
+                </Button>
+                <Button type="button" variant="outline" disabled={analyzingDrawing} className="min-h-10 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => void analyzeDrawing('Explain the visible drawing and the concept it represents. State what is directly visible, explain it step by step for a learner, and do not infer details that are not shown.')}>
+                  {analyzingDrawing ? 'Analyzing…' : 'Explain board'}
+                </Button>
+                <Button type="button" variant="outline" disabled={analyzingDrawing} className="min-h-10 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => void analyzeDrawing('Check the visible drawing for mathematical, scientific, or labeling errors. Separate definite errors from uncertainty, explain each correction, and do not claim to edit or replace the drawing.')}>
+                  Check accuracy
+                </Button>
+                <Button type="button" variant="outline" disabled={analyzingDrawing} className="min-h-10 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => void analyzeDrawing('Create a concise lesson based on the visible board content: state learning objectives, explain the central concept in ordered steps, include one worked or real-world example where appropriate, and end with two short learner questions and their answer key. Do not invent unclear content.')}>
+                  <BookOpen className="h-4 w-4" /> Generate lesson
+                </Button>
+                <Button type="button" variant="outline" disabled={analyzingDrawing} className="min-h-10 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => void analyzeDrawing('Generate three short practice questions based only on the visible board content. Include a separate answer key with concise reasoning, and ask one clarification if the content cannot be read reliably.')}>
+                  Generate questions
+                </Button>
+                <Button type="button" variant="outline" disabled={analyzingDrawing} className="min-h-10 border-white/15 bg-transparent text-white hover:bg-white/10" onClick={() => void analyzeDrawing('Suggest a clean, accurate 2D diagram based on the visible drawing. Use a supported FaceMeX diagram format only if it represents the concept accurately; otherwise describe a practical set of corrections. Do not claim to alter the board or generate a 3D model.')}>
+                  Improve 2D (AI advice)
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-3">
+                <span className="text-xs font-medium text-white/70">Teaching timer</span>
+                <span className="min-w-14 font-mono text-lg tabular-nums text-white" aria-live="polite">{formatTimer(timerSeconds)}</span>
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white/80 hover:bg-white/10" aria-label={timerRunning ? 'Pause timer' : 'Start timer'} onClick={() => setTimerRunning((running) => !running)}>
+                  {timerRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </Button>
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white/80 hover:bg-white/10" aria-label="Reset timer to 15 minutes" onClick={() => { setTimerRunning(false); setTimerSeconds(15 * 60); }}>
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+                <span className="text-xs text-white/45">3D conversion of arbitrary uploaded drawings is not available; use the supported procedural models below.</span>
+              </div>
+            </>
+          )}
+
           {imageError && <p role="alert" className="text-sm text-rose-300">{imageError}</p>}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              onClick={() => void recognize()}
-              disabled={recognizing || (!uploadedImage && !strokes.length)}
-              className="min-h-10 gap-2 rounded-xl bg-[#252525] text-white hover:bg-[#333] disabled:opacity-50"
-            >
-              <Pencil className="h-4 w-4" />{recognizing ? 'Recognizing…' : 'Recognize writing'}
-            </Button>
-          </div>
 
           {recognition && (
             <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
@@ -468,14 +856,14 @@ export default function WorkspaceSmartboard({
             </section>
           )}
 
-          <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
-            <label htmlFor="smartboard-equation" className="text-sm font-medium text-white">Explore a quadratic graph</label>
+          {!presentationMode && <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+            <label htmlFor="smartboard-equation" className="text-sm font-medium text-white">Explore or solve a quadratic equation</label>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <input
                 id="smartboard-equation"
                 value={equation}
                 onChange={(event) => setEquation(event.target.value)}
-                placeholder="y = x² - 3"
+                placeholder="y = x² - 3 or x² - 5x + 6 = 0"
                 className="min-h-11 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-white/30"
               />
               {graphCoefficients && (
@@ -488,13 +876,21 @@ export default function WorkspaceSmartboard({
               <>
                 <QuadraticGraph coefficients={effectiveCoefficients} setCoefficientA={setCoefficientA} />
                 <p className="mt-2 text-xs text-white/55">The graph is computed in your browser. The highlighted points show real roots and the turning point when they exist.</p>
+                {equationSolution && (
+                  <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-white/75" aria-live="polite">
+                    <p className="font-medium text-white">Equation results</p>
+                    <p className="mt-1">Real solution{equationSolution.roots.length === 1 ? '' : 's'}: {equationSolution.roots.length ? equationSolution.roots.map(formatNumber).join(', ') : 'none'}.</p>
+                    {equationSolution.vertex && <p>Vertex: ({formatNumber(equationSolution.vertex.x)}, {formatNumber(equationSolution.vertex.y)}); axis of symmetry: x = {formatNumber(equationSolution.vertex.x)}.</p>}
+                    {equationSolution.discriminant !== null && <p>Discriminant: {formatNumber(equationSolution.discriminant)}.</p>}
+                  </div>
+                )}
               </>
             ) : (
-              <p className="mt-2 text-sm text-white/60">Enter a supported quadratic such as y = x² - 3. Other forms are not graphed yet.</p>
+              <p className="mt-2 text-sm text-white/60">Enter a supported quadratic function or equation, such as y = x² - 3 or x² - 5x + 6 = 0. Higher-degree equations and other forms are not graphed yet.</p>
             )}
-          </section>
+          </section>}
 
-          <WorkspaceLearningModels onExplain={solveExpression} />
+          {!presentationMode && <WorkspaceLearningModels onExplain={solveExpression} />}
         </DialogContent>
       </Dialog>
     </>
