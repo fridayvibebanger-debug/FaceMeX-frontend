@@ -6,6 +6,7 @@ import {
   WATER_MOLECULE_ATOMS,
   getWaterMoleculeBondAngleDegrees,
   getWaterMoleculeBondLengthAngstroms,
+  getLinearMarketEquilibrium,
   rotatePoint3D,
 } from './workspaceLearningModels.js';
 
@@ -24,6 +25,16 @@ test('cube model has eight vertices and twelve edges', () => {
 
 test('3D point rotation preserves distance from the origin', () => {
   const original = [0.3, -0.5, 0.8];
-  const rotated = rotatePoint3D(original, 1.2, -0.7);
+  const rotated = rotatePoint3D(original, 1.2, -0.7, 0.4);
   assert.ok(Math.abs(Math.hypot(...original) - Math.hypot(rotated.x, rotated.y, rotated.z)) < 1e-12);
+});
+
+test('linear supply and demand controls calculate equilibrium correctly', () => {
+  assert.deepEqual(getLinearMarketEquilibrium(100, 20), {
+    quantity: 80 / 3,
+    price: 140 / 3,
+    demandSlope: 2,
+    supplySlope: 1,
+  });
+  assert.equal(getLinearMarketEquilibrium(20, 20), null);
 });

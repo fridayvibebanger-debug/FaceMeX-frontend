@@ -32,6 +32,24 @@ export type ProjectMessage = {
   metadata?: Record<string, unknown>;
 };
 
+export type WorkspaceSmartboardLesson = {
+  id: string;
+  conversationId: string;
+  title: string;
+  createdAt: string;
+  scene: Record<string, unknown>;
+  image?: { id: string; name: string; dataUrl: string };
+};
+
+export type WorkspaceSmartboardLessonDraft = {
+  id?: string;
+  conversationId?: string;
+  title: string;
+  createdAt?: string;
+  scene: Record<string, unknown>;
+  image?: { id: string; name: string; dataUrl: string };
+};
+
 const attachmentPathCache = new Map<string, string>();
 
 function requireSupabase() {
@@ -370,6 +388,110 @@ export async function saveProjectMessage(message: ProjectMessage): Promise<void>
     metadata,
   });
   throwIfError(error);
+}
+
+export async function saveWorkspaceSmartboardLesson(
+  lesson: WorkspaceSmartboardLessonDraft,
+): Promise<WorkspaceSmartboardLesson> {
+  const title = lesson.title.trim();
+  if (!title) throw new Error('Add a lesson title before saving the Smartboard.');
+
+  const conversation = lesson.conversationId
+    ? { id: lesson.conversationId }
+    : await createWorkspaceConversation(`Smartboard: ${title}`);
+  const now = new Date().toISOString();
+  const savedLesson: WorkspaceSmartboardLesson = {
+    id: lesson.id || crypto.randomUUID(),
+    conversationId: conversation.id,
+    title,
+    createdAt: lesson.createdAt || now,
+    scene: lesson.scene,
+    ...(lesson.image ? { image: lesson.image } : {}),
+  };
+  await saveProjectMessage({
+    id: savedLesson.id,
+    projectId: null,
+    conversationId: conversation.id,
+    role: 'assistant',
+    content: `Saved Smartboard lesson: ${title}`,
+    createdAt: savedLesson.createdAt,
+    metadata: {
+      smartboardLesson: {
+        title,
+        scene: savedLesson.scene,
+      },
+      images: lesson.image ? [lesson.image] : [],
+    },
+  });
+  if (lesson.conversationId) {
+    await updateProjectConversationTitle(conversation.id, `Smartboard: ${title}`);
+  }
+  return savedLesson;
+}
+
+export async function listWorkspaceSmartboardLessons(): Promise<WorkspaceSmartboardLesson[]> {
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to load saved Smartboard lessons.');
+
+  const { data: conversations, error } = await client
+    .from('workspace_conversations')
+    .select('id')
+    .eq('user_id', authData.user.id)
+    .is('project_id', null)
+    .like('title', 'Smartboard: %')
+    .order('updated_at', { ascending: false })
+    .limit(50);
+  throwIfError(error);
+  const conversationIds = (conversations || []).map((conversation) => conversation.id);
+  if (!conversationIds.length) return [];
+
+  const { data: messages, error: messagesError } = await client
+    .from('workspace_messages')
+    .select('id,conversation_id,created_at,metadata')
+    .in('conversation_id', conversationIds)
+    .order('created_at', { ascending: false });
+  throwIfError(messagesError);
+
+  const lessons = await Promise.all((messages || []).flatMap((message) => {
+    const metadata = message.metadata && typeof message.metadata === 'object'
+      ? message.metadata as Record<string, unknown>
+      : {};
+    const lessonValue = metadata.smartboardLesson;
+    if (!lessonValue || typeof lessonValue !== 'object' || Array.isArray(lessonValue)) return [];
+    const saved = lessonValue as Record<string, unknown>;
+    if (typeof saved.title !== 'string' || !saved.scene || typeof saved.scene !== 'object' || Array.isArray(saved.scene)) return [];
+
+    return [async () => {
+      const imageRecords = Array.isArray(metadata.images)
+        ? metadata.images as Array<Record<string, unknown>>
+        : [];
+      const imageRecord = imageRecords[0];
+      let image: WorkspaceSmartboardLesson['image'];
+      if (imageRecord && typeof imageRecord.id === 'string' && typeof imageRecord.name === 'string') {
+        let dataUrl = typeof imageRecord.dataUrl === 'string' ? imageRecord.dataUrl : '';
+        if (typeof imageRecord.storagePath === 'string') {
+          const { data: signed, error: signedError } = await client.storage
+            .from('facemex-files')
+            .createSignedUrl(imageRecord.storagePath, 60 * 60);
+          throwIfError(signedError);
+          dataUrl = signed.signedUrl;
+        }
+        if (dataUrl) image = { id: imageRecord.id, name: imageRecord.name, dataUrl };
+      }
+
+      return {
+        id: message.id,
+        conversationId: message.conversation_id,
+        createdAt: message.created_at,
+        title: saved.title as string,
+        scene: saved.scene as Record<string, unknown>,
+        ...(image ? { image } : {}),
+      };
+    }];
+  }).map((load) => load()));
+  return lessons;
 }
 
 export async function deleteWorkspaceMessages(conversationId: string, messageIds: string[]): Promise<void> {

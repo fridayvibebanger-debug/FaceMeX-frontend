@@ -43,17 +43,21 @@ export const CUBE_EDGES = [
   [0, 4], [1, 5], [2, 6], [3, 7],
 ];
 
-export function rotatePoint3D([x, y, z], yaw, pitch) {
+export function rotatePoint3D([x, y, z], yaw, pitch, roll = 0) {
   const yawCos = Math.cos(yaw);
   const yawSin = Math.sin(yaw);
   const pitchCos = Math.cos(pitch);
   const pitchSin = Math.sin(pitch);
+  const rollCos = Math.cos(roll);
+  const rollSin = Math.sin(roll);
   const rotatedX = x * yawCos + z * yawSin;
   const rotatedZ = -x * yawSin + z * yawCos;
+  const rotatedY = y * pitchCos - rotatedZ * pitchSin;
+  const pitchedZ = y * pitchSin + rotatedZ * pitchCos;
   return {
-    x: rotatedX,
-    y: y * pitchCos - rotatedZ * pitchSin,
-    z: y * pitchSin + rotatedZ * pitchCos,
+    x: rotatedX * rollCos - rotatedY * rollSin,
+    y: rotatedX * rollSin + rotatedY * rollCos,
+    z: pitchedZ,
   };
 }
 
@@ -70,4 +74,14 @@ export function getWaterMoleculeBondAngleDegrees() {
 
 export function getWaterMoleculeBondLengthAngstroms() {
   return Math.hypot(...WATER_MOLECULE_ATOMS[1].position);
+}
+
+export function getLinearMarketEquilibrium(demandIntercept, supplyIntercept) {
+  const demandSlope = 2;
+  const supplySlope = 1;
+  if (![demandIntercept, supplyIntercept].every(Number.isFinite) ||
+    demandIntercept < 0 || supplyIntercept < 0 || supplyIntercept >= demandIntercept) return null;
+  const quantity = (demandIntercept - supplyIntercept) / (demandSlope + supplySlope);
+  const price = supplyIntercept + supplySlope * quantity;
+  return { quantity, price, demandSlope, supplySlope };
 }

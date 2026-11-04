@@ -10,6 +10,13 @@ export type GraphPoint = {
 };
 
 export function parseQuadraticEquation(input: string): QuadraticCoefficients | null;
+export function solveQuadraticEquation(input: string): {
+  coefficients: QuadraticCoefficients;
+  discriminant: number | null;
+  roots: number[];
+  vertex: GraphPoint | null;
+  kind: 'linear' | 'quadratic';
+} | null;
 export function sampleQuadratic(
   coefficients: QuadraticCoefficients,
   minimumX: number,
