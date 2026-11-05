@@ -47,20 +47,33 @@ function HomeSchema() {
             '@type': 'Organization',
             '@id': `${SEO_SITE_ORIGIN}/#organization`,
             name: 'FaceMeX',
+            alternateName: 'FaceMeX AI',
             url: `${SEO_SITE_ORIGIN}/`,
             logo: {
               '@type': 'ImageObject',
               url: `${SEO_SITE_ORIGIN}/facemex-logo.png`,
             },
-            description: 'An AI workspace with tools for learning, job discovery and career preparation.',
+            description: 'A South African AI-powered learning and career preparation platform for students, graduates and job seekers.',
           },
           {
             '@type': 'WebSite',
             '@id': `${SEO_SITE_ORIGIN}/#website`,
             name: 'FaceMeX',
+            alternateName: 'FaceMeX AI',
             url: `${SEO_SITE_ORIGIN}/`,
-            description: 'An AI workspace with tools for learning, job discovery and career preparation.',
+            description: 'A South African AI-powered platform for learning, career development, job discovery, CV preparation and interview practice.',
             publisher: { '@id': `${SEO_SITE_ORIGIN}/#organization` },
+          },
+          {
+            '@type': 'SoftwareApplication',
+            '@id': `${SEO_SITE_ORIGIN}/#software`,
+            name: 'FaceMeX',
+            url: `${SEO_SITE_ORIGIN}/`,
+            description: 'A South African AI-powered platform for learning, career development, job discovery, CV preparation and interview practice.',
+            applicationCategory: 'EducationalApplication',
+            operatingSystem: 'Web browser',
+            provider: { '@id': `${SEO_SITE_ORIGIN}/#organization` },
+            isPartOf: { '@id': `${SEO_SITE_ORIGIN}/#website` },
           },
         ],
       }}
@@ -327,6 +340,17 @@ function HomeProductShowcase() {
           </div>
         </article>
       ))}
+      <nav aria-label="Explore public FaceMeX pages" className="border-t border-slate-200 py-8">
+        <h2 className="text-lg font-semibold tracking-tight">Explore learning and career resources</h2>
+        <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium">
+          <li><Link className="underline underline-offset-4" to="/ai-for-students">AI learning</Link></li>
+          <li><Link className="underline underline-offset-4" to="/jobs-in-south-africa">Find jobs</Link></li>
+          <li><Link className="underline underline-offset-4" to="/ai-career-assistant">CV &amp; documents</Link></li>
+          <li><Link className="underline underline-offset-4" to="/resources/how-to-prepare-for-an-interview">Interview preparation</Link></li>
+          <li><Link className="underline underline-offset-4" to="/student-career-guidance">Career development</Link></li>
+          <li><Link className="underline underline-offset-4" to="/about">About FaceMeX</Link></li>
+        </ul>
+      </nav>
     </section>
   );
 }
