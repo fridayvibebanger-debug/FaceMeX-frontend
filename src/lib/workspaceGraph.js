@@ -104,7 +104,8 @@ export function sampleQuadratic(coefficients, minimumX, maximumX, pointCount = 1
       : discriminant === 0
         ? [-b / (2 * a)]
         : [(-b - Math.sqrt(discriminant)) / (2 * a), (-b + Math.sqrt(discriminant)) / (2 * a)];
-  const vertexX = a === 0 ? null : -b / (2 * a);
+  const rawVertexX = a === 0 ? null : -b / (2 * a);
+  const vertexX = rawVertexX === 0 ? 0 : rawVertexX;
   return {
     points,
     roots: roots.filter((root) => root >= minimumX && root <= maximumX),
