@@ -1,6 +1,8 @@
 # FaceMeX SEO keyword map
 
-Public content describes FaceMeX as an AI workspace for learning and career preparation. It does not describe FaceMeX as a social or professional networking platform.
+Public content describes FaceMeX as a South African AI-powered learning and career preparation platform for students, graduates and job seekers. It does not describe FaceMeX as a social media platform, photo editor or face-swapping application.
+
+The keyword themes below are mapped from product fit and likely search intent. No search-volume, ranking, or traffic data has been verified; treat demand as unverified until checked in Google Search Console or a credible keyword research tool.
 
 | Canonical URL | Primary topic | Supporting topics |
 |---|---|---|
@@ -36,4 +38,5 @@ Public content describes FaceMeX as an AI workspace for learning and career prep
 2. Confirm HTTPS and canonical-domain redirects at the host, then submit `https://facemexsocial.com/sitemap.xml`.
 3. Inspect the public landing pages and a resource article with URL Inspection; verify the rendered page, canonical, robots directive and structured data.
 4. Review the current privacy notice and publish a verified contact channel before including those pages in the sitemap.
-5. Optional GA4 support is gated by the `VITE_GA_MEASUREMENT_ID` build variable and explicit opt-in in the public-site footer. Leave it unset if GA4 is not approved. Event payloads use a field allowlist and exclude prompt text, identifiers, search strings and query parameters.
+5. The current frontend sends optional FaceMeX product events to `/.netlify/functions/analytics` only after a user opts in and has an authenticated Supabase session. The client allowlists event properties and excludes prompt text, document content, identifiers and query parameters. Confirm the deployed function, database migration and privacy notice before relying on these events.
+6. No Google Analytics 4 or Search Console integration was found in the frontend. Product-event analytics does not provide Google organic impressions, clicks or query data. Configure and verify those Google services through their respective accounts; add any future tracking only with approved consent and privacy handling.
