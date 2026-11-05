@@ -37,9 +37,9 @@ export const seoLandingPages: SeoLandingPage[] = [
   {
     path: '/',
     title: 'FaceMeX — AI Learning, Careers & Opportunities',
-    description: 'AI assistance for learning and practical tools for job discovery, CV and document preparation, and interview practice — in one FaceMeX workspace.',
-    heading: 'AI support for learning and career preparation',
-    introduction: 'FaceMeX brings an AI assistant together with practical tools for learning, job discovery and career preparation. Ask questions, work through a topic, and get help turning your next step into an action.',
+    description: 'Discover FaceMeX, a South African AI-powered platform for learning, career development, job discovery, CV preparation and interview practice.',
+    heading: 'FaceMeX — AI learning and career preparation',
+    introduction: 'FaceMeX is a South African AI-powered learning and career preparation platform for students, graduates and job seekers. Learn new concepts, develop practical skills, discover opportunities, prepare your CV and practise for interviews with AI-supported tools.',
     sections: [
       {
         heading: 'Learn by asking and practising',
@@ -195,9 +195,9 @@ export const seoLandingPages: SeoLandingPage[] = [
   {
     path: '/about',
     title: 'About FaceMeX | AI Learning and Career Workspace',
-    description: 'Learn about FaceMeX, an AI workspace with tools for learning, practical activities, job discovery, documents, CV preparation and interviews.',
+    description: 'Learn about FaceMeX, a South African AI-powered platform helping students, graduates and job seekers build skills and prepare for work.',
     heading: 'About FaceMeX',
-    introduction: 'FaceMeX is an AI-powered workspace focused on learning and career preparation. It brings conversational assistance together with tools for practical learning, job discovery and professional documents.',
+    introduction: 'FaceMeX is a South African AI-powered learning and career preparation platform for students, graduates and job seekers. It combines AI learning support and practical activities with job discovery, CV and document preparation, and interview practice.',
     sections: [
       { heading: 'What the workspace includes', paragraphs: ['The current workspace includes AI conversations, learning and lesson support, Practical Lab activities, job discovery, project conversations, CV and document assistance, and interview preparation. Feature availability may vary by account plan.'] },
       { heading: 'How to use AI responses', paragraphs: ['AI output is generated assistance, not authoritative advice. Review responses, confirm important information with suitable sources and use your own judgement before taking action.'] },
