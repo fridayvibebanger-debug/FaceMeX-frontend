@@ -39,7 +39,7 @@ type BoardStroke = {
   tool: Tool;
 };
 type BoardText = { text: string; x: number; y: number; color: string; scale?: number };
-type BoardVisualKind = 'triangle' | 'circle' | 'cube' | 'cube2d' | 'sphere' | 'water' | 'newton' | 'parabola';
+type BoardVisualKind = 'triangle' | 'circle' | 'cube' | 'cube2d' | 'sphere' | 'prism' | 'water' | 'newton' | 'parabola';
 type BoardVisual = {
   id: string;
   kind: BoardVisualKind;
@@ -108,7 +108,7 @@ function isBoardVisual(value: unknown): value is BoardVisual {
   const visual = value as Partial<BoardVisual>;
   return typeof visual.id === 'string' &&
     (visual.kind === 'triangle' || visual.kind === 'circle' || visual.kind === 'cube' ||
-      visual.kind === 'cube2d' || visual.kind === 'sphere' ||
+      visual.kind === 'cube2d' || visual.kind === 'sphere' || visual.kind === 'prism' ||
       visual.kind === 'water' || visual.kind === 'newton' || visual.kind === 'parabola') &&
     [visual.x, visual.y, visual.width, visual.height, visual.rotation].every(
       (number) => typeof number === 'number' && Number.isFinite(number),
@@ -231,7 +231,9 @@ function getModelForSuggestion(text: string): WorkspaceLearningModelId | null {
 
 function getBoardVisualKind(text: string): BoardVisualKind | null {
   const normalized = text.toLowerCase();
+  if (/\b(triangular prism|prism)\b/.test(normalized)) return 'prism';
   if (/\b(cube|cuboid)\b/.test(normalized)) return 'cube';
+  if (/\bsphere\b/.test(normalized)) return 'sphere';
   if (/\b(water molecule|h₂o|h2o)\b/.test(normalized)) return 'water';
   if (/\b(newton|force|f\s*=\s*ma|second law)\b/.test(normalized)) return 'newton';
   if (/\b(parabola|quadratic|graph)\b/.test(normalized)) return 'parabola';
@@ -242,6 +244,7 @@ function getBoardVisualKind(text: string): BoardVisualKind | null {
 
 function getBoardVisualLabel(kind: BoardVisualKind): string {
   if (kind === 'cube2d') return '2D cube';
+  if (kind === 'prism') return 'triangular prism';
   if (kind === 'water') return 'water molecule';
   if (kind === 'newton') return 'Newton’s second law';
   return kind;
@@ -617,7 +620,7 @@ export default function WorkspaceSmartboardCanvas({
         const centerY = y + height / 2;
         context.save();
         context.translate(centerX, centerY);
-        context.rotate(visual.kind === 'cube' || visual.kind === 'cube2d' || visual.kind === 'water' ? 0 : visual.rotation);
+        context.rotate(visual.kind === 'cube' || visual.kind === 'cube2d' || visual.kind === 'water' || visual.kind === 'sphere' || visual.kind === 'prism' ? 0 : visual.rotation);
         context.lineWidth = 3;
         context.lineCap = 'round';
         context.lineJoin = 'round';
@@ -645,8 +648,67 @@ export default function WorkspaceSmartboardCanvas({
           context.beginPath();
           context.arc(0, 0, radius, 0, Math.PI * 2);
           context.fill();
+          const projectSpherePoint = (latitude: number, longitude: number) => {
+            const x = Math.cos(latitude) * Math.cos(longitude);
+            const y = Math.sin(latitude);
+            const z = Math.cos(latitude) * Math.sin(longitude);
+            const yawX = x * Math.cos(visual.rotation) - z * Math.sin(visual.rotation);
+            const yawZ = x * Math.sin(visual.rotation) + z * Math.cos(visual.rotation);
+            const pitch = 0.28;
+            const pitchY = y * Math.cos(pitch) - yawZ * Math.sin(pitch);
+            const pitchZ = y * Math.sin(pitch) + yawZ * Math.cos(pitch);
+            const perspective = 1 / (1.8 - pitchZ * 0.35);
+            return { x: yawX * radius * perspective, y: -pitchY * radius * perspective };
+          };
+          context.save();
+          context.beginPath();
+          context.arc(0, 0, radius - 1, 0, Math.PI * 2);
+          context.clip();
+          context.strokeStyle = 'rgba(255,255,255,.62)';
+          context.lineWidth = 1.1;
+          for (let latitude = -60; latitude <= 60; latitude += 30) {
+            context.beginPath();
+            for (let longitude = 0; longitude <= 360; longitude += 5) {
+              const point = projectSpherePoint(latitude * Math.PI / 180, longitude * Math.PI / 180);
+              if (longitude === 0) context.moveTo(point.x, point.y);
+              else context.lineTo(point.x, point.y);
+            }
+            context.stroke();
+          }
+          for (let longitude = 0; longitude < 180; longitude += 30) {
+            context.beginPath();
+            for (let latitude = -90; latitude <= 90; latitude += 3) {
+              const point = projectSpherePoint(latitude * Math.PI / 180, longitude * Math.PI / 180);
+              if (latitude === -90) context.moveTo(point.x, point.y);
+              else context.lineTo(point.x, point.y);
+            }
+            context.stroke();
+          }
+          context.restore();
           context.strokeStyle = '#244f9f';
+          context.beginPath();
+          context.arc(0, 0, radius, 0, Math.PI * 2);
           context.stroke();
+        } else if (visual.kind === 'prism') {
+          const vertices = [
+            [-0.8, -1, 1], [0.8, -1, 1], [0, 1, 1],
+            [-0.8, -1, -1], [0.8, -1, -1], [0, 1, -1],
+          ];
+          const yaw = visual.rotation;
+          const pitch = 0.35;
+          const projected = vertices.map(([vx, vy, vz]) => {
+            const rotatedX = vx * Math.cos(yaw) - vz * Math.sin(yaw);
+            const rotatedZ = vx * Math.sin(yaw) + vz * Math.cos(yaw);
+            const rotatedY = vy * Math.cos(pitch) - rotatedZ * Math.sin(pitch);
+            return { x: rotatedX * width * 0.22, y: rotatedY * height * 0.22 };
+          });
+          const edges = [[0, 1], [1, 2], [2, 0], [3, 4], [4, 5], [5, 3], [0, 3], [1, 4], [2, 5]];
+          edges.forEach(([from, to]) => {
+            context.beginPath();
+            context.moveTo(projected[from].x, projected[from].y);
+            context.lineTo(projected[to].x, projected[to].y);
+            context.stroke();
+          });
         } else if (visual.kind === 'cube' || visual.kind === 'cube2d') {
           const vertices = [
             [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
@@ -798,8 +860,8 @@ export default function WorkspaceSmartboardCanvas({
           'Read the complete visible whiteboard as a teaching assistant. Recognize handwritten text and transcribe equations exactly, preserving superscripts, subscripts, fractions, signs, units, labels and uncertainty.',
           'Identify the most likely subject and the learner’s apparent intent. For incomplete work, say it is incomplete and offer possible continuations as choices without presenting missing values as known.',
           'For rough sentences or short notes, offer one polished, subject-accurate rewrite under Suggested wording: and preserve the original meaning.',
-          'Give up to three concise, relevant next actions. For a clear quadratic, include graphing and finding its vertex/axis of symmetry. For a supported cube, water molecule or Newton’s second law topic, recommend the existing matching interactive visual.',
-          'For a clearly drawn triangle, circle, rectangle or cube, name the shape and offer a clean editable version. Recommend interactive 3D only for the supported cube or water molecule. A sphere on this board is only a shaded illustration, not an interactive 3D model.',
+          'Give up to three concise, relevant next actions. For a clear quadratic, include graphing and finding its vertex/axis of symmetry. For a supported cube, sphere, water molecule or Newton’s second law topic, recommend the existing matching interactive visual.',
+          'For a clearly drawn triangle, offer a clean editable 2D triangle and the board-supported interactive triangular prism. For a circle, offer an editable circle and board-supported interactive sphere. For a cube, offer its board-supported interactive model. Do not claim unsupported geometry is available.',
           'Return plain text only, with these labels on separate lines: Recognition:, Subject:, Intent:, Suggestions:. Do not use Markdown, JSON, LaTeX, or claim that you changed the board.',
         ].join(' '),
       ));
@@ -816,7 +878,9 @@ export default function WorkspaceSmartboardCanvas({
   };
 
   useEffect(() => {
-    if (!open || !aiSuggestionsEnabled || !scene.strokes.length || mode !== 'markup') return;
+    const hasAnalyzableContent = scene.strokes.length > 0 || scene.texts.length > 0 ||
+      scene.visuals.length > 0 || scene.graphOnBoard || Boolean(image);
+    if (!open || !aiSuggestionsEnabled || !hasAnalyzableContent) return;
     if (recognitionTimerRef.current !== null) window.clearTimeout(recognitionTimerRef.current);
     const timer = window.setTimeout(() => {
       if (!canvasRef.current || activeStrokeRef.current) return;
@@ -831,7 +895,7 @@ export default function WorkspaceSmartboardCanvas({
       window.clearTimeout(timer);
       analysisRequestRef.current += 1;
     };
-  }, [open, aiSuggestionsEnabled, scene.strokes, mode, image]);
+  }, [open, aiSuggestionsEnabled, scene.strokes, scene.texts, scene.visuals, scene.graphOnBoard, image]);
 
   const boardPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1487,12 +1551,12 @@ export default function WorkspaceSmartboardCanvas({
         }
         setOpen(nextOpen);
       }}>
-        <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !bg-[#111315] !p-0 text-white [&>button:last-child]:hidden">
+        <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !bg-[#eef0f3] !p-0 text-white [&>button:last-child]:hidden">
           <DialogTitle className="sr-only">FaceMeX Smartboard</DialogTitle>
           <DialogDescription className="sr-only">A full-screen whiteboard for drawing, editing and saving your work.</DialogDescription>
-          <main className="relative min-h-0 flex-1 overflow-hidden bg-[#111315]">
-            <section aria-label="Whiteboard canvas" className="absolute inset-0 flex items-center justify-center p-1.5 pt-[calc(env(safe-area-inset-top)_+_4rem)] pb-[calc(env(safe-area-inset-bottom)_+_5rem)] sm:p-2 sm:pt-16 sm:pb-20">
-            <div className={`overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_8px_32px_rgba(0,0,0,0.12)] ${scene.boardSize === 'wide' ? 'aspect-video max-h-full w-full max-w-full' : scene.boardSize === 'portrait' ? 'aspect-[0.707] h-full w-auto max-w-full' : 'h-full w-full'}`}>
+          <main className="relative min-h-0 flex-1 overflow-hidden bg-[#eef0f3]">
+            <section aria-label="Whiteboard canvas" className="absolute inset-0 flex items-center justify-center p-1.5 pt-[calc(env(safe-area-inset-top)_+_4rem)] pb-[calc(env(safe-area-inset-bottom)_+_5rem)] sm:p-3 sm:pt-16 sm:pb-20">
+            <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_16px_48px_rgba(24,32,48,0.12)] ${scene.boardSize === 'wide' ? 'aspect-video max-h-full w-full max-w-full' : scene.boardSize === 'portrait' ? 'aspect-[0.707] h-full w-auto max-w-full' : 'h-full w-full'}`}>
                 <canvas
                   ref={canvasRef}
                   className={`block h-full w-full touch-none bg-white ${mode === 'markup' ? 'cursor-crosshair' : 'cursor-default'}`}
@@ -1610,7 +1674,7 @@ export default function WorkspaceSmartboardCanvas({
             </header>
 
             {shapeCandidate && aiSuggestionsEnabled && !suggestion && !presentation && (
-              <section style={{ top: 'calc(env(safe-area-inset-top) + 7.5rem)' }} className="absolute left-1/2 z-20 w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-2xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-xl" aria-live="polite">
+              <section style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }} className="absolute right-3 z-20 w-[min(21rem,calc(100%-1.5rem))] rounded-2xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-xl sm:right-6" aria-live="polite">
                 <p className="text-sm font-medium">This may be a {shapeCandidate.tool}.</p>
                 <p className="mt-1 text-xs text-slate-600">Create an editable clean version without changing the original, or keep drawing.</p>
                 <div className="mt-2 flex gap-2">
@@ -1622,8 +1686,8 @@ export default function WorkspaceSmartboardCanvas({
             {error && (
               <p
                 role="alert"
-                style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }}
-                className="absolute left-3 right-3 z-20 mx-auto max-w-xl rounded-xl border border-white/10 bg-[#191c20]/95 p-3 text-center text-xs text-rose-200 shadow-xl"
+                style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }}
+                className="absolute right-3 z-20 max-w-[min(22rem,calc(100%-1.5rem))] rounded-xl border border-rose-200/60 bg-white/95 p-3 text-xs text-rose-800 shadow-lg sm:right-6"
               >
                 {error}
               </p>
@@ -1650,7 +1714,7 @@ export default function WorkspaceSmartboardCanvas({
               <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-2xl border border-white/10 bg-[#191c20]/95 p-2 shadow-xl backdrop-blur" aria-label="Selected object actions">
                 {selectedText && <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" onClick={editSelectedText}>Edit text</Button>}
                 {selectedVisual && <span className="px-2 text-xs capitalize text-white/70">{getBoardVisualLabel(selectedVisual.kind)}</span>}
-                {selectedVisual && (selectedVisual.kind === 'cube' || selectedVisual.kind === 'water') && (
+                {selectedVisual && (selectedVisual.kind === 'cube' || selectedVisual.kind === 'sphere' || selectedVisual.kind === 'prism' || selectedVisual.kind === 'water') && (
                   <label className="flex items-center gap-2 px-2 text-xs text-white/70">
                     Rotate
                     <input type="range" min="-3.14" max="3.14" step="0.05" value={selectedVisual.rotation} aria-label={`Rotate ${selectedVisual.kind}`} onPointerDown={remember} onChange={(event) => {
@@ -1724,20 +1788,20 @@ export default function WorkspaceSmartboardCanvas({
             )}
 
             {analyzing && !presentation && (
-              <p style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-3 right-3 z-20 mx-auto max-w-xl rounded-xl bg-[#191c20]/90 px-3 py-2 text-center text-xs text-white/70 shadow sm:left-auto sm:right-6 sm:w-auto" role="status">
+              <p style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }} className="absolute right-3 z-20 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-xs text-slate-600 shadow sm:right-6" role="status">
                 Understanding your work…
               </p>
             )}
 
             {analysisError && !presentation && (
-              <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-3 right-3 z-20 mx-auto max-w-xl rounded-2xl border border-rose-200/20 bg-[#191c20]/95 p-3 text-white shadow-xl sm:left-auto sm:right-6" role="alert">
+              <section style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }} className="absolute right-3 z-20 w-[min(22rem,calc(100%-1.5rem))] rounded-2xl border border-rose-200 bg-white/95 p-3 text-slate-800 shadow-lg sm:right-6" role="alert">
                 <p className="text-sm">{analysisError}</p>
-                <Button type="button" variant="ghost" className="mt-1 min-h-9 px-2 text-xs text-white hover:bg-white/10" onClick={retryAnalysis}>Retry analysis</Button>
+                <Button type="button" variant="ghost" className="mt-1 min-h-9 px-2 text-xs text-slate-700 hover:bg-slate-100" onClick={retryAnalysis}>Retry analysis</Button>
               </section>
             )}
 
             {suggestion && !presentation && (
-              <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-3 right-3 z-20 mx-auto max-h-[38dvh] max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#191c20]/95 p-3 text-white shadow-xl sm:left-auto sm:right-6" aria-live="polite">
+              <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute right-3 z-20 max-h-[26dvh] w-[min(22rem,calc(100%-1.5rem))] overflow-y-auto rounded-2xl border border-white/10 bg-[#191c20]/95 p-3 text-white shadow-xl sm:right-6" aria-live="polite">
                 <p className="whitespace-pre-wrap text-sm leading-5">{suggestion}</p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   <Button type="button" className="min-h-9 bg-white/15 text-xs text-white hover:bg-white/20" onClick={acceptSuggestion}>Add to board</Button>
@@ -1752,12 +1816,13 @@ export default function WorkspaceSmartboardCanvas({
                   )}
                   {suggestedObjectKind && suggestedObjectKind !== 'parabola' && (
                     <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual(suggestedObjectKind)}>
-                      {suggestedObjectKind === 'cube' ? 'Create interactive 3D cube' :
-                        suggestedObjectKind === 'sphere' ? 'Add shaded sphere illustration' :
+                      {suggestedObjectKind === 'prism' ? 'Create interactive 3D triangular prism' :
+                        suggestedObjectKind === 'cube' ? 'Create interactive 3D cube' :
+                        suggestedObjectKind === 'sphere' ? 'Create interactive 3D sphere' :
                           `Create ${suggestedObjectKind === 'water' ? 'water molecule' : suggestedObjectKind} on board`}
                     </Button>
                   )}
-                  {suggestedObjectKind === 'circle' && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('sphere')}>Add shaded sphere illustration</Button>}
+                  {suggestedObjectKind === 'circle' && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('sphere')}>Create interactive 3D sphere</Button>}
                   {shapeCandidate && (
                     <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={applyShapeCleanup}>Create clean 2D {shapeCandidate.tool}</Button>
                   )}
