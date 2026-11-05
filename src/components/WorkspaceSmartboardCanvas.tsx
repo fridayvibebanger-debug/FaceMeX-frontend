@@ -224,7 +224,6 @@ function formatAIResponse(response: string): string {
 function getModelForSuggestion(text: string): WorkspaceLearningModelId | null {
   const normalized = text.toLowerCase();
   if (/\b(cube|cuboid)\b/.test(normalized)) return 'cube';
-  if (/\bsphere\b/.test(normalized)) return 'sphere';
   if (/\b(water molecule|h₂o|h2o)\b/.test(normalized)) return 'water';
   if (/\b(newton|force|f\s*=\s*ma|second law)\b/.test(normalized)) return 'newton';
   return null;
@@ -800,7 +799,7 @@ export default function WorkspaceSmartboardCanvas({
           'Identify the most likely subject and the learner’s apparent intent. For incomplete work, say it is incomplete and offer possible continuations as choices without presenting missing values as known.',
           'For rough sentences or short notes, offer one polished, subject-accurate rewrite under Suggested wording: and preserve the original meaning.',
           'Give up to three concise, relevant next actions. For a clear quadratic, include graphing and finding its vertex/axis of symmetry. For a supported cube, water molecule or Newton’s second law topic, recommend the existing matching interactive visual.',
-          'For a clearly drawn triangle, circle, rectangle or cube, name the shape and offer a clean editable version. Recommend an interactive 3D object only for the supported cube, sphere or water molecule models; do not claim unsupported geometry is available.',
+          'For a clearly drawn triangle, circle, rectangle or cube, name the shape and offer a clean editable version. Recommend interactive 3D only for the supported cube or water molecule. A sphere on this board is only a shaded illustration, not an interactive 3D model.',
           'Return plain text only, with these labels on separate lines: Recognition:, Subject:, Intent:, Suggestions:. Do not use Markdown, JSON, LaTeX, or claim that you changed the board.',
         ].join(' '),
       ));
@@ -1754,11 +1753,11 @@ export default function WorkspaceSmartboardCanvas({
                   {suggestedObjectKind && suggestedObjectKind !== 'parabola' && (
                     <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual(suggestedObjectKind)}>
                       {suggestedObjectKind === 'cube' ? 'Create interactive 3D cube' :
-                        suggestedObjectKind === 'sphere' ? 'Create 3D sphere' :
+                        suggestedObjectKind === 'sphere' ? 'Add shaded sphere illustration' :
                           `Create ${suggestedObjectKind === 'water' ? 'water molecule' : suggestedObjectKind} on board`}
                     </Button>
                   )}
-                  {suggestedObjectKind === 'circle' && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('sphere')}>Create 3D sphere</Button>}
+                  {suggestedObjectKind === 'circle' && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('sphere')}>Add shaded sphere illustration</Button>}
                   {shapeCandidate && (
                     <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={applyShapeCleanup}>Create clean 2D {shapeCandidate.tool}</Button>
                   )}
