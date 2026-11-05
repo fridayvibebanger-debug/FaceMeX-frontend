@@ -363,6 +363,7 @@ export default function WorkspaceSmartboardCanvas({
   const [image, setImage] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [suggestion, setSuggestion] = useState('');
+  const [aiPrompt, setAiPrompt] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
   const [aiSuggestionsEnabled, setAISuggestionsEnabled] = useState(false);
@@ -1551,12 +1552,19 @@ export default function WorkspaceSmartboardCanvas({
         }
         setOpen(nextOpen);
       }}>
-        <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !bg-[#eef0f3] !p-0 text-white [&>button:last-child]:hidden">
+        <DialogContent className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !bg-[#f7f7f8] !p-0 text-slate-900 [&>button:last-child]:hidden">
           <DialogTitle className="sr-only">FaceMeX Smartboard</DialogTitle>
           <DialogDescription className="sr-only">A full-screen whiteboard for drawing, editing and saving your work.</DialogDescription>
-          <main className="relative min-h-0 flex-1 overflow-hidden bg-[#eef0f3]">
-            <section aria-label="Whiteboard canvas" className="absolute inset-0 flex items-center justify-center p-1.5 pt-[calc(env(safe-area-inset-top)_+_4rem)] pb-[calc(env(safe-area-inset-bottom)_+_5rem)] sm:p-3 sm:pt-16 sm:pb-20">
-            <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_16px_48px_rgba(24,32,48,0.12)] ${scene.boardSize === 'wide' ? 'aspect-video max-h-full w-full max-w-full' : scene.boardSize === 'portrait' ? 'aspect-[0.707] h-full w-auto max-w-full' : 'h-full w-full'}`}>
+          <main className="relative min-h-0 flex-1 overflow-hidden bg-[#f7f7f8]">
+            <header className="absolute left-4 top-[calc(env(safe-area-inset-top)_+_0.8rem)] z-30 flex items-center gap-3 sm:left-6">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-white"><Pencil className="h-4 w-4" aria-hidden="true" /></span>
+              <div>
+                <h2 className="text-sm font-semibold tracking-tight text-slate-900">FaceMeX Smartboard</h2>
+                <p className="hidden text-xs text-slate-500 sm:block">Sketch, explore, and build ideas</p>
+              </div>
+            </header>
+            <section aria-label="Whiteboard canvas" className="absolute inset-0 flex items-center justify-center py-[calc(env(safe-area-inset-bottom)_+_7rem)] pl-14 pr-2 pt-[calc(env(safe-area-inset-top)_+_4.25rem)] sm:py-28 sm:pl-20 sm:pr-6 sm:pt-20">
+            <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_42px_rgba(24,32,48,0.09)] ${scene.boardSize === 'wide' ? 'aspect-video max-h-full w-full max-w-[min(100%,80rem)]' : scene.boardSize === 'portrait' ? 'aspect-[0.707] h-full w-auto max-w-full' : 'h-full w-full max-w-[80rem]'}`}>
                 <canvas
                   ref={canvasRef}
                   className={`block h-full w-full touch-none bg-white ${mode === 'markup' ? 'cursor-crosshair' : 'cursor-default'}`}
@@ -1569,49 +1577,67 @@ export default function WorkspaceSmartboardCanvas({
               </div>
             </section>
 
-            <header style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)' }} className="absolute left-1/2 z-30 flex w-[calc(100%-1rem)] max-w-xl -translate-x-1/2 items-center justify-between rounded-full border border-white/10 bg-[#181a1d]/90 p-1.5 shadow-xl backdrop-blur-md sm:w-auto sm:gap-8">
-              <Button type="button" size="icon" variant="ghost" className="h-10 w-10 rounded-full text-white hover:bg-white/10" aria-label="Close Smartboard" title="Close" onClick={() => { analysisRequestRef.current += 1; setAnalyzing(false); lastAnalyzedImageRef.current = null; retryAnalysisImageRef.current = null; setOpen(false); }}>
-                <X className="h-5 w-5" />
+            {!presentation && (
+              <nav
+                aria-label="Smartboard tools"
+                className="absolute left-2 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur sm:left-4 sm:gap-1.5 sm:p-1.5"
+              >
+                <Button type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-xl ${mode === 'edit' ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`} aria-label="Select and move" title="Select and move" aria-pressed={mode === 'edit'} onClick={() => changeMode('edit')}><MousePointer2 className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-xl ${mode === 'markup' && tool === 'pen' ? 'bg-slate-900 text-white hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} aria-label="Pen" title="Pen" aria-pressed={mode === 'markup' && tool === 'pen'} onClick={() => { changeMode('markup'); setTool('pen'); }}><Pencil className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-xl ${mode === 'markup' && tool === 'highlighter' ? 'bg-slate-900 text-white hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} aria-label="Highlighter" title="Highlighter" aria-pressed={mode === 'markup' && tool === 'highlighter'} onClick={() => { changeMode('markup'); setTool('highlighter'); }}><Highlighter className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-xl ${mode === 'markup' && tool === 'eraser' ? 'bg-slate-900 text-white hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} aria-label="Eraser" title="Eraser" aria-pressed={mode === 'markup' && tool === 'eraser'} onClick={() => { changeMode('markup'); setTool('eraser'); }}><Eraser className="h-4 w-4" /></Button>
+                <span className="mx-auto h-px w-6 bg-slate-200" aria-hidden="true" />
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-xl text-slate-600 hover:bg-slate-100" aria-label="Add text" title="Add text" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(false); window.setTimeout(() => textRef.current?.focus(), 0); }}><Type className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-xl text-slate-600 hover:bg-slate-100" aria-label="Add image" title="Add image" onClick={() => fileRef.current?.click()}><ImagePlus className="h-4 w-4" /></Button>
+                <span className="mx-auto h-px w-6 bg-slate-200" aria-hidden="true" />
+                <Button type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-xl ${mode === 'resize' ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`} aria-label="Pan and zoom" title="Pan and zoom" aria-pressed={mode === 'resize'} onClick={() => changeMode('resize')}><Settings2 className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-xl text-slate-600 hover:bg-rose-50 hover:text-rose-700" aria-label={selection ? 'Remove selected object' : 'Clear board'} title={selection ? 'Remove selected object' : 'Clear board'} onClick={removeSelection}><Trash2 className="h-4 w-4" /></Button>
+              </nav>
+            )}
+
+            <header style={{ top: 'calc(env(safe-area-inset-top) + 0.65rem)' }} className="absolute right-3 z-30 flex items-center justify-between gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur-md sm:right-6 sm:gap-1.5">
+              <Button type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-full text-slate-700 hover:bg-slate-100" aria-label="Close Smartboard" title="Close" onClick={() => { analysisRequestRef.current += 1; setAnalyzing(false); lastAnalyzedImageRef.current = null; retryAnalysisImageRef.current = null; setOpen(false); }}>
+                <X className="h-4 w-4" />
               </Button>
               <div className="flex items-center gap-1">
-                <Button type="button" size="icon" variant="ghost" className="h-10 w-10 rounded-full text-white hover:bg-white/10" aria-label="Undo" title="Undo" disabled={!history.length} onClick={undo}><Undo2 className="h-4 w-4" /></Button>
-                <Button type="button" size="icon" variant="ghost" className="h-10 w-10 rounded-full text-white hover:bg-white/10" aria-label="Redo" title="Redo" disabled={!future.length} onClick={redo}><Redo2 className="h-4 w-4" /></Button>
-                <Button type="button" size="icon" variant="ghost" className="h-10 w-10 rounded-full text-white hover:bg-white/10" aria-label="Duplicate selected object" title="Duplicate" disabled={!selection} onClick={duplicate}><Copy className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-full text-slate-700 hover:bg-slate-100" aria-label="Undo" title="Undo" disabled={!history.length} onClick={undo}><Undo2 className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="hidden h-9 w-9 rounded-full text-slate-700 hover:bg-slate-100 sm:inline-flex" aria-label="Redo" title="Redo" disabled={!future.length} onClick={redo}><Redo2 className="h-4 w-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="hidden h-9 w-9 rounded-full text-slate-700 hover:bg-slate-100 sm:inline-flex" aria-label="Duplicate selected object" title="Duplicate" disabled={!selection} onClick={duplicate}><Copy className="h-4 w-4" /></Button>
                 <details ref={moreMenuRef} className="relative">
-                  <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full text-white hover:bg-white/10" aria-label="More board actions" title="More">
+                  <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full text-slate-700 hover:bg-slate-100" aria-label="More board actions" title="More">
                     <MoreHorizontal className="h-5 w-5" />
                   </summary>
-                  <div className="absolute right-0 top-full mt-2 max-h-[75dvh] w-[min(90vw,22rem)] overflow-y-auto rounded-2xl border border-white/10 bg-[#191c20] p-3 shadow-2xl">
-                    <label className="block text-xs text-white/60">
+                  <div className="absolute right-0 top-full mt-2 max-h-[75dvh] w-[min(90vw,22rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl">
+                    <label className="block text-xs text-slate-500">
                       Board name
-                      <input value={boardTitle} onChange={(event) => setBoardTitle(event.target.value)} maxLength={120} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-white/30" />
+                      <input value={boardTitle} onChange={(event) => setBoardTitle(event.target.value)} maxLength={120} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-slate-400" />
                     </label>
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" disabled={busy} onClick={() => void saveBoard()}><Save className="mr-2 h-4 w-4" />Save board</Button>
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={downloadBoard}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" disabled={busy} onClick={() => void loadBoards()}>Open saved</Button>
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" aria-pressed={presentation} onClick={() => setPresentation((value) => !value)}>{presentation ? 'Exit present' : 'Presentation'}</Button>
+                      <Button type="button" variant="outline" className="min-h-10 border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={busy} onClick={() => void saveBoard()}><Save className="mr-2 h-4 w-4" />Save board</Button>
+                      <Button type="button" variant="outline" className="min-h-10 border-slate-200 bg-white text-slate-700 hover:bg-slate-50" onClick={downloadBoard}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
+                      <Button type="button" variant="outline" className="min-h-10 border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={busy} onClick={() => void loadBoards()}>Open saved</Button>
+                      <Button type="button" variant="outline" className="min-h-10 border-slate-200 bg-white text-slate-700 hover:bg-slate-50" aria-pressed={presentation} onClick={() => setPresentation((value) => !value)}>{presentation ? 'Exit present' : 'Presentation'}</Button>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={() => fileRef.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />Add image</Button>
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" aria-pressed={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}><Settings2 className="mr-2 h-4 w-4" />Board settings</Button>
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-rose-200 hover:bg-rose-950/40" onClick={clearBoard}><Trash2 className="mr-2 h-4 w-4" />Clear board</Button>
+                      <Button type="button" variant="outline" className="min-h-10 border-slate-200 bg-white text-slate-700 hover:bg-slate-50" onClick={() => fileRef.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />Add image</Button>
+                      <Button type="button" variant="outline" className="min-h-10 border-slate-200 bg-white text-slate-700 hover:bg-slate-50" aria-pressed={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}><Settings2 className="mr-2 h-4 w-4" />Board settings</Button>
+                      <Button type="button" variant="outline" className="min-h-10 border-rose-200 bg-white text-rose-700 hover:bg-rose-50" onClick={clearBoard}><Trash2 className="mr-2 h-4 w-4" />Clear board</Button>
                     </div>
-                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-xs font-medium text-white">AI suggestions: {aiSuggestionsEnabled ? 'On' : 'Off'}</p>
-                      <p className="mt-1 text-[11px] leading-4 text-white/55">When on, FaceMeX analyzes a board snapshot after you pause. It never edits your work.</p>
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-medium text-slate-900">AI suggestions: {aiSuggestionsEnabled ? 'On' : 'Off'}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-500">When on, FaceMeX analyzes a board snapshot after you pause. It never edits your work.</p>
                       <Button
                         type="button"
                         variant="outline"
-                        className="mt-2 min-h-10 w-full border-white/10 bg-white/5 text-white hover:bg-white/10"
+                        className="mt-2 min-h-10 w-full border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
                         aria-pressed={aiSuggestionsEnabled}
                         onClick={toggleAISuggestions}
                       >
                         {aiSuggestionsEnabled ? 'Pause AI suggestions' : 'Enable AI suggestions'}
                       </Button>
                     </div>
-                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-xs font-medium text-white">Drawing tools</p>
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-medium text-slate-900">Drawing tools</p>
                       <div className="mt-2 flex flex-wrap items-center gap-1">
                         {([
                           ['pen', Pencil, 'Pen'],
@@ -1623,51 +1649,51 @@ export default function WorkspaceSmartboardCanvas({
                           ['ellipse', Circle, 'Ellipse'],
                           ['triangle', Triangle, 'Triangle'],
                         ] as const).map(([name, Icon, label]) => (
-                          <Button key={name} type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-full ${tool === name ? 'bg-white/15 text-white' : 'text-white/65 hover:bg-white/10'}`} aria-label={label} title={label} aria-pressed={tool === name} onClick={() => { changeMode('markup'); setTool(name); moreMenuRef.current?.removeAttribute('open'); }}>
+                          <Button key={name} type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-full ${tool === name ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`} aria-label={label} title={label} aria-pressed={tool === name} onClick={() => { changeMode('markup'); setTool(name); moreMenuRef.current?.removeAttribute('open'); }}>
                             <Icon className="h-4 w-4" />
                           </Button>
                         ))}
                         <input aria-label="Pen colour" type="color" value={color} onChange={(event) => setColor(event.target.value)} className="h-8 w-8 cursor-pointer rounded-full border-0 bg-transparent p-0" />
-                        <input aria-label="Pen thickness" type="range" min="1" max="18" value={width} onChange={(event) => setWidth(Number(event.target.value))} className="w-20 accent-white" />
-                        <Button type="button" variant="outline" className="min-h-9 border-white/10 bg-white/5 px-2 text-xs text-white hover:bg-white/10" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(false); moreMenuRef.current?.removeAttribute('open'); window.setTimeout(() => textRef.current?.focus(), 0); }}><Type className="mr-1 h-3.5 w-3.5" />Add text</Button>
-                        <Button type="button" variant="outline" className="min-h-9 border-white/10 bg-white/5 px-2 text-xs text-white hover:bg-white/10" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(true); moreMenuRef.current?.removeAttribute('open'); window.setTimeout(() => textRef.current?.focus(), 0); }}>Math input</Button>
+                        <input aria-label="Pen thickness" type="range" min="1" max="18" value={width} onChange={(event) => setWidth(Number(event.target.value))} className="w-20 accent-slate-700" />
+                        <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700 hover:bg-slate-100" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(false); moreMenuRef.current?.removeAttribute('open'); window.setTimeout(() => textRef.current?.focus(), 0); }}><Type className="mr-1 h-3.5 w-3.5" />Add text</Button>
+                        <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700 hover:bg-slate-100" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(true); moreMenuRef.current?.removeAttribute('open'); window.setTimeout(() => textRef.current?.focus(), 0); }}>Math input</Button>
                       </div>
                     </div>
                     {settingsOpen && (
-                      <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                        <label className="block text-xs text-white/70">Canvas size
+                      <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <label className="block text-xs text-slate-600">Canvas size
                           <select value={scene.boardSize} onChange={(event) => {
                             const boardSize = event.target.value === 'wide' || event.target.value === 'portrait' ? event.target.value : 'fit';
                             remember();
                             updateScene((previous) => ({ ...previous, boardSize }));
-                          }} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#15171a] px-3 text-sm text-white">
+                          }} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900">
                             <option value="fit">Fit screen</option>
                             <option value="wide">Wide 16:9</option>
                             <option value="portrait">Portrait A4 proportion</option>
                           </select>
                         </label>
-                        <label className="block text-xs text-white/70">Equation graph (browser-calculated)
-                          <input value={scene.equation} onChange={(event) => updateScene((previous) => ({ ...previous, equation: event.target.value }))} placeholder="y = x² - 3" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-white/30" />
+                        <label className="block text-xs text-slate-600">Equation graph (browser-calculated)
+                          <input value={scene.equation} onChange={(event) => updateScene((previous) => ({ ...previous, equation: event.target.value }))} placeholder="y = x² - 3" className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-slate-400" />
                         </label>
-                        <label className="flex min-h-9 items-center gap-2 text-sm text-white/80">
+                        <label className="flex min-h-9 items-center gap-2 text-sm text-slate-700">
                           <input type="checkbox" checked={scene.graphOnBoard} disabled={!coefficients} onChange={(event) => { remember(); updateScene((previous) => ({ ...previous, graphOnBoard: event.target.checked })); }} />
                           Show graph on canvas
                         </label>
                         {scene.graphOnBoard && coefficients && (
-                          <Button type="button" variant="outline" className="min-h-9 border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={() => onSolve(scene.equation)}>Explain equation</Button>
+                          <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white text-slate-700 hover:bg-slate-100" onClick={() => onSolve(scene.equation)}>Explain equation</Button>
                         )}
                       </div>
                     )}
                     {savedListOpen && (
                       <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-white/10 p-2">
                         {savedBoards.length ? savedBoards.map((board) => (
-                          <button key={board.id} type="button" className="block min-h-10 w-full rounded-lg px-2 text-left text-sm text-white/80 hover:bg-white/10" onClick={() => restoreBoard(board)}>
-                            {board.title}<span className="ml-2 text-xs text-white/45">{new Date(board.createdAt).toLocaleDateString()}</span>
+                          <button key={board.id} type="button" className="block min-h-10 w-full rounded-lg px-2 text-left text-sm text-slate-800 hover:bg-slate-100" onClick={() => restoreBoard(board)}>
+                            {board.title}<span className="ml-2 text-xs text-slate-500">{new Date(board.createdAt).toLocaleDateString()}</span>
                           </button>
-                        )) : <p className="p-2 text-xs text-white/55">No saved boards yet.</p>}
+                        )) : <p className="p-2 text-xs text-slate-500">No saved boards yet.</p>}
                       </div>
                     )}
-                    {(notice || error) && <p role={error ? 'alert' : 'status'} className={`mt-2 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error || notice}</p>}
+                    {(notice || error) && <p role={error ? 'alert' : 'status'} className={`mt-2 text-xs ${error ? 'text-rose-700' : 'text-emerald-700'}`}>{error || notice}</p>}
                   </div>
                 </details>
               </div>
@@ -1711,11 +1737,11 @@ export default function WorkspaceSmartboardCanvas({
             )}
 
             {!presentation && selection && (
-              <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-2xl border border-white/10 bg-[#191c20]/95 p-2 shadow-xl backdrop-blur" aria-label="Selected object actions">
-                {selectedText && <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" onClick={editSelectedText}>Edit text</Button>}
-                {selectedVisual && <span className="px-2 text-xs capitalize text-white/70">{getBoardVisualLabel(selectedVisual.kind)}</span>}
+              <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-2xl border border-slate-200 bg-white/95 p-2 text-slate-700 shadow-xl backdrop-blur" aria-label="Selected object actions">
+                {selectedText && <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-700 hover:bg-slate-100" onClick={editSelectedText}>Edit text</Button>}
+                {selectedVisual && <span className="px-2 text-xs capitalize text-slate-600">{getBoardVisualLabel(selectedVisual.kind)}</span>}
                 {selectedVisual && (selectedVisual.kind === 'cube' || selectedVisual.kind === 'sphere' || selectedVisual.kind === 'prism' || selectedVisual.kind === 'water') && (
-                  <label className="flex items-center gap-2 px-2 text-xs text-white/70">
+                  <label className="flex items-center gap-2 px-2 text-xs text-slate-600">
                     Rotate
                     <input type="range" min="-3.14" max="3.14" step="0.05" value={selectedVisual.rotation} aria-label={`Rotate ${selectedVisual.kind}`} onPointerDown={remember} onChange={(event) => {
                       const rotation = Number(event.target.value);
@@ -1723,12 +1749,12 @@ export default function WorkspaceSmartboardCanvas({
                         ...previous,
                         visuals: previous.visuals.map((visual, index) => index === selection.index ? { ...visual, rotation } : visual),
                       }));
-                    }} className="w-24 accent-white" />
+                    }} className="w-24 accent-slate-700" />
                   </label>
                 )}
                 {selectedVisual?.kind === 'newton' && (
                   <>
-                    <label className="flex items-center gap-2 px-2 text-xs text-white/70">
+                    <label className="flex items-center gap-2 px-2 text-xs text-slate-600">
                       Mass {selectedVisual.mass || 1200} kg
                       <input type="range" min="100" max="2000" step="100" value={selectedVisual.mass || 1200} aria-label="Demonstration mass in kilograms" onPointerDown={remember} onChange={(event) => {
                         const mass = Number(event.target.value);
@@ -1736,9 +1762,9 @@ export default function WorkspaceSmartboardCanvas({
                           ...previous,
                           visuals: previous.visuals.map((visual, index) => index === selection.index ? { ...visual, mass } : visual),
                         }));
-                      }} className="w-20 accent-white" />
+                      }} className="w-20 accent-slate-700" />
                     </label>
-                    <label className="flex items-center gap-2 px-2 text-xs text-white/70">
+                    <label className="flex items-center gap-2 px-2 text-xs text-slate-600">
                       Acceleration {selectedVisual.acceleration ?? 4} m/s²
                       <input type="range" min="0" max="10" step="0.5" value={selectedVisual.acceleration ?? 4} aria-label="Demonstration acceleration in metres per second squared" onPointerDown={remember} onChange={(event) => {
                         const acceleration = Number(event.target.value);
@@ -1746,42 +1772,42 @@ export default function WorkspaceSmartboardCanvas({
                           ...previous,
                           visuals: previous.visuals.map((visual, index) => index === selection.index ? { ...visual, acceleration } : visual),
                         }));
-                      }} className="w-20 accent-white" />
+                      }} className="w-20 accent-slate-700" />
                     </label>
                   </>
                 )}
-                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void recognizeSelectedText()}><Sparkles className="mr-1 h-3.5 w-3.5" />Read text</Button>
-                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void askAI('Improve the selected writing for spelling, grammar, clarity and professional tone. Preserve its meaning. Return only the suggested replacement text.')}>Improve</Button>
-                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void askAI('Explain the selected board content accurately and concisely. Clearly state uncertainty where content is unclear.')}>Explain</Button>
-                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void askAI('Suggest an accurate, editable 2D diagram for the selected content. Give a concise structured description; do not claim a graphic was inserted.')}>Convert to 2D</Button>
-                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void askAI('Assess whether the selected content matches a supported interactive FaceMeX subject model. If supported, identify the model and explain what can be represented. Do not claim to generate an arbitrary 3D object.')}>Convert to 3D</Button>
-                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void askAI('Suggest concise labels for the selected drawing. Do not invent unshown parts and do not claim to add the labels.')}>Add labels</Button>
-                {busy && <span className="px-2 text-xs text-white/55">Thinking…</span>}
+                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void recognizeSelectedText()}><Sparkles className="mr-1 h-3.5 w-3.5" />Read text</Button>
+                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void askAI('Improve the selected writing for spelling, grammar, clarity and professional tone. Preserve its meaning. Return only the suggested replacement text.')}>Improve</Button>
+                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void askAI('Explain the selected board content accurately and concisely. Clearly state uncertainty where content is unclear.')}>Explain</Button>
+                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void askAI('Suggest an accurate, editable 2D diagram for the selected content. Give a concise structured description; do not claim a graphic was inserted.')}>Convert to 2D</Button>
+                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void askAI('Assess whether the selected content matches a supported interactive FaceMeX subject model. If supported, identify the model and explain what can be represented. Do not claim to generate an arbitrary 3D object.')}>Convert to 3D</Button>
+                <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void askAI('Suggest concise labels for the selected drawing. Do not invent unshown parts and do not claim to add the labels.')}>Add labels</Button>
+                {busy && <span className="px-2 text-xs text-slate-500">Thinking…</span>}
               </section>
             )}
 
             {!presentation && mode === 'resize' && (
-              <div style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-white/10 bg-[#191c20]/95 p-1.5 shadow-xl">
-                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Zoom out" onClick={() => setView((current) => ({ ...current, zoom: Math.max(0.5, current.zoom - 0.15) }))}><Minus className="h-4 w-4" /></Button>
-                <span className="min-w-12 text-center text-xs text-white/75">{Math.round(view.zoom * 100)}%</span>
-                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Zoom in" onClick={() => setView((current) => ({ ...current, zoom: Math.min(3, current.zoom + 0.15) }))}><Plus className="h-4 w-4" /></Button>
-                <Button type="button" variant="ghost" className="min-h-9 px-2 text-xs text-white hover:bg-white/10" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</Button>
+              <div style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-slate-200 bg-white/95 p-1.5 text-slate-700 shadow-xl">
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Zoom out" onClick={() => setView((current) => ({ ...current, zoom: Math.max(0.5, current.zoom - 0.15) }))}><Minus className="h-4 w-4" /></Button>
+                <span className="min-w-12 text-center text-xs text-slate-600">{Math.round(view.zoom * 100)}%</span>
+                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Zoom in" onClick={() => setView((current) => ({ ...current, zoom: Math.min(3, current.zoom + 0.15) }))}><Plus className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" className="min-h-9 px-2 text-xs text-slate-700 hover:bg-slate-100" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</Button>
                 {selectedStroke && (
                   <>
-                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Shrink selected object" onClick={() => resizeSelection(0.85)}><Minus className="h-4 w-4" /></Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Enlarge selected object" onClick={() => resizeSelection(1.15)}><Plus className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Shrink selected object" onClick={() => resizeSelection(0.85)}><Minus className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Enlarge selected object" onClick={() => resizeSelection(1.15)}><Plus className="h-4 w-4" /></Button>
                   </>
                 )}
                 {selectedVisual && (
                   <>
-                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Shrink selected visual" onClick={() => resizeSelection(0.85)}><Minus className="h-4 w-4" /></Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Enlarge selected visual" onClick={() => resizeSelection(1.15)}><Plus className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Shrink selected visual" onClick={() => resizeSelection(0.85)}><Minus className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Enlarge selected visual" onClick={() => resizeSelection(1.15)}><Plus className="h-4 w-4" /></Button>
                   </>
                 )}
                 {selectedText && (
                   <>
-                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Shrink selected text" onClick={() => resizeSelectedText(0.85)}><Minus className="h-4 w-4" /></Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Enlarge selected text" onClick={() => resizeSelectedText(1.15)}><Plus className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Shrink selected text" onClick={() => resizeSelectedText(0.85)}><Minus className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-700 hover:bg-slate-100" aria-label="Enlarge selected text" onClick={() => resizeSelectedText(1.15)}><Plus className="h-4 w-4" /></Button>
                   </>
                 )}
               </div>
@@ -1801,42 +1827,42 @@ export default function WorkspaceSmartboardCanvas({
             )}
 
             {suggestion && !presentation && (
-              <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute right-3 z-20 max-h-[26dvh] w-[min(22rem,calc(100%-1.5rem))] overflow-y-auto rounded-2xl border border-white/10 bg-[#191c20]/95 p-3 text-white shadow-xl sm:right-6" aria-live="polite">
+              <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute right-3 z-20 max-h-[26dvh] w-[min(22rem,calc(100%-1.5rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-xl sm:right-6" aria-live="polite">
                 <p className="whitespace-pre-wrap text-sm leading-5">{suggestion}</p>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  <Button type="button" className="min-h-9 bg-white/15 text-xs text-white hover:bg-white/20" onClick={acceptSuggestion}>Add to board</Button>
-                  <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={editSuggestion}>Edit</Button>
-                  {selectedText && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={replaceSelectedTextWithSuggestion}>Replace selected text</Button>}
-                  {scene.recognizedText && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => onSolve(scene.recognizedText)}>Explain</Button>}
+                  <Button type="button" className="min-h-9 bg-slate-900 text-xs text-white hover:bg-slate-700" onClick={acceptSuggestion}>Add to board</Button>
+                  <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={editSuggestion}>Edit</Button>
+                  {selectedText && <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={replaceSelectedTextWithSuggestion}>Replace selected text</Button>}
+                  {scene.recognizedText && <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={() => onSolve(scene.recognizedText)}>Explain</Button>}
                   {recognizedCoefficients && (
                     <>
-                      <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('parabola')}>Plot on board</Button>
-                      <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => onSolve(scene.recognizedText)}>Find turning point</Button>
+                      <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={() => addBoardVisual('parabola')}>Plot on board</Button>
+                      <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={() => onSolve(scene.recognizedText)}>Find turning point</Button>
                     </>
                   )}
                   {suggestedObjectKind && suggestedObjectKind !== 'parabola' && (
-                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual(suggestedObjectKind)}>
+                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={() => addBoardVisual(suggestedObjectKind)}>
                       {suggestedObjectKind === 'prism' ? 'Create interactive 3D triangular prism' :
                         suggestedObjectKind === 'cube' ? 'Create interactive 3D cube' :
                         suggestedObjectKind === 'sphere' ? 'Create interactive 3D sphere' :
                           `Create ${suggestedObjectKind === 'water' ? 'water molecule' : suggestedObjectKind} on board`}
                     </Button>
                   )}
-                  {suggestedObjectKind === 'circle' && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('sphere')}>Create interactive 3D sphere</Button>}
+                  {suggestedObjectKind === 'circle' && <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={() => addBoardVisual('sphere')}>Create interactive 3D sphere</Button>}
                   {shapeCandidate && (
-                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={applyShapeCleanup}>Create clean 2D {shapeCandidate.tool}</Button>
+                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={applyShapeCleanup}>Create clean 2D {shapeCandidate.tool}</Button>
                   )}
                   {scene.visualModel === 'cube' && (
-                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={addCleanCube}>Add clean 2D cube</Button>
+                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-700 hover:bg-slate-100" onClick={addCleanCube}>Add clean 2D cube</Button>
                   )}
-                  <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/65 hover:bg-white/10" onClick={() => setSuggestion('')}>Keep original</Button>
+                  <Button type="button" variant="ghost" className="min-h-9 text-xs text-slate-500 hover:bg-slate-100" onClick={() => setSuggestion('')}>Keep original</Button>
                 </div>
               </section>
             )}
 
             {!presentation && mode === 'edit' && selectedText && (
-              <div style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-white/10 bg-[#191c20]/95 p-2 shadow-xl">
-                <label className="text-xs text-white/70">Text colour</label>
+              <div style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 text-slate-700 shadow-xl">
+                <label className="text-xs text-slate-600">Text colour</label>
                 <input type="color" aria-label="Selected text colour" value={selectedText.color} onChange={(event) => updateScene((previous) => ({
                   ...previous,
                   texts: previous.texts.map((item, index) => index === selection?.index ? { ...item, color: event.target.value } : item),
@@ -1844,8 +1870,8 @@ export default function WorkspaceSmartboardCanvas({
               </div>
             )}
             {!presentation && mode === 'edit' && selectedStroke && selection?.type === 'stroke' && (
-              <div style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-white/10 bg-[#191c20]/95 p-2 shadow-xl">
-                <label className="text-xs text-white/70">Stroke</label>
+              <div style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 text-slate-700 shadow-xl">
+                <label className="text-xs text-slate-600">Stroke</label>
                 <input type="color" aria-label="Selected stroke colour" value={selectedStroke.color} onChange={(event) => updateScene((previous) => ({
                   ...previous,
                   strokes: previous.strokes.map((item, index) => index === selection?.index ? { ...item, color: event.target.value } : item),
@@ -1853,27 +1879,45 @@ export default function WorkspaceSmartboardCanvas({
                 <input type="range" min="1" max="18" aria-label="Selected stroke thickness" value={selectedStroke.width} onChange={(event) => updateScene((previous) => ({
                   ...previous,
                   strokes: previous.strokes.map((item, index) => index === selection?.index ? { ...item, width: Number(event.target.value) } : item),
-                }))} onPointerDown={remember} className="w-20 accent-white" />
+                }))} onPointerDown={remember} className="w-20 accent-slate-700" />
               </div>
             )}
 
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(event) => void uploadImage(event)} />
 
             {!presentation && (
-              <nav style={{ bottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }} className="absolute left-1/2 z-30 grid w-[calc(100%-1rem)] max-w-lg -translate-x-1/2 grid-cols-4 rounded-2xl border border-white/10 bg-[#181a1d]/95 p-1.5 shadow-2xl backdrop-blur-md" aria-label="Canvas actions">
-                <button type="button" aria-pressed={mode === 'edit'} onClick={() => changeMode('edit')} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-white transition-colors hover:bg-white/10 ${mode === 'edit' ? 'bg-white/10' : ''}`}>
-                  <MousePointer2 className="h-5 w-5" /><span className="text-[10px] font-semibold tracking-wide">EDIT</span>
-                </button>
-                <button type="button" aria-pressed={mode === 'markup'} onClick={() => changeMode('markup')} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-white transition-colors hover:bg-white/10 ${mode === 'markup' ? 'bg-white/10' : ''}`}>
-                  <Pencil className="h-5 w-5" /><span className="text-[10px] font-semibold tracking-wide">MARKUP</span>
-                </button>
-                <button type="button" aria-pressed={mode === 'resize'} onClick={() => changeMode('resize')} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-white transition-colors hover:bg-white/10 ${mode === 'resize' ? 'bg-white/10' : ''}`}>
-                  <Settings2 className="h-5 w-5" /><span className="text-[10px] font-semibold tracking-wide">RESIZE</span>
-                </button>
-                <button type="button" onClick={removeSelection} className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-white transition-colors hover:bg-rose-900/40">
-                  <Trash2 className="h-5 w-5" /><span className="text-[10px] font-semibold tracking-wide">REMOVE</span>
-                </button>
-              </nav>
+              <form
+                style={{ bottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+                className="absolute left-[3.75rem] right-2 z-30 mx-auto flex max-w-3xl items-end gap-2 rounded-[1.65rem] border border-slate-200 bg-white p-2 shadow-lg sm:left-24 sm:right-6"
+                aria-label="Ask FaceMeX about the whiteboard"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const instruction = aiPrompt.trim();
+                  if (!instruction || busy) return;
+                  setAiPrompt('');
+                  void askAI(instruction);
+                }}
+              >
+                <Button type="button" size="icon" variant="ghost" className="mb-0.5 h-9 w-9 shrink-0 rounded-full text-slate-600 hover:bg-slate-100" aria-label="Add image to board" title="Add image" onClick={() => fileRef.current?.click()}><Plus className="h-5 w-5" /></Button>
+                <textarea
+                  value={aiPrompt}
+                  onChange={(event) => setAiPrompt(event.target.value)}
+                  rows={1}
+                  maxLength={500}
+                  placeholder="Ask FaceMeX to explore something on your board"
+                  aria-label="Describe what you want FaceMeX to do"
+                  className="max-h-24 min-h-10 flex-1 resize-none self-center bg-transparent px-1 py-2 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-500"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                />
+                <Button type="submit" size="icon" className="mb-0.5 h-9 w-9 shrink-0 rounded-full bg-slate-900 text-white hover:bg-slate-700" aria-label="Ask FaceMeX" title="Ask FaceMeX" disabled={!aiPrompt.trim() || busy}>
+                  {busy ? <Sparkles className="h-4 w-4 animate-pulse" /> : <ArrowRight className="h-4 w-4" />}
+                </Button>
+              </form>
             )}
           </main>
         </DialogContent>
