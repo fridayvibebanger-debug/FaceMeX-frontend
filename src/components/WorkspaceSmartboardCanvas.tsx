@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowRight,
-  Box,
   Circle,
   Check,
   Copy,
@@ -26,7 +25,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import WorkspaceLearningModels, { type WorkspaceLearningModelId } from '@/components/WorkspaceLearningModels';
+import type { WorkspaceLearningModelId } from '@/components/WorkspaceLearningModels';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { parseQuadraticEquation } from '@/lib/workspaceGraph';
@@ -40,12 +39,25 @@ type BoardStroke = {
   tool: Tool;
 };
 type BoardText = { text: string; x: number; y: number; color: string; scale?: number };
-type Selection = { type: 'stroke' | 'text'; index: number } | null;
+type BoardVisualKind = 'triangle' | 'circle' | 'cube' | 'cube2d' | 'sphere' | 'water' | 'newton' | 'parabola';
+type BoardVisual = {
+  id: string;
+  kind: BoardVisualKind;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  mass?: number;
+  acceleration?: number;
+};
+type Selection = { type: 'stroke' | 'text' | 'visual'; index: number } | null;
 type ShapeTool = 'triangle' | 'ellipse' | 'rectangle';
 type BoardSize = 'fit' | 'wide' | 'portrait';
 type Scene = {
   strokes: BoardStroke[];
   texts: BoardText[];
+  visuals: BoardVisual[];
   graphOnBoard: boolean;
   equation: string;
   boardSize: BoardSize;
@@ -91,6 +103,23 @@ function isBoardText(value: unknown): value is BoardText {
     typeof text.color === 'string' && /^#[\da-f]{6}$/i.test(text.color);
 }
 
+function isBoardVisual(value: unknown): value is BoardVisual {
+  if (!value || typeof value !== 'object') return false;
+  const visual = value as Partial<BoardVisual>;
+  return typeof visual.id === 'string' &&
+    (visual.kind === 'triangle' || visual.kind === 'circle' || visual.kind === 'cube' ||
+      visual.kind === 'cube2d' || visual.kind === 'sphere' ||
+      visual.kind === 'water' || visual.kind === 'newton' || visual.kind === 'parabola') &&
+    [visual.x, visual.y, visual.width, visual.height, visual.rotation].every(
+      (number) => typeof number === 'number' && Number.isFinite(number),
+    ) &&
+    visual.x! >= 0 && visual.x! <= 1 && visual.y! >= 0 && visual.y! <= 1 &&
+    visual.width! > 0 && visual.width! <= 1 && visual.height! > 0 && visual.height! <= 1 &&
+    visual.x! + visual.width! <= 1 && visual.y! + visual.height! <= 1 &&
+    (visual.mass === undefined || (Number.isFinite(visual.mass) && visual.mass >= 0 && visual.mass <= 100000)) &&
+    (visual.acceleration === undefined || (Number.isFinite(visual.acceleration) && visual.acceleration >= 0 && visual.acceleration <= 1000));
+}
+
 function getBounds(points: BoardStroke['points']) {
   return points.reduce((bounds, point) => ({
     minX: Math.min(bounds.minX, point.x),
@@ -100,10 +129,61 @@ function getBounds(points: BoardStroke['points']) {
   }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
 }
 
+function isNearStroke(
+  point: { x: number; y: number },
+  stroke: BoardStroke,
+  canvas: HTMLCanvasElement,
+  tolerance: number,
+): boolean {
+  const toPixels = ({ x, y }: { x: number; y: number }) => ({
+    x: x * canvas.clientWidth,
+    y: y * canvas.clientHeight,
+  });
+  const pixelPoint = toPixels(point);
+  const points = stroke.points.map(toPixels);
+  if (stroke.tool === 'rectangle' || stroke.tool === 'triangle') {
+    const [{ x: firstX, y: firstY }, { x: lastX, y: lastY }] = [points[0], points[points.length - 1]];
+    const minX = Math.min(firstX, lastX);
+    const maxX = Math.max(firstX, lastX);
+    const minY = Math.min(firstY, lastY);
+    const maxY = Math.max(firstY, lastY);
+    if (pixelPoint.x < minX - tolerance || pixelPoint.x > maxX + tolerance ||
+      pixelPoint.y < minY - tolerance || pixelPoint.y > maxY + tolerance) return false;
+    const edges = stroke.tool === 'rectangle'
+      ? [
+        [{ x: minX, y: minY }, { x: maxX, y: minY }],
+        [{ x: maxX, y: minY }, { x: maxX, y: maxY }],
+        [{ x: maxX, y: maxY }, { x: minX, y: maxY }],
+        [{ x: minX, y: maxY }, { x: minX, y: minY }],
+      ]
+      : [
+        [{ x: (minX + maxX) / 2, y: minY }, { x: maxX, y: maxY }],
+        [{ x: maxX, y: maxY }, { x: minX, y: maxY }],
+        [{ x: minX, y: maxY }, { x: (minX + maxX) / 2, y: minY }],
+      ];
+    return edges.some(([start, end]) => distanceToLine(pixelPoint, start, end) <= tolerance + stroke.width / 2);
+  }
+  if (stroke.tool === 'ellipse') {
+    const bounds = getBounds(stroke.points);
+    const radiusX = (bounds.maxX - bounds.minX) * canvas.clientWidth / 2;
+    const radiusY = (bounds.maxY - bounds.minY) * canvas.clientHeight / 2;
+    if (!radiusX || !radiusY) return false;
+    const centerX = (bounds.minX + bounds.maxX) * canvas.clientWidth / 2;
+    const centerY = (bounds.minY + bounds.maxY) * canvas.clientHeight / 2;
+    const radialDistance = Math.hypot((pixelPoint.x - centerX) / radiusX, (pixelPoint.y - centerY) / radiusY);
+    return Math.abs(radialDistance - 1) * Math.min(radiusX, radiusY) <= tolerance + stroke.width / 2;
+  }
+  for (let index = 1; index < points.length; index += 1) {
+    if (distanceToLine(pixelPoint, points[index - 1], points[index]) <= tolerance + stroke.width / 2) return true;
+  }
+  return points.length === 1 && distance(pixelPoint, points[0]) <= tolerance + stroke.width / 2;
+}
+
 function emptyScene(): Scene {
   return {
     strokes: [],
     texts: [],
+    visuals: [],
     graphOnBoard: false,
     equation: 'y = x² - 3',
     boardSize: 'fit',
@@ -144,9 +224,28 @@ function formatAIResponse(response: string): string {
 function getModelForSuggestion(text: string): WorkspaceLearningModelId | null {
   const normalized = text.toLowerCase();
   if (/\b(cube|cuboid)\b/.test(normalized)) return 'cube';
+  if (/\bsphere\b/.test(normalized)) return 'sphere';
   if (/\b(water molecule|h₂o|h2o)\b/.test(normalized)) return 'water';
   if (/\b(newton|force|f\s*=\s*ma|second law)\b/.test(normalized)) return 'newton';
   return null;
+}
+
+function getBoardVisualKind(text: string): BoardVisualKind | null {
+  const normalized = text.toLowerCase();
+  if (/\b(cube|cuboid)\b/.test(normalized)) return 'cube';
+  if (/\b(water molecule|h₂o|h2o)\b/.test(normalized)) return 'water';
+  if (/\b(newton|force|f\s*=\s*ma|second law)\b/.test(normalized)) return 'newton';
+  if (/\b(parabola|quadratic|graph)\b/.test(normalized)) return 'parabola';
+  if (/\b(triangle|triangular)\b/.test(normalized)) return 'triangle';
+  if (/\b(circle|circular)\b/.test(normalized)) return 'circle';
+  return null;
+}
+
+function getBoardVisualLabel(kind: BoardVisualKind): string {
+  if (kind === 'cube2d') return '2D cube';
+  if (kind === 'water') return 'water molecule';
+  if (kind === 'newton') return 'Newton’s second law';
+  return kind;
 }
 
 function isWorkspaceLearningModelId(value: unknown): value is WorkspaceLearningModelId {
@@ -162,12 +261,14 @@ function getSuggestedText(text: string, fallback: string): string {
   const lines = text.split(/\r?\n/);
   const wording = lines.find((line) => /^(suggested wording|improved sentence):/i.test(line.trim()));
   if (wording) return wording.replace(/^(suggested wording|improved sentence):\s*/i, '').trim() || fallback || text;
-  const section = lines.findIndex((line) => /^suggestions?:/i.test(line.trim()));
-  const inlineSuggestion = section >= 0 ? lines[section].replace(/^suggestions?:\s*/i, '').trim() : '';
-  const nextSuggestion = section >= 0
-    ? lines.slice(section + 1).find((line) => line.trim() && !/^(recognition|subject|intent):/i.test(line.trim()))?.replace(/^\s*[•*-]\s*/, '').trim()
-    : '';
-  return fallback || inlineSuggestion || nextSuggestion || text;
+  if (/^(recognition|transcription|expression|suggestions?):/im.test(text)) {
+    return getLabeledValue(text, 'Recognition') ||
+      getLabeledValue(text, 'Transcription') ||
+      getLabeledValue(text, 'Expression') ||
+      fallback ||
+      text;
+  }
+  return text;
 }
 
 function withTimeout<T>(request: Promise<T>, timeoutMs = 15000): Promise<T> {
@@ -262,6 +363,7 @@ export default function WorkspaceSmartboardCanvas({
   const [suggestion, setSuggestion] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
+  const [aiSuggestionsEnabled, setAISuggestionsEnabled] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -270,7 +372,6 @@ export default function WorkspaceSmartboardCanvas({
   const [savedBoards, setSavedBoards] = useState<WorkspaceSmartboardLesson[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [savedListOpen, setSavedListOpen] = useState(false);
-  const [modelsOpen, setModelsOpen] = useState(false);
   const [presentation, setPresentation] = useState(false);
   const [textDraft, setTextDraft] = useState('');
   const [textComposerOpen, setTextComposerOpen] = useState(false);
@@ -280,8 +381,15 @@ export default function WorkspaceSmartboardCanvas({
   const textRef = useRef<HTMLInputElement | null>(null);
   const activeStrokeRef = useRef<BoardStroke | null>(null);
   const activeStrokeIndexRef = useRef<number | null>(null);
-  const activeSelectionRef = useRef<{ selection: Selection; start: { x: number; y: number }; stroke?: BoardStroke; text?: BoardText } | null>(null);
+  const activeSelectionRef = useRef<{
+    selection: Selection;
+    start: { x: number; y: number };
+    stroke?: BoardStroke;
+    text?: BoardText;
+    visual?: BoardVisual;
+  } | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const panRef = useRef<{ startX: number; startY: number; x: number; y: number } | null>(null);
   const gestureRef = useRef<{ distance: number; zoom: number; anchorX: number; anchorY: number; centerX: number; centerY: number } | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const moreMenuRef = useRef<HTMLDetailsElement | null>(null);
@@ -294,6 +402,10 @@ export default function WorkspaceSmartboardCanvas({
   const recognizedCoefficients = useMemo(
     () => scene.recognizedText ? parseQuadraticEquation(scene.recognizedText) : null,
     [scene.recognizedText],
+  );
+  const suggestedObjectKind = useMemo(
+    () => getBoardVisualKind(`${scene.recognizedText}\n${suggestion}`),
+    [scene.recognizedText, suggestion],
   );
 
   useEffect(() => {
@@ -316,7 +428,32 @@ export default function WorkspaceSmartboardCanvas({
     }));
   };
 
-  const snapshot = (): Snapshot => ({ scene: { ...scene, strokes: [...scene.strokes], texts: [...scene.texts] }, image });
+  const toggleAISuggestions = () => {
+    if (aiSuggestionsEnabled) {
+      analysisRequestRef.current += 1;
+      setAISuggestionsEnabled(false);
+      setAnalyzing(false);
+      setAnalysisError('');
+      setSuggestion('');
+      lastAnalyzedImageRef.current = null;
+      return;
+    }
+    if (!window.confirm(
+      'Enable AI suggestions for this board? After you pause, a snapshot of your writing may be sent to FaceMeX’s existing AI service for recognition. FaceMeX will only suggest actions and will not change your board without approval.',
+    )) return;
+    setAISuggestionsEnabled(true);
+    setAnalysisError('');
+  };
+
+  const snapshot = (): Snapshot => ({
+    scene: {
+      ...scene,
+      strokes: [...scene.strokes],
+      texts: [...scene.texts],
+      visuals: [...scene.visuals],
+    },
+    image,
+  });
   const remember = () => {
     setHistory((previous) => [...previous.slice(-49), snapshot()]);
     setFuture([]);
@@ -405,8 +542,21 @@ export default function WorkspaceSmartboardCanvas({
           context.stroke();
         } else {
           context.moveTo(x1, y1);
-          stroke.points.slice(1).forEach((point) => context.lineTo(point.x * bounds.width, point.y * bounds.height));
           if (stroke.points.length === 1) context.lineTo(x1 + 0.1, y1 + 0.1);
+          for (let pointIndex = 1; pointIndex < stroke.points.length - 1; pointIndex += 1) {
+            const current = stroke.points[pointIndex];
+            const next = stroke.points[pointIndex + 1];
+            context.quadraticCurveTo(
+              current.x * bounds.width,
+              current.y * bounds.height,
+              ((current.x + next.x) / 2) * bounds.width,
+              ((current.y + next.y) / 2) * bounds.height,
+            );
+          }
+          if (stroke.points.length > 1) {
+            const last = stroke.points[stroke.points.length - 1];
+            context.lineTo(last.x * bounds.width, last.y * bounds.height);
+          }
           context.stroke();
         }
         context.globalAlpha = 1;
@@ -459,6 +609,161 @@ export default function WorkspaceSmartboardCanvas({
         context.lineWidth = 3;
         context.stroke();
       }
+      scene.visuals.forEach((visual, index) => {
+        const x = visual.x * bounds.width;
+        const y = visual.y * bounds.height;
+        const width = visual.width * bounds.width;
+        const height = visual.height * bounds.height;
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        context.save();
+        context.translate(centerX, centerY);
+        context.rotate(visual.kind === 'cube' || visual.kind === 'cube2d' || visual.kind === 'water' ? 0 : visual.rotation);
+        context.lineWidth = 3;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        context.strokeStyle = '#356fe5';
+        context.fillStyle = '#356fe5';
+
+        if (visual.kind === 'triangle') {
+          context.beginPath();
+          context.moveTo(0, -height * 0.4);
+          context.lineTo(width * 0.42, height * 0.36);
+          context.lineTo(-width * 0.42, height * 0.36);
+          context.closePath();
+          context.stroke();
+        } else if (visual.kind === 'circle') {
+          context.beginPath();
+          context.ellipse(0, 0, width * 0.4, height * 0.4, 0, 0, Math.PI * 2);
+          context.stroke();
+        } else if (visual.kind === 'sphere') {
+          const radius = Math.min(width, height) * 0.38;
+          const shading = context.createRadialGradient(-radius * 0.38, -radius * 0.42, radius * 0.06, 0, 0, radius);
+          shading.addColorStop(0, '#ffffff');
+          shading.addColorStop(0.25, '#b8d5ff');
+          shading.addColorStop(1, '#356fe5');
+          context.fillStyle = shading;
+          context.beginPath();
+          context.arc(0, 0, radius, 0, Math.PI * 2);
+          context.fill();
+          context.strokeStyle = '#244f9f';
+          context.stroke();
+        } else if (visual.kind === 'cube' || visual.kind === 'cube2d') {
+          const vertices = [
+            [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+            [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+          ];
+          const yaw = visual.kind === 'cube2d' ? -0.45 : visual.rotation;
+          const pitch = 0.35;
+          const projected = vertices.map(([vx, vy, vz]) => {
+            const rotatedX = vx * Math.cos(yaw) - vz * Math.sin(yaw);
+            const rotatedZ = vx * Math.sin(yaw) + vz * Math.cos(yaw);
+            const rotatedY = vy * Math.cos(pitch) - rotatedZ * Math.sin(pitch);
+            return { x: rotatedX * width * 0.22, y: rotatedY * height * 0.22 };
+          });
+          const edges = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+          context.strokeStyle = '#356fe5';
+          edges.forEach(([from, to]) => {
+            context.beginPath();
+            context.moveTo(projected[from].x, projected[from].y);
+            context.lineTo(projected[to].x, projected[to].y);
+            context.stroke();
+          });
+          context.fillStyle = '#172033';
+          context.font = `600 ${Math.max(11, Math.min(16, width * 0.08))}px system-ui, sans-serif`;
+          projected.forEach((point, vertexIndex) => {
+            context.beginPath();
+            context.arc(point.x, point.y, 3, 0, Math.PI * 2);
+            context.fill();
+            context.fillText(String.fromCharCode(65 + vertexIndex), point.x + 5, point.y - 5);
+          });
+        } else if (visual.kind === 'water') {
+          const angle = visual.rotation + 0.45;
+          const oxygen = { x: 0, y: -height * 0.05 };
+          const bond = Math.min(width, height) * 0.28;
+          const hydrogenPoints = [
+            { x: Math.cos(angle) * bond, y: Math.sin(angle) * bond },
+            { x: Math.cos(angle + 1.75) * bond, y: Math.sin(angle + 1.75) * bond },
+          ];
+          context.strokeStyle = '#718096';
+          context.lineWidth = Math.max(5, bond * 0.18);
+          hydrogenPoints.forEach((point) => {
+            context.beginPath();
+            context.moveTo(oxygen.x, oxygen.y);
+            context.lineTo(point.x, point.y);
+            context.stroke();
+          });
+          context.fillStyle = '#b83c36';
+          context.beginPath();
+          context.arc(oxygen.x, oxygen.y, Math.max(10, bond * 0.3), 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = '#263449';
+          hydrogenPoints.forEach((point) => {
+            context.beginPath();
+            context.arc(point.x, point.y, Math.max(7, bond * 0.22), 0, Math.PI * 2);
+            context.fill();
+          });
+          context.fillStyle = '#fff';
+          context.font = 'bold 12px system-ui, sans-serif';
+          context.fillText('O', -4, 4);
+          context.fillStyle = '#172033';
+          context.fillText('H', hydrogenPoints[0].x - 4, hydrogenPoints[0].y + 4);
+          context.fillText('H', hydrogenPoints[1].x - 4, hydrogenPoints[1].y + 4);
+        } else if (visual.kind === 'newton') {
+          const mass = visual.mass || 1200;
+          const acceleration = visual.acceleration ?? 4;
+          const force = mass * acceleration;
+          context.fillStyle = '#172033';
+          context.font = `700 ${Math.max(18, Math.min(30, width * 0.16))}px system-ui, sans-serif`;
+          context.textAlign = 'center';
+          context.textBaseline = 'middle';
+          context.fillText(`F = ma = ${force.toLocaleString()} N`, 0, -height * 0.06);
+          context.strokeStyle = '#e05a47';
+          context.beginPath();
+          const arrowEnd = Math.min(width * 0.38, width * 0.1 + force / 10000 * width * 0.28);
+          context.moveTo(-width * 0.38, height * 0.22);
+          context.lineTo(arrowEnd, height * 0.22);
+          context.lineTo(arrowEnd - width * 0.08, height * 0.1);
+          context.moveTo(arrowEnd, height * 0.22);
+          context.lineTo(arrowEnd - width * 0.08, height * 0.34);
+          context.stroke();
+          context.fillStyle = '#475569';
+          context.font = '12px system-ui, sans-serif';
+          context.fillText(`${mass.toLocaleString()} kg · ${acceleration} m/s²`, 0, height * 0.44);
+        } else if (visual.kind === 'parabola') {
+          context.strokeStyle = 'rgba(25,40,65,.2)';
+          context.lineWidth = 1;
+          context.beginPath();
+          context.moveTo(-width * 0.4, 0);
+          context.lineTo(width * 0.4, 0);
+          context.moveTo(0, -height * 0.4);
+          context.lineTo(0, height * 0.4);
+          context.stroke();
+          context.strokeStyle = '#356fe5';
+          context.lineWidth = 3;
+          context.beginPath();
+          for (let pointIndex = 0; pointIndex <= 60; pointIndex += 1) {
+            const unitX = (pointIndex / 60) * 2 - 1;
+            const unitY = coefficients
+              ? coefficients.a * unitX * unitX + coefficients.b * unitX + coefficients.c
+              : unitX * unitX;
+            const pointX = unitX * width * 0.38;
+            const pointY = Math.max(-height * 0.4, Math.min(height * 0.4, unitY * height * 0.12));
+            if (pointIndex === 0) context.moveTo(pointX, pointY);
+            else context.lineTo(pointX, pointY);
+          }
+          context.stroke();
+        }
+
+        if (selection?.type === 'visual' && selection.index === index) {
+          context.strokeStyle = '#5688ef';
+          context.lineWidth = 1.5;
+          context.setLineDash([6, 4]);
+          context.strokeRect(-width / 2 - 8, -height / 2 - 8, width + 16, height + 16);
+          context.setLineDash([]);
+        }
+        context.restore();
+      });
       scene.texts.forEach((text, index) => {
         context.fillStyle = text.color;
         context.font = `600 ${18 * (text.scale || 1)}px system-ui, sans-serif`;
@@ -483,6 +788,7 @@ export default function WorkspaceSmartboardCanvas({
   }, [open, scene, selection, view, coefficients, imageLoaded]);
 
   const runAutoAnalysis = async (imageDataUrl: string) => {
+    if (!aiSuggestionsEnabled) return;
     const requestId = ++analysisRequestRef.current;
     setAnalyzing(true);
     setAnalysisError('');
@@ -494,15 +800,15 @@ export default function WorkspaceSmartboardCanvas({
           'Identify the most likely subject and the learner’s apparent intent. For incomplete work, say it is incomplete and offer possible continuations as choices without presenting missing values as known.',
           'For rough sentences or short notes, offer one polished, subject-accurate rewrite under Suggested wording: and preserve the original meaning.',
           'Give up to three concise, relevant next actions. For a clear quadratic, include graphing and finding its vertex/axis of symmetry. For a supported cube, water molecule or Newton’s second law topic, recommend the existing matching interactive visual.',
-          'For rough basic shapes, identify a likely editable shape only when visible. For unclear content, state what could not be read instead of guessing.',
+          'For a clearly drawn triangle, circle, rectangle or cube, name the shape and offer a clean editable version. Recommend an interactive 3D object only for the supported cube, sphere or water molecule models; do not claim unsupported geometry is available.',
           'Return plain text only, with these labels on separate lines: Recognition:, Subject:, Intent:, Suggestions:. Do not use Markdown, JSON, LaTeX, or claim that you changed the board.',
         ].join(' '),
       ));
-      if (requestId !== analysisRequestRef.current) return;
+      if (requestId !== analysisRequestRef.current || !aiSuggestionsEnabled) return;
       if (!response?.trim()) throw new Error('FaceMeX returned no readable work. Retry the analysis or keep drawing.');
       setAIResult(response);
     } catch (reason) {
-      if (requestId === analysisRequestRef.current) {
+      if (requestId === analysisRequestRef.current && aiSuggestionsEnabled) {
         setAnalysisError(reason instanceof Error ? reason.message : 'FaceMeX could not analyze this drawing.');
       }
     } finally {
@@ -511,7 +817,7 @@ export default function WorkspaceSmartboardCanvas({
   };
 
   useEffect(() => {
-    if (!open || !scene.strokes.length || mode !== 'markup' || image) return;
+    if (!open || !aiSuggestionsEnabled || !scene.strokes.length || mode !== 'markup') return;
     if (recognitionTimerRef.current !== null) window.clearTimeout(recognitionTimerRef.current);
     const timer = window.setTimeout(() => {
       if (!canvasRef.current || activeStrokeRef.current) return;
@@ -526,7 +832,7 @@ export default function WorkspaceSmartboardCanvas({
       window.clearTimeout(timer);
       analysisRequestRef.current += 1;
     };
-  }, [open, scene.strokes, mode, image]);
+  }, [open, aiSuggestionsEnabled, scene.strokes, mode, image]);
 
   const boardPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -539,16 +845,22 @@ export default function WorkspaceSmartboardCanvas({
   const hitTest = (point: { x: number; y: number }, canvas: HTMLCanvasElement): Selection => {
     const toleranceX = 12 / (canvas.clientWidth * view.zoom);
     const toleranceY = 12 / (canvas.clientHeight * view.zoom);
+    const strokeTolerance = 12 / view.zoom;
     for (let index = scene.texts.length - 1; index >= 0; index -= 1) {
       const text = scene.texts[index];
       if (Math.abs(text.x - point.x) < Math.max(toleranceX, text.text.length * 0.008 * (text.scale || 1)) && Math.abs(text.y - point.y) < toleranceY * 2 * (text.scale || 1)) {
         return { type: 'text', index };
       }
     }
+    for (let index = scene.visuals.length - 1; index >= 0; index -= 1) {
+      const visual = scene.visuals[index];
+      if (point.x >= visual.x - toleranceX && point.x <= visual.x + visual.width + toleranceX &&
+        point.y >= visual.y - toleranceY && point.y <= visual.y + visual.height + toleranceY) {
+        return { type: 'visual', index };
+      }
+    }
     for (let index = scene.strokes.length - 1; index >= 0; index -= 1) {
-      const box = getBounds(scene.strokes[index].points);
-      if (point.x >= box.minX - toleranceX && point.x <= box.maxX + toleranceX &&
-        point.y >= box.minY - toleranceY && point.y <= box.maxY + toleranceY) {
+      if (isNearStroke(point, scene.strokes[index], canvas, strokeTolerance)) {
         return { type: 'stroke', index };
       }
     }
@@ -561,6 +873,13 @@ export default function WorkspaceSmartboardCanvas({
     const position = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, position);
     if (pointersRef.current.size >= 2) {
+      if (activeStrokeIndexRef.current !== null) {
+        const unfinishedStrokeIndex = activeStrokeIndexRef.current;
+        updateScene((previous) => ({
+          ...previous,
+          strokes: previous.strokes.filter((_, index) => index !== unfinishedStrokeIndex),
+        }));
+      }
       const [first, second] = [...pointersRef.current.values()];
       const rect = event.currentTarget.getBoundingClientRect();
       const centerX = (first.x + second.x) / 2;
@@ -574,7 +893,17 @@ export default function WorkspaceSmartboardCanvas({
         centerY,
       };
       activeStrokeRef.current = null;
+      activeStrokeIndexRef.current = null;
       activeSelectionRef.current = null;
+      return;
+    }
+    if (mode === 'resize') {
+      panRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        x: view.x,
+        y: view.y,
+      };
       return;
     }
     const point = boardPoint(event);
@@ -586,7 +915,8 @@ export default function WorkspaceSmartboardCanvas({
         activeSelectionRef.current = {
           selection: hit,
           start: point,
-          ...(hit.type === 'stroke' ? { stroke: scene.strokes[hit.index] } : { text: scene.texts[hit.index] }),
+          ...(hit.type === 'stroke' ? { stroke: scene.strokes[hit.index] } :
+            hit.type === 'text' ? { text: scene.texts[hit.index] } : { visual: scene.visuals[hit.index] }),
         };
       }
       return;
@@ -633,6 +963,15 @@ export default function WorkspaceSmartboardCanvas({
       });
       return;
     }
+    const activePan = panRef.current;
+    if (activePan) {
+      setView((current) => ({
+        ...current,
+        x: activePan.x + event.clientX - activePan.startX,
+        y: activePan.y + event.clientY - activePan.startY,
+      }));
+      return;
+    }
     const point = boardPoint(event);
     const activeSelection = activeSelectionRef.current;
     if (activeSelection) {
@@ -644,9 +983,20 @@ export default function WorkspaceSmartboardCanvas({
         const shiftY = Math.max(-bounds.minY, Math.min(1 - bounds.maxY, dy));
         const moved = { ...activeSelection.stroke, points: activeSelection.stroke.points.map((item) => ({ x: item.x + shiftX, y: item.y + shiftY })) };
         updateScene((previous) => ({ ...previous, strokes: previous.strokes.map((item, index) => index === activeSelection.selection.index ? moved : item) }));
-      } else if (activeSelection.text) {
+      } else if (activeSelection.selection.type === 'text' && activeSelection.text) {
         const moved = { ...activeSelection.text, x: Math.max(0, Math.min(1, activeSelection.text.x + dx)), y: Math.max(0, Math.min(1, activeSelection.text.y + dy)) };
         updateScene((previous) => ({ ...previous, texts: previous.texts.map((item, index) => index === activeSelection.selection.index ? moved : item) }));
+      } else if (activeSelection.selection.type === 'visual' && activeSelection.visual) {
+        const visual = activeSelection.visual;
+        const moved = {
+          ...visual,
+          x: Math.max(0, Math.min(1 - visual.width, visual.x + dx)),
+          y: Math.max(0, Math.min(1 - visual.height, visual.y + dy)),
+        };
+        updateScene((previous) => ({
+          ...previous,
+          visuals: previous.visuals.map((item, index) => index === activeSelection.selection?.index ? moved : item),
+        }));
       }
       return;
     }
@@ -662,6 +1012,7 @@ export default function WorkspaceSmartboardCanvas({
 
   const pointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     pointersRef.current.delete(event.pointerId);
+    panRef.current = null;
     if (pointersRef.current.size < 2) gestureRef.current = null;
     const activeStroke = activeStrokeRef.current;
     const strokeIndex = activeStrokeIndexRef.current;
@@ -691,9 +1042,9 @@ export default function WorkspaceSmartboardCanvas({
     };
     updateScene((previous) => ({
       ...previous,
-      strokes: previous.strokes.map((item, index) => index === shapeCandidate.index ? cleaned : item),
+      strokes: [...previous.strokes, cleaned],
     }));
-    setSelection({ type: 'stroke', index: shapeCandidate.index });
+    setSelection({ type: 'stroke', index: scene.strokes.length });
     setShapeCandidate(null);
   };
 
@@ -719,14 +1070,15 @@ export default function WorkspaceSmartboardCanvas({
 
   const selectedStroke = selection?.type === 'stroke' ? scene.strokes[selection.index] : null;
   const selectedText = selection?.type === 'text' ? scene.texts[selection.index] : null;
+  const selectedVisual = selection?.type === 'visual' ? scene.visuals[selection.index] : null;
 
   const duplicate = () => {
     if (!selection) return;
     remember();
     if (selection.type === 'stroke' && selectedStroke) {
       const box = getBounds(selectedStroke.points);
-      const dx = box.maxX <= 0.96 ? 0.04 : -0.04;
-      const dy = box.maxY <= 0.96 ? 0.04 : -0.04;
+      const dx = box.maxX + 0.04 <= 1 ? 0.04 : box.minX - 0.04 >= 0 ? -0.04 : 0;
+      const dy = box.maxY + 0.04 <= 1 ? 0.04 : box.minY - 0.04 >= 0 ? -0.04 : 0;
       const copy = { ...selectedStroke, points: selectedStroke.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) };
       updateScene((previous) => ({ ...previous, strokes: [...previous.strokes, copy] }));
       setSelection({ type: 'stroke', index: scene.strokes.length });
@@ -738,6 +1090,15 @@ export default function WorkspaceSmartboardCanvas({
       };
       updateScene((previous) => ({ ...previous, texts: [...previous.texts, copy] }));
       setSelection({ type: 'text', index: scene.texts.length });
+    } else if (selection.type === 'visual' && selectedVisual) {
+      const copy = {
+        ...selectedVisual,
+        id: crypto.randomUUID(),
+        x: Math.min(1 - selectedVisual.width, selectedVisual.x + 0.04),
+        y: Math.min(1 - selectedVisual.height, selectedVisual.y + 0.04),
+      };
+      updateScene((previous) => ({ ...previous, visuals: [...previous.visuals, copy] }));
+      setSelection({ type: 'visual', index: scene.visuals.length });
     }
   };
 
@@ -749,8 +1110,10 @@ export default function WorkspaceSmartboardCanvas({
     remember();
     if (selection.type === 'stroke') {
       updateScene((previous) => ({ ...previous, strokes: previous.strokes.filter((_, index) => index !== selection.index) }));
-    } else {
+    } else if (selection.type === 'text') {
       updateScene((previous) => ({ ...previous, texts: previous.texts.filter((_, index) => index !== selection.index) }));
+    } else {
+      updateScene((previous) => ({ ...previous, visuals: previous.visuals.filter((_, index) => index !== selection.index) }));
     }
     setSelection(null);
   };
@@ -770,7 +1133,28 @@ export default function WorkspaceSmartboardCanvas({
   };
 
   const resizeSelection = (factor: number) => {
-    if (!selection || selection.type !== 'stroke' || !selectedStroke) return;
+    if (!selection) return;
+    if (selection.type === 'visual' && selectedVisual) {
+      const width = Math.max(0.08, Math.min(0.8, selectedVisual.width * factor));
+      const height = Math.max(0.08, Math.min(0.8, selectedVisual.height * factor));
+      const centerX = selectedVisual.x + selectedVisual.width / 2;
+      const centerY = selectedVisual.y + selectedVisual.height / 2;
+      remember();
+      updateScene((previous) => ({
+        ...previous,
+        visuals: previous.visuals.map((visual, index) => index === selection.index
+          ? {
+            ...visual,
+            x: Math.max(0, Math.min(1 - width, centerX - width / 2)),
+            y: Math.max(0, Math.min(1 - height, centerY - height / 2)),
+            width,
+            height,
+          }
+          : visual),
+      }));
+      return;
+    }
+    if (selection.type !== 'stroke' || !selectedStroke) return;
     const box = getBounds(selectedStroke.points);
     const centerX = (box.minX + box.maxX) / 2;
     const centerY = (box.minY + box.maxY) / 2;
@@ -808,38 +1192,32 @@ export default function WorkspaceSmartboardCanvas({
   };
 
   const addCleanCube = () => {
-    const vertices = {
-      A: { x: 0.34, y: 0.43 },
-      B: { x: 0.54, y: 0.43 },
-      C: { x: 0.54, y: 0.63 },
-      D: { x: 0.34, y: 0.63 },
-      E: { x: 0.43, y: 0.34 },
-      F: { x: 0.63, y: 0.34 },
-      G: { x: 0.63, y: 0.54 },
-      H: { x: 0.43, y: 0.54 },
+    addBoardVisual('cube2d');
+  };
+
+  const addBoardVisual = (kind: BoardVisualKind) => {
+    const visual: BoardVisual = {
+      id: crypto.randomUUID(),
+      kind,
+      x: 0.37,
+      y: 0.3,
+      width: kind === 'parabola' || kind === 'newton' ? 0.34 : 0.26,
+      height: 0.3,
+      rotation: 0,
+      ...(kind === 'newton' ? { mass: 1200, acceleration: 4 } : {}),
     };
-    const edges = ['AB', 'BC', 'CD', 'DA', 'EF', 'FG', 'GH', 'HE', 'AE', 'BF', 'CG', 'DH'];
-    const cubeStrokes: BoardStroke[] = edges.map((edge) => ({
-      points: [vertices[edge[0] as keyof typeof vertices], vertices[edge[1] as keyof typeof vertices]],
-      color: '#172033',
-      width: 2.5,
-      tool: 'line',
-    }));
-    const labels: BoardText[] = Object.entries(vertices).map(([label, point]) => ({
-      text: label,
-      x: point.x + (label === 'A' || label === 'D' || label === 'E' || label === 'H' ? -0.02 : 0.01),
-      y: point.y + (label === 'A' || label === 'B' || label === 'E' || label === 'F' ? -0.02 : 0.02),
-      color: '#172033',
-      scale: 0.75,
-    }));
     remember();
     updateScene((previous) => ({
       ...previous,
-      strokes: [...previous.strokes, ...cubeStrokes],
-      texts: [...previous.texts, ...labels],
+      visuals: [...previous.visuals, visual],
+      ...(kind === 'parabola' && scene.recognizedText ? {
+        equation: scene.recognizedText,
+        graphOnBoard: false,
+      } : {}),
     }));
-    setSelection({ type: 'stroke', index: scene.strokes.length });
-    setNotice('Added an editable, labelled 2D cube. Select its edges or labels to adjust them.');
+    setSelection({ type: 'visual', index: scene.visuals.length });
+    setSuggestion('');
+    setNotice(`Added an editable ${getBoardVisualLabel(kind)} to the whiteboard.`);
   };
 
   const insertMathSymbol = (symbol: string) => {
@@ -969,6 +1347,7 @@ export default function WorkspaceSmartboardCanvas({
       scene: {
         strokes: scene.strokes,
         labels: scene.texts,
+        visuals: scene.visuals,
         graphOnBoard: scene.graphOnBoard,
         equation: scene.equation,
         boardSize: scene.boardSize,
@@ -1008,6 +1387,7 @@ export default function WorkspaceSmartboardCanvas({
   };
 
   const restoreBoard = (board: WorkspaceSmartboardLesson) => {
+    analysisRequestRef.current += 1;
     const savedScene = board.scene;
     const strokes = Array.isArray(savedScene.strokes)
       ? savedScene.strokes.filter(isStroke).map((stroke) => ({
@@ -1016,14 +1396,28 @@ export default function WorkspaceSmartboardCanvas({
       }))
       : [];
     const texts = Array.isArray(savedScene.labels) ? savedScene.labels.filter(isBoardText) : [];
+    const visuals = Array.isArray(savedScene.visuals) ? savedScene.visuals.filter(isBoardVisual) : [];
     const restoredEquation = typeof savedScene.equation === 'string' ? savedScene.equation : 'y = x² - 3';
     const restoredView = savedScene.view && typeof savedScene.view === 'object'
       ? savedScene.view as Partial<ViewTransform>
       : {};
+    const savedDimensions = savedScene.boardDimensions && typeof savedScene.boardDimensions === 'object'
+      ? savedScene.boardDimensions as Record<string, unknown>
+      : {};
+    const savedWidth = typeof savedDimensions.width === 'number' && Number.isFinite(savedDimensions.width) && savedDimensions.width > 0
+      ? savedDimensions.width
+      : null;
+    const savedHeight = typeof savedDimensions.height === 'number' && Number.isFinite(savedDimensions.height) && savedDimensions.height > 0
+      ? savedDimensions.height
+      : null;
+    const currentBounds = canvasRef.current?.getBoundingClientRect();
+    const restoredX = typeof restoredView.x === 'number' && Number.isFinite(restoredView.x) ? restoredView.x : 0;
+    const restoredY = typeof restoredView.y === 'number' && Number.isFinite(restoredView.y) ? restoredView.y : 0;
     const restoredModel = isWorkspaceLearningModelId(savedScene.visualModel) ? savedScene.visualModel : null;
     setScene({
       strokes,
       texts,
+      visuals,
       equation: restoredEquation,
       graphOnBoard: savedScene.graphOnBoard === true,
       boardSize: savedScene.boardSize === 'wide' || savedScene.boardSize === 'portrait' ? savedScene.boardSize : 'fit',
@@ -1032,11 +1426,14 @@ export default function WorkspaceSmartboardCanvas({
       visualModel: restoredModel,
     });
     setView({
-      zoom: typeof restoredView.zoom === 'number' ? Math.max(0.5, Math.min(3, restoredView.zoom)) : 1,
-      x: typeof restoredView.x === 'number' ? restoredView.x : 0,
-      y: typeof restoredView.y === 'number' ? restoredView.y : 0,
+      zoom: typeof restoredView.zoom === 'number' && Number.isFinite(restoredView.zoom)
+        ? Math.max(0.5, Math.min(3, restoredView.zoom))
+        : 1,
+      x: savedWidth && currentBounds?.width ? restoredX * currentBounds.width / savedWidth : restoredX,
+      y: savedHeight && currentBounds?.height ? restoredY * currentBounds.height / savedHeight : restoredY,
     });
     setImage(board.image?.dataUrl || null);
+    setBusy(false);
     setAnalyzing(false);
     setSuggestion(typeof savedScene.suggestion === 'string' ? savedScene.suggestion : '');
     setAnalysisError('');
@@ -1086,6 +1483,8 @@ export default function WorkspaceSmartboardCanvas({
         if (!nextOpen) {
           analysisRequestRef.current += 1;
           setAnalyzing(false);
+          lastAnalyzedImageRef.current = null;
+          retryAnalysisImageRef.current = null;
         }
         setOpen(nextOpen);
       }}>
@@ -1093,8 +1492,8 @@ export default function WorkspaceSmartboardCanvas({
           <DialogTitle className="sr-only">FaceMeX Smartboard</DialogTitle>
           <DialogDescription className="sr-only">A full-screen whiteboard for drawing, editing and saving your work.</DialogDescription>
           <main className="relative min-h-0 flex-1 overflow-hidden bg-[#111315]">
-            <section aria-label="Whiteboard canvas" className="absolute inset-0 flex items-center justify-center p-2 pt-[calc(env(safe-area-inset-top)_+_4.25rem)] pb-[calc(env(safe-area-inset-bottom)_+_5.5rem)] sm:p-4 sm:pt-20 sm:pb-24">
-              <div className={`overflow-hidden rounded-xl bg-white ${scene.boardSize === 'fit' ? 'h-full w-full' : scene.boardSize === 'wide' ? 'aspect-video max-h-full w-full max-w-full' : 'aspect-[0.707] h-full w-auto max-w-full'}`}>
+            <section aria-label="Whiteboard canvas" className="absolute inset-0 flex items-center justify-center p-1.5 pt-[calc(env(safe-area-inset-top)_+_4rem)] pb-[calc(env(safe-area-inset-bottom)_+_5rem)] sm:p-2 sm:pt-16 sm:pb-20">
+            <div className={`overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_8px_32px_rgba(0,0,0,0.12)] ${scene.boardSize === 'wide' ? 'aspect-video max-h-full w-full max-w-full' : scene.boardSize === 'portrait' ? 'aspect-[0.707] h-full w-auto max-w-full' : 'h-full w-full'}`}>
                 <canvas
                   ref={canvasRef}
                   className={`block h-full w-full touch-none bg-white ${mode === 'markup' ? 'cursor-crosshair' : 'cursor-default'}`}
@@ -1108,7 +1507,7 @@ export default function WorkspaceSmartboardCanvas({
             </section>
 
             <header style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)' }} className="absolute left-1/2 z-30 flex w-[calc(100%-1rem)] max-w-xl -translate-x-1/2 items-center justify-between rounded-full border border-white/10 bg-[#181a1d]/90 p-1.5 shadow-xl backdrop-blur-md sm:w-auto sm:gap-8">
-              <Button type="button" size="icon" variant="ghost" className="h-10 w-10 rounded-full text-white hover:bg-white/10" aria-label="Close Smartboard" title="Close" onClick={() => { analysisRequestRef.current += 1; setAnalyzing(false); setOpen(false); }}>
+              <Button type="button" size="icon" variant="ghost" className="h-10 w-10 rounded-full text-white hover:bg-white/10" aria-label="Close Smartboard" title="Close" onClick={() => { analysisRequestRef.current += 1; setAnalyzing(false); lastAnalyzedImageRef.current = null; retryAnalysisImageRef.current = null; setOpen(false); }}>
                 <X className="h-5 w-5" />
               </Button>
               <div className="flex items-center gap-1">
@@ -1132,9 +1531,44 @@ export default function WorkspaceSmartboardCanvas({
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={() => fileRef.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />Add image</Button>
-                      <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" aria-pressed={modelsOpen} onClick={() => setModelsOpen((value) => !value)}><Box className="mr-2 h-4 w-4" />Subject models</Button>
                       <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-white hover:bg-white/10" aria-pressed={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}><Settings2 className="mr-2 h-4 w-4" />Board settings</Button>
                       <Button type="button" variant="outline" className="min-h-10 border-white/10 bg-white/5 text-rose-200 hover:bg-rose-950/40" onClick={clearBoard}><Trash2 className="mr-2 h-4 w-4" />Clear board</Button>
+                    </div>
+                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-xs font-medium text-white">AI suggestions: {aiSuggestionsEnabled ? 'On' : 'Off'}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-white/55">When on, FaceMeX analyzes a board snapshot after you pause. It never edits your work.</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-2 min-h-10 w-full border-white/10 bg-white/5 text-white hover:bg-white/10"
+                        aria-pressed={aiSuggestionsEnabled}
+                        onClick={toggleAISuggestions}
+                      >
+                        {aiSuggestionsEnabled ? 'Pause AI suggestions' : 'Enable AI suggestions'}
+                      </Button>
+                    </div>
+                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-xs font-medium text-white">Drawing tools</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1">
+                        {([
+                          ['pen', Pencil, 'Pen'],
+                          ['highlighter', Highlighter, 'Highlight'],
+                          ['eraser', Eraser, 'Erase'],
+                          ['arrow', ArrowRight, 'Arrow'],
+                          ['line', Minus, 'Line'],
+                          ['rectangle', Square, 'Rectangle'],
+                          ['ellipse', Circle, 'Ellipse'],
+                          ['triangle', Triangle, 'Triangle'],
+                        ] as const).map(([name, Icon, label]) => (
+                          <Button key={name} type="button" size="icon" variant="ghost" className={`h-9 w-9 rounded-full ${tool === name ? 'bg-white/15 text-white' : 'text-white/65 hover:bg-white/10'}`} aria-label={label} title={label} aria-pressed={tool === name} onClick={() => { changeMode('markup'); setTool(name); moreMenuRef.current?.removeAttribute('open'); }}>
+                            <Icon className="h-4 w-4" />
+                          </Button>
+                        ))}
+                        <input aria-label="Pen colour" type="color" value={color} onChange={(event) => setColor(event.target.value)} className="h-8 w-8 cursor-pointer rounded-full border-0 bg-transparent p-0" />
+                        <input aria-label="Pen thickness" type="range" min="1" max="18" value={width} onChange={(event) => setWidth(Number(event.target.value))} className="w-20 accent-white" />
+                        <Button type="button" variant="outline" className="min-h-9 border-white/10 bg-white/5 px-2 text-xs text-white hover:bg-white/10" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(false); moreMenuRef.current?.removeAttribute('open'); window.setTimeout(() => textRef.current?.focus(), 0); }}><Type className="mr-1 h-3.5 w-3.5" />Add text</Button>
+                        <Button type="button" variant="outline" className="min-h-9 border-white/10 bg-white/5 px-2 text-xs text-white hover:bg-white/10" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(true); moreMenuRef.current?.removeAttribute('open'); window.setTimeout(() => textRef.current?.focus(), 0); }}>Math input</Button>
+                      </div>
                     </div>
                     {settingsOpen && (
                       <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
@@ -1161,15 +1595,6 @@ export default function WorkspaceSmartboardCanvas({
                         )}
                       </div>
                     )}
-                    {modelsOpen && (
-                      <div className="mt-3">
-                        <WorkspaceLearningModels
-                          key={scene.visualModel || 'water'}
-                          initialModel={scene.visualModel || undefined}
-                          onExplain={onSolve}
-                        />
-                      </div>
-                    )}
                     {savedListOpen && (
                       <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-white/10 p-2">
                         {savedBoards.length ? savedBoards.map((board) => (
@@ -1185,49 +1610,24 @@ export default function WorkspaceSmartboardCanvas({
               </div>
             </header>
 
-            {shapeCandidate && !presentation && (
+            {shapeCandidate && aiSuggestionsEnabled && !suggestion && !presentation && (
               <section style={{ top: 'calc(env(safe-area-inset-top) + 7.5rem)' }} className="absolute left-1/2 z-20 w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-2xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-xl" aria-live="polite">
                 <p className="text-sm font-medium">This may be a {shapeCandidate.tool}.</p>
-                <p className="mt-1 text-xs text-slate-600">Keep your original drawing, or replace it with a clean editable shape.</p>
+                <p className="mt-1 text-xs text-slate-600">Create an editable clean version without changing the original, or keep drawing.</p>
                 <div className="mt-2 flex gap-2">
-                  <Button type="button" className="min-h-9 bg-slate-900 px-3 text-xs text-white hover:bg-slate-700" onClick={applyShapeCleanup}>Clean up shape</Button>
+                  <Button type="button" className="min-h-9 bg-slate-900 px-3 text-xs text-white hover:bg-slate-700" onClick={applyShapeCleanup}>Create clean shape</Button>
                   <Button type="button" variant="outline" className="min-h-9 px-3 text-xs" onClick={() => setShapeCandidate(null)}>Keep original</Button>
                 </div>
               </section>
             )}
-            {(error || notice) && (
+            {error && (
               <p
-                role={error ? 'alert' : 'status'}
+                role="alert"
                 style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }}
-                className={`absolute left-3 right-3 z-20 mx-auto max-w-xl rounded-xl border border-white/10 bg-[#191c20]/95 p-3 text-center text-xs shadow-xl ${error ? 'text-rose-200' : 'text-emerald-200'}`}
+                className="absolute left-3 right-3 z-20 mx-auto max-w-xl rounded-xl border border-white/10 bg-[#191c20]/95 p-3 text-center text-xs text-rose-200 shadow-xl"
               >
-                {error || notice}
+                {error}
               </p>
-            )}
-
-            {!presentation && mode === 'markup' && (
-              <div style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }} className="absolute left-1/2 z-20 flex max-w-[calc(100%-1.25rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-black/10 bg-white/95 p-1 shadow-lg backdrop-blur">
-                {([
-                  ['pen', Pencil, 'Pen'],
-                  ['highlighter', Highlighter, 'Highlight'],
-                  ['eraser', Eraser, 'Erase'],
-                  ['arrow', ArrowRight, 'Arrow'],
-                  ['line', Minus, 'Line'],
-                  ['rectangle', Square, 'Rectangle'],
-                  ['ellipse', Circle, 'Ellipse'],
-                  ['triangle', Triangle, 'Triangle'],
-                ] as const).map(([name, Icon, label]) => (
-                  <Button key={name} type="button" size="icon" variant="ghost" className={`h-9 w-9 shrink-0 rounded-full ${tool === name ? 'bg-slate-200 text-slate-950' : 'text-slate-700 hover:bg-slate-100'}`} aria-label={label} title={label} aria-pressed={tool === name} onClick={() => setTool(name)}>
-                    <Icon className="h-4 w-4" />
-                  </Button>
-                ))}
-                <label className="flex h-9 shrink-0 items-center px-1" title="Pen colour">
-                  <input aria-label="Pen colour" type="color" value={color} onChange={(event) => setColor(event.target.value)} className="h-7 w-7 cursor-pointer rounded-full border-0 bg-transparent p-0" />
-                </label>
-                <input aria-label="Pen thickness" title="Pen thickness" type="range" min="1" max="18" value={width} onChange={(event) => setWidth(Number(event.target.value))} className="w-16 accent-slate-800" />
-                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 shrink-0 rounded-full text-slate-700 hover:bg-slate-100" aria-label="Add text" title="Add text" onClick={() => { setTextComposerOpen(true); window.setTimeout(() => textRef.current?.focus(), 0); }}><Type className="h-4 w-4" /></Button>
-                <Button type="button" size="icon" variant="ghost" className="h-9 w-9 shrink-0 rounded-full text-slate-700 hover:bg-slate-100" aria-label="Open mathematical symbol input" title="Math symbols" onClick={() => { setTextComposerOpen(true); setMathKeyboardOpen(true); window.setTimeout(() => textRef.current?.focus(), 0); }}>∑</Button>
-              </div>
             )}
 
             {textComposerOpen && !presentation && (
@@ -1239,7 +1639,7 @@ export default function WorkspaceSmartboardCanvas({
                 </div>
                 {mathKeyboardOpen && (
                   <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto" aria-label="Mathematical symbols">
-                    {['x²', 'x³', 'xⁿ', '√', '∛', 'a/b', 'π', 'θ', '∫', '∑', '≤', '≥', '≠', '()', '[]', '×', '÷', '−', '∂', 'lim', '→'].map((symbol) => (
+                    {['x²', 'x³', 'xⁿ', 'x₁', 'xₙ', '⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹', '₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉', '√', '∛', 'a/b', 'π', 'θ', '∫', '∑', '≤', '≥', '≠', '()', '[]', '×', '÷', '−', '∂', 'lim', '→'].map((symbol) => (
                       <Button key={symbol} type="button" variant="outline" aria-label={`Insert ${symbol}`} className="h-8 min-w-9 px-2 text-sm text-slate-800" onClick={() => insertMathSymbol(symbol)}>{symbol}</Button>
                     ))}
                   </div>
@@ -1250,6 +1650,43 @@ export default function WorkspaceSmartboardCanvas({
             {!presentation && selection && (
               <section style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5.25rem)' }} className="absolute left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-2xl border border-white/10 bg-[#191c20]/95 p-2 shadow-xl backdrop-blur" aria-label="Selected object actions">
                 {selectedText && <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" onClick={editSelectedText}>Edit text</Button>}
+                {selectedVisual && <span className="px-2 text-xs capitalize text-white/70">{getBoardVisualLabel(selectedVisual.kind)}</span>}
+                {selectedVisual && (selectedVisual.kind === 'cube' || selectedVisual.kind === 'water') && (
+                  <label className="flex items-center gap-2 px-2 text-xs text-white/70">
+                    Rotate
+                    <input type="range" min="-3.14" max="3.14" step="0.05" value={selectedVisual.rotation} aria-label={`Rotate ${selectedVisual.kind}`} onPointerDown={remember} onChange={(event) => {
+                      const rotation = Number(event.target.value);
+                      updateScene((previous) => ({
+                        ...previous,
+                        visuals: previous.visuals.map((visual, index) => index === selection.index ? { ...visual, rotation } : visual),
+                      }));
+                    }} className="w-24 accent-white" />
+                  </label>
+                )}
+                {selectedVisual?.kind === 'newton' && (
+                  <>
+                    <label className="flex items-center gap-2 px-2 text-xs text-white/70">
+                      Mass {selectedVisual.mass || 1200} kg
+                      <input type="range" min="100" max="2000" step="100" value={selectedVisual.mass || 1200} aria-label="Demonstration mass in kilograms" onPointerDown={remember} onChange={(event) => {
+                        const mass = Number(event.target.value);
+                        updateScene((previous) => ({
+                          ...previous,
+                          visuals: previous.visuals.map((visual, index) => index === selection.index ? { ...visual, mass } : visual),
+                        }));
+                      }} className="w-20 accent-white" />
+                    </label>
+                    <label className="flex items-center gap-2 px-2 text-xs text-white/70">
+                      Acceleration {selectedVisual.acceleration ?? 4} m/s²
+                      <input type="range" min="0" max="10" step="0.5" value={selectedVisual.acceleration ?? 4} aria-label="Demonstration acceleration in metres per second squared" onPointerDown={remember} onChange={(event) => {
+                        const acceleration = Number(event.target.value);
+                        updateScene((previous) => ({
+                          ...previous,
+                          visuals: previous.visuals.map((visual, index) => index === selection.index ? { ...visual, acceleration } : visual),
+                        }));
+                      }} className="w-20 accent-white" />
+                    </label>
+                  </>
+                )}
                 <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void recognizeSelectedText()}><Sparkles className="mr-1 h-3.5 w-3.5" />Read text</Button>
                 <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void askAI('Improve the selected writing for spelling, grammar, clarity and professional tone. Preserve its meaning. Return only the suggested replacement text.')}>Improve</Button>
                 <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-white hover:bg-white/10" disabled={busy} onClick={() => void askAI('Explain the selected board content accurately and concisely. Clearly state uncertainty where content is unclear.')}>Explain</Button>
@@ -1270,6 +1707,12 @@ export default function WorkspaceSmartboardCanvas({
                   <>
                     <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Shrink selected object" onClick={() => resizeSelection(0.85)}><Minus className="h-4 w-4" /></Button>
                     <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Enlarge selected object" onClick={() => resizeSelection(1.15)}><Plus className="h-4 w-4" /></Button>
+                  </>
+                )}
+                {selectedVisual && (
+                  <>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Shrink selected visual" onClick={() => resizeSelection(0.85)}><Minus className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-white hover:bg-white/10" aria-label="Enlarge selected visual" onClick={() => resizeSelection(1.15)}><Plus className="h-4 w-4" /></Button>
                   </>
                 )}
                 {selectedText && (
@@ -1304,23 +1747,20 @@ export default function WorkspaceSmartboardCanvas({
                   {scene.recognizedText && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => onSolve(scene.recognizedText)}>Explain</Button>}
                   {recognizedCoefficients && (
                     <>
-                      <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => {
-                        remember();
-                        updateScene((previous) => ({
-                          ...previous,
-                          equation: scene.recognizedText,
-                          graphOnBoard: true,
-                        }));
-                        setSuggestion('');
-                      }}>Plot on board</Button>
+                      <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('parabola')}>Plot on board</Button>
                       <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => onSolve(scene.recognizedText)}>Find turning point</Button>
                     </>
                   )}
-                  {scene.visualModel && (
-                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => {
-                      if (moreMenuRef.current) moreMenuRef.current.open = true;
-                      setModelsOpen(true);
-                    }}>Open interactive visual</Button>
+                  {suggestedObjectKind && suggestedObjectKind !== 'parabola' && (
+                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual(suggestedObjectKind)}>
+                      {suggestedObjectKind === 'cube' ? 'Create interactive 3D cube' :
+                        suggestedObjectKind === 'sphere' ? 'Create 3D sphere' :
+                          `Create ${suggestedObjectKind === 'water' ? 'water molecule' : suggestedObjectKind} on board`}
+                    </Button>
+                  )}
+                  {suggestedObjectKind === 'circle' && <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={() => addBoardVisual('sphere')}>Create 3D sphere</Button>}
+                  {shapeCandidate && (
+                    <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={applyShapeCleanup}>Create clean 2D {shapeCandidate.tool}</Button>
                   )}
                   {scene.visualModel === 'cube' && (
                     <Button type="button" variant="ghost" className="min-h-9 text-xs text-white/75 hover:bg-white/10" onClick={addCleanCube}>Add clean 2D cube</Button>
