@@ -6721,7 +6721,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         allowPortrait: false,
       },
       1,
-    )[0]?.image;
+    )[0];
     if (!image?.attribution || !(image.attributionUrl || image.photoUrl)) return undefined;
     return {
       url: image.url,
