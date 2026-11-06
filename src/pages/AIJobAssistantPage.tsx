@@ -6639,60 +6639,97 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     }
   };
 
-  const recognizeSmartboardDrawing = async (imageDataUrl: string) => {
-    if (!canUseAI || aiUsageLimitReached) {
-      toast({
-        title: 'AI access unavailable',
-        description: 'Sign in or wait for your AI usage allowance to refresh before recognizing handwriting.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const imageResponse = await fetch(imageDataUrl);
-    if (!imageResponse.ok) throw new Error('Could not prepare the drawing for FaceMeX vision.');
-    const imageBlob = await imageResponse.blob();
-    const imageFile = new File([imageBlob], 'smartboard-handwriting.png', {
-      type: imageBlob.type || 'image/png',
-    });
-    const image = await imageFileToWorkspaceImage(imageFile);
-    const response = await sendPrompt(
-      'Read the handwritten mathematical or scientific notation in this image and transcribe it exactly. Do not solve or explain it yet. Preserve symbols, exponents, signs, numbers, and units. If any essential mark is unclear, identify only the uncertain part and ask me to correct it; do not guess.',
-      { images: [image] },
-    );
-    if (!response) throw new Error('FaceMeX could not recognize the handwriting. Please try a clearer image.');
-    return response;
-  };
-
-  const analyzeSmartboardDrawing = async (
-    imageDataUrl: string,
+  const requestSmartboardAI = async (
     instruction: string,
-  ): Promise<string | undefined> => {
+    imageDataUrl?: string,
+  ): Promise<string> => {
     if (!canUseAI || aiUsageLimitReached) {
-      toast({
-        title: 'AI access unavailable',
-        description: 'Sign in or wait for your AI usage allowance to refresh before analyzing the board.',
-        variant: 'destructive',
-      });
-      throw new Error('AI access is currently unavailable.');
+      throw new Error('Sign in or wait for your AI usage allowance to refresh before using Smartboard AI.');
     }
     if (busy || promptSubmissionRef.current) {
-      throw new Error('FaceMeX is responding to another request. Retry the Smartboard analysis when it is ready.');
+      throw new Error('FaceMeX is responding to another request. Retry when it is ready.');
     }
 
-    const imageResponse = await fetch(imageDataUrl);
-    if (!imageResponse.ok) throw new Error('Could not prepare the board image for FaceMeX vision.');
-    const imageBlob = await imageResponse.blob();
-    const imageFile = new File([imageBlob], 'smartboard-board.png', {
-      type: imageBlob.type || 'image/png',
-    });
-    const image = await imageFileToWorkspaceImage(imageFile);
-    const response = await sendPrompt(
-      `${instruction}\n\nTreat the attached image as the current teaching board. Be specific to the visible subject and content, preserve the exact notation and labels, and ask only one focused clarification if essential information cannot be read. Do not claim to edit the board, generate a professional image, or create a 3D model unless that output is actually available.`,
-      { images: [image] },
+    promptSubmissionRef.current = true;
+    try {
+      const payload = {
+        messages: [
+          {
+            role: 'system',
+            content: 'You are FaceMeX Smartboard, a helpful learning and career preparation assistant. Keep the answer relevant to the user-provided board. Be accurate, preserve visible notation, and never claim that you edited or added anything to the board.',
+          },
+          { role: 'user', content: instruction },
+        ],
+        attachments: imageDataUrl
+          ? [{ name: 'smartboard-board.png', mimeType: 'image/png', dataUrl: imageDataUrl }]
+          : [],
+      };
+
+      let data: any;
+      try {
+        data = unwrapApiResponse(await api.postViaSameOriginProxy('/api/ai/pro/job-assistant', payload));
+      } catch {
+        data = unwrapApiResponse(await api.postViaSameOriginProxy('/api/ai/workspace', payload));
+      }
+
+      if (isAIUsageLimitError(data)) {
+        throw new Error('The AI usage limit has been reached.');
+      }
+      if (data?.success === false || data?.error) {
+        const message = typeof data.error === 'string'
+          ? data.error
+          : typeof data.message === 'string'
+            ? data.message
+            : 'The AI service could not complete the Smartboard request.';
+        throw new Error(message);
+      }
+
+      const answer = normalizeAnswerText(data, '').trim();
+      if (!answer) throw new Error('FaceMeX returned an empty Smartboard response. Please try again.');
+      recordAIUse();
+      return answer;
+    } finally {
+      promptSubmissionRef.current = false;
+    }
+  };
+
+  const recognizeSmartboardDrawing = (imageDataUrl: string) =>
+    requestSmartboardAI(
+      'Read the handwritten mathematical or scientific notation in this image and transcribe it exactly. Do not solve or explain it yet. Preserve symbols, exponents, signs, numbers, and units. If any essential mark is unclear, identify only the uncertain part and ask me to correct it; do not guess.',
+      imageDataUrl,
     );
-    if (!response) throw new Error('FaceMeX could not analyze the current board. Please try again.');
-    return response;
+
+  const analyzeSmartboardDrawing = (
+    imageDataUrl: string,
+    instruction: string,
+  ): Promise<string> =>
+    requestSmartboardAI(
+      `${instruction}\n\nTreat the attached image as the current teaching board. Be specific to the visible subject and content, preserve the exact notation and labels, and ask only one focused clarification if essential information cannot be read. Do not claim to edit the board, generate a professional image, or create a 3D model unless that output is actually available.`,
+      imageDataUrl,
+    );
+
+  const searchSmartboardReferenceImage = async (query: string) => {
+    const searchQuery = query.trim().replace(/\s+/g, ' ').slice(0, 120);
+    if (!searchQuery) return undefined;
+    const result = await api.get(`/api/media/images/search?query=${encodeURIComponent(searchQuery)}`);
+    const image = selectRelevantWorkspaceImages(
+      normalizeWorkspaceImages(result, 12),
+      {
+        imageQuery: searchQuery,
+        educationalPhoto: false,
+        allowPeople: false,
+        allowPortrait: false,
+      },
+      1,
+    )[0]?.image;
+    if (!image?.attribution || !(image.attributionUrl || image.photoUrl)) return undefined;
+    return {
+      url: image.url,
+      alt: image.alt || searchQuery,
+      attribution: image.attribution,
+      attributionUrl: image.attributionUrl || image.photoUrl || '',
+      photoUrl: image.photoUrl || image.attributionUrl || '',
+    };
   };
 
   const saveSmartboardLesson = (lesson: WorkspaceSmartboardLessonDraft) =>
@@ -6700,17 +6737,21 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
   const listSmartboardLessons = () => listWorkspaceSmartboardLessons();
 
-  const solveSmartboardExpression = (expression: string) => {
-    if (!expression.trim()) return;
-    if (!canUseAI || aiUsageLimitReached) {
-      toast({
-        title: 'AI access unavailable',
-        description: 'Sign in or wait for your AI usage allowance to refresh before asking FaceMeX to solve this.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    sendPrompt(`Tutor me through this learner-provided mathematical or scientific question. Preserve the expression, values, units and labels exactly. Identify what it is asking, then explain the relevant principle and work through the solution in ordered steps, explaining why each important step is valid. Show formulas and substitutions where relevant, check the result, and interpret it in context. If the expression is quadratic, find and explain its vertex and axis of symmetry. For a scientific concept, explain the process and cause-and-effect using accurate terminology. Include a validated visual only if it materially helps; do not claim a visual is shown unless it is actually rendered. If essential information is unclear or missing, ask one focused clarification question instead of guessing:\n\n${expression.trim()}`);
+  const solveSmartboardExpression = (
+    expression: string,
+    imageDataUrl?: string,
+  ): Promise<string | undefined> => {
+    if (!expression.trim()) return Promise.resolve(undefined);
+    return requestSmartboardAI(
+      `Explain the learner's visible mathematical or scientific work as an intelligent, supportive academic tutor. Use the short headings "What it shows", "How it works", and "Key takeaway". Under the headings, begin with a plain-language summary and then explain the reasoning in numbered, logical steps, showing formulas and substitutions where useful and defining specialist terms. Connect the explanation to the visible drawing, labels, and notation; preserve all values and units exactly. Check conclusions for accuracy and explain why each step is valid. For quadratic work, identify the vertex and axis of symmetry when supported by the equation. Clearly separate visible facts from assumptions; if something cannot be read, state that rather than guessing. Keep the polished, professional explanation under 140 words so it fits as a readable board note. Do not claim to change the board:\n\n${expression.trim()}`,
+      imageDataUrl,
+    );
+  };
+
+  const sendSmartboardResponseToWorkspace = (content: string) => {
+    setPrompt((current) => current.trim()
+      ? `${current.trim()}\n\nSmartboard response:\n${content}`
+      : content);
   };
 
   const quickAsk = (text: string) => {
@@ -10733,8 +10774,10 @@ Start with the most useful next action. Do not invent personal details, course r
                     onRecognizeDrawing={recognizeSmartboardDrawing}
                     onSolve={solveSmartboardExpression}
                     onAnalyzeDrawing={analyzeSmartboardDrawing}
+                    onSearchReferenceImage={searchSmartboardReferenceImage}
                     onSaveLesson={saveSmartboardLesson}
                     onListLessons={listSmartboardLessons}
+                    onSendToWorkspace={sendSmartboardResponseToWorkspace}
                   />
                   <button
                     type="button"
