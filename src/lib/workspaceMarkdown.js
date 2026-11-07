@@ -1,5 +1,5 @@
-const SUBSCRIPT_DIGITS = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '+': '₊', '-': '₋' };
-const SUPERSCRIPT_DIGITS = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺', '-': '⁻' };
+const SUBSCRIPT_DIGITS = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '+': '₊', '-': '₋', 'i': 'ᵢ', 'j': 'ⱼ', 'n': 'ₙ', 'x': 'ₓ' };
+const SUPERSCRIPT_DIGITS = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺', '-': '⁻', 'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'i': 'ⁱ', 'n': 'ⁿ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ' };
 
 function splitTableRow(line) {
   const cells = [];
@@ -200,25 +200,22 @@ export function formatWorkspaceMath(source) {
     .replace(/\\(?:underbrace|overbrace)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\s*[_^]\s*\{(?:\\text\s*\{[^{}]*\}|[^{}]*)\}/g, '$1')
     .replace(/\\(?:underbrace|overbrace)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '$1')
     .replace(/\\(?:mathrm|mathbf|mathit|text|operatorname)\s*\{([^{}]*)\}/g, '$1')
-    .replace(/\\(?:ce|pu)\s*\{([^{}]*)\}/g, '$1')
-    .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
-    .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
-    .replace(/\\(?:times|timesdot)/g, '×')
-    .replace(/\\cdot/g, '·')
-    .replace(/\\(?:rightarrow|to|longrightarrow)/g, '→')
-    .replace(/\\leftarrow/g, '←')
-    .replace(/\\approx/g, '≈')
-    .replace(/\\neq/g, '≠')
-    .replace(/\\leq?/g, '≤')
-    .replace(/\\geq?/g, '≥')
-    .replace(/\\pm/g, '±')
-    .replace(/\\pi\b/g, 'π')
-    .replace(/\\alpha\b/g, 'α')
-    .replace(/\\beta\b/g, 'β')
-    .replace(/\\gamma\b/g, 'γ')
-    .replace(/\\Delta\b/g, 'Δ')
-    .replace(/\\delta\b/g, 'δ')
-    .replace(/\\infty\b/g, '∞')
+    .replace(/\\(?:ce|pu)\s*\{([^{}]*)\}/g, '$1');
+  for (let iteration = 0; iteration < 16; iteration += 1) {
+    const formatted = value
+      .replace(/\\(?:frac|dfrac|tfrac)\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
+      .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+      .replace(/\\sqrt\s*([A-Za-z0-9])/g, '√($1)')
+      .replace(/\\boxed\s*\{([^{}]*)\}/g, '$1');
+    if (formatted === value) break;
+    value = formatted;
+  }
+  value = value
+    .replace(/\\(?:frac|dfrac|tfrac|sqrt|boxed)\b/g, '')
+    .replace(/\\(?:begin|end)\s*\{(?:aligned|align\*?|gathered)\}/g, '')
+    .replace(/\\left\s*|\\right\s*/g, '')
+    .replace(/\\(?:,|;|!|quad|qquad)\s*/g, ' ')
+    .replace(/\\([a-zA-Z]+)\b/g, (command, name) => MATH_SYMBOLS[name] || '')
     .replace(/_\{([^{}]+)\}|_([a-zA-Z0-9]+)/g, (_, braced, simple) => unicodeScript(braced || simple, SUBSCRIPT_DIGITS))
     .replace(/\^\{([^{}]+)\}|\^([a-zA-Z0-9]+)/g, (_, braced, simple) => unicodeScript(braced || simple, SUPERSCRIPT_DIGITS))
     .replace(/[{}]/g, '')
@@ -226,6 +223,32 @@ export function formatWorkspaceMath(source) {
     .replace(/\s+/g, ' ')
     .trim();
   return value;
+}
+
+export function formatWorkspaceMathForBoard(source) {
+  const formatMathLine = (line) => formatWorkspaceMath(line.replace(/&/g, ''));
+  let text = String(source || '')
+    .replace(/\\begin\{(aligned|align\*?|gathered)\}([\s\S]*?)\\end\{\1\}/g, (_, _environment, body) =>
+      body.split(/\\\\(?:\[[^\]]+\])?/)
+        .map(formatMathLine)
+        .filter(Boolean)
+        .join('\n')
+    )
+    .replace(/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|(?<!\\)\$([^$\n]+)\$/g,
+      (match, displayDollar, displayBracket, inlineParen, inlineDollar) => {
+        const expression = displayDollar ?? displayBracket ?? inlineParen ?? inlineDollar;
+        if (inlineDollar && !/[=+\-*/^_{}()<>×÷√∑∫]|\\[a-zA-Z]+|\b[a-zA-Z]\b/.test(inlineDollar)) return match;
+        return formatMathLine(expression ?? match);
+      }
+    )
+    .replace(/\\(?:\[|\]|\(|\))/g, '')
+    .replace(/^\$+|\$+$/gm, '');
+
+  return text.split('\n').map((line) =>
+    /\\[a-zA-Z]+|[A-Za-z0-9)]\s*[_^]\s*(?:\{[^}]+\}|[A-Za-z0-9])/.test(line)
+      ? formatMathLine(line)
+      : line
+  ).join('\n').trim();
 }
 
 const MATH_SYMBOLS = {
@@ -242,6 +265,9 @@ const MATH_SYMBOLS = {
   nabla: '∇', int: '∫', iint: '∬', oint: '∮', sum: '∑', prod: '∏',
   cdots: '⋯', ldots: '…', forall: '∀', exists: '∃', in: '∈', notin: '∉',
   subset: '⊂', subseteq: '⊆', perp: '⊥', angle: '∠', degree: '°',
+  sin: 'sin', cos: 'cos', tan: 'tan', cot: 'cot', sec: 'sec', csc: 'csc',
+  arcsin: 'arcsin', arccos: 'arccos', arctan: 'arctan', log: 'log', ln: 'ln',
+  exp: 'exp', max: 'max', min: 'min', det: 'det',
 };
 
 const MATH_OPERATORS = new Set([

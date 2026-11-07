@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseQuadraticEquation, sampleQuadratic, solveQuadraticEquation } from './workspaceGraph.js';
+import {
+  createIncompleteEquationClarification,
+  createQuadraticFunctionExplanation,
+  isIncompleteEquation,
+  parseQuadraticEquation,
+  sampleQuadratic,
+  solveQuadraticEquation,
+} from './workspaceGraph.js';
 
 test('parses supported quadratic equations and rejects ambiguous or unsupported input', () => {
   assert.deepEqual(parseQuadraticEquation('y = x² - 3'), { a: 1, b: 0, c: -3 });
@@ -41,4 +48,36 @@ test('samples an accurate curve and identifies intercepts and turning point', ()
   assert.equal(graph.roots.length, 2);
   assert.ok(Math.abs(graph.roots[0] + Math.sqrt(3)) < 1e-10);
   assert.ok(Math.abs(graph.roots[1] - Math.sqrt(3)) < 1e-10);
+});
+
+test('detects an incomplete equation without guessing its missing right-hand side', () => {
+  assert.equal(isIncompleteEquation('x² + 5 ='), true);
+  assert.equal(isIncompleteEquation('\\[x^2 + 5 =\\]'), true);
+  assert.equal(isIncompleteEquation('y = x² - 6x + 2'), false);
+  assert.equal(isIncompleteEquation('How do I solve this?'), false);
+  assert.equal(createIncompleteEquationClarification('x² + 5 ='), [
+    'What I noticed',
+    'Your equation currently reads:',
+    '',
+    '\\[x² + 5 =\\]',
+    '',
+    'The right-hand side is missing.',
+    '',
+    'Let’s complete it',
+    'What should come after the equals sign?',
+  ].join('\n'));
+});
+
+test('creates a checked, specific explanation for a quadratic function', () => {
+  const explanation = createQuadraticFunctionExplanation('y = x² - 6x + 2');
+  assert.ok(explanation);
+  assert.match(explanation, /y = x² - 6x \+ 2/);
+  assert.match(explanation, /a=1,\\ b=-6,\\ c=2/);
+  assert.match(explanation, /\\frac\{6\}\{2\(1\)\}=3/);
+  assert.match(explanation, /3\^2-6\(3\)\+2=-7/);
+  assert.match(explanation, /x=3 \\pm \\sqrt\{7\}/);
+  assert.match(explanation, /x\\approx0\.354/);
+  assert.match(explanation, /x\\approx5\.646/);
+  assert.match(explanation, /\\\(3,-7\\\)/);
+  assert.equal(createQuadraticFunctionExplanation('x² - 6x + 2 = 0'), null);
 });

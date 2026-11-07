@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   formatWorkspaceMath,
+  formatWorkspaceMathForBoard,
   parseWorkspaceMarkdown,
   renderWorkspaceMathML,
   tokenizeWorkspaceInline,
@@ -108,6 +109,38 @@ test('renders inline emphasis, code, links, images, and mathematical notation as
 
 test('preserves unsupported LaTeX as readable plain text rather than delimiters', () => {
   assert.equal(formatWorkspaceMath('$\\frac{a}{b} \\approx \\sqrt{x}$'), '(a)/(b) ≈ √(x)');
+});
+
+test('formats board explanations without leaking math delimiters or LaTeX commands', () => {
+  const explanation = formatWorkspaceMathForBoard([
+    'The roots are:',
+    String.raw`\[x=3\pm\sqrt{7}\]`,
+    String.raw`The value is \(y=\frac{x+2}{3}\), approximately \(\frac{5}{6}\).`,
+    String.raw`\begin{aligned}y&=3^2-6(3)+2\\&=-7\end{aligned}`,
+  ].join('\n'));
+
+  assert.match(explanation, /x=3±√\(7\)/);
+  assert.match(explanation, /y=\(x\+2\)\/\(3\)/);
+  assert.match(explanation, /5\/6/);
+  assert.match(explanation, /y=3²-6\(3\)\+2\n=-7/);
+  assert.doesNotMatch(explanation, /\\(?:frac|sqrt|pm|approx|begin|end)\b|\\\[|\\\]|\\\(|\\\)|\$\$/);
+});
+
+test('formats common board math and aligned simultaneous equations as readable notation', () => {
+  const formatted = formatWorkspaceMathForBoard([
+    String.raw`\(y=\frac{x+2}{3}\)`,
+    String.raw`\(\sqrt{49}=7\)`,
+    String.raw`\begin{aligned}x+y&=10\\x-y&=2\end{aligned}`,
+    String.raw`\(a=1,\quad b=-6,\quad c=2,\quad x\approx3\pm\sqrt7\)`,
+    'Tickets cost $5 and $10 per person.',
+  ].join('\n'));
+
+  assert.match(formatted, /y=\(x\+2\)\/\(3\)/);
+  assert.match(formatted, /√\(49\)=7/);
+  assert.match(formatted, /x\+y=10\nx-y=2/);
+  assert.match(formatted, /a=1, b=-6, c=2, x≈3±√\(7\)/);
+  assert.match(formatted, /Tickets cost \$5 and \$10 per person\./);
+  assert.doesNotMatch(formatted, /\\(?:frac|sqrt|pm|approx|begin|end|quad)\b|\\\[|\\\]|\\\(|\\\)/);
 });
 
 test('formats chemical equations and renders brace annotations without leaking LaTeX commands', () => {

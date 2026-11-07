@@ -16,5 +16,6 @@ export type WorkspaceInlineToken =
 
 export function parseWorkspaceMarkdown(source: string): WorkspaceMarkdownBlock[];
 export function formatWorkspaceMath(source: string): string;
+export function formatWorkspaceMathForBoard(source: string): string;
 export function renderWorkspaceMathML(source: string, display?: boolean): string;
 export function tokenizeWorkspaceInline(source: string): WorkspaceInlineToken[];

@@ -55,6 +55,151 @@ export function parseQuadraticEquation(input) {
     : null;
 }
 
+export function isIncompleteEquation(input) {
+  const expression = String(input || '')
+    .replace(/\\(?:\[|\]|\(|\))/g, '')
+    .replace(/[$\s]/g, '')
+    .trim();
+  const equalityIndex = expression.lastIndexOf('=');
+  if (equalityIndex < 0 || equalityIndex !== expression.length - 1 ||
+    expression.indexOf('=') !== equalityIndex) return false;
+  return /[a-z0-9]/i.test(expression.slice(0, equalityIndex));
+}
+
+export function createIncompleteEquationClarification(input) {
+  const expression = String(input || '').trim();
+  if (!isIncompleteEquation(expression)) return null;
+  const withoutDelimiters = expression.replace(/\\(?:\[|\]|\(|\))/g, '').replace(/^\$+|\$+$/g, '').trim();
+  const equalsIndex = withoutDelimiters.lastIndexOf('=');
+  const left = withoutDelimiters.slice(0, equalsIndex).trim();
+  const right = withoutDelimiters.slice(equalsIndex + 1).trim();
+  if (!left) {
+    return [
+      'What I noticed',
+      'Your equation is missing the expression before the equals sign.',
+      '',
+      'Let’s complete it',
+      'What should go on the left-hand side?',
+    ].join('\n');
+  }
+  if (right) return null;
+  return [
+    'What I noticed',
+    'Your equation currently reads:',
+    '',
+    `\\[${left} =\\]`,
+    '',
+    'The right-hand side is missing.',
+    '',
+    'Let’s complete it',
+    'What should come after the equals sign?',
+  ].join('\n');
+}
+
+function formatExactQuadraticRoots(coefficients, discriminant) {
+  const { a, b } = coefficients;
+  const denominator = 2 * a;
+  if (!Number.isInteger(a) || !Number.isInteger(b) || !Number.isInteger(discriminant) ||
+    a <= 0 || denominator === 0) return null;
+
+  const centerNumerator = -b;
+  if (centerNumerator % denominator !== 0) return null;
+  let outside = 1;
+  let inside = discriminant;
+  for (let factor = 2; factor * factor <= inside; factor += 1) {
+    while (inside % (factor * factor) === 0) {
+      outside *= factor;
+      inside /= factor * factor;
+    }
+  }
+  if (outside % denominator !== 0) return null;
+
+  const center = centerNumerator / denominator;
+  const radicalCoefficient = outside / denominator;
+  const radical = inside === 1
+    ? String(radicalCoefficient)
+    : `${radicalCoefficient === 1 ? '' : radicalCoefficient}\\sqrt{${inside}}`;
+  return `${center} \\pm ${radical}`;
+}
+
+function formatQuadraticPolynomial(a, b, c) {
+  return [
+    { coefficient: a, variable: 'x^2' },
+    { coefficient: b, variable: 'x' },
+    { coefficient: c, variable: '' },
+  ].filter(({ coefficient }) => coefficient !== 0)
+    .map(({ coefficient, variable }, index) => {
+      const sign = coefficient < 0 ? '-' : index === 0 ? '' : '+';
+      const magnitude = Math.abs(coefficient);
+      const value = variable && magnitude === 1 ? '' : String(magnitude);
+      return `${sign}${value}${variable}`;
+    }).join('');
+}
+
+export function createQuadraticFunctionExplanation(input) {
+  const source = String(input || '').trim();
+  const expression = source.replace(/\\(?:\[|\]|\(|\))/g, '').replace(/^\$+|\$+$/g, '').trim();
+  if (!/^(?:y|f\(x\))\s*=/i.test(expression)) return null;
+  const result = solveQuadraticEquation(expression);
+  if (!result || result.kind !== 'quadratic' || !result.vertex || result.discriminant === null) return null;
+
+  const { a, b, c } = result.coefficients;
+  const { x, y } = result.vertex;
+  const fixed = (value) => Number(value.toFixed(3)).toString();
+  const direction = a > 0 ? 'upward' : 'downward';
+  const roots = result.roots.length
+    ? result.roots.map(fixed)
+    : [];
+  const exactRoots = result.discriminant >= 0
+    ? formatExactQuadraticRoots(result.coefficients, result.discriminant)
+    : null;
+  const rootExplanation = result.discriminant < 0
+    ? 'There are no real x-intercepts because the discriminant is negative.'
+    : result.roots.length === 1
+      ? `The graph touches the x-axis once, at \\(x=${roots[0]}\\).`
+      : `The roots are ${exactRoots ? `\\(x=${exactRoots}\\)` : 'given by the quadratic formula'}; approximately \\(x\\approx${roots[0]}\\) and \\(x\\approx${roots[1]}\\).`;
+  const polynomial = formatQuadraticPolynomial(a, b, c);
+  const substitutedY = [
+    { value: a, term: `${fixed(x)}^2` },
+    { value: b, term: `(${fixed(x)})` },
+    { value: c, term: '' },
+  ].filter(({ value }) => value !== 0)
+    .map(({ value, term }, index) => {
+      const sign = value < 0 ? '-' : index === 0 ? '' : '+';
+      const magnitude = Math.abs(value);
+      const coefficient = term && magnitude === 1 ? '' : String(magnitude);
+      return `${sign}${coefficient}${term}`;
+    }).join('');
+
+  return [
+    'What I see',
+    'The board shows the quadratic function:',
+    '',
+    `\\[${source}\\]`,
+    '',
+    `Its coefficients are \\(a=${a},\\ b=${b},\\ c=${c}\\).`,
+    '',
+    'Step 1: Find the turning point’s x-coordinate.',
+    `\\[x=-\\frac{b}{2a}=\\frac{${-b}}{2(${a})}=${fixed(x)}\\]`,
+    '',
+    'Step 2: Substitute that value to find the y-coordinate.',
+    `\\[y=${substitutedY}=${fixed(y)}\\]`,
+    '',
+    `The vertex is \\((${fixed(x)},${fixed(y)})\\), the ${a > 0 ? 'lowest' : 'highest'} point.`,
+    '',
+    'Step 3: Find the y-intercept by setting x to zero.',
+    `\\[y=${c}\\]`,
+    `The y-intercept is \\((0,${c})\\).`,
+    '',
+    'Step 4: Find where the graph crosses the x-axis.',
+    `Set \\(y=0\\): \\[${polynomial}=0\\]`,
+    rootExplanation,
+    '',
+    'Final understanding',
+    `The parabola opens ${direction}. Its vertex is \\((${fixed(x)},${fixed(y)})\\), and its y-intercept is \\((0,${c})\\).`,
+  ].join('\n');
+}
+
 export function solveQuadraticEquation(input) {
   const coefficients = parseQuadraticEquation(input);
   if (!coefficients) return null;

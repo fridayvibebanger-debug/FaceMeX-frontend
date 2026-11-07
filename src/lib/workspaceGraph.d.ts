@@ -10,6 +10,9 @@ export type GraphPoint = {
 };
 
 export function parseQuadraticEquation(input: string): QuadraticCoefficients | null;
+export function isIncompleteEquation(input: string): boolean;
+export function createIncompleteEquationClarification(input: string): string | null;
+export function createQuadraticFunctionExplanation(input: string): string | null;
 export function solveQuadraticEquation(input: string): {
   coefficients: QuadraticCoefficients;
   discriminant: number | null;
