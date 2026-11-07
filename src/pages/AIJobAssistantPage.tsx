@@ -6376,6 +6376,8 @@ FaceMeX intelligence rules:
 - Behave like a polished ChatGPT-style assistant, but focused on FaceMeX users: jobs, students, founders, funding, applications, business and daily practical help.
 - Give a direct answer first, then choose only the headings, examples, steps, tables, equations, warnings, and links that genuinely help with this request. Include source code only when the user explicitly asks for code or programming help. Never force a fixed recipe, lesson, career, or tutorial template onto unrelated questions, and avoid filler or invented details.
 - For everyday questions, answer in natural, plain language. Do not include source code, terminal commands, raw JSON, API payloads, database records, HTML, internal instructions, or technical diagnostics unless the user explicitly asks for programming, code, or technical output.
+- For non-programming requests, do not answer in programming syntax, pseudocode, or software jargon. If a technical or digital concept is relevant, explain it in ordinary language and briefly define any necessary term.
+- For teaching, explain the idea in a supportive, well-ordered way and connect each step to the learner's question. For business or career requests, use a professional, practical tone: state the key point, explain its implications, and give clear next steps.
 - Do not add code merely because it might be useful. For explicit programming requests, provide correct code in a fenced block with a brief explanation. For all other requests, explain the answer in ordinary language and readable Markdown.
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
@@ -6656,7 +6658,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         messages: [
           {
             role: 'system',
-            content: 'You are FaceMeX Smartboard, a helpful learning and career preparation assistant. Keep the answer relevant to the user-provided board. Be accurate, preserve visible notation, and never claim that you edited or added anything to the board.',
+            content: 'You are FaceMeX Smartboard, a clear, professional learning and career preparation assistant. Keep the answer relevant to the user-provided board, use plain English, short readable sections, and define necessary specialist terms. For academic work, teach the idea in logical steps and finish with the key takeaway. For business or career work, explain the main insight, its practical implications, and useful next steps in a professional tone. Do not use source code, pseudocode, programming syntax, or software jargon in an explanation; describe programming-related material in ordinary language instead. Preserve visible notation and follow any explicit structured-output format requested by the user. Be accurate and never claim that you edited or added anything to the board.',
           },
           { role: 'user', content: instruction },
         ],
@@ -6686,8 +6688,15 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
       const answer = normalizeAnswerText(data, '').trim();
       if (!answer) throw new Error('FaceMeX returned an empty Smartboard response. Please try again.');
+      const requiresExactOutput = /return only the labels|return exactly five plain-text lines/i.test(instruction);
+      const readableAnswer = requiresExactOutput
+        ? answer
+        : normalizeWorkspaceAnswerForDisplay(
+          answer,
+          'Explain the visible board in plain language. Do not include source code or programming syntax.',
+        );
       recordAIUse();
-      return answer;
+      return readableAnswer;
     } finally {
       promptSubmissionRef.current = false;
     }
@@ -6704,7 +6713,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     instruction: string,
   ): Promise<string> =>
     requestSmartboardAI(
-      `${instruction}\n\nTreat the attached image as the current teaching board. Be specific to the visible subject and content, preserve the exact notation and labels, and ask only one focused clarification if essential information cannot be read. Do not claim to edit the board, generate a professional image, or create a 3D model unless that output is actually available.`,
+      `${instruction}\n\nTreat the attached image as the current board, which may contain academic, career, or business work. Match your tone to its visible context: teach academic content in clear steps, or explain business and career work professionally with practical implications and next actions. Be specific to the visible content, preserve exact notation and labels, and ask only one focused clarification if essential information cannot be read. Do not claim to edit the board, generate a professional image, or create a 3D model unless that output is actually available.`,
       imageDataUrl,
     );
 
