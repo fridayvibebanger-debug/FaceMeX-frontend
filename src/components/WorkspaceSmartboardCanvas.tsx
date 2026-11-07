@@ -33,7 +33,13 @@ import {
 import type { WorkspaceLearningModelId } from '@/components/WorkspaceLearningModels';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { parseQuadraticEquation } from '@/lib/workspaceGraph';
+import {
+  createIncompleteEquationClarification,
+  createQuadraticFunctionExplanation,
+  isIncompleteEquation,
+  parseQuadraticEquation,
+} from '@/lib/workspaceGraph';
+import { formatWorkspaceMathForBoard } from '@/lib/workspaceMarkdown';
 import type { WorkspaceSmartboardLesson, WorkspaceSmartboardLessonDraft } from '@/lib/projects';
 
 type Tool = 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'triangle';
@@ -273,7 +279,10 @@ function emptyScene(): Scene {
 }
 
 function formatAIResponse(response: string): string {
-  let text = response.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  let text = response.trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .replace(/```[^\n]*\n[\s\S]*?```/g, '');
   try {
     const parsed: unknown = JSON.parse(text);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -290,14 +299,14 @@ function formatAIResponse(response: string): string {
       if (entries.length) text = entries.join('\n');
     }
   } catch {
-    text = response.trim();
+    text = text.trim();
   }
-  return text
+  return formatWorkspaceMathForBoard(text
     .replace(/^#{1,6}\s*/gm, '')
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/__(.*?)__/g, '$1')
     .replace(/^\s*[-*]\s+/gm, '• ')
-    .trim();
+    .trim());
 }
 
 function wrapCanvasText(context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
@@ -309,13 +318,28 @@ function wrapCanvasText(context: CanvasRenderingContext2D, text: string, maxWidt
     }
     let line = '';
     paragraph.split(/\s+/).forEach((word) => {
-      const next = line ? `${line} ${word}` : word;
-      if (line && context.measureText(next).width > maxWidth) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = next;
-      }
+      const chunks = [];
+      let chunk = '';
+      [...word].forEach((character) => {
+        if (chunk && context.measureText(chunk + character).width > maxWidth) {
+          chunks.push(chunk);
+          chunk = character;
+        } else {
+          chunk += character;
+        }
+      });
+      if (chunk) chunks.push(chunk);
+      chunks.forEach((wordChunk, index) => {
+        const next = index > 0
+          ? `${line}${wordChunk}`
+          : line ? `${line} ${wordChunk}` : wordChunk;
+        if (line && context.measureText(next).width > maxWidth) {
+          lines.push(line);
+          line = wordChunk;
+        } else {
+          line = next;
+        }
+      });
     });
     if (line) lines.push(line);
   });
@@ -413,6 +437,67 @@ function drawQuadraticGraph(
   context.lineWidth = 2.5;
   context.stroke();
   context.restore();
+  context.fillStyle = '#1e293b';
+  context.font = `600 ${Math.max(9, Math.min(11, padding * 0.38))}px system-ui, sans-serif`;
+  context.textAlign = 'left';
+  context.textBaseline = 'top';
+  context.fillText('y', plot.x + 3, plot.y + 3);
+  context.textAlign = 'right';
+  context.textBaseline = 'bottom';
+  context.fillText('x', plot.x + plot.width - 3, plot.y + plot.height - 3);
+
+  const discriminant = coefficients.b ** 2 - 4 * coefficients.a * coefficients.c;
+  const vertexX = coefficients.a === 0 ? null : -coefficients.b / (2 * coefficients.a);
+  const points = [];
+  if (vertexX !== null && vertexX >= xMin && vertexX <= xMax) {
+    points.push({
+      x: vertexX,
+      y: coefficients.a * vertexX ** 2 + coefficients.b * vertexX + coefficients.c,
+      label: `Vertex (${Number(vertexX.toFixed(2))}, ${Number((coefficients.a * vertexX ** 2 + coefficients.b * vertexX + coefficients.c).toFixed(2))})`,
+    });
+  }
+  if ((coefficients.a === 0 && coefficients.b !== 0) ||
+    (coefficients.a !== 0 && discriminant >= 0)) {
+    const roots = coefficients.a === 0
+      ? [-coefficients.c / coefficients.b]
+      : discriminant === 0
+        ? [-coefficients.b / (2 * coefficients.a)]
+        : [
+          (-coefficients.b - Math.sqrt(discriminant)) / (2 * coefficients.a),
+          (-coefficients.b + Math.sqrt(discriminant)) / (2 * coefficients.a),
+        ];
+    roots.forEach((root, index) => {
+      if (root >= xMin && root <= xMax) {
+        points.push({
+          x: root,
+          y: 0,
+          label: `x${roots.length > 1 ? index + 1 : ''} (${Number(root.toFixed(2))}, 0)`,
+        });
+      }
+    });
+  }
+  points.forEach((point) => {
+    if (point.y < yMin || point.y > yMax) return;
+    const pointX = px(point.x);
+    const pointY = py(point.y);
+    context.beginPath();
+    context.arc(pointX, pointY, Math.max(3, padding * 0.12), 0, Math.PI * 2);
+    context.fillStyle = '#dc2626';
+    context.fill();
+    context.font = `600 ${Math.max(8, Math.min(10, padding * 0.34))}px system-ui, sans-serif`;
+    const labelWidth = context.measureText(point.label).width;
+    const labelX = Math.max(plot.x + labelWidth / 2 + 2, Math.min(plot.x + plot.width - labelWidth / 2 - 2, pointX));
+    const labelY = Math.max(plot.y + 2, pointY - 14);
+    context.fillStyle = 'rgba(255,255,255,.92)';
+    context.fillRect(labelX - labelWidth / 2 - 2, labelY - 1, labelWidth + 4, 12);
+    context.strokeStyle = 'rgba(148,163,184,.8)';
+    context.lineWidth = 0.5;
+    context.strokeRect(labelX - labelWidth / 2 - 2, labelY - 1, labelWidth + 4, 12);
+    context.fillStyle = '#1e293b';
+    context.textAlign = 'center';
+    context.textBaseline = 'top';
+    context.fillText(point.label, labelX, labelY, plot.width - 4);
+  });
   context.fillStyle = '#1e293b';
   context.font = `600 ${Math.max(10, Math.min(13, padding * 0.46))}px system-ui, sans-serif`;
   context.textAlign = 'right';
@@ -1221,8 +1306,9 @@ export default function WorkspaceSmartboardCanvas({
       const response = await withTimeout(analyzeDrawingRef.current(
         imageDataUrl,
         [
-          'Read the complete visible whiteboard as a teaching assistant. Recognize handwritten text and transcribe equations exactly, preserving superscripts, subscripts, fractions, signs, units, labels and uncertainty.',
-          'Identify the most likely subject and the learner’s apparent intent. For incomplete work, say it is incomplete and offer possible continuations as choices without presenting missing values as known.',
+          'Read the complete visible whiteboard before answering. Recognize handwritten text and transcribe equations exactly, preserving superscripts, subscripts, fractions, signs, units, labels and uncertainty. Separate directly visible content from interpretation.',
+          'Classify the content as a complete equation, incomplete equation, unclear handwriting, question/instruction, or diagram/drawing. If an equation ends after an equals sign, report the exact left-hand side, say the right-hand side is missing, and ask what should follow. Never reinterpret an expression such as x² + 5 = as a function or invent missing values, variables, operators, or assumptions. If a character is unclear, name only the uncertain character and ask one focused question.',
+          'For complete mathematics, explain the actual expression, show relevant steps, and independently check calculations before stating results. Ask a question only when the visible work is genuinely ambiguous or incomplete.',
           'For rough sentences or short notes, offer one polished, subject-accurate rewrite under Suggested wording: and preserve the original meaning.',
           'Give up to three concise, relevant next actions. For a clear quadratic, include graphing and finding its vertex/axis of symmetry. For a supported cube, sphere, water molecule or Newton’s second law topic, recommend the existing matching interactive visual.',
           'For a clearly drawn triangle, offer a clean editable 2D triangle and the board-supported interactive triangular prism. For a circle, offer an editable circle and board-supported interactive sphere. For a cube, offer its board-supported interactive model. Do not claim unsupported geometry is available.',
@@ -1231,6 +1317,19 @@ export default function WorkspaceSmartboardCanvas({
       ));
       if (requestId !== analysisRequestRef.current || !aiSuggestionsEnabled) return;
       if (!response?.trim()) throw new Error('FaceMeX returned no readable work. Retry the analysis or keep drawing.');
+      const formattedResponse = formatAIResponse(response);
+      const recognizedText = getLabeledValue(formattedResponse, 'Recognition') ||
+        getLabeledValue(formattedResponse, 'Transcription') ||
+        getLabeledValue(formattedResponse, 'Expression');
+      if (recognizedText && isIncompleteEquation(recognizedText)) {
+        setAIResult([
+          `Recognition: ${recognizedText}`,
+          'Subject: Mathematics',
+          'Intent: Incomplete equation; the right-hand side is missing.',
+          'Suggestions: Ask what should come after the equals sign. Do not treat this as a function.',
+        ].join('\n'));
+        return;
+      }
       setAIResult(response);
     } catch (reason) {
       if (requestId === analysisRequestRef.current && aiSuggestionsEnabled) {
@@ -2051,6 +2150,14 @@ export default function WorkspaceSmartboardCanvas({
     setError('');
     setNotice('');
     try {
+      const incompleteEquation = explainOnBoard
+        ? createIncompleteEquationClarification(sceneRef.current.recognizedText)
+        : null;
+      if (incompleteEquation) {
+        placeExplanation(incompleteEquation);
+        setNotice('The equation is incomplete. Complete it before asking for a solution.');
+        return;
+      }
       const response = await withTimeout(onAnalyzeDrawing(canvasRef.current.toDataURL('image/png'), instruction));
       if (requestId !== analysisRequestRef.current) return;
       if (!response?.trim()) throw new Error('FaceMeX did not return a suggestion. Please try again.');
@@ -2078,6 +2185,18 @@ export default function WorkspaceSmartboardCanvas({
     setError('');
     setNotice('');
     try {
+      const clarification = createIncompleteEquationClarification(expression);
+      if (clarification) {
+        placeExplanation(clarification);
+        setNotice('The equation is incomplete. Complete it before asking for a solution.');
+        return;
+      }
+      const checkedQuadraticExplanation = createQuadraticFunctionExplanation(expression);
+      if (checkedQuadraticExplanation) {
+        placeExplanation(checkedQuadraticExplanation);
+        setNotice('Added a checked, step-by-step explanation to the board.');
+        return;
+      }
       const response = await withTimeout(onSolve(expression, canvas.toDataURL('image/png')));
       if (requestId !== analysisRequestRef.current) return;
       if (!response?.trim()) throw new Error('FaceMeX did not return an explanation. Please try again.');
@@ -2647,15 +2766,21 @@ export default function WorkspaceSmartboardCanvas({
 
             {equationPrompt && !shapeCandidate && !suggestion && !presentation && (
               <section style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }} className="absolute right-3 z-20 w-[min(24rem,calc(100%-1.5rem))] rounded-2xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-xl sm:right-6" aria-live="polite">
-                <p className="text-sm font-semibold">Would you like to present this equation?</p>
+                <p className="text-sm font-semibold">{isIncompleteEquation(equationPrompt) ? 'This equation is incomplete.' : 'Would you like to present this equation?'}</p>
                 <p className="mt-1 truncate text-xs text-slate-600" title={equationPrompt}>{equationPrompt}</p>
-                <p className="mt-1 text-xs text-slate-600">Add a graph, explore teaching visuals, or explain it. Your board stays unchanged until you choose.</p>
+                {isIncompleteEquation(equationPrompt)
+                  ? <p className="mt-1 text-xs text-slate-600">The right-hand side is missing. What should come after the equals sign?</p>
+                  : <p className="mt-1 text-xs text-slate-600">Add a graph, explore teaching visuals, or explain it. Your board stays unchanged until you choose.</p>}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {parseQuadraticEquation(equationPrompt) && (
+                  {!isIncompleteEquation(equationPrompt) && parseQuadraticEquation(equationPrompt) && (
                     <Button type="button" className="min-h-9 bg-slate-900 px-3 text-xs text-white hover:bg-slate-700" onClick={() => presentEquationAsGraph(equationPrompt)}>Add graph</Button>
                   )}
-                  <Button type="button" variant="outline" className="min-h-9 border-slate-300 bg-white px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => { setEquationPrompt(''); void solveOnBoard(equationPrompt); }}>Explain steps</Button>
-                  <Button type="button" variant="outline" className="min-h-9 border-slate-300 bg-white px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => { setEquationPrompt(''); void demonstrateBoard(); }}>Explore visual ideas</Button>
+                  {!isIncompleteEquation(equationPrompt) && (
+                    <>
+                      <Button type="button" variant="outline" className="min-h-9 border-slate-300 bg-white px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => { setEquationPrompt(''); void solveOnBoard(equationPrompt); }}>Explain steps</Button>
+                      <Button type="button" variant="outline" className="min-h-9 border-slate-300 bg-white px-3 text-xs text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => { setEquationPrompt(''); void demonstrateBoard(); }}>Explore visual ideas</Button>
+                    </>
+                  )}
                   <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-600 hover:bg-slate-100" onClick={() => setEquationPrompt('')}>Not now</Button>
                 </div>
               </section>
