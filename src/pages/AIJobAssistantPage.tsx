@@ -112,6 +112,10 @@ import {
 } from '@/lib/workspaceLearningEngine';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import {
+  createIncompleteEquationClarification,
+  createQuadraticFunctionExplanation,
+} from '@/lib/workspaceGraph';
+import {
   formatWorkspaceMath,
   parseWorkspaceMarkdown,
   renderWorkspaceMathML,
@@ -6751,8 +6755,12 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     imageDataUrl?: string,
   ): Promise<string | undefined> => {
     if (!expression.trim()) return Promise.resolve(undefined);
+    const clarification = createIncompleteEquationClarification(expression);
+    if (clarification) return Promise.resolve(clarification);
+    const checkedQuadraticExplanation = createQuadraticFunctionExplanation(expression);
+    if (checkedQuadraticExplanation) return Promise.resolve(checkedQuadraticExplanation);
     return requestSmartboardAI(
-      `Explain the learner's visible mathematical or scientific work as an intelligent, supportive academic tutor. Use the short headings "What it shows", "How it works", and "Key takeaway". Under the headings, begin with a plain-language summary and then explain the reasoning in numbered, logical steps, showing formulas and substitutions where useful and defining specialist terms. Connect the explanation to the visible drawing, labels, and notation; preserve all values and units exactly. Check conclusions for accuracy and explain why each step is valid. For quadratic work, identify the vertex and axis of symmetry when supported by the equation. Clearly separate visible facts from assumptions; if something cannot be read, state that rather than guessing. Keep the polished, professional explanation under 140 words so it fits as a readable board note. Do not claim to change the board:\n\n${expression.trim()}`,
+      `Read both the visible board image and the exact expression supplied below before answering. First identify what is actually written; preserve its original notation and values. Classify it as a complete equation, incomplete equation, unclear handwriting, question/instruction, or diagram. If the equals sign has no right-hand side, do not treat the left side as a function or solve by guessing; state exactly what is missing and ask one focused question. For complete mathematics, explain the relevant concept in plain language, show the important steps in order, and check calculations independently. Distinguish observation from interpretation and acknowledge unclear handwriting instead of guessing. Use concise headings only when helpful. Do not include raw code or claim that you changed the board or created a visual:\n\n${expression.trim()}`,
       imageDataUrl,
     );
   };
