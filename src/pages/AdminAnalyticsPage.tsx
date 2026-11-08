@@ -91,7 +91,15 @@ export default function AdminAnalyticsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
+    let httpStatus: number | null = null;
+    let responseError: string | null = null;
     try {
+      if (!startDate || !endDate || startDate > endDate) {
+        setReport(null);
+        setError('Choose a valid From and Through date range.');
+        return;
+      }
+
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
       if (!data.session?.access_token) throw new Error('Sign in to view product analytics.');
@@ -108,21 +116,38 @@ export default function AdminAnalyticsPage() {
           feature: feature || null,
         }),
       });
+      httpStatus = response.status;
       const responseBody = await response.text();
-      let result: { message?: string; report?: AnalyticsReport } | null = null;
+      let result: { error?: string; message?: string; report?: AnalyticsReport } | null = null;
       if (responseBody) {
         try {
-          result = JSON.parse(responseBody) as { message?: string; report?: AnalyticsReport };
+          result = JSON.parse(responseBody) as { error?: string; message?: string; report?: AnalyticsReport };
         } catch {
           if (response.ok) throw new Error('Analytics service returned an invalid response.');
         }
       }
       if (!response.ok) {
+        responseError = result?.error || null;
         if (response.status === 403) {
           throw new Error('This dashboard is private to the FaceMeX owner account.');
         }
+        if (response.status === 401) {
+          throw new Error('Your sign-in has expired. Sign in again to view product analytics.');
+        }
+        if (response.status === 400) {
+          throw new Error('Choose a valid From and Through date range.');
+        }
         if (response.status === 404) {
           throw new Error('Analytics service was not found. Use Netlify Dev for local testing, or verify the deployed function.');
+        }
+        if (result?.error === 'analytics_not_configured') {
+          throw new Error('Product analytics is not configured for this deployment. Please contact the administrator.');
+        }
+        if (result?.error === 'analytics_database_unavailable' || result?.error === 'analytics_storage_unavailable') {
+          throw new Error('Product activity data could not be reached right now. Please try again.');
+        }
+        if (response.status >= 500) {
+          throw new Error('Product analytics is temporarily unavailable. Please try again.');
         }
         throw new Error(result?.message || `Analytics could not be loaded (HTTP ${response.status}).`);
       }
@@ -130,6 +155,13 @@ export default function AdminAnalyticsPage() {
       setReport(result.report);
     } catch (cause) {
       setReport(null);
+      if (import.meta.env.DEV) {
+        console.error('Product analytics request failed.', {
+          endpoint: '/.netlify/functions/analytics',
+          status: httpStatus,
+          error: responseError || (cause instanceof Error ? cause.message : 'Unknown analytics request error'),
+        });
+      }
       setError(cause instanceof Error ? cause.message : 'Analytics could not be loaded.');
     } finally {
       setLoading(false);
@@ -177,7 +209,14 @@ export default function AdminAnalyticsPage() {
         <p className="min-w-0 break-words text-xs text-muted-foreground sm:ml-auto">Showing {startDate} through {endDate}</p>
       </section>
 
-      {error && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>}
+      {error && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
+          <p>{error}</p>
+          <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex min-h-9 items-center justify-center gap-2 self-start rounded-lg border border-current px-3 text-sm disabled:opacity-50 sm:self-auto">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Retry
+          </button>
+        </div>
+      )}
       {loading && !report && <p className="rounded-xl border border-border p-6 text-sm text-muted-foreground">Loading recorded activity…</p>}
       {!loading && !error && report && overview?.event_count === 0 && (
         <p className="rounded-xl border border-border p-6 text-sm text-muted-foreground">No analytics events were recorded in this date range. Events are collected only after the user has granted analytics consent.</p>

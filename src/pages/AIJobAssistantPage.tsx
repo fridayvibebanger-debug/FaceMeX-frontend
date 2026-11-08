@@ -6657,6 +6657,10 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       throw new Error('FaceMeX is responding to another request. Retry when it is ready.');
     }
 
+    trackFeatureUse({
+      feature: 'FaceMeX Smartboard',
+      action: 'smartboard_ai_request',
+    });
     promptSubmissionRef.current = true;
     try {
       const payload = {
