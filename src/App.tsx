@@ -1,6 +1,12 @@
-﻿import { lazy, Suspense, useEffect, type ReactNode } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { initializeAnalytics, trackAppOpen, trackEvent } from '@/lib/analytics';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
+import {
+  hasAnalyticsConsentChoice,
+  initializeAnalytics,
+  setAnalyticsConsent,
+  trackAppOpen,
+  trackEvent,
+} from '@/lib/analytics';
 
 import { useAuthStore } from './store/authStore';
 
@@ -169,6 +175,67 @@ function AnalyticsBootstrap() {
   return null;
 }
 
+function AnalyticsConsentNotice() {
+  const { isAuthenticated, isInitialized } = useAuthStore();
+  const [visible, setVisible] = useState(false);
+  const [storageError, setStorageError] = useState(false);
+
+  useEffect(() => {
+    setVisible(isInitialized && isAuthenticated && !hasAnalyticsConsentChoice());
+  }, [isInitialized, isAuthenticated]);
+
+  if (!visible) return null;
+
+  const chooseConsent = (consent: 'granted' | 'denied') => {
+    if (!setAnalyticsConsent(consent)) {
+      setStorageError(true);
+      return;
+    }
+    setStorageError(false);
+    setVisible(false);
+  };
+
+  return (
+    <aside
+      role="region"
+      aria-label="Product analytics preference"
+      className="fixed inset-x-3 bottom-3 z-[110] mx-auto max-w-2xl rounded-xl border border-slate-300 bg-white p-4 text-slate-900 shadow-2xl dark:border-white/15 dark:bg-[#1d1d1d] dark:text-white sm:inset-x-5 sm:bottom-5"
+    >
+      <h2 className="text-sm font-semibold">Help improve FaceMeX?</h2>
+      <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-white/70">
+        If you agree, FaceMeX will record signed-in feature usage, page, device category, and your account identifier to understand reliability and usage. Your prompts, messages, and uploaded content are not included. You can change this choice in Data controls.
+      </p>
+      {storageError && (
+        <p role="alert" className="mt-2 text-xs text-red-700 dark:text-red-300">
+          Your preference couldn’t be saved in this browser. Check your browser’s storage settings and try again.
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => chooseConsent('granted')}
+          className="min-h-9 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+        >
+          Allow analytics
+        </button>
+        <button
+          type="button"
+          onClick={() => chooseConsent('denied')}
+          className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+        >
+          Decline
+        </button>
+        <Link
+          to="/ai/settings/data-controls"
+          className="ml-auto min-h-9 content-center px-2 text-xs text-slate-600 underline underline-offset-2 dark:text-white/70"
+        >
+          Data controls
+        </Link>
+      </div>
+    </aside>
+  );
+}
+
 function PageSeoMetadata() {
   const location = useLocation();
 
@@ -245,6 +312,7 @@ function App() {
       <LiveNotificationListener />
       <GlobalCallListener />
       <AppAnalyticsTracker />
+      <AnalyticsConsentNotice />
 
       <Routes>
         <Route path="/" element={<PublicHomeRoute />} />
