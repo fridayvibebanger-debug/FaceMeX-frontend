@@ -112,6 +112,7 @@ import {
 } from '@/lib/workspaceLearningEngine';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import {
+  createLinearFunctionExplanation,
   createIncompleteEquationClarification,
   createQuadraticFunctionExplanation,
 } from '@/lib/workspaceGraph';
@@ -6759,6 +6760,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     if (clarification) return Promise.resolve(clarification);
     const checkedQuadraticExplanation = createQuadraticFunctionExplanation(expression);
     if (checkedQuadraticExplanation) return Promise.resolve(checkedQuadraticExplanation);
+    const checkedLinearExplanation = createLinearFunctionExplanation(expression);
+    if (checkedLinearExplanation) return Promise.resolve(checkedLinearExplanation);
     return requestSmartboardAI(
       `Read both the visible board image and the exact expression supplied below before answering. First identify what is actually written; preserve its original notation and values. Classify it as a complete equation, incomplete equation, unclear handwriting, question/instruction, or diagram. If the equals sign has no right-hand side, do not treat the left side as a function or solve by guessing; state exactly what is missing and ask one focused question. For complete mathematics, explain the relevant concept in plain language, show the important steps in order, and check calculations independently. Distinguish observation from interpretation and acknowledge unclear handwriting instead of guessing. Use concise headings only when helpful. Do not include raw code or claim that you changed the board or created a visual:\n\n${expression.trim()}`,
       imageDataUrl,
