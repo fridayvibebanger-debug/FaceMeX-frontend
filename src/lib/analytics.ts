@@ -9,6 +9,7 @@ type AnalyticsEvent = {
   action: string | null;
   route: string;
   device_category: 'mobile' | 'tablet' | 'desktop';
+  duration_ms?: number;
   properties: AnalyticsPayload;
 };
 
@@ -25,7 +26,6 @@ const ALLOWED_PROPERTIES = new Set([
   'category',
   'source',
   'answer_length',
-  'duration_ms',
 ]);
 const VALUE_PATTERN = /^[\w:/ -]{0,64}$/;
 
@@ -47,19 +47,30 @@ export function getAnalyticsConsent(): 'granted' | 'denied' {
   }
 }
 
+export function hasAnalyticsConsentChoice() {
+  try {
+    const consent = localStorage.getItem(CONSENT_KEY);
+    return consent === 'granted' || consent === 'denied';
+  } catch {
+    return false;
+  }
+}
+
 export function initializeAnalytics() {
   if (typeof window !== 'undefined') window.facemexProductAnalyticsConfigured = true;
 }
 
-export function setAnalyticsConsent(consent: 'granted' | 'denied') {
+export function setAnalyticsConsent(consent: 'granted' | 'denied'): boolean {
   try {
     localStorage.setItem(CONSENT_KEY, consent);
   } catch (error) {
     console.warn('FaceMeX analytics preference could not be saved.', error);
+    return false;
   }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(CONSENT_CHANGED_EVENT));
   }
+  return true;
 }
 
 function safeValue(value: unknown): string | number | boolean | undefined {
@@ -140,6 +151,12 @@ export async function trackEvent(
       route: getSafeRoute(),
       device_category: getDeviceCategory(),
       properties: safeProperties(payload),
+      ...(typeof payload?.duration_ms === 'number' &&
+        Number.isInteger(payload.duration_ms) &&
+        payload.duration_ms >= 0 &&
+        payload.duration_ms <= 3_600_000
+        ? { duration_ms: payload.duration_ms }
+        : {}),
     };
     const outcome = deriveOutcome(event);
     if (outcome) eventPayload.outcome = outcome;
@@ -181,9 +198,13 @@ export function trackImageAnalysis(count?: number, _prompt?: string, _label?: st
   void trackEvent('image_analysis', undefined, { ...payload, ...(count === undefined ? {} : { image_count: count }) });
 }
 
-export function trackLinkClick(_urlOrEvent: string, label?: string, payload?: AnalyticsPayload | string, meta?: AnalyticsPayload) {
-  const event = typeof payload === 'string' ? payload : label || 'link_click';
-  void trackEvent(event, undefined, meta || (typeof payload === 'object' ? payload : undefined));
+export function trackLinkClick(urlOrEvent: string, label?: string, payload?: AnalyticsPayload | string, meta?: AnalyticsPayload) {
+  const isEventName = (value: string) => /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(value);
+  const event = typeof payload === 'string' && isEventName(payload)
+    ? payload
+    : isEventName(urlOrEvent) ? urlOrEvent : 'link_click';
+  const properties = meta || (typeof payload === 'object' ? payload : undefined);
+  void trackEvent(event, label, properties);
 }
 
 export function trackUpload(payload?: AnalyticsPayload | string) {
