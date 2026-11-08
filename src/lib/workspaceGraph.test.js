@@ -1,13 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  createGraphPractice,
   createIncompleteEquationClarification,
+  createLinearFunctionExplanation,
   createQuadraticFunctionExplanation,
   isIncompleteEquation,
+  parseGraphFunction,
   parseQuadraticEquation,
+  sampleGraphFunction,
   sampleQuadratic,
   solveQuadraticEquation,
 } from './workspaceGraph.js';
+
+test('parses only supported linear and quadratic functions for graphing', () => {
+  assert.deepEqual(parseGraphFunction('y = 2x - 4'), { a: 0, b: 2, c: -4 });
+  assert.deepEqual(parseGraphFunction('f(x) = x² - 6x + 2'), { a: 1, b: -6, c: 2 });
+  assert.equal(parseGraphFunction('x² - 6x + 2 = 0'), null);
+  assert.equal(parseGraphFunction('y = x³'), null);
+  assert.equal(parseGraphFunction('y = x +'), null);
+  assert.equal(parseGraphFunction('y ='), null);
+});
 
 test('parses supported quadratic equations and rejects ambiguous or unsupported input', () => {
   assert.deepEqual(parseQuadraticEquation('y = x² - 3'), { a: 1, b: 0, c: -3 });
@@ -78,6 +91,40 @@ test('creates a checked, specific explanation for a quadratic function', () => {
   assert.match(explanation, /x=3 \\pm \\sqrt\{7\}/);
   assert.match(explanation, /x\\approx0\.354/);
   assert.match(explanation, /x\\approx5\.646/);
-  assert.match(explanation, /\\\(3,-7\\\)/);
+  assert.ok(explanation.includes('\\((3,-7)\\)'));
   assert.equal(createQuadraticFunctionExplanation('x² - 6x + 2 = 0'), null);
+});
+
+test('explains linear functions and creates practice from the parsed function', () => {
+  const explanation = createLinearFunctionExplanation('y = 2x - 4');
+  assert.ok(explanation);
+  assert.ok(explanation.includes('slope is \\(m=2\\)'));
+  assert.ok(explanation.includes('y-intercept is \\((0,-4)\\)'));
+  assert.ok(explanation.includes('x=2'));
+  assert.equal(createLinearFunctionExplanation('y = x² + 1'), null);
+  assert.ok(createLinearFunctionExplanation('y = 4')?.includes('slope is \\(m=0\\)'));
+
+  const linearPractice = createGraphPractice('y = 2x - 4');
+  assert.equal(linearPractice?.length, 3);
+  assert.deepEqual(linearPractice?.map(({ answer }) => answer), ['2', '(0, -4)', '(2, 0)']);
+
+  const quadraticPractice = createGraphPractice('y = x² - 6x + 2');
+  assert.equal(quadraticPractice?.length, 3);
+  assert.deepEqual(quadraticPractice?.map(({ answer }) => answer), [
+    '(0, 2)',
+    '(3, -7)',
+    '(0.354, 0) and (5.646, 0)',
+  ]);
+  assert.match(createGraphPractice('y = x² + 1')?.[2].answer ?? '', /no real x-intercepts/);
+  assert.equal(createGraphPractice('y ='), null);
+});
+
+test('samples supported graph functions and rejects unsafe coordinates', () => {
+  const graph = sampleGraphFunction({ a: 0, b: 2, c: -4 }, -2, 4, 7);
+  assert.deepEqual(graph?.points[3], { x: 1, y: -2 });
+  assert.deepEqual(graph?.roots, [2]);
+  assert.equal(graph?.yIntercept, -4);
+  assert.equal(graph?.vertex, null);
+  assert.equal(sampleGraphFunction({ a: 1, b: 0, c: 0 }, 1e200, 1e201, 5), null);
+  assert.equal(sampleGraphFunction({ a: 0, b: 1, c: 0 }, 2, 1), null);
 });

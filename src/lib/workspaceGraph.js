@@ -55,6 +55,15 @@ export function parseQuadraticEquation(input) {
     : null;
 }
 
+export function parseGraphFunction(input) {
+  const expression = String(input || '')
+    .replace(/\\(?:\[|\]|\(|\))/g, '')
+    .replace(/^\$+|\$+$/g, '')
+    .trim();
+  if (!/^(?:y|f\(x\))\s*=/i.test(expression)) return null;
+  return parseQuadraticEquation(expression);
+}
+
 export function isIncompleteEquation(input) {
   const expression = String(input || '')
     .replace(/\\(?:\[|\]|\(|\))/g, '')
@@ -200,6 +209,117 @@ export function createQuadraticFunctionExplanation(input) {
   ].join('\n');
 }
 
+export function createLinearFunctionExplanation(input) {
+  const source = String(input || '').trim();
+  const coefficients = parseGraphFunction(source);
+  if (!coefficients || coefficients.a !== 0) return null;
+
+  const { b: slope, c: yIntercept } = coefficients;
+  const fixed = (value) => Number(value.toFixed(3)).toString();
+  const xIntercept = slope === 0 ? null : -yIntercept / slope;
+  if (xIntercept !== null && !Number.isFinite(xIntercept)) return null;
+  const lineDescription = slope > 0
+    ? 'an increasing'
+    : slope < 0
+      ? 'a decreasing'
+      : 'a constant';
+  const interceptLine = slope === 0
+    ? yIntercept === 0
+      ? 'Every point on the line is also on the x-axis.'
+      : 'The graph has no x-intercept.'
+    : `Setting \\(y=0\\) gives \\(x=${fixed(xIntercept)}\\), so the x-intercept is \\((${fixed(xIntercept)},0)\\).`;
+
+  return [
+    'What I see',
+    'The board shows the linear function:',
+    '',
+    `\\[${source}\\]`,
+    '',
+    'Understanding the concept',
+    `A linear function has the form \\(y=mx+c\\). Here, the slope is \\(m=${slope}\\), and the y-intercept is \\((0,${yIntercept})\\).`,
+    '',
+    'Important graph properties',
+    slope > 0
+      ? 'The positive slope means the line rises from left to right.'
+      : slope < 0
+        ? 'The negative slope means the line falls from left to right.'
+        : 'A slope of zero means the graph is a horizontal line.',
+    interceptLine,
+    '',
+    'Final understanding',
+    `This is ${lineDescription} straight line: each increase of 1 in \\(x\\) changes \\(y\\) by ${slope}.`,
+  ].join('\n');
+}
+
+export function createGraphPractice(input) {
+  const coefficients = parseGraphFunction(input);
+  if (!coefficients) return null;
+
+  const { a, b, c } = coefficients;
+  const fixed = (value) => Number(value.toFixed(3)).toString();
+  if (a === 0) {
+    const root = b === 0 ? null : -c / b;
+    if (root !== null && !Number.isFinite(root)) return null;
+    return [
+      {
+        question: 'What is the slope of this line?',
+        answer: fixed(b),
+        explanation: `In \\(y=mx+c\\), the coefficient of \\(x\\) is the slope, so \\(m=${fixed(b)}\\).`,
+      },
+      {
+        question: 'Where does this line cross the y-axis?',
+        answer: `(0, ${fixed(c)})`,
+        explanation: 'The y-intercept is the value of y when x is zero, which is the constant term.',
+      },
+      {
+        question: 'Where does this line cross the x-axis?',
+        answer: root === null
+          ? c === 0 ? 'Every point on the line is on the x-axis.' : 'It does not cross the x-axis.'
+          : `(${fixed(root)}, 0)`,
+        explanation: root === null
+          ? c === 0
+            ? 'The function is y = 0, so every point on the line lies on the x-axis.'
+            : 'This is a horizontal line above or below the x-axis, so it has no x-intercept.'
+          : `At the x-intercept, \\(y=0\\). Solving \\(0=${fixed(b)}x${c < 0 ? '' : '+'}${fixed(c)}\\) gives \\(x=${fixed(root)}\\).`,
+      },
+    ];
+  }
+
+  const vertexX = -b / (2 * a);
+  const vertexY = a * vertexX ** 2 + b * vertexX + c;
+  const discriminant = b ** 2 - 4 * a * c;
+  if (![vertexX, vertexY, discriminant].every(Number.isFinite)) return null;
+  const numericRoots = discriminant < 0
+    ? []
+    : discriminant === 0
+      ? [-b / (2 * a)]
+      : [
+        (-b - Math.sqrt(discriminant)) / (2 * a),
+        (-b + Math.sqrt(discriminant)) / (2 * a),
+      ];
+  if (numericRoots.some((root) => !Number.isFinite(root))) return null;
+  const roots = discriminant < 0
+    ? 'There are no real x-intercepts.'
+    : numericRoots.map((root) => `(${fixed(root)}, 0)`).join(' and ');
+  return [
+    {
+      question: 'What is the y-intercept?',
+      answer: `(0, ${fixed(c)})`,
+      explanation: 'Set x to zero; the remaining value is the constant term.',
+    },
+    {
+      question: 'What are the coordinates of the vertex?',
+      answer: `(${fixed(vertexX)}, ${fixed(vertexY)})`,
+      explanation: `The vertex x-coordinate is \\(-b/(2a)=${fixed(vertexX)}\\). Substituting it into the function gives \\(y=${fixed(vertexY)}\\).`,
+    },
+    {
+      question: 'Where does the graph meet the x-axis?',
+      answer: roots,
+      explanation: 'The x-intercepts occur where y is zero. Solve the corresponding quadratic equation and keep only real roots.',
+    },
+  ];
+}
+
 export function solveQuadraticEquation(input) {
   const coefficients = parseQuadraticEquation(input);
   if (!coefficients) return null;
@@ -232,6 +352,10 @@ export function solveQuadraticEquation(input) {
 }
 
 export function sampleQuadratic(coefficients, minimumX, maximumX, pointCount = 101) {
+  return sampleGraphFunction(coefficients, minimumX, maximumX, pointCount);
+}
+
+export function sampleGraphFunction(coefficients, minimumX, maximumX, pointCount = 101) {
   const { a, b, c } = coefficients || {};
   if (![a, b, c, minimumX, maximumX].every(Number.isFinite) ||
     minimumX >= maximumX || !Number.isInteger(pointCount) || pointCount < 2 || pointCount > 500) {
@@ -241,7 +365,9 @@ export function sampleQuadratic(coefficients, minimumX, maximumX, pointCount = 1
     const x = minimumX + ((maximumX - minimumX) * index) / (pointCount - 1);
     return { x, y: a * x ** 2 + b * x + c };
   });
+  if (points.some(({ x, y }) => !Number.isFinite(x) || !Number.isFinite(y))) return null;
   const discriminant = b ** 2 - 4 * a * c;
+  if (!Number.isFinite(discriminant)) return null;
   const roots = a === 0
     ? b === 0 ? [] : [-c / b]
     : discriminant < 0
@@ -251,6 +377,10 @@ export function sampleQuadratic(coefficients, minimumX, maximumX, pointCount = 1
         : [(-b - Math.sqrt(discriminant)) / (2 * a), (-b + Math.sqrt(discriminant)) / (2 * a)];
   const rawVertexX = a === 0 ? null : -b / (2 * a);
   const vertexX = rawVertexX === 0 ? 0 : rawVertexX;
+  if (roots.some((root) => !Number.isFinite(root)) ||
+    (vertexX !== null && (!Number.isFinite(vertexX) || !Number.isFinite(a * vertexX ** 2 + b * vertexX + c)))) {
+    return null;
+  }
   return {
     points,
     roots: roots.filter((root) => root >= minimumX && root <= maximumX),

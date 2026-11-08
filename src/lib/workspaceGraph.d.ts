@@ -9,6 +9,22 @@ export type GraphPoint = {
   y: number;
 };
 
+export type GraphPracticeQuestion = {
+  question: string;
+  answer: string;
+  explanation: string;
+};
+
+export type GraphSample = {
+  points: GraphPoint[];
+  roots: number[];
+  yIntercept: number;
+  vertex: GraphPoint | null;
+};
+
+export function parseGraphFunction(input: string): QuadraticCoefficients | null;
+export function createGraphPractice(input: string): GraphPracticeQuestion[] | null;
+export function createLinearFunctionExplanation(input: string): string | null;
 export function parseQuadraticEquation(input: string): QuadraticCoefficients | null;
 export function isIncompleteEquation(input: string): boolean;
 export function createIncompleteEquationClarification(input: string): string | null;
@@ -25,9 +41,10 @@ export function sampleQuadratic(
   minimumX: number,
   maximumX: number,
   pointCount?: number,
-): {
-  points: GraphPoint[];
-  roots: number[];
-  yIntercept: number;
-  vertex: GraphPoint | null;
-} | null;
+): GraphSample | null;
+export function sampleGraphFunction(
+  coefficients: QuadraticCoefficients,
+  minimumX: number,
+  maximumX: number,
+  pointCount?: number,
+): GraphSample | null;
