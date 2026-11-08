@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   createIncompleteEquationClarification,
+  createGraphPractice,
+  createLinearFunctionExplanation,
   createQuadraticFunctionExplanation,
   isIncompleteEquation,
   parseQuadraticEquation,
+  parseGraphFunction,
+  sampleGraphFunction,
   sampleQuadratic,
   solveQuadraticEquation,
 } from './workspaceGraph.js';
@@ -80,4 +84,60 @@ test('creates a checked, specific explanation for a quadratic function', () => {
   assert.match(explanation, /x\\approx5\.646/);
   assert.match(explanation, /\\\(3,-7\\\)/);
   assert.equal(createQuadraticFunctionExplanation('x² - 6x + 2 = 0'), null);
+  const shiftedParabola = createQuadraticFunctionExplanation('y = x² + 8');
+  assert.match(shiftedParabola, /axis of symmetry is \\\(x=0\\\)/);
+  assert.match(shiftedParabola, /minimum value is \\\(8\\\)/);
+  assert.match(shiftedParabola, /no real x-intercepts/);
+  assert.equal(createGraphPractice('y = x² + 8').questions.length, 5);
+});
+
+test('safely parses and samples common function families without evaluating source code', () => {
+  const cases = [
+    ['y = 2x + 3', 7, 'linear'],
+    ['y = x³ - 2x', 4, 'polynomial'],
+    ['y = e^x', Math.E ** 2, 'exponential'],
+    ['y = ln(x)', Math.log(2), 'logarithmic'],
+    ['y = sin(x)', Math.sin(2), 'trigonometric'],
+    ['y = abs(x)', 2, 'absolute-value'],
+    ['y = 1/x', 0.5, 'rational'],
+  ];
+  for (const [equation, expectedAtTwo, family] of cases) {
+    const graph = parseGraphFunction(equation);
+    assert.ok(graph, equation);
+    assert.equal(graph.family, family);
+    assert.ok(Math.abs(graph.evaluate(2) - expectedAtTwo) < 1e-10, equation);
+    assert.ok(sampleGraphFunction(graph, -5, 5, 11));
+  }
+  assert.equal(parseGraphFunction('y = window.alert(1)'), null);
+  assert.equal(parseGraphFunction('y = x;alert(1)'), null);
+  assert.equal(parseGraphFunction('x² + 5 ='), null);
+  assert.ok(sampleGraphFunction('y = 1/x', -1, 1, 3).points.some((point) => point === null));
+});
+
+test('creates equation-specific practice and a checked explanation for linear functions', () => {
+  const practice = createGraphPractice('y = 2x + 3');
+  assert.equal(practice.questions.length, 3);
+  assert.equal(practice.questions[0].answer, '2');
+  assert.match(createLinearFunctionExplanation('y = 2x + 3'), /slope is/);
+  const quadraticPractice = createGraphPractice('y = x² + 8');
+  assert.equal(quadraticPractice.questions.length, 5);
+  assert.equal(quadraticPractice.questions[0].answer, '0,8');
+  assert.equal(quadraticPractice.questions[3].answer, '0');
+});
+
+test('verifies the requested graphing examples and keeps incomplete equations ungraphable', () => {
+  const shifted = solveQuadraticEquation('y = x² + 8');
+  assert.deepEqual(shifted?.vertex, { x: 0, y: 8 });
+  assert.deepEqual(shifted?.roots, []);
+  assert.equal(parseGraphFunction('y = x² + 8')?.evaluate(0), 8);
+
+  const translated = solveQuadraticEquation('y = x² - 6x + 2');
+  assert.deepEqual(translated?.vertex, { x: 3, y: -7 });
+  assert.ok(Math.abs((translated?.roots[0] ?? 0) - (3 - Math.sqrt(7))) < 1e-10);
+  assert.ok(Math.abs((translated?.roots[1] ?? 0) - (3 + Math.sqrt(7))) < 1e-10);
+
+  const line = parseGraphFunction('y = 2x + 3');
+  assert.equal(line?.evaluate(0), 3);
+  assert.equal(line?.evaluate(1), 5);
+  assert.equal(parseGraphFunction('x² + 5 ='), null);
 });
