@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createFaceMeXDataExport } from '@/services/facemexDataExport';
+import { getAnalyticsConsent, hasAnalyticsConsentChoice, setAnalyticsConsent } from '@/lib/analytics';
 import FaceMeXSettingsPageShell from '@/components/facemex-settings/FaceMeXSettingsPageShell';
 import './DataControlsPage.css';
 
@@ -21,6 +22,10 @@ export default function DataControlsPage() {
   const [exportMessage, setExportMessage] = useState('');
   const [exportError, setExportError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [analyticsConsent, setAnalyticsConsentState] = useState<'granted' | 'denied' | 'unset'>(
+    () => hasAnalyticsConsentChoice() ? getAnalyticsConsent() : 'unset',
+  );
+  const [analyticsConsentError, setAnalyticsConsentError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -97,6 +102,15 @@ export default function DataControlsPage() {
     }
   };
 
+  const updateAnalyticsConsent = (consent: 'granted' | 'denied') => {
+    if (!setAnalyticsConsent(consent)) {
+      setAnalyticsConsentError('Your preference couldn’t be saved in this browser. Check your browser’s storage settings and try again.');
+      return;
+    }
+    setAnalyticsConsentError('');
+    setAnalyticsConsentState(consent);
+  };
+
   const locationStatus = locationPermission === 'granted'
     ? 'On'
     : locationPermission === 'denied'
@@ -110,6 +124,35 @@ export default function DataControlsPage() {
   return (
     <FaceMeXSettingsPageShell title="Data controls" onBack={goBack} variant="plus">
         <div className="dc-sections">
+          <section className="dc-section" aria-labelledby="dc-analytics-heading">
+            <h2 id="dc-analytics-heading" className="dc-section-heading">Product analytics</h2>
+            <p className="dc-description">
+              When allowed, FaceMeX records signed-in feature use, page, device category, and your account identifier to measure product usage and reliability. Prompts, messages, uploaded files, and their contents are not recorded.
+            </p>
+            <p className="dc-feedback" role="status" aria-live="polite">
+              Current preference: {analyticsConsent === 'granted' ? 'Allowed' : analyticsConsent === 'denied' ? 'Declined' : 'Not set (analytics is off)'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="fm-settings-action"
+                aria-pressed={analyticsConsent === 'granted'}
+                onClick={() => updateAnalyticsConsent('granted')}
+              >
+                Allow analytics
+              </button>
+              <button
+                type="button"
+                className="fm-settings-action"
+                aria-pressed={analyticsConsent === 'denied'}
+                onClick={() => updateAnalyticsConsent('denied')}
+              >
+                Decline analytics
+              </button>
+            </div>
+            {analyticsConsentError && <p className="dc-feedback dc-error" role="alert">{analyticsConsentError}</p>}
+          </section>
+
           <section className="dc-section" aria-labelledby="dc-model-title">
             <div className="dc-row">
               <div className="dc-row-copy">
