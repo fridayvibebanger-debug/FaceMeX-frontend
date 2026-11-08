@@ -34,14 +34,11 @@ import type { WorkspaceLearningModelId } from '@/components/WorkspaceLearningMod
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import {
+  createLinearFunctionExplanation,
   createIncompleteEquationClarification,
   createQuadraticFunctionExplanation,
-  createGraphPractice,
-  createLinearFunctionExplanation,
   isIncompleteEquation,
-  parseGraphFunction,
   parseQuadraticEquation,
-  sampleGraphFunction,
 } from '@/lib/workspaceGraph';
 import { formatWorkspaceMathForBoard } from '@/lib/workspaceMarkdown';
 import type { WorkspaceSmartboardLesson, WorkspaceSmartboardLessonDraft } from '@/lib/projects';
@@ -62,9 +59,8 @@ type BoardText = {
   kind?: 'explanation';
   width?: number;
   height?: number;
-  linkedGraphId?: string;
 };
-type BoardVisualKind = 'triangle' | 'circle' | 'cube' | 'cube2d' | 'sphere' | 'prism' | 'water' | 'newton' | 'parabola' | 'functionGraph' | 'diagram' | 'photo';
+type BoardVisualKind = 'triangle' | 'circle' | 'cube' | 'cube2d' | 'sphere' | 'prism' | 'water' | 'newton' | 'parabola' | 'diagram' | 'photo';
 type BoardDiagram = {
   title: string;
   nodes: Array<{ label: string; x: number; y: number }>;
@@ -86,24 +82,6 @@ type BoardVisual = {
   attribution?: string;
   attributionUrl?: string;
   diagram?: BoardDiagram;
-  hidden?: boolean;
-  graphView?: { centerX: number; centerY: number; scale: number };
-};
-type BoardPractice = {
-  topic: string;
-  equation: string;
-  questions: Array<{ id: string; prompt: string; answer: string; hint: string; explanation: string; options?: string[] }>;
-  currentIndex: number;
-  attempts: number;
-  correct: number;
-  completed: boolean;
-  createdAt: string;
-  lastAttemptAt: string | null;
-  submitted?: boolean;
-  feedback?: string;
-  hinted?: boolean;
-  revealed?: boolean;
-  questionAttempts?: Record<string, number>;
 };
 type BoardReferenceImage = {
   url: string;
@@ -125,7 +103,6 @@ type Scene = {
   recognizedText: string;
   subject: string;
   visualModel: WorkspaceLearningModelId | null;
-  practice?: BoardPractice | null;
 };
 type Snapshot = { scene: Scene; image: string | null };
 type ViewTransform = { zoom: number; x: number; y: number };
@@ -181,7 +158,6 @@ function isBoardText(value: unknown): value is BoardText {
     (text.kind === undefined || text.kind === 'explanation') &&
     (text.width === undefined || (Number.isFinite(text.width) && text.width >= 0.1 && text.width <= 0.9)) &&
     (text.height === undefined || (Number.isFinite(text.height) && text.height >= 0.1 && text.height <= 0.9)) &&
-    (text.linkedGraphId === undefined || (typeof text.linkedGraphId === 'string' && text.linkedGraphId.length <= 100)) &&
     typeof text.x === 'number' && Number.isFinite(text.x) && text.x >= -1000 && text.x <= 1000 &&
     typeof text.y === 'number' && Number.isFinite(text.y) && text.y >= -1000 && text.y <= 1000 &&
     (text.scale === undefined || (typeof text.scale === 'number' && Number.isFinite(text.scale) && text.scale >= 0.5 && text.scale <= 3)) &&
@@ -195,7 +171,6 @@ function isBoardVisual(value: unknown): value is BoardVisual {
     (visual.kind === 'triangle' || visual.kind === 'circle' || visual.kind === 'cube' ||
       visual.kind === 'cube2d' || visual.kind === 'sphere' || visual.kind === 'prism' ||
       visual.kind === 'water' || visual.kind === 'newton' || visual.kind === 'parabola' ||
-      visual.kind === 'functionGraph' ||
       visual.kind === 'diagram' || visual.kind === 'photo') &&
     [visual.x, visual.y, visual.width, visual.height, visual.rotation].every(
       (number) => typeof number === 'number' && Number.isFinite(number),
@@ -206,13 +181,6 @@ function isBoardVisual(value: unknown): value is BoardVisual {
     (visual.mass === undefined || (Number.isFinite(visual.mass) && visual.mass >= 0 && visual.mass <= 100000)) &&
     (visual.acceleration === undefined || (Number.isFinite(visual.acceleration) && visual.acceleration >= 0 && visual.acceleration <= 1000)) &&
     (visual.equation === undefined || (typeof visual.equation === 'string' && visual.equation.length <= 120)) &&
-    (visual.hidden === undefined || typeof visual.hidden === 'boolean') &&
-    (visual.graphView === undefined || (
-      Boolean(visual.graphView) && typeof visual.graphView === 'object' &&
-      Number.isFinite(visual.graphView.centerX) && Math.abs(visual.graphView.centerX) <= 100 &&
-      Number.isFinite(visual.graphView.centerY) && Math.abs(visual.graphView.centerY) <= 100000 &&
-      Number.isFinite(visual.graphView.scale) && visual.graphView.scale >= 0.5 && visual.graphView.scale <= 10
-    )) &&
     (visual.kind !== 'photo' || (
       typeof visual.imageUrl === 'string' &&
       /^https:\/\/images\.unsplash\.com\//i.test(visual.imageUrl) &&
@@ -222,37 +190,6 @@ function isBoardVisual(value: unknown): value is BoardVisual {
       /^https:\/\/(www\.)?unsplash\.com\//i.test(visual.attributionUrl)
     )) &&
     (visual.kind !== 'diagram' || isBoardDiagram(visual.diagram));
-}
-
-function isBoardPractice(value: unknown): value is BoardPractice {
-  if (!value || typeof value !== 'object') return false;
-  const practice = value as Partial<BoardPractice>;
-  return typeof practice.topic === 'string' && practice.topic.length <= 100 &&
-    typeof practice.equation === 'string' && practice.equation.length <= 120 &&
-    Array.isArray(practice.questions) && practice.questions.length > 0 && practice.questions.length <= 10 &&
-    practice.questions.every((question) => question && typeof question.id === 'string' &&
-      typeof question.prompt === 'string' && question.prompt.length <= 300 &&
-      typeof question.answer === 'string' && question.answer.length <= 100 &&
-      typeof question.hint === 'string' && question.hint.length <= 400 &&
-      typeof question.explanation === 'string' && question.explanation.length <= 600 &&
-      (question.options === undefined || (Array.isArray(question.options) &&
-        question.options.length <= 8 && question.options.every((option) => typeof option === 'string' && option.length <= 120)))) &&
-    typeof practice.currentIndex === 'number' && Number.isInteger(practice.currentIndex) &&
-    practice.currentIndex >= 0 && practice.currentIndex <= practice.questions.length &&
-    typeof practice.attempts === 'number' && Number.isInteger(practice.attempts) && practice.attempts >= 0 &&
-    typeof practice.correct === 'number' && Number.isInteger(practice.correct) &&
-    practice.correct >= 0 && practice.correct <= practice.attempts &&
-    typeof practice.completed === 'boolean' && typeof practice.createdAt === 'string' &&
-    (practice.lastAttemptAt === null || typeof practice.lastAttemptAt === 'string') &&
-    (practice.submitted === undefined || typeof practice.submitted === 'boolean') &&
-    (practice.feedback === undefined || (typeof practice.feedback === 'string' && practice.feedback.length <= 700)) &&
-    (practice.hinted === undefined || typeof practice.hinted === 'boolean') &&
-    (practice.revealed === undefined || typeof practice.revealed === 'boolean') &&
-    (practice.questionAttempts === undefined || (
-      Boolean(practice.questionAttempts) && typeof practice.questionAttempts === 'object' &&
-      Object.entries(practice.questionAttempts).every(([id, attempts]) =>
-        id.length <= 100 && Number.isInteger(attempts) && attempts >= 0 && attempts <= 100)
-    ));
 }
 
 function isBoardDiagram(value: unknown): value is BoardDiagram {
@@ -339,7 +276,6 @@ function emptyScene(): Scene {
     recognizedText: '',
     subject: '',
     visualModel: null,
-    practice: null,
   };
 }
 
@@ -418,8 +354,6 @@ function drawQuadraticGraph(
   width: number,
   height: number,
   coefficients: { a: number; b: number; c: number },
-  selectedX?: number,
-  graphView: { centerX: number; centerY: number; scale: number } = { centerX: 0, centerY: 0, scale: 1 },
 ) {
   const padding = Math.max(12, Math.min(34, Math.min(width, height) * 0.09));
   const plot = {
@@ -428,10 +362,10 @@ function drawQuadraticGraph(
     width: Math.max(1, width - padding * 2),
     height: Math.max(1, height - padding * 2),
   };
-  const xMin = graphView.centerX - 10 / graphView.scale;
-  const xMax = graphView.centerX + 10 / graphView.scale;
-  const samples = Array.from({ length: 201 }, (_, index) => {
-    const value = xMin + (xMax - xMin) * index / 200;
+  const xMin = -6;
+  const xMax = 6;
+  const samples = Array.from({ length: 121 }, (_, index) => {
+    const value = xMin + (xMax - xMin) * index / 120;
     return { x: value, y: coefficients.a * value * value + coefficients.b * value + coefficients.c };
   });
   let yMin = Math.min(0, ...samples.map((point) => point.y));
@@ -446,7 +380,7 @@ function drawQuadraticGraph(
   const scaleX = plot.width / (xMax - xMin);
   const scaleY = plot.height / (yMax - yMin);
   const px = (value: number) => plot.x + (value - xMin) * scaleX;
-  const py = (value: number) => plot.y + (yMax - (value - graphView.centerY)) * scaleY;
+  const py = (value: number) => plot.y + (yMax - value) * scaleY;
 
   context.fillStyle = '#ffffff';
   context.fillRect(x, y, width, height);
@@ -455,8 +389,7 @@ function drawQuadraticGraph(
   context.strokeRect(x, y, width, height);
   context.strokeStyle = 'rgba(25,40,65,.12)';
   context.lineWidth = 1;
-  for (let index = 0; index <= 10; index += 1) {
-    const value = xMin + (xMax - xMin) * index / 10;
+  for (let value = xMin; value <= xMax; value += 1) {
     context.beginPath();
     context.moveTo(px(value), plot.y);
     context.lineTo(px(value), plot.y + plot.height);
@@ -465,7 +398,7 @@ function drawQuadraticGraph(
     context.font = `${Math.max(9, Math.min(12, padding * 0.42))}px system-ui, sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'bottom';
-    context.fillText(String(Number(value.toPrecision(3))), px(value), plot.y + plot.height + padding * 0.42, Math.max(12, padding * 0.8));
+    context.fillText(String(value), px(value), plot.y + plot.height + padding * 0.42, Math.max(12, padding * 0.8));
   }
   const rawYStep = (yMax - yMin) / 8;
   const stepMagnitude = 10 ** Math.floor(Math.log10(Math.max(rawYStep, Number.EPSILON)));
@@ -476,44 +409,22 @@ function drawQuadraticGraph(
   context.textAlign = 'center';
   context.textBaseline = 'top';
   for (let value = Math.ceil(yMin / yStep) * yStep; value <= yMax; value += yStep) {
-    const displayedValue = value + graphView.centerY;
     context.beginPath();
-    context.moveTo(plot.x, py(displayedValue));
-    context.lineTo(plot.x + plot.width, py(displayedValue));
+    context.moveTo(plot.x, py(value));
+    context.lineTo(plot.x + plot.width, py(value));
     context.stroke();
-    context.fillText(String(Number(displayedValue.toPrecision(4))), x + padding * 0.48, py(displayedValue) - 6, padding * 0.8);
+    context.fillText(String(Number(value.toPrecision(4))), x + padding * 0.48, py(value) - 6, padding * 0.8);
   }
   context.strokeStyle = '#29364c';
   context.lineWidth = 1.5;
   context.beginPath();
-  if (yMin <= -graphView.centerY && yMax >= -graphView.centerY) {
+  if (yMin <= 0 && yMax >= 0) {
     context.moveTo(plot.x, py(0));
     context.lineTo(plot.x + plot.width, py(0));
   }
-  if (xMin <= 0 && xMax >= 0) {
-    context.moveTo(px(0), plot.y);
-    context.lineTo(px(0), plot.y + plot.height);
-  }
+  context.moveTo(px(0), plot.y);
+  context.lineTo(px(0), plot.y + plot.height);
   context.stroke();
-  if (coefficients.a !== 0) {
-    const axisX = -coefficients.b / (2 * coefficients.a);
-    if (axisX >= xMin && axisX <= xMax) {
-      context.save();
-      context.strokeStyle = '#d97706';
-      context.lineWidth = 1.2;
-      context.setLineDash([4, 4]);
-      context.beginPath();
-      context.moveTo(px(axisX), plot.y);
-      context.lineTo(px(axisX), plot.y + plot.height);
-      context.stroke();
-      context.restore();
-      context.fillStyle = '#92400e';
-      context.font = `600 ${Math.max(8, Math.min(10, padding * 0.34))}px system-ui, sans-serif`;
-      context.textAlign = 'center';
-      context.textBaseline = 'top';
-      context.fillText(`x = ${Number(axisX.toFixed(2))}`, px(axisX), plot.y + 2);
-    }
-  }
   context.save();
   context.beginPath();
   context.rect(plot.x, plot.y, plot.width, plot.height);
@@ -566,17 +477,8 @@ function drawQuadraticGraph(
       }
     });
   }
-  const yIntercept = points.find((point) =>
-    Math.abs(point.x) < 1e-10 && Math.abs(point.y - coefficients.c) < 1e-10);
-  if (yIntercept) {
-    yIntercept.label = coefficients.a === 0
-      ? `X- and y-intercept (0, ${Number(coefficients.c.toFixed(2))})`
-      : `Vertex / y-intercept (0, ${Number(coefficients.c.toFixed(2))})`;
-  } else {
-    points.push({ x: 0, y: coefficients.c, label: `Y-intercept (0, ${Number(coefficients.c.toFixed(2))})` });
-  }
   points.forEach((point) => {
-    if (point.y < yMin + graphView.centerY || point.y > yMax + graphView.centerY) return;
+    if (point.y < yMin || point.y > yMax) return;
     const pointX = px(point.x);
     const pointY = py(point.y);
     context.beginPath();
@@ -597,22 +499,6 @@ function drawQuadraticGraph(
     context.textBaseline = 'top';
     context.fillText(point.label, labelX, labelY, plot.width - 4);
   });
-  if (selectedX !== undefined && selectedX >= xMin && selectedX <= xMax) {
-    const selectedY = coefficients.a * selectedX ** 2 + coefficients.b * selectedX + coefficients.c;
-    if (selectedY >= yMin + graphView.centerY && selectedY <= yMax + graphView.centerY) {
-      const selectedPointX = px(selectedX);
-      const selectedPointY = py(selectedY);
-      context.beginPath();
-      context.arc(selectedPointX, selectedPointY, Math.max(4, padding * 0.15), 0, Math.PI * 2);
-      context.fillStyle = '#dc2626';
-      context.fill();
-      context.fillStyle = '#1e293b';
-      context.font = `600 ${Math.max(8, Math.min(10, padding * 0.34))}px system-ui, sans-serif`;
-      context.textAlign = 'left';
-      context.textBaseline = 'bottom';
-      context.fillText(`(${Number(selectedX.toFixed(2))}, ${Number(selectedY.toFixed(2))})`, selectedPointX + 5, selectedPointY - 4);
-    }
-  }
   context.fillStyle = '#1e293b';
   context.font = `600 ${Math.max(10, Math.min(13, padding * 0.46))}px system-ui, sans-serif`;
   context.textAlign = 'right';
@@ -631,142 +517,6 @@ function drawQuadraticGraph(
     }).join(' ')
     : '0';
   context.fillText(`y = ${equation}`, x + width - 5, y + height - 4, width * 0.78);
-}
-
-function drawFunctionGraph(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  expression: string,
-  selectedX?: number,
-  graphView: { centerX: number; centerY: number; scale: number } = { centerX: 0, centerY: 0, scale: 1 },
-) {
-  const xMin = graphView.centerX - 10 / graphView.scale;
-  const xMax = graphView.centerX + 10 / graphView.scale;
-  const graph = sampleGraphFunction(expression, xMin, xMax, 201);
-  if (!graph) return false;
-  const padding = Math.max(24, Math.min(40, Math.min(width, height) * 0.1));
-  const plot = { x: x + padding, y: y + padding, width: width - padding * 1.5, height: height - padding * 1.5 };
-  if (plot.width < 20 || plot.height < 20) return false;
-  const values = graph.points.flatMap((point) => point ? [point.y] : []);
-  if (!values.length) return false;
-  let minimumY = Math.min(0, ...values);
-  let maximumY = Math.max(0, ...values);
-  if (!Number.isFinite(minimumY) || !Number.isFinite(maximumY)) return false;
-  if (minimumY === maximumY) {
-    minimumY -= 1;
-    maximumY += 1;
-  }
-  const margin = (maximumY - minimumY) * 0.08;
-  minimumY -= margin;
-  maximumY += margin;
-  const px = (value: number) => plot.x + (value - xMin) * plot.width / (xMax - xMin);
-  const py = (value: number) => plot.y + (maximumY - (value - graphView.centerY)) * plot.height / (maximumY - minimumY);
-  const fontSize = Math.max(8, Math.min(11, padding * 0.32));
-  context.fillStyle = '#fff';
-  context.fillRect(x, y, width, height);
-  context.strokeStyle = '#cbd5e1';
-  context.lineWidth = 1;
-  context.strokeRect(x, y, width, height);
-  context.font = `${fontSize}px system-ui, sans-serif`;
-  context.fillStyle = '#64748b';
-  context.textAlign = 'center';
-  context.textBaseline = 'top';
-  for (let index = 0; index <= 10; index += 1) {
-    const tick = xMin + (xMax - xMin) * index / 10;
-    context.strokeStyle = 'rgba(25,40,65,.1)';
-    context.beginPath();
-    context.moveTo(px(tick), plot.y);
-    context.lineTo(px(tick), plot.y + plot.height);
-    context.stroke();
-    context.fillText(Number(tick.toPrecision(3)).toString(), px(tick), plot.y + plot.height + 3);
-  }
-  context.textAlign = 'right';
-  context.textBaseline = 'middle';
-  for (let index = 0; index <= 8; index += 1) {
-    const value = minimumY + (maximumY - minimumY) * index / 8 + graphView.centerY;
-    context.strokeStyle = 'rgba(25,40,65,.1)';
-    context.beginPath();
-    context.moveTo(plot.x, py(value));
-    context.lineTo(plot.x + plot.width, py(value));
-    context.stroke();
-    context.fillText(Number(value.toPrecision(3)).toString(), plot.x - 4, py(value));
-  }
-  context.strokeStyle = '#334155';
-  context.lineWidth = 1.4;
-  context.beginPath();
-  if (minimumY <= -graphView.centerY && maximumY >= -graphView.centerY) {
-    context.moveTo(plot.x, py(0));
-    context.lineTo(plot.x + plot.width, py(0));
-  }
-  if (xMin <= 0 && xMax >= 0) {
-    context.moveTo(px(0), plot.y);
-    context.lineTo(px(0), plot.y + plot.height);
-  }
-  context.stroke();
-  context.save();
-  context.beginPath();
-  context.rect(plot.x, plot.y, plot.width, plot.height);
-  context.clip();
-  context.beginPath();
-  let penDown = false;
-  graph.points.forEach((point) => {
-    if (!point) {
-      penDown = false;
-      return;
-    }
-    if (penDown) context.lineTo(px(point.x), py(point.y));
-    else context.moveTo(px(point.x), py(point.y));
-    penDown = true;
-  });
-  context.strokeStyle = '#2563eb';
-  context.lineWidth = 2.5;
-  context.stroke();
-  context.restore();
-  if (selectedX !== undefined && selectedX >= xMin && selectedX <= xMax) {
-    const selectedY = parseGraphFunction(expression)?.evaluate(selectedX);
-    if (selectedY !== null && selectedY !== undefined &&
-      selectedY >= minimumY + graphView.centerY && selectedY <= maximumY + graphView.centerY) {
-      const selectedPointX = px(selectedX);
-      const selectedPointY = py(selectedY);
-      context.beginPath();
-      context.arc(selectedPointX, selectedPointY, Math.max(4, fontSize * 0.6), 0, Math.PI * 2);
-      context.fillStyle = '#dc2626';
-      context.fill();
-      context.fillStyle = '#1e293b';
-      context.font = `600 ${fontSize}px system-ui, sans-serif`;
-      context.textAlign = 'left';
-      context.textBaseline = 'bottom';
-      context.fillText(`(${Number(selectedX.toFixed(2))}, ${Number(selectedY.toFixed(2))})`, selectedPointX + 5, selectedPointY - 4);
-    }
-  }
-  context.fillStyle = '#334155';
-  context.font = `600 ${fontSize + 1}px system-ui, sans-serif`;
-  context.textAlign = 'left';
-  context.textBaseline = 'top';
-  context.fillText('y', plot.x + 2, plot.y + 2);
-  context.textAlign = 'right';
-  context.textBaseline = 'bottom';
-  context.fillText('x', plot.x + plot.width - 2, plot.y + plot.height - 2);
-  context.fillText(expression, x + width - 5, y + height - 3, width - 10);
-  return true;
-}
-
-function formatGraphCoefficients({ a, b, c }: { a: number; b: number; c: number }) {
-  const terms = [
-    { coefficient: a, variable: 'x²' },
-    { coefficient: b, variable: 'x' },
-    { coefficient: c, variable: '' },
-  ].filter((term) => Number.isFinite(term.coefficient) && term.coefficient !== 0);
-  const expression = terms.map(({ coefficient, variable }, index) => {
-    const sign = coefficient < 0 ? '−' : index ? '+' : '';
-    const magnitude = Math.abs(coefficient);
-    const value = variable && magnitude === 1 ? '' : String(magnitude);
-    return `${index ? ` ${sign} ` : sign}${value}${variable}`;
-  }).join('');
-  return `y = ${expression || '0'}`;
 }
 
 function getModelForSuggestion(text: string): WorkspaceLearningModelId | null {
@@ -918,8 +668,6 @@ export default function WorkspaceSmartboardCanvas({
   const [future, setFuture] = useState<Snapshot[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
   const [equationPrompt, setEquationPrompt] = useState('');
-  const [practiceAnswer, setPracticeAnswer] = useState('');
-  const [graphInspection, setGraphInspection] = useState<{ visualId: string; x: number; y: number } | null>(null);
   const [shapeCandidate, setShapeCandidate] = useState<{ index: number; tool: ShapeTool } | null>(null);
   const [mode, setMode] = useState<'edit' | 'markup' | 'resize'>('markup');
   const [tool, setTool] = useState<Tool>('pen');
@@ -952,17 +700,6 @@ export default function WorkspaceSmartboardCanvas({
   sceneRef.current = scene;
   const boardImageRef = useRef(image);
   boardImageRef.current = image;
-  const savedBoardRef = useRef(savedBoard);
-  savedBoardRef.current = savedBoard;
-  const viewRef = useRef(view);
-  viewRef.current = view;
-  const boardTitleRef = useRef(boardTitle);
-  boardTitleRef.current = boardTitle;
-  const suggestionRef = useRef(suggestion);
-  suggestionRef.current = suggestion;
-  const onSaveLessonRef = useRef(onSaveLesson);
-  onSaveLessonRef.current = onSaveLesson;
-  const practiceSaveQueueRef = useRef(Promise.resolve());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const textRef = useRef<HTMLInputElement | null>(null);
@@ -1004,51 +741,6 @@ export default function WorkspaceSmartboardCanvas({
     analyzeDrawingRef.current = onAnalyzeDrawing;
   }, [onAnalyzeDrawing]);
 
-  useEffect(() => {
-    if (!scene.practice || !savedBoard?.id) return;
-    const timer = window.setTimeout(() => {
-      practiceSaveQueueRef.current = practiceSaveQueueRef.current.then(async () => {
-        const board = savedBoardRef.current;
-        if (!board) return;
-        const currentScene = sceneRef.current;
-        const bounds = canvasRef.current?.getBoundingClientRect();
-        const draft: WorkspaceSmartboardLessonDraft = {
-          id: board.id,
-          conversationId: board.conversationId,
-          createdAt: board.createdAt,
-          title: boardTitleRef.current.trim() || 'Untitled board',
-          scene: {
-            strokes: currentScene.strokes,
-            labels: currentScene.texts,
-            visuals: currentScene.visuals,
-            graphOnBoard: currentScene.graphOnBoard,
-            equation: currentScene.equation,
-            boardSize: currentScene.boardSize,
-            canvasStyle: 'whiteboard',
-            boardDimensions: bounds ? { width: Math.round(bounds.width), height: Math.round(bounds.height) } : null,
-            view: viewRef.current,
-            recognizedText: currentScene.recognizedText,
-            subject: currentScene.subject,
-            visualModel: currentScene.visualModel,
-            practice: currentScene.practice || null,
-            suggestion: suggestionRef.current,
-          },
-          ...(boardImageRef.current ? {
-            image: { id: crypto.randomUUID(), name: 'Board image', dataUrl: boardImageRef.current },
-          } : {}),
-        };
-        try {
-          const saved = await onSaveLessonRef.current(draft);
-          setSavedBoard(saved);
-          setNotice('Practice progress saved.');
-        } catch (reason) {
-          setError(reason instanceof Error ? reason.message : 'Practice progress could not be saved.');
-        }
-      });
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [scene.practice, savedBoard?.id]);
-
   const setAIResult = (response: string) => {
     labelSuggestionRef.current = false;
     const formatted = formatAIResponse(response);
@@ -1056,8 +748,7 @@ export default function WorkspaceSmartboardCanvas({
       getLabeledValue(formatted, 'Transcription') ||
       getLabeledValue(formatted, 'Expression');
     if (recognizedText && /[=≤≥]/.test(recognizedText) && /[a-z0-9]/i.test(recognizedText)) {
-      setEquationPrompt(parseGraphFunction(recognizedText) ? '' : recognizedText);
-      if (parseGraphFunction(recognizedText)) presentEquationAsGraph(recognizedText);
+      setEquationPrompt(recognizedText);
     }
     const subject = getLabeledValue(formatted, 'Subject');
     const visualModel = getModelForSuggestion(`${recognizedText}\n${subject}\n${formatted}`);
@@ -1100,11 +791,7 @@ export default function WorkspaceSmartboardCanvas({
     setHistory((previous) => [...previous.slice(-49), snapshot()]);
     setFuture([]);
   };
-  const updateScene = (updater: (previous: Scene) => Scene) => {
-    const next = updater(sceneRef.current);
-    sceneRef.current = next;
-    setScene(next);
-  };
+  const updateScene = (updater: (previous: Scene) => Scene) => setScene(updater);
 
   useEffect(() => {
     if (!image) {
@@ -1242,7 +929,6 @@ export default function WorkspaceSmartboardCanvas({
         drawQuadraticGraph(context, bounds.width * 0.12, bounds.height * 0.12, bounds.width * 0.76, bounds.height * 0.7, coefficients);
       }
       scene.visuals.forEach((visual, index) => {
-        if (visual.hidden) return;
         const x = visual.x * bounds.width;
         const y = visual.y * bounds.height;
         const width = visual.width * bounds.width;
@@ -1532,23 +1218,6 @@ export default function WorkspaceSmartboardCanvas({
             context.textAlign = 'center';
             context.fillText('Enter a supported linear or quadratic equation', 0, 0, width - 16);
           }
-        } else if (visual.kind === 'functionGraph') {
-          const graphEquation = visual.equation || '';
-          const graphCoefficients = parseQuadraticEquation(graphEquation);
-          const selectedX = graphInspection?.visualId === visual.id ? graphInspection.x : undefined;
-          const graphView = visual.graphView || { centerX: 0, centerY: 0, scale: 1 };
-          if (graphCoefficients) {
-            drawQuadraticGraph(context, -width / 2, -height / 2, width, height, graphCoefficients, selectedX, graphView);
-          } else if (!drawFunctionGraph(context, -width / 2, -height / 2, width, height, graphEquation, selectedX, graphView)) {
-            context.fillStyle = '#fff';
-            context.fillRect(-width / 2, -height / 2, width, height);
-            context.strokeStyle = '#cbd5e1';
-            context.strokeRect(-width / 2, -height / 2, width, height);
-            context.fillStyle = '#b91c1c';
-            context.font = '12px system-ui, sans-serif';
-            context.textAlign = 'center';
-            context.fillText('This function cannot be graphed safely.', 0, 0, width - 16);
-          }
         }
 
         if (selection?.type === 'visual' && selection.index === index) {
@@ -1626,7 +1295,7 @@ export default function WorkspaceSmartboardCanvas({
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [open, scene, selection, view, coefficients, imageLoaded, referenceImageVersion, graphInspection]);
+  }, [open, scene, selection, view, coefficients, imageLoaded, referenceImageVersion]);
 
   const runAutoAnalysis = async (imageDataUrl: string) => {
     if (!aiSuggestionsEnabled) return;
@@ -1725,7 +1394,6 @@ export default function WorkspaceSmartboardCanvas({
     }
     for (let index = scene.visuals.length - 1; index >= 0; index -= 1) {
       const visual = scene.visuals[index];
-      if (visual.hidden) continue;
       if (point.x >= visual.x - toleranceX && point.x <= visual.x + visual.width + toleranceX &&
         point.y >= visual.y - toleranceY && point.y <= visual.y + visual.height + toleranceY) {
         return { type: 'visual', index };
@@ -1790,35 +1458,6 @@ export default function WorkspaceSmartboardCanvas({
     if (mode !== 'markup') {
       const hit = hitTest(point, event.currentTarget);
       setSelection(hit);
-      if (hit?.type === 'visual') {
-        const visual = scene.visuals[hit.index];
-        const graph = visual.kind === 'functionGraph' ? parseGraphFunction(visual.equation || '') : null;
-        if (graph) {
-          const xFraction = Math.max(0, Math.min(1, (point.x - visual.x) / visual.width));
-          const graphView = visual.graphView || { centerX: 0, centerY: 0, scale: 1 };
-          const x = graphView.centerX + (((xFraction - 0.1) / 0.8) * 2 - 1) * 10 / graphView.scale;
-          const y = graph.evaluate(x);
-          setGraphInspection(y === null ? null : { visualId: visual.id, x, y });
-        } else {
-          setGraphInspection(null);
-        }
-      } else if (hit?.type === 'text') {
-        const note = scene.texts[hit.index];
-        const linkedGraph = note.linkedGraphId
-          ? scene.visuals.find((visual) => visual.id === note.linkedGraphId)
-          : null;
-        const coefficients = linkedGraph?.equation ? parseQuadraticEquation(linkedGraph.equation) : null;
-        if (linkedGraph && coefficients && coefficients.a !== 0 && note.text.toLowerCase().includes('vertex')) {
-          const yInterceptSection = point.y >= note.y + (note.height || 0.42) * 0.62;
-          const x = yInterceptSection ? 0 : -coefficients.b / (2 * coefficients.a);
-          const y = coefficients.a * x * x + coefficients.b * x + coefficients.c;
-          setGraphInspection({ visualId: linkedGraph.id, x, y });
-        } else {
-          setGraphInspection(null);
-        }
-      } else {
-        setGraphInspection(null);
-      }
       if (hit) {
         remember();
         activeSelectionRef.current = {
@@ -2022,17 +1661,6 @@ export default function WorkspaceSmartboardCanvas({
   const selectedStroke = selection?.type === 'stroke' ? scene.strokes[selection.index] : null;
   const selectedText = selection?.type === 'text' ? scene.texts[selection.index] : null;
   const selectedVisual = selection?.type === 'visual' ? scene.visuals[selection.index] : null;
-  const graphVisualIndex = selection?.type === 'visual' &&
-    (selectedVisual?.kind === 'functionGraph' || selectedVisual?.kind === 'parabola')
-    ? selection.index
-    : scene.visuals.findIndex((visual) =>
-      (visual.kind === 'functionGraph' || visual.kind === 'parabola') &&
-      visual.equation === scene.equation);
-  const graphVisual = graphVisualIndex >= 0 ? scene.visuals[graphVisualIndex] : null;
-  const graphFunction = useMemo(
-    () => parseGraphFunction(graphVisual?.equation || scene.equation),
-    [graphVisual?.equation, scene.equation],
-  );
 
   const duplicate = () => {
     if (!selection) return;
@@ -2245,59 +1873,17 @@ export default function WorkspaceSmartboardCanvas({
     const item = { text: value.slice(0, 120), x: 0.5, y: 0.5, color };
     updateScene((previous) => ({ ...previous, texts: [...previous.texts, item] }));
     setSelection(isEquation ? null : { type: 'text', index: scene.texts.length });
-    setEquationPrompt(isEquation && !parseGraphFunction(value) ? value : '');
+    setEquationPrompt(isEquation ? value : '');
     setTextDraft('');
     setTextComposerOpen(false);
     setMathKeyboardOpen(false);
-    if (parseGraphFunction(value)) presentEquationAsGraph(value);
   };
 
   const presentEquationAsGraph = (equation: string) => {
-    const graph = parseGraphFunction(equation);
-    if (!graph) {
-      if (isIncompleteEquation(equation)) {
-        setNotice(createIncompleteEquationClarification(equation) || 'Complete the equation before graphing it.');
-      } else {
-        setNotice('This expression cannot be graphed safely. Use a supported function such as y = 2x + 3 or y = x² + 8.');
-      }
-      return;
-    }
-    const existingIndex = sceneRef.current.visuals.findIndex((visual) =>
-      (visual.kind === 'functionGraph' || visual.kind === 'parabola') &&
-      visual.equation === equation);
-    let graphId: string | undefined;
-    if (existingIndex >= 0) {
-      const existing = sceneRef.current.visuals[existingIndex];
-      graphId = existing.id;
-      if (existing.hidden) {
-        remember();
-        updateScene((previous) => ({
-          ...previous,
-          visuals: previous.visuals.map((visual, index) => index === existingIndex ? { ...visual, hidden: false } : visual),
-        }));
-      }
-    } else {
-      graphId = addBoardVisual('functionGraph', equation)?.id;
-    }
-    const practice = sceneRef.current.practice?.equation === equation
-      ? sceneRef.current.practice
-      : createGraphPractice(equation);
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      equation,
-      practice: practice ? {
-        ...practice,
-        submitted: previous.practice?.equation === equation ? previous.practice.submitted : false,
-        feedback: previous.practice?.equation === equation ? previous.practice.feedback : '',
-        hinted: previous.practice?.equation === equation ? previous.practice.hinted : false,
-      } : null,
-    }));
+    if (!parseQuadraticEquation(equation)) return;
+    addBoardVisual('parabola', equation);
     setEquationPrompt('');
-    const explanation = createQuadraticFunctionExplanation(equation) || createLinearFunctionExplanation(equation);
-    if (explanation) placeExplanation(explanation, graphId);
-    else void solveOnBoard(equation);
-    setNotice(`Graph and ${practice?.questions.length || 0} practice questions added. Select the graph to move or resize it.`);
+    setNotice('Added an editable graph. Select it to move, resize, or change its equation.');
   };
 
   const addCleanCube = () => {
@@ -2369,7 +1955,7 @@ export default function WorkspaceSmartboardCanvas({
       height: visualHeight,
       rotation: 0,
       ...(kind === 'newton' ? { mass: 1200, acceleration: 4 } : {}),
-      ...((kind === 'parabola' || kind === 'functionGraph') && (equation || scene.recognizedText)
+      ...(kind === 'parabola' && (equation || scene.recognizedText)
         ? { equation: equation || scene.recognizedText }
         : {}),
       ...(kind === 'diagram' && diagram ? { diagram } : {}),
@@ -2378,7 +1964,7 @@ export default function WorkspaceSmartboardCanvas({
     updateScene((previous) => ({
       ...previous,
       visuals: [...previous.visuals, visual],
-      ...((kind === 'parabola' || kind === 'functionGraph') && (equation || scene.recognizedText) ? {
+      ...(kind === 'parabola' && (equation || scene.recognizedText) ? {
         equation: equation || scene.recognizedText,
         graphOnBoard: false,
       } : {}),
@@ -2386,208 +1972,23 @@ export default function WorkspaceSmartboardCanvas({
     setSelection({ type: 'visual', index: scene.visuals.length });
     setSuggestion('');
     setNotice(`Added an editable ${getBoardVisualLabel(kind)} to the whiteboard.`);
-    return visual;
   };
 
   const toggleEquationGraph = (enabled: boolean) => {
     if (enabled) {
-      if (graphVisualIndex >= 0 && graphVisual?.hidden) {
-        remember();
-        updateScene((previous) => ({
-          ...previous,
-          visuals: previous.visuals.map((visual, index) =>
-            index === graphVisualIndex ? { ...visual, hidden: false } : visual),
-        }));
-      } else {
-        presentEquationAsGraph(scene.equation);
-      }
+      addBoardVisual('parabola', scene.equation);
       return;
     }
-    if (graphVisualIndex < 0 || graphVisual?.hidden) return;
+    const graphIndex = scene.visuals.map((visual) =>
+      visual.kind === 'parabola' && (visual.equation || scene.equation) === scene.equation).lastIndexOf(true);
+    if (graphIndex < 0) return;
     remember();
     updateScene((previous) => ({
       ...previous,
-      visuals: previous.visuals.map((visual, index) => index === graphVisualIndex ? { ...visual, hidden: true } : visual),
+      visuals: previous.visuals.filter((_, index) => index !== graphIndex),
     }));
-    setNotice('Graph hidden. Its position and settings are preserved.');
-  };
-
-  const updateGraphCoefficient = (key: 'a' | 'b' | 'c', value: number) => {
-    const currentEquation = graphVisual?.equation || sceneRef.current.equation;
-    const currentFunction = parseGraphFunction(currentEquation);
-    if (!currentFunction?.coefficients || !Number.isFinite(value)) return;
-    const coefficients = { ...currentFunction.coefficients, [key]: value };
-    const equation = formatGraphCoefficients(coefficients);
-    const visualIndex = graphVisualIndex;
-    const graphId = visualIndex >= 0 ? sceneRef.current.visuals[visualIndex]?.id : undefined;
-    const practice = createGraphPractice(equation);
-    const explanation = createQuadraticFunctionExplanation(equation) || createLinearFunctionExplanation(equation);
-    const formattedExplanation = explanation ? formatAIResponse(explanation).slice(0, 1600) : null;
-    updateScene((previous) => ({
-      ...previous,
-      equation,
-      recognizedText: equation,
-      visuals: previous.visuals.map((visual, index) =>
-        index === visualIndex ? { ...visual, equation } : visual),
-      texts: formattedExplanation && graphId
-        ? previous.texts.map((text) => text.linkedGraphId === graphId
-          ? { ...text, text: formattedExplanation }
-          : text)
-        : previous.texts,
-      practice: practice ? { ...practice, submitted: false, feedback: '', hinted: false } : previous.practice,
-    }));
-  };
-
-  const setGraphExpanded = (expanded: boolean) => {
-    if (graphVisualIndex < 0) return;
-    const visual = scene.visuals[graphVisualIndex];
-    const width = expanded ? 0.76 : 0.34;
-    const height = expanded ? 0.7 : 0.3;
-    const centerX = visual.x + visual.width / 2;
-    const centerY = visual.y + visual.height / 2;
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      visuals: previous.visuals.map((item, index) => index === graphVisualIndex ? {
-        ...item,
-        x: Math.max(0, Math.min(1 - width, centerX - width / 2)),
-        y: Math.max(0, Math.min(1 - height, centerY - height / 2)),
-        width,
-        height,
-      } : item),
-    }));
-  };
-
-  const adjustGraphView = (
-    direction: 'left' | 'right' | 'up' | 'down' | 'zoomIn' | 'zoomOut' | 'reset',
-  ) => {
-    if (graphVisualIndex < 0) return;
-    const graph = sceneRef.current.visuals[graphVisualIndex];
-    if (!graph || graph.kind !== 'functionGraph') return;
-    const current = graph.graphView || { centerX: 0, centerY: 0, scale: 1 };
-    const scale = direction === 'zoomIn'
-      ? Math.min(10, current.scale * 1.25)
-      : direction === 'zoomOut'
-        ? Math.max(0.5, current.scale / 1.25)
-        : direction === 'reset' ? 1 : current.scale;
-    const step = 2 / current.scale;
-    const graphView = direction === 'reset'
-      ? { centerX: 0, centerY: 0, scale: 1 }
-      : {
-        centerX: Math.max(-100, Math.min(100,
-          current.centerX + (direction === 'left' ? -step : direction === 'right' ? step : 0))),
-        centerY: Math.max(-100000, Math.min(100000,
-          current.centerY + (direction === 'up' ? step : direction === 'down' ? -step : 0))),
-        scale,
-      };
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      visuals: previous.visuals.map((visual, index) =>
-        index === graphVisualIndex ? { ...visual, graphView } : visual),
-    }));
-  };
-
-  const normalizePracticeAnswer = (answer: string) =>
-    answer.toLowerCase().replace(/[−–]/g, '-').replace(/[^a-z0-9.+-]/g, '');
-
-  const submitPracticeAnswer = (answer: string) => {
-    const practice = sceneRef.current.practice;
-    const question = practice?.questions[practice.currentIndex];
-    if (!practice || !question || practice.completed || practice.submitted || !answer.trim()) return;
-    const correct = normalizePracticeAnswer(answer) === normalizePracticeAnswer(question.answer) ||
-      Boolean(question.options?.some((option) =>
-        normalizePracticeAnswer(option) === normalizePracticeAnswer(answer) &&
-        normalizePracticeAnswer(option) === normalizePracticeAnswer(question.answer)));
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      practice: previous.practice ? {
-        ...previous.practice,
-        attempts: previous.practice.attempts + 1,
-        correct: previous.practice.correct + (correct ? 1 : 0),
-        questionAttempts: {
-          ...previous.practice.questionAttempts,
-          [question.id]: (previous.practice.questionAttempts?.[question.id] || 0) + 1,
-        },
-        lastAttemptAt: new Date().toISOString(),
-        submitted: correct,
-        hinted: !correct,
-        revealed: false,
-        feedback: correct
-          ? `Correct! ${question.explanation}`
-          : `Not quite. Hint: ${question.hint}`,
-      } : previous.practice,
-    }));
-    setPracticeAnswer('');
-  };
-
-  const nextPracticeQuestion = () => {
-    const practice = sceneRef.current.practice;
-    if (!practice || !practice.submitted) return;
-    remember();
-    updateScene((previous) => {
-      if (!previous.practice) return previous;
-      const currentIndex = previous.practice.currentIndex + 1;
-      return {
-        ...previous,
-        practice: {
-          ...previous.practice,
-          currentIndex,
-          completed: currentIndex >= previous.practice.questions.length,
-          submitted: false,
-          feedback: '',
-          hinted: false,
-          revealed: false,
-        },
-      };
-    });
-    setPracticeAnswer('');
-  };
-
-  const resetPracticeQuestion = () => {
-    if (!sceneRef.current.practice) return;
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      practice: previous.practice ? { ...previous.practice, submitted: false, feedback: '', hinted: false, revealed: false } : null,
-    }));
-    setPracticeAnswer('');
-  };
-
-  const restartPractice = () => {
-    const practice = sceneRef.current.practice;
-    if (!practice) return;
-    const replacement = createGraphPractice(practice.equation);
-    if (!replacement) return;
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      practice: replacement,
-    }));
-    setPracticeAnswer('');
-  };
-
-  const revealPracticeExplanation = () => {
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      practice: previous.practice ? { ...previous.practice, revealed: true } : null,
-    }));
-  };
-
-  const showPracticeHint = () => {
-    remember();
-    updateScene((previous) => ({
-      ...previous,
-      practice: previous.practice ? { ...previous.practice, hinted: true } : null,
-    }));
-  };
-
-  const openPracticePanel = () => {
-    setSidebarOpen(true);
-    setSettingsOpen(true);
-    moreMenuRef.current?.setAttribute('open', '');
+    setSelection(null);
+    setNotice('Removed the selected equation graph.');
   };
 
   const addReferencePhoto = (photo: BoardReferenceImage) => {
@@ -2646,7 +2047,7 @@ export default function WorkspaceSmartboardCanvas({
     }));
   };
 
-  const placeExplanation = (response: string, linkedGraphId?: string) => {
+  const placeExplanation = (response: string) => {
     const canvas = canvasRef.current;
     if (!canvas) throw new Error('The Smartboard is not ready to place an explanation.');
     const bounds = canvas.getBoundingClientRect();
@@ -2735,7 +2136,6 @@ export default function WorkspaceSmartboardCanvas({
       kind: 'explanation',
       width,
       height,
-      ...(linkedGraphId ? { linkedGraphId } : {}),
     };
     remember();
     updateScene((previous) => ({ ...previous, texts: [...previous.texts, note] }));
@@ -2795,6 +2195,12 @@ export default function WorkspaceSmartboardCanvas({
       const checkedQuadraticExplanation = createQuadraticFunctionExplanation(expression);
       if (checkedQuadraticExplanation) {
         placeExplanation(checkedQuadraticExplanation);
+        setNotice('Added a checked, step-by-step explanation to the board.');
+        return;
+      }
+      const checkedLinearExplanation = createLinearFunctionExplanation(expression);
+      if (checkedLinearExplanation) {
+        placeExplanation(checkedLinearExplanation);
         setNotice('Added a checked, step-by-step explanation to the board.');
         return;
       }
@@ -3019,7 +2425,6 @@ export default function WorkspaceSmartboardCanvas({
         recognizedText: scene.recognizedText,
         subject: scene.subject,
         visualModel: scene.visualModel,
-        practice: scene.practice || null,
         suggestion,
       },
       ...(image ? { image: { id: crypto.randomUUID(), name: 'Board image', dataUrl: image } } : {}),
@@ -3061,10 +2466,10 @@ export default function WorkspaceSmartboardCanvas({
     const texts = Array.isArray(savedScene.labels) ? savedScene.labels.filter(isBoardText) : [];
     const restoredEquation = typeof savedScene.equation === 'string' ? savedScene.equation : 'y = x² - 3';
     const visuals = Array.isArray(savedScene.visuals) ? savedScene.visuals.filter(isBoardVisual) : [];
-    const restoredGraph = savedScene.graphOnBoard === true && parseGraphFunction(restoredEquation)
+    const restoredGraph = savedScene.graphOnBoard === true && parseQuadraticEquation(restoredEquation)
       ? {
         id: crypto.randomUUID(),
-        kind: 'functionGraph' as const,
+        kind: 'parabola' as const,
         x: 0.12,
         y: 0.12,
         width: 0.76,
@@ -3089,7 +2494,6 @@ export default function WorkspaceSmartboardCanvas({
     const restoredX = typeof restoredView.x === 'number' && Number.isFinite(restoredView.x) ? restoredView.x : 0;
     const restoredY = typeof restoredView.y === 'number' && Number.isFinite(restoredView.y) ? restoredView.y : 0;
     const restoredModel = isWorkspaceLearningModelId(savedScene.visualModel) ? savedScene.visualModel : null;
-    const restoredPractice = isBoardPractice(savedScene.practice) ? savedScene.practice : null;
     setScene({
       strokes,
       texts,
@@ -3100,7 +2504,6 @@ export default function WorkspaceSmartboardCanvas({
       recognizedText: typeof savedScene.recognizedText === 'string' ? savedScene.recognizedText : '',
       subject: typeof savedScene.subject === 'string' ? savedScene.subject : '',
       visualModel: restoredModel,
-      practice: restoredPractice,
     });
     setView({
       zoom: typeof restoredView.zoom === 'number' && Number.isFinite(restoredView.zoom)
@@ -3338,128 +2741,18 @@ export default function WorkspaceSmartboardCanvas({
                         <label className="block text-xs text-slate-600">Equation graph (browser-calculated)
                           <input value={scene.equation} onFocus={remember} onChange={(event) => updateScene((previous) => ({ ...previous, equation: event.target.value }))} placeholder="y = x² - 3" className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-slate-400" />
                         </label>
-                        <Button type="button" className="min-h-9 w-full bg-slate-900 text-xs text-white hover:bg-slate-700" disabled={!graphFunction} onClick={() => presentEquationAsGraph(scene.equation)}>Add or update graph and practice</Button>
                         <label className="flex min-h-9 items-center gap-2 text-sm text-slate-700">
                           <input
                             type="checkbox"
-                            checked={Boolean(graphVisual && !graphVisual.hidden)}
-                            disabled={!graphFunction}
+                            checked={scene.graphOnBoard || scene.visuals.some((visual) =>
+                              visual.kind === 'parabola' && (visual.equation || scene.equation) === scene.equation)}
+                            disabled={!coefficients}
                             onChange={(event) => toggleEquationGraph(event.target.checked)}
                           />
-                          Show interactive graph on canvas
+                          Show editable graph on canvas
                         </label>
-                        {graphFunction && graphFunction.coefficients && graphVisual && (
-                          <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
-                            <p className="text-xs font-medium text-slate-800">Explore the coefficients</p>
-                            {(['a', 'b', 'c'] as const).map((key) => (
-                              <label key={key} className="grid grid-cols-[1rem_1fr_2.5rem] items-center gap-2 text-xs text-slate-700">
-                                <span>{key}</span>
-                                <input
-                                  type="range"
-                                  min="-10"
-                                  max="10"
-                                  step="0.25"
-                                  value={graphFunction.coefficients?.[key] ?? 0}
-                                  onFocus={remember}
-                                  onChange={(event) => updateGraphCoefficient(key, Number(event.target.value))}
-                                  className="w-full accent-slate-700"
-                                  aria-label={`Adjust coefficient ${key}`}
-                                />
-                                <span className="text-right tabular-nums">{Number(graphFunction.coefficients[key].toFixed(2))}</span>
-                              </label>
-                            ))}
-                            <p className="break-words text-xs text-slate-600">{scene.equation}</p>
-                          </div>
-                        )}
-                        {graphVisual?.kind === 'functionGraph' && (
-                          <div className="grid grid-cols-3 gap-1" aria-label="Graph view controls">
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700" aria-label="Zoom graph out" onClick={() => adjustGraphView('zoomOut')}>−</Button>
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700" aria-label="Pan graph up" onClick={() => adjustGraphView('up')}>↑</Button>
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700" aria-label="Zoom graph in" onClick={() => adjustGraphView('zoomIn')}>+</Button>
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700" aria-label="Pan graph left" onClick={() => adjustGraphView('left')}>←</Button>
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700" onClick={() => adjustGraphView('reset')}>Reset graph view</Button>
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700" aria-label="Pan graph right" onClick={() => adjustGraphView('right')}>→</Button>
-                            <span />
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-2 text-xs text-slate-700" aria-label="Pan graph down" onClick={() => adjustGraphView('down')}>↓</Button>
-                          </div>
-                        )}
-                        {graphFunction && graphVisual && (
-                          <>
-                            <div className="flex gap-2">
-                              <Button type="button" variant="outline" className="min-h-9 flex-1 border-slate-200 bg-white text-xs text-slate-700 hover:bg-slate-100" onClick={() => setGraphExpanded(true)}>Expand graph</Button>
-                              <Button type="button" variant="outline" className="min-h-9 flex-1 border-slate-200 bg-white text-xs text-slate-700 hover:bg-slate-100" onClick={() => setGraphExpanded(false)}>Minimise graph</Button>
-                            </div>
-                            <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void solveOnBoard(scene.equation)}>Explain equation</Button>
-                          </>
-                        )}
-                        {graphInspection && graphVisual?.id === graphInspection.visualId && (
-                          <p role="status" className="rounded-lg bg-white p-2 text-xs text-slate-700">
-                            Selected coordinate: ({graphInspection.x.toFixed(2)}, {graphInspection.y.toFixed(2)})
-                          </p>
-                        )}
-                        {scene.practice && (
-                          <section className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-3" aria-label="Test Your Understanding">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <h3 className="text-sm font-semibold text-slate-900">Test Your Understanding</h3>
-                                <p className="text-xs text-slate-600">
-                                  {scene.practice.completed
-                                    ? `Complete: ${scene.practice.correct} correct of ${scene.practice.attempts} attempts`
-                                    : `Question ${scene.practice.currentIndex + 1} of ${scene.practice.questions.length} · ${scene.practice.correct} correct`}
-                                </p>
-                              </div>
-                            </div>
-                            {!scene.practice.completed && scene.practice.questions[scene.practice.currentIndex] && (
-                              <>
-                                <p className="text-sm font-medium leading-5 text-slate-900">{scene.practice.questions[scene.practice.currentIndex].prompt}</p>
-                                {scene.practice.questions[scene.practice.currentIndex].options ? (
-                                  <div className="grid grid-cols-2 gap-1">
-                                    {scene.practice.questions[scene.practice.currentIndex].options?.map((option) => (
-                                      <button
-                                        key={option}
-                                        type="button"
-                                        className={`min-h-9 rounded-lg border px-2 text-left text-xs ${practiceAnswer === option ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-800'}`}
-                                        onClick={() => setPracticeAnswer(option)}
-                                        aria-pressed={practiceAnswer === option}
-                                      >{option}</button>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <input
-                                    value={practiceAnswer}
-                                    onChange={(event) => setPracticeAnswer(event.target.value)}
-                                    onKeyDown={(event) => { if (event.key === 'Enter') submitPracticeAnswer(practiceAnswer); }}
-                                    placeholder="Your answer"
-                                    aria-label="Your answer"
-                                    className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                                  />
-                                )}
-                                {scene.practice.feedback && <p role="status" className="text-xs leading-5 text-slate-700">{scene.practice.feedback}</p>}
-                                {scene.practice.revealed && (
-                                  <p className="rounded-lg bg-white p-2 text-xs leading-5 text-slate-700">
-                                    {scene.practice.questions[scene.practice.currentIndex].explanation}
-                                  </p>
-                                )}
-                                <div className="flex flex-wrap gap-1.5">
-                                  <Button type="button" className="min-h-9 bg-slate-900 px-3 text-xs text-white hover:bg-slate-700" disabled={!practiceAnswer.trim() || scene.practice.submitted} onClick={() => submitPracticeAnswer(practiceAnswer)}>Check answer</Button>
-                                  {!scene.practice.submitted && <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-3 text-xs text-slate-700" onClick={showPracticeHint}>Show hint</Button>}
-                                  {scene.practice.hinted && !scene.practice.submitted && (
-                                    <p className="w-full text-xs text-slate-700">{scene.practice.questions[scene.practice.currentIndex].hint}</p>
-                                  )}
-                                  {!scene.practice.submitted &&
-                                    (scene.practice.questionAttempts?.[scene.practice.questions[scene.practice.currentIndex].id] || 0) >= 2 &&
-                                    !scene.practice.revealed && (
-                                      <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-3 text-xs text-slate-700" onClick={revealPracticeExplanation}>Show explanation</Button>
-                                    )}
-                                  {scene.practice.submitted && <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-3 text-xs text-slate-700" onClick={nextPracticeQuestion}>Next question</Button>}
-                                  {scene.practice.feedback.startsWith('Not quite.') && <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-3 text-xs text-slate-700" onClick={resetPracticeQuestion}>Retry</Button>}
-                                </div>
-                              </>
-                            )}
-                            {scene.practice.completed && (
-                              <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white px-3 text-xs text-slate-700" onClick={restartPractice}>Try the practice again</Button>
-                            )}
-                          </section>
+                        {scene.graphOnBoard && coefficients && (
+                          <Button type="button" variant="outline" className="min-h-9 border-slate-200 bg-white text-slate-700 hover:bg-slate-100" disabled={busy} onClick={() => void solveOnBoard(scene.equation)}>Explain equation</Button>
                         )}
                       </div>
                     )}
@@ -3486,7 +2779,7 @@ export default function WorkspaceSmartboardCanvas({
                   ? <p className="mt-1 text-xs text-slate-600">The right-hand side is missing. What should come after the equals sign?</p>
                   : <p className="mt-1 text-xs text-slate-600">Add a graph, explore teaching visuals, or explain it. Your board stays unchanged until you choose.</p>}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {!isIncompleteEquation(equationPrompt) && parseGraphFunction(equationPrompt) && (
+                  {!isIncompleteEquation(equationPrompt) && parseQuadraticEquation(equationPrompt) && (
                     <Button type="button" className="min-h-9 bg-slate-900 px-3 text-xs text-white hover:bg-slate-700" onClick={() => presentEquationAsGraph(equationPrompt)}>Add graph</Button>
                   )}
                   {!isIncompleteEquation(equationPrompt) && (
@@ -3498,20 +2791,6 @@ export default function WorkspaceSmartboardCanvas({
                   <Button type="button" variant="ghost" className="min-h-9 px-3 text-xs text-slate-600 hover:bg-slate-100" onClick={() => setEquationPrompt('')}>Not now</Button>
                 </div>
               </section>
-            )}
-
-            {scene.practice && !presentation && (
-              <Button
-                type="button"
-                variant="outline"
-                className="absolute left-3 top-[calc(env(safe-area-inset-top)_+_3.65rem)] z-20 min-h-9 max-w-[min(60vw,18rem)] border-blue-200 bg-white/95 px-3 text-left text-xs text-slate-800 shadow-lg hover:bg-blue-50"
-                onClick={openPracticePanel}
-                aria-label="Open Test Your Understanding practice"
-              >
-                {scene.practice.completed
-                  ? `Practice complete · ${scene.practice.correct}/${scene.practice.attempts}`
-                  : `Test Your Understanding · ${scene.practice.currentIndex + 1}/${scene.practice.questions.length}`}
-              </Button>
             )}
 
             {shapeCandidate && !suggestion && !presentation && (
