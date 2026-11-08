@@ -136,17 +136,39 @@ export function createAnalyticsHandler({
     const requestId = crypto.randomUUID();
     const route = event.path || '/.netlify/functions/analytics';
     let action = 'unknown';
+    const respond = (statusCode, body, headers = {}) => {
+      const response = json(statusCode, body);
+      response.headers = {
+        ...response.headers,
+        'X-Request-Id': requestId,
+        ...headers,
+      };
+      return response;
+    };
 
     try {
+      if (event.httpMethod && event.httpMethod !== 'POST') {
+        return respond(405, { error: 'method_not_allowed', message: 'Use POST for analytics requests.' }, {
+          Allow: 'POST',
+        });
+      }
+
       const body = parseBody(event);
       action = body.action;
       if (!['track', 'report'].includes(action)) {
-        return json(400, { error: 'invalid_action', message: 'This analytics action is not supported.' });
+        return respond(400, { error: 'invalid_action', message: 'This analytics action is not supported.' });
       }
 
       const accessToken = getBearerToken(event.headers);
       if (!accessToken) {
-        return json(401, { error: 'unauthorized', message: 'Sign in to use FaceMeX analytics.' });
+        console.warn('FaceMeX analytics authorization failed', {
+          route,
+          action,
+          request_id: requestId,
+          http_status: 401,
+          reason: 'missing_bearer_token',
+        });
+        return respond(401, { error: 'unauthorized', message: 'Sign in to use FaceMeX analytics.' });
       }
       const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
       const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
@@ -155,21 +177,49 @@ export function createAnalyticsHandler({
         console.error('FaceMeX analytics configuration is incomplete', {
           route,
           request_id: requestId,
+          http_status: 503,
           missing: [
             !supabaseUrl && 'SUPABASE_URL',
             !anonKey && 'SUPABASE_ANON_KEY',
             !serviceRoleKey && 'SUPABASE_SERVICE_ROLE_KEY',
           ].filter(Boolean),
         });
-        return json(503, { error: 'analytics_not_configured', message: 'Analytics is temporarily unavailable.' });
+        return respond(503, {
+          error: 'analytics_not_configured',
+          message: 'Product analytics is not configured. Please contact the administrator.',
+        });
       }
 
       const verifier = createClientFn(supabaseUrl, anonKey, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
       const { data: authData, error: authError } = await verifier.auth.getUser(accessToken);
-      if (authError || !authData.user) {
-        return json(401, { error: 'unauthorized', message: 'Your FaceMeX sign-in has expired. Sign in again.' });
+      if (authError) {
+        const statusCode = Number(authError.status) === 401 ? 401 : 503;
+        console.warn('FaceMeX analytics authentication check failed', {
+          route,
+          action,
+          request_id: requestId,
+          http_status: statusCode,
+          error_code: authError.code || 'auth_verification_failed',
+          error_message: authError.message,
+        });
+        return respond(statusCode, {
+          error: statusCode === 401 ? 'unauthorized' : 'analytics_auth_unavailable',
+          message: statusCode === 401
+            ? 'Your FaceMeX sign-in has expired. Sign in again.'
+            : 'Sign-in could not be verified right now. Please try again.',
+        });
+      }
+      if (!authData.user) {
+        console.warn('FaceMeX analytics authorization failed', {
+          route,
+          action,
+          request_id: requestId,
+          http_status: 401,
+          reason: 'no_verified_user',
+        });
+        return respond(401, { error: 'unauthorized', message: 'Your FaceMeX sign-in has expired. Sign in again.' });
       }
 
       const admin = createClientFn(supabaseUrl, serviceRoleKey, {
@@ -179,7 +229,7 @@ export function createAnalyticsHandler({
       if (action === 'track') {
         const safeEvent = sanitizeAnalyticsEvent(body.event);
         if (!safeEvent) {
-          return json(400, { error: 'invalid_event', message: 'This analytics event is not valid.' });
+          return respond(400, { error: 'invalid_event', message: 'This analytics event is not valid.' });
         }
         const { error } = await admin
           .from('facemex_product_events')
@@ -187,12 +237,32 @@ export function createAnalyticsHandler({
             ...safeEvent,
             user_id: authData.user.id,
           }, { onConflict: 'event_id', ignoreDuplicates: true });
-        if (error) throw error;
-        return json(202, { accepted: true });
+        if (error) {
+          console.error('FaceMeX analytics event insert failed', {
+            route,
+            action,
+            request_id: requestId,
+            http_status: 503,
+            error_code: error.code || 'analytics_insert_failed',
+            error_message: error.message,
+          });
+          return respond(503, {
+            error: 'analytics_storage_unavailable',
+            message: 'Product activity could not be recorded right now. Please try again.',
+          });
+        }
+        return respond(202, { accepted: true });
       }
 
       if (String(authData.user.email || '').toLowerCase() !== OWNER_EMAIL) {
-        return json(403, { error: 'founder_only', message: 'Founder access is required to view analytics.' });
+        console.warn('FaceMeX analytics authorization denied', {
+          route,
+          action,
+          request_id: requestId,
+          http_status: 403,
+          reason: 'owner_only_report',
+        });
+        return respond(403, { error: 'founder_only', message: 'Founder access is required to view analytics.' });
       }
 
       const { start_date: startDate, end_date: endDate, feature } = body;
@@ -203,18 +273,45 @@ export function createAnalyticsHandler({
         (Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) / 86_400_000 > 365 ||
         (feature !== null && feature !== undefined && safeString(feature, 48) === null)
       ) {
-        return json(400, { error: 'invalid_report_range', message: 'Choose a valid date range of up to one year.' });
+        console.warn('FaceMeX analytics report filters were rejected', {
+          route,
+          action,
+          request_id: requestId,
+          http_status: 400,
+          reason: 'invalid_date_range_or_feature',
+        });
+        return respond(400, {
+          error: 'invalid_report_range',
+          message: 'Choose valid dates and a supported feature for a range of up to one year.',
+        });
       }
       const { data, error } = await admin.rpc('facemex_analytics_report', {
         p_start_date: startDate,
         p_end_date: endDate,
         p_feature: feature || null,
       });
-      if (error) throw error;
-      return json(200, { report: data });
+      if (error) {
+        const notInstalled = ['PGRST202', '42P01', '42883'].includes(error.code);
+        console.error('FaceMeX analytics report query failed', {
+          route,
+          action,
+          request_id: requestId,
+          http_status: 503,
+          error_code: error.code || 'analytics_report_failed',
+          error_message: error.message,
+        });
+        return respond(503, {
+          error: notInstalled ? 'analytics_not_configured' : 'analytics_database_unavailable',
+          message: notInstalled
+            ? 'Product analytics is not configured yet. Please contact the administrator.'
+            : 'Product activity data could not be reached right now. Please try again.',
+        });
+      }
+      return respond(200, { report: data });
     } catch (error) {
       if (error instanceof Error && ['request_too_large', 'invalid_json'].includes(error.message)) {
-        return json(error.message === 'request_too_large' ? 413 : 400, {
+        const statusCode = error.message === 'request_too_large' ? 413 : 400;
+        return respond(statusCode, {
           error: error.message,
           message: 'The analytics request could not be read.',
         });
@@ -223,9 +320,14 @@ export function createAnalyticsHandler({
         route,
         action,
         request_id: requestId,
+        http_status: 500,
         error_code: error && typeof error === 'object' && 'code' in error ? error.code : 'analytics_request_failed',
+        error_message: error instanceof Error ? error.message : 'Unknown analytics function error',
       });
-      return json(500, { error: 'analytics_request_failed', message: 'Analytics is temporarily unavailable.' });
+      return respond(500, {
+        error: 'analytics_request_failed',
+        message: 'Product analytics is temporarily unavailable. Please try again.',
+      });
     }
   };
 }
