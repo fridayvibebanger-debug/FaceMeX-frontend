@@ -11,7 +11,7 @@ import {
   isUuid,
   readScreenShareConfig,
   rotateActiveSessionRoom,
-} from './screen-share.js';
+} from '../functions/screen-share.js';
 import { TrackSource } from 'livekit-server-sdk';
 
 test('extracts only a well-formed bearer token', () => {

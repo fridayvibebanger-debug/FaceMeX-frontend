@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAnalyticsHandler, sanitizeAnalyticsEvent } from './analytics.js';
+import { createAnalyticsHandler, sanitizeAnalyticsEvent } from '../functions/analytics.js';
 
 const validEvent = {
   event_id: '07d44437-9f21-4ca2-8d15-8830d64d32b9',

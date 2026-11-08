@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   createYouTubeSummarizeHandler,
   extractYouTubeVideoId,
-} from './youtube-summarize.js';
+} from '../functions/youtube-summarize.js';
 
 const configuredEnv = {
   SUPABASE_URL: 'https://example.supabase.co',

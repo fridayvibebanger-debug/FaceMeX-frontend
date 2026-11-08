@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { handler } from './ai-proxy.js';
+import { handler } from '../functions/ai-proxy.js';
 
 function createEvent(path) {
   return {
