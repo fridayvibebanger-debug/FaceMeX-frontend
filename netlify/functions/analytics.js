@@ -317,54 +317,69 @@ export function createAnalyticsHandler({
           .filter((userId) => typeof userId === 'string' && UUID_PATTERN.test(userId))
           .map((userId) => userId.toLowerCase()),
       )];
+      const identities = new Map();
 
-      if (userIds.length) {
-        const { data: identities, error: identityError } = await admin.rpc(
-          'facemex_analytics_user_identities',
-          { p_user_ids: userIds },
-        );
-        if (identityError) {
-          const notInstalled = ['PGRST202', '42P01', '42883'].includes(identityError.code);
-          console.error('FaceMeX analytics identity query failed', {
-            route,
-            action,
-            request_id: requestId,
-            http_status: 503,
-            error_code: identityError.code || 'analytics_identity_failed',
-            error_message: identityError.message,
-          });
-          return respond(503, {
-            error: notInstalled ? 'analytics_not_configured' : 'analytics_database_unavailable',
-            message: notInstalled
-              ? 'Product analytics identity reporting is not configured yet. Please contact the administrator.'
-              : 'Product activity identities could not be reached right now. Please try again.',
-          });
-        }
+      for (let offset = 0; offset < userIds.length; offset += 10) {
+        await Promise.all(userIds.slice(offset, offset + 10).map(async (userId) => {
+          try {
+            const { data: userData, error: userError } = await admin.auth.admin.getUserById(userId);
+            if (userError) {
+              console.warn('FaceMeX analytics user lookup failed', {
+                route,
+                action,
+                request_id: requestId,
+                error_code: userError.code || 'auth_user_lookup_failed',
+              });
+            }
 
-        const withIdentity = (item) => {
-          const identity = typeof item?.user_id === 'string'
-            ? identities?.[item.user_id.toLowerCase()]
-            : null;
-          return {
-            ...item,
-            user_name: typeof identity?.name === 'string' && identity.name
-              ? identity.name
-              : 'Name not provided',
-            user_email: typeof identity?.email === 'string' && identity.email
-              ? identity.email
-              : 'Email unavailable',
-          };
-        };
-        return respond(200, {
-          report: {
-            ...report,
-            users: users.map(withIdentity),
-            recent_activity: recentActivity.map(withIdentity),
-          },
-        });
+            const user = userError ? null : userData?.user;
+            const metadata = user?.user_metadata && typeof user.user_metadata === 'object'
+              ? user.user_metadata
+              : {};
+            const fullName = [metadata.first_name, metadata.last_name]
+              .filter((part) => typeof part === 'string' && part.trim())
+              .join(' ')
+              .trim();
+            const name = [metadata.full_name, metadata.name, metadata.display_name, fullName]
+              .find((candidate) => typeof candidate === 'string' && candidate.trim());
+            const email = typeof user?.email === 'string' ? user.email.trim() : '';
+
+            identities.set(userId, {
+              user_id: userId,
+              name: name || 'Name not provided',
+              email: email || 'Email unavailable',
+            });
+          } catch (lookupError) {
+            console.warn('FaceMeX analytics user lookup failed', {
+              route,
+              action,
+              request_id: requestId,
+              error_code: lookupError && typeof lookupError === 'object' && 'code' in lookupError
+                ? lookupError.code
+                : 'auth_user_lookup_failed',
+            });
+            identities.set(userId, {
+              user_id: userId,
+              name: 'Name not provided',
+              email: 'Email unavailable',
+            });
+          }
+        }));
       }
 
-      return respond(200, { report });
+      const withIdentity = (item) => ({
+        ...item,
+        name: identities.get(String(item?.user_id || '').toLowerCase())?.name || 'Name not provided',
+        email: identities.get(String(item?.user_id || '').toLowerCase())?.email || 'Email unavailable',
+      });
+
+      return respond(200, {
+        report: {
+          ...report,
+          users: users.map(withIdentity),
+          recent_activity: recentActivity.map(withIdentity),
+        },
+      });
     } catch (error) {
       if (error instanceof Error && ['request_too_large', 'invalid_json'].includes(error.message)) {
         const statusCode = error.message === 'request_too_large' ? 413 : 400;
