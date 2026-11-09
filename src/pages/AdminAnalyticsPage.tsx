@@ -23,9 +23,18 @@ type AnalyticsReport = {
   buttons: Array<{ button_id: string; events: number; unique_users: number }>;
   devices: Array<{ device: string; events: number; unique_users: number }>;
   errors: Array<{ event_name: string; feature: string | null; error_category: string | null; events: number; unique_users: number }>;
-  users: Array<{ user_id: string; events: number; features_used: number; last_seen: string }>;
+  users: Array<{
+    user_id: string;
+    user_name: string;
+    user_email: string;
+    events: number;
+    features_used: number;
+    last_seen: string;
+  }>;
   recent_activity: Array<{
     user_id: string;
+    user_name: string;
+    user_email: string;
     event_name: string;
     feature: string | null;
     button_id: string | null;
@@ -87,6 +96,7 @@ export default function AdminAnalyticsPage() {
   const [report, setReport] = useState<AnalyticsReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [userSearch, setUserSearch] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -174,6 +184,12 @@ export default function AdminAnalyticsPage() {
 
   const overview = report?.overview;
   const maxEvents = Math.max(1, ...(report?.daily.map((item) => item.events) || []));
+  const filteredUsers = report?.users.filter((item) => {
+    const query = userSearch.trim().toLocaleLowerCase();
+    return !query ||
+      (item.user_name || 'Name not provided').toLocaleLowerCase().includes(query) ||
+      (item.user_email || 'Email unavailable').toLocaleLowerCase().includes(query);
+  }) || [];
 
   return (
     <main className="mx-auto min-h-screen w-full min-w-0 max-w-7xl space-y-4 overflow-x-hidden px-3 py-4 text-foreground sm:space-y-6 sm:px-6 sm:py-6 lg:px-8">
@@ -300,26 +316,53 @@ export default function AdminAnalyticsPage() {
             </div>
             <div className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
               <h2 className="font-semibold">User activity</h2>
-              <p className="text-xs text-muted-foreground">User IDs are pseudonymous account identifiers. No email or content is shown.</p>
-              <DataTable headers={['User ID', 'Events', 'Features', 'Last active']}>
-                {report.users.map((item) => <tr key={item.user_id}><Cell>{item.user_id}</Cell><Cell>{metric(item.events)}</Cell><Cell>{metric(item.features_used)}</Cell><Cell>{new Date(item.last_seen).toLocaleString()}</Cell></tr>)}
-                {!report.users.length && <tr><Cell>No user activity in this range.</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell></tr>}
+              <p className="text-xs text-muted-foreground">Names and email addresses are visible only to the verified owner.</p>
+              <label className="block">
+                <span className="sr-only">Search users by name or email</span>
+                <input
+                  type="search"
+                  value={userSearch}
+                  onChange={(event) => setUserSearch(event.target.value)}
+                  placeholder="Search name or email"
+                  className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                />
+              </label>
+              <DataTable headers={['Name', 'Email', 'Recorded events', 'Features', 'Last active']}>
+                {filteredUsers.map((item) => (
+                  <tr key={item.user_id}>
+                    <Cell>{item.user_name || 'Name not provided'}</Cell>
+                    <Cell>
+                      {item.user_email && item.user_email !== 'Email unavailable'
+                        ? <a className="underline underline-offset-2" href={`mailto:${item.user_email}`}>{item.user_email}</a>
+                        : 'Email unavailable'}
+                    </Cell>
+                    <Cell>{metric(item.events)}</Cell>
+                    <Cell>{metric(item.features_used)}</Cell>
+                    <Cell>{new Date(item.last_seen).toLocaleString()}</Cell>
+                  </tr>
+                ))}
+                {!filteredUsers.length && <tr><Cell>{userSearch ? 'No users match this search.' : 'No user activity in this range.'}</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell></tr>}
               </DataTable>
             </div>
           </section>
 
           <section className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
             <h2 className="font-semibold">Recent activity</h2>
-            <DataTable headers={['Time', 'User ID', 'Event', 'Feature / button', 'Route', 'Result']}>
+            <DataTable headers={['Time', 'Name', 'Email', 'Event', 'Feature / button', 'Route', 'Result']}>
               {report.recent_activity.map((item, index) => <tr key={`${item.user_id}-${item.event_name}-${item.occurred_at}-${index}`}>
                 <Cell>{new Date(item.occurred_at).toLocaleString()}</Cell>
-                <Cell>{item.user_id}</Cell>
+                <Cell>{item.user_name || 'Name not provided'}</Cell>
+                <Cell>
+                  {item.user_email && item.user_email !== 'Email unavailable'
+                    ? <a className="underline underline-offset-2" href={`mailto:${item.user_email}`}>{item.user_email}</a>
+                    : 'Email unavailable'}
+                </Cell>
                 <Cell>{item.event_name}</Cell>
                 <Cell>{[item.feature, item.button_id].filter(Boolean).join(' / ') || '—'}</Cell>
                 <Cell>{item.route || '—'}</Cell>
                 <Cell>{item.outcome || item.error_category || '—'}</Cell>
               </tr>)}
-              {!report.recent_activity.length && <tr><Cell>No activity recorded in this range.</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell></tr>}
+              {!report.recent_activity.length && <tr><Cell>No activity recorded in this range.</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell><Cell>—</Cell></tr>}
             </DataTable>
           </section>
 
