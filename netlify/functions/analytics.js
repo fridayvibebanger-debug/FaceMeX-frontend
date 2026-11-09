@@ -307,7 +307,64 @@ export function createAnalyticsHandler({
             : 'Product activity data could not be reached right now. Please try again.',
         });
       }
-      return respond(200, { report: data });
+
+      const report = data && typeof data === 'object' ? data : {};
+      const users = Array.isArray(report.users) ? report.users : [];
+      const recentActivity = Array.isArray(report.recent_activity) ? report.recent_activity : [];
+      const userIds = [...new Set(
+        [...users, ...recentActivity]
+          .map((item) => item?.user_id)
+          .filter((userId) => typeof userId === 'string' && UUID_PATTERN.test(userId))
+          .map((userId) => userId.toLowerCase()),
+      )];
+
+      if (userIds.length) {
+        const { data: identities, error: identityError } = await admin.rpc(
+          'facemex_analytics_user_identities',
+          { p_user_ids: userIds },
+        );
+        if (identityError) {
+          const notInstalled = ['PGRST202', '42P01', '42883'].includes(identityError.code);
+          console.error('FaceMeX analytics identity query failed', {
+            route,
+            action,
+            request_id: requestId,
+            http_status: 503,
+            error_code: identityError.code || 'analytics_identity_failed',
+            error_message: identityError.message,
+          });
+          return respond(503, {
+            error: notInstalled ? 'analytics_not_configured' : 'analytics_database_unavailable',
+            message: notInstalled
+              ? 'Product analytics identity reporting is not configured yet. Please contact the administrator.'
+              : 'Product activity identities could not be reached right now. Please try again.',
+          });
+        }
+
+        const withIdentity = (item) => {
+          const identity = typeof item?.user_id === 'string'
+            ? identities?.[item.user_id.toLowerCase()]
+            : null;
+          return {
+            ...item,
+            user_name: typeof identity?.name === 'string' && identity.name
+              ? identity.name
+              : 'Name not provided',
+            user_email: typeof identity?.email === 'string' && identity.email
+              ? identity.email
+              : 'Email unavailable',
+          };
+        };
+        return respond(200, {
+          report: {
+            ...report,
+            users: users.map(withIdentity),
+            recent_activity: recentActivity.map(withIdentity),
+          },
+        });
+      }
+
+      return respond(200, { report });
     } catch (error) {
       if (error instanceof Error && ['request_too_large', 'invalid_json'].includes(error.message)) {
         const statusCode = error.message === 'request_too_large' ? 413 : 400;
