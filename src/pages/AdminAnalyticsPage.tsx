@@ -25,16 +25,16 @@ type AnalyticsReport = {
   errors: Array<{ event_name: string; feature: string | null; error_category: string | null; events: number; unique_users: number }>;
   users: Array<{
     user_id: string;
-    user_name: string;
-    user_email: string;
+    name: string;
+    email: string;
     events: number;
     features_used: number;
     last_seen: string;
   }>;
   recent_activity: Array<{
     user_id: string;
-    user_name: string;
-    user_email: string;
+    name: string;
+    email: string;
     event_name: string;
     feature: string | null;
     button_id: string | null;
@@ -187,8 +187,8 @@ export default function AdminAnalyticsPage() {
   const filteredUsers = report?.users.filter((item) => {
     const query = userSearch.trim().toLocaleLowerCase();
     return !query ||
-      (item.user_name || 'Name not provided').toLocaleLowerCase().includes(query) ||
-      (item.user_email || 'Email unavailable').toLocaleLowerCase().includes(query);
+      (item.name || 'Name not provided').toLocaleLowerCase().includes(query) ||
+      (item.email || 'Email unavailable').toLocaleLowerCase().includes(query);
   }) || [];
 
   return (
@@ -330,10 +330,10 @@ export default function AdminAnalyticsPage() {
               <DataTable headers={['Name', 'Email', 'Recorded events', 'Features', 'Last active']}>
                 {filteredUsers.map((item) => (
                   <tr key={item.user_id}>
-                    <Cell>{item.user_name || 'Name not provided'}</Cell>
+                    <Cell>{item.name || 'Name not provided'}</Cell>
                     <Cell>
-                      {item.user_email && item.user_email !== 'Email unavailable'
-                        ? <a className="underline underline-offset-2" href={`mailto:${item.user_email}`}>{item.user_email}</a>
+                      {item.email && item.email !== 'Email unavailable'
+                        ? <a className="underline underline-offset-2" href={`mailto:${item.email}`}>{item.email}</a>
                         : 'Email unavailable'}
                     </Cell>
                     <Cell>{metric(item.events)}</Cell>
@@ -351,10 +351,10 @@ export default function AdminAnalyticsPage() {
             <DataTable headers={['Time', 'Name', 'Email', 'Event', 'Feature / button', 'Route', 'Result']}>
               {report.recent_activity.map((item, index) => <tr key={`${item.user_id}-${item.event_name}-${item.occurred_at}-${index}`}>
                 <Cell>{new Date(item.occurred_at).toLocaleString()}</Cell>
-                <Cell>{item.user_name || 'Name not provided'}</Cell>
+                <Cell>{item.name || 'Name not provided'}</Cell>
                 <Cell>
-                  {item.user_email && item.user_email !== 'Email unavailable'
-                    ? <a className="underline underline-offset-2" href={`mailto:${item.user_email}`}>{item.user_email}</a>
+                  {item.email && item.email !== 'Email unavailable'
+                    ? <a className="underline underline-offset-2" href={`mailto:${item.email}`}>{item.email}</a>
                     : 'Email unavailable'}
                 </Cell>
                 <Cell>{item.event_name}</Cell>
