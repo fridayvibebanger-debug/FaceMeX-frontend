@@ -71,7 +71,7 @@ const textColorOptions = [
   { value: '#7c3aed', label: 'Violet' },
   { value: '#64748b', label: 'Gray' },
 ];
-const zoomOptions = [50, 75, 90, 100, 110, 125, 150, 200];
+const zoomOptions = [10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75, 90, 100, 110, 125, 150, 200];
 const lineSpacingOptions = [
   { value: '1', label: '1.0' },
   { value: '1.15', label: '1.15' },
@@ -268,6 +268,9 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
   };
   const zoomIndex = zoomOptions.reduce((closest, value, index) =>
     Math.abs(value - zoom) < Math.abs(zoomOptions[closest] - zoom) ? index : closest, 0);
+  const availableZoomOptions = zoomOptions.includes(zoom)
+    ? zoomOptions
+    : [...zoomOptions, zoom].sort((left, right) => left - right);
 
   return (
     <TooltipProvider>
@@ -738,11 +741,11 @@ export default function EditorToolbar({ editor, onSave, onPrint, onDownload, onD
           </Tooltip>
         </div>
 
-        <div className="flex shrink-0 gap-1">
+        <div className="fm-editor-toolbar-zoom-controls flex shrink-0 gap-1">
           {onZoomChange && <>
             <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(zoomOptions[Math.max(0, zoomIndex - 1)])} disabled={zoomIndex === 0} aria-label="Zoom out" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomOut className="h-4 w-4" /></Button>
             <select value={zoom} onChange={(event) => onZoomChange(Number(event.target.value))} aria-label="Document zoom" className="h-10 min-w-[68px] rounded-md border border-slate-300 bg-white px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 lg:border-slate-600 lg:bg-slate-900 lg:text-slate-100">
-              {zoomOptions.map((option) => <option key={option} value={option}>{option}%</option>)}
+              {availableZoomOptions.map((option) => <option key={option} value={option}>{option}%</option>)}
             </select>
             <Button type="button" variant="outline" size="icon" onClick={() => onZoomChange(zoomOptions[Math.min(zoomOptions.length - 1, zoomIndex + 1)])} disabled={zoomIndex === zoomOptions.length - 1} aria-label="Zoom in" className="h-10 w-10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"><ZoomIn className="h-4 w-4" /></Button>
           </>}

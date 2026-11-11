@@ -2,15 +2,24 @@
 import type { ReactNode } from 'react';
 import { AlignmentType, BorderStyle, Document, HeadingLevel, PageBreak as DocxPageBreak, Packer, Paragraph, Table as DocxTable, TableCell as DocxTableCell, TableRow as DocxTableRow, TextRun, WidthType } from 'docx';
 import {
-  Download,
   ArrowUp,
   X,
-  Save,
   Sparkles,
   Wand2,
+  Undo2,
+  Redo2,
+  UserRound,
+  MoreVertical,
+  Copy,
+  Pencil,
+  ZoomIn,
+  Eraser,
+  Plus,
   Phone,
   MapPin,
   Mail,
+  FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Extension, Node as TiptapNode } from '@tiptap/core';
@@ -38,7 +47,6 @@ import { parseMarkdownTable, renderMarkdownToEditorHtml } from '@/lib/documentMa
 import { useUserStore } from '@/store/userStore';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import EditorToolbar from './EditorToolbar';
-import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 import DocumentTemplateGallery from './DocumentTemplateGallery';
 import {
   buildClassicCvTemplateContent,
@@ -121,6 +129,7 @@ type Props = {
   documentName?: string;
   projectId?: string | null;
   onDocumentSaved?: (document: PersistedDocument) => void;
+  onOpenDocuments?: () => void;
   embeddedWorkspace?: boolean;
 };
 
@@ -1189,6 +1198,7 @@ export default function DocumentStudio({
   documentName,
   projectId = null,
   onDocumentSaved,
+  onOpenDocuments,
   embeddedWorkspace = false,
 }: Props) {
   const { id: userId, hasTier, name: accountName, professional: accountProfessional } = useUserStore();
@@ -1251,17 +1261,6 @@ export default function DocumentStudio({
     };
   }, [userId]);
 
-  const [appearance, setAppearance] = useState<AppearanceMode>(() => getAppearanceMode());
-
-  useEffect(() => {
-    const handleAppearanceChange = (event: Event) => {
-      const nextMode = (event as CustomEvent<AppearanceMode>).detail;
-      if (nextMode === 'light' || nextMode === 'dark') setAppearance(nextMode);
-    };
-    window.addEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
-    return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
-  }, []);
-
   const [form, setForm] = useState<FormState>(emptyForm);
   const [template, setTemplate] = useState<TemplateKey>(kind === 'cv' ? 'classic' : 'modern');
   const [templateId, setTemplateId] = useState('');
@@ -1279,15 +1278,22 @@ export default function DocumentStudio({
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [coachPrompt, setCoachPrompt] = useState('');
   const [coachMode, setCoachMode] = useState<'draft' | 'ask' | 'review' | 'edit'>('draft');
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [coachImage, setCoachImage] = useState<{ name: string; mimeType: string; dataUrl: string } | null>(null);
   const [coachResponse, setCoachResponse] = useState('');
   const [coachSuggestion, setCoachSuggestion] = useState<{ original: string; suggested: string; explanation: string; from: number; to: number } | null>(null);
   const [hasCoachSelection, setHasCoachSelection] = useState(false);
   const [coachBusy, setCoachBusy] = useState(false);
   const [advancedFormattingOpen, setAdvancedFormattingOpen] = useState(false);
+  const [resizeOpen, setResizeOpen] = useState(false);
   const [documentLoadWarning, setDocumentLoadWarning] = useState('');
+  const livePageRef = useRef<HTMLDivElement>(null);
+  const liveCanvasRef = useRef<HTMLDivElement>(null);
+  const [livePageSize, setLivePageSize] = useState({ width: 0, height: 0, canvasWidth: 0 });
   const documentSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const coachTextareaRef = useRef<HTMLTextAreaElement>(null);
   const documentUploadRef = useRef<HTMLInputElement>(null);
+  const imageUploadRef = useRef<HTMLInputElement>(null);
   const coachSelectionRef = useRef<{ from: number; to: number; original: string } | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -1410,6 +1416,42 @@ export default function DocumentStudio({
       setHasCoachSelection(hasSelection);
     },
   });
+
+  useEffect(() => {
+    if (!embeddedWorkspace) return;
+
+    const page = livePageRef.current;
+    const canvas = liveCanvasRef.current;
+    if (!page || !canvas) return;
+
+    const updateSize = () => {
+      const next = {
+        width: page.offsetWidth,
+        height: page.offsetHeight,
+        canvasWidth: canvas.clientWidth,
+      };
+      setLivePageSize((current) =>
+        current.width === next.width &&
+        current.height === next.height &&
+        current.canvasWidth === next.canvasWidth
+          ? current
+          : next
+      );
+
+    };
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(page);
+    observer.observe(canvas);
+    window.addEventListener('resize', updateSize);
+    window.visualViewport?.addEventListener('resize', updateSize);
+    updateSize();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+      window.visualViewport?.removeEventListener('resize', updateSize);
+    };
+  }, [embeddedWorkspace]);
 
   useEffect(() => {
     if (!editor) {
@@ -1868,6 +1910,32 @@ export default function DocumentStudio({
     }
   };
 
+  const importCoachImage = (file?: File) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast({ title: 'Unsupported image type', description: 'Choose a JPEG, PNG, or WebP image.', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Image is too large', description: 'Choose an image smaller than 5 MB.', variant: 'destructive' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        toast({ title: 'Could not attach image', description: 'Please choose the image again.', variant: 'destructive' });
+        return;
+      }
+      setCoachImage({ name: file.name, mimeType: file.type, dataUrl: reader.result });
+      toast({ title: 'Image attached', description: 'Ask FaceMeX to use it with your document.' });
+    };
+    reader.onerror = () => {
+      console.error('FaceMeX document image import failed', reader.error);
+      toast({ title: 'Could not attach image', description: 'Please check the image and try again.', variant: 'destructive' });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const printDocument = () => {
     trackDocumentEvent('export', 'started');
     try {
@@ -1931,6 +1999,22 @@ export default function DocumentStudio({
     setTemplateId('');
   };
 
+  const duplicateSelection = () => {
+    if (!editor) return;
+    const { from, to, empty } = editor.state.selection;
+    if (empty) return;
+    const selectedContent = editor.state.doc.slice(from, to).content.toJSON();
+    editor.chain().focus().insertContentAt(to, selectedContent).run();
+  };
+
+  const removeDocumentContent = () => {
+    if (!window.confirm('Remove all content from this document? This cannot be undone.')) return;
+    clearDocument();
+    editor?.commands.setContent('<p></p>');
+    setCoachResponse('');
+    setCoachSuggestion(null);
+  };
+
   const handleSave = async () => {
     trackDocumentEvent('save', 'started');
     let localCopySaved = false;
@@ -1985,7 +2069,9 @@ export default function DocumentStudio({
       return;
     }
 
-    const userQuestion = coachPrompt.trim();
+    const userQuestion = coachPrompt.trim() || (coachImage
+      ? 'Analyze the attached image and use relevant information to help with this document.'
+      : '');
     if ((mode === 'ask' || mode === 'draft') && !userQuestion) {
       toast({ title: 'Ask FaceMeX a question', description: 'Enter what you want help with.' });
       return;
@@ -2035,11 +2121,14 @@ export default function DocumentStudio({
       const response = await api.postViaSameOriginProxy('/api/ai/workspace', {
         messages: [{
           role: 'user',
-          content: `${instruction}\n\nDocument type: ${kind}\nSelected template: ${selectedTemplate ? `${selectedTemplate.name} — ${selectedTemplate.description}` : 'Blank or imported document'}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(userDetails)}`,
+          content: `${instruction}${coachImage ? `\n\nThe user attached an image named "${coachImage.name}". Use it as user-provided context for this request, and do not infer facts that are not visible or clearly supported.` : ''}\n\nDocument type: ${kind}\nSelected template: ${selectedTemplate ? `${selectedTemplate.name} — ${selectedTemplate.description}` : 'Blank or imported document'}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(userDetails)}`,
         }],
         intent: 'document_analysis',
         source: 'facemex-document-coach',
         directAnswer: true,
+        attachments: coachImage
+          ? [{ name: coachImage.name, mimeType: coachImage.mimeType, dataUrl: coachImage.dataUrl }]
+          : [],
       });
       const answer = String(response?.answer || response?.reply || response?.text || response?.content || response?.data?.answer || '').trim();
       if (!answer) {
@@ -2088,6 +2177,7 @@ export default function DocumentStudio({
         if (coachTextareaRef.current) coachTextareaRef.current.style.height = '32px';
       }
       recordDocumentAIUsage();
+      setCoachImage(null);
     } catch (error) {
       if (mode === 'edit' || mode === 'draft') trackDocumentEvent('edit', 'failed');
       console.error('FaceMeX document coach request failed', error);
@@ -2203,8 +2293,9 @@ export default function DocumentStudio({
   const wordCount = (editor?.getText() || '').trim().split(/\s+/).filter(Boolean).length;
   const pageOrientation = isClassicCv ? 'portrait' : orientation;
   const pageWidthPx = (pageOrientation === 'portrait' ? 210 : 297) * (96 / 25.4);
+  const pageHeightPx = (pageOrientation === 'portrait' ? 297 : 210) * (96 / 25.4);
   const composerPlaceholder = coachMode === 'draft'
-    ? `Ask FaceMeX to write or edit your ${kind === 'cv' ? 'CV' : 'document'}`
+    ? `Describe what to write or edit in your ${kind === 'cv' ? 'CV' : 'document'}`
     : coachMode === 'ask'
       ? 'Ask a question about this document'
       : coachMode === 'review'
@@ -2217,6 +2308,23 @@ export default function DocumentStudio({
     textarea.style.height = 'auto';
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     setCoachPrompt(value);
+  };
+
+  const changeCoachMode = (nextMode: typeof coachMode) => {
+    if (nextMode === 'edit' && editor) {
+      const { from, to } = editor.state.selection;
+      if (from !== to) {
+        coachSelectionRef.current = {
+          from,
+          to,
+          original: editor.state.doc.textBetween(from, to, '\n'),
+        };
+        setHasCoachSelection(true);
+      }
+    }
+    setCoachMode(nextMode);
+    setCoachResponse('');
+    setCoachSuggestion(null);
   };
 
   if (initError) {
@@ -2234,30 +2342,60 @@ export default function DocumentStudio({
   }
 
   return (
-    <div className={`fm-document-workspace fm-theme-${appearance} ${embeddedWorkspace ? 'h-full min-h-0' : 'h-screen h-[100dvh]'} overflow-hidden bg-slate-50 text-slate-900 lg:bg-[#0b0b0b] lg:text-white`}>
+    <div className={`fm-document-workspace fm-theme-dark relative ${embeddedWorkspace ? 'fm-document-workspace-embedded h-full min-h-0' : 'h-screen h-[100dvh]'} overflow-hidden bg-[#111112] text-white`}>
       <SensitiveContentShield
         context={kind === 'cv' ? 'cv' : 'cover-letter'}
-        className={`mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1500px] flex-col overflow-hidden ${embeddedWorkspace ? 'px-2 pb-0 pt-2 sm:px-5 lg:px-8 lg:pt-5' : 'px-3 pb-3 pt-3 sm:px-5 lg:px-8 lg:pt-5'}`}
+        className={`mx-auto flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${embeddedWorkspace ? 'max-w-none p-0' : 'max-w-[1500px] px-3 pb-3 pt-3 sm:px-5 lg:px-8 lg:pt-5'}`}
         contentClassName="flex h-full min-h-0 flex-col"
       >
-        <div className="fm-document-editor-header mb-2 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:mb-3 sm:gap-3 lg:gap-4">
+        {embeddedWorkspace && (
+          <header
+            className="fm-document-top-controls absolute right-3 z-[70] flex items-center gap-1 bg-transparent p-0 text-white"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.65rem)' }}
+            aria-label="Document actions"
+          >
+            <Button type="button" size="icon" variant="ghost" className="fm-document-control-button h-10 w-10 rounded-full" aria-label="Undo" title="Undo" disabled={!editor?.can().undo()} onClick={() => editor?.chain().focus().undo().run()}><Undo2 className="h-5 w-5" /></Button>
+            <Button type="button" size="icon" variant="ghost" className="fm-document-control-button h-10 w-10 rounded-full" aria-label="Redo" title="Redo" disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()}><Redo2 className="h-5 w-5" /></Button>
+            <Button type="button" size="icon" variant="ghost" className="fm-document-control-button h-10 w-10 rounded-full" aria-label="Duplicate selection" title="Duplicate selection" disabled={!editor || editor.state.selection.empty} onClick={duplicateSelection}><Copy className="h-5 w-5" /></Button>
+            <details className="relative">
+              <summary className="fm-document-control-button flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full" aria-label="More document actions" title="More">
+                <MoreVertical className="h-5 w-5" />
+              </summary>
+              <div className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-5rem)] w-60 overflow-y-auto rounded-2xl border border-white/10 bg-[#171717] p-2 shadow-2xl">
+                <p className="truncate px-3 pb-1 pt-2 text-xs font-medium text-white/85">{title}</p>
+                <p className="px-3 pb-2 text-[11px] text-white/50" role="status" aria-live="polite">
+                  {syncStatus === 'loading' ? 'Loading...' : syncStatus === 'saving' ? 'Saving...' : syncStatus === 'error' ? 'Sync issue' : draftSaved ? 'Saved' : 'Unsaved'}
+                </p>
+                <button type="button" onClick={handleSave} className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10">Save document</button>
+                <button type="button" onClick={printDocument} className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10">Export PDF</button>
+                <button type="button" onClick={() => void downloadDocx()} className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10">Download DOCX</button>
+                <button type="button" onClick={() => { setAdvancedFormattingOpen(false); setResizeOpen(false); setDetailsOpen(true); }} className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10">Document details</button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    const menu = event.currentTarget.closest('details');
+                    if (menu instanceof HTMLDetailsElement) menu.open = false;
+                    onOpenDocuments();
+                  }}
+                  className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10"
+                >
+                  Open documents
+                </button>
+              </div>
+            </details>
+          </header>
+        )}
+        {!embeddedWorkspace && <div className="fm-document-editor-header mb-1 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 py-1 sm:mb-2 sm:gap-3 sm:px-3">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-slate-500 lg:text-white/55">FaceMeX · {kind === 'cv' ? 'CV editor' : 'Document editor'}</p>
-            <h1 className="mt-0.5 truncate text-xl font-semibold tracking-tight text-slate-900 lg:text-white lg:text-2xl">{title}</h1>
+            <p className="text-[10px] font-medium text-white/45 sm:text-xs">FaceMeX · {kind === 'cv' ? 'CV editor' : 'Document editor'}</p>
+            <h1 className="mt-0.5 truncate text-base font-semibold tracking-tight text-white sm:text-lg">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-2 lg:gap-2.5">
-            <span className="shrink-0 text-xs text-slate-500 lg:text-white/55" role="status" aria-live="polite">
+            <span className="shrink-0 text-[10px] text-white/55 sm:text-xs" role="status" aria-live="polite">
               {syncStatus === 'loading' ? 'Loading...' : syncStatus === 'saving' ? 'Saving...' : syncStatus === 'error' ? 'Sync issue' : draftSaved ? 'Saved' : 'Unsaved'}
             </span>
-            <Button type="button" variant="outline" size="sm" onClick={handleSave} className="h-9 shrink-0 rounded-full border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
-              <Save className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Save</span>
-            </Button>
-            <Button type="button" variant="outline" size="icon" onClick={printDocument} aria-label="Export PDF" title="Export PDF" className="h-9 w-9 shrink-0 rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.06] lg:text-white">
-              <Download className="h-4 w-4" />
-            </Button>
           </div>
-        </div>
+        </div>}
 
         <input
           ref={documentUploadRef}
@@ -2271,33 +2409,45 @@ export default function DocumentStudio({
             void importDocumentFile(file);
           }}
         />
+        <input
+          ref={imageUploadRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          aria-label="Upload an image for FaceMeX"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            importCoachImage(file);
+          }}
+        />
 
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 xl:flex-row xl:gap-4">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {detailsOpen && (
             <>
               <button
                 type="button"
-                className="absolute inset-0 z-20 cursor-default bg-black/60 xl:hidden"
+                className="absolute inset-0 z-20 cursor-default bg-black/45 backdrop-blur-[2px]"
                 onClick={() => setDetailsOpen(false)}
                 aria-label="Close document details"
               />
               <aside
                 id="document-details-panel"
                 aria-labelledby="document-details-title"
-                className="absolute inset-x-0 top-0 z-30 mx-auto flex h-[min(78dvh,680px)] max-h-[calc(100%-1rem)] min-h-0 w-full max-w-2xl flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-2xl xl:static xl:mx-0 xl:h-full xl:max-h-none xl:w-[280px] xl:max-w-none xl:shrink-0 xl:shadow-none"
+                className="absolute bottom-20 left-3 top-2 z-40 flex w-[min(88vw,340px)] min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#171717]/[0.98] p-4 text-white shadow-2xl"
               >
                 <div className="mb-3 flex shrink-0 items-center justify-between">
-                  <h2 id="document-details-title" className="text-sm font-semibold text-slate-900 lg:text-white">Document details</h2>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setDetailsOpen(false)} className="h-8 px-2 text-xs text-slate-500 lg:text-white/60">
+                  <h2 id="document-details-title" className="text-sm font-semibold text-white">Document details</h2>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setDetailsOpen(false)} className="h-8 px-2 text-xs text-white/60">
                     Done
                   </Button>
                 </div>
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
+                <div className="fm-document-details-fields min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
                   {fields.map(([key, label]) =>
                     key === 'summary' || key === 'experience' || key === 'skills' || key === 'education' || key === 'references' || key === 'extras'
                       ? (
                           <label key={key} className="block space-y-1">
-                            <span className="text-xs font-semibold text-slate-600 lg:text-white/70">{label}</span>
+                            <span className="text-xs font-semibold text-white/70">{label}</span>
                             <Textarea
                               rows={key === 'experience' || key === 'references' ? 4 : 3}
                               value={form[key as keyof FormState]}
@@ -2313,17 +2463,17 @@ export default function DocumentStudio({
                                         ? 'One skill per line'
                                         : undefined
                               }
-                              className="border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 lg:border-white/10 lg:bg-white/[0.04] lg:text-white lg:placeholder:text-white/35"
+                              className="border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
                             />
                           </label>
                         )
                       : (
                           <label key={key} className="block space-y-1">
-                            <span className="text-xs font-semibold text-slate-600 lg:text-white/70">{label}</span>
+                            <span className="text-xs font-semibold text-white/70">{label}</span>
                             <Input
                               value={form[key as keyof FormState]}
                               onChange={(event) => update(key as keyof FormState, event.target.value)}
-                              className="border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 lg:border-white/10 lg:bg-white/[0.04] lg:text-white lg:placeholder:text-white/35"
+                              className="border-white/10 bg-white/[0.04] text-white placeholder:text-white/35"
                             />
                           </label>
                         ),
@@ -2338,38 +2488,15 @@ export default function DocumentStudio({
             </>
           )}
 
-          <main className="fm-document-editor-main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200 pb-2 lg:gap-3 lg:border-white/10">
-              <p className="min-w-0 truncate whitespace-nowrap text-[11px] text-slate-500 lg:text-xs lg:text-white/50">
+          <main className="fm-document-editor-main relative min-h-0 min-w-0 flex-1 overflow-hidden">
+            {!embeddedWorkspace && <div className="absolute left-1/2 top-2 z-10 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/10 bg-[#181819]/95 p-1 text-white shadow-lg backdrop-blur-md sm:gap-2 sm:p-1.5">
+              <p className="shrink-0 whitespace-nowrap px-2 text-[10px] text-white/55 sm:text-xs">
                 A4 {orientation} · {wordCount} words
               </p>
-              <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDetailsOpen((open) => !open)}
-                  aria-expanded={detailsOpen}
-                  aria-controls="document-details-panel"
-                  className="h-8 min-w-[72px] shrink-0 whitespace-nowrap rounded-lg px-1.5 text-[11px] text-slate-600 sm:min-w-[78px] sm:px-2.5 sm:text-xs lg:text-white/70"
-                >
-                  {detailsOpen ? 'Hide details' : 'Details'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAdvancedFormattingOpen((open) => !open)}
-                  aria-expanded={advancedFormattingOpen}
-                  className="h-8 min-w-[72px] shrink-0 whitespace-nowrap rounded-lg px-1.5 text-[11px] text-slate-600 sm:min-w-[78px] sm:px-2.5 sm:text-xs lg:text-white/70"
-                >
-                  {advancedFormattingOpen ? 'Done' : 'Format'}
-                </Button>
-              </div>
-            </div>
+            </div>}
 
             {advancedFormattingOpen && (
-              <div className="fm-document-format-panel mt-2 max-h-[30dvh] shrink-0 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white p-2 lg:max-h-none lg:overflow-visible lg:border-white/10 lg:bg-[#171717]">
+              <div className={`fm-document-format-panel absolute left-2 right-2 z-50 max-h-[min(58dvh,30rem)] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#181819]/[0.98] p-2 shadow-xl backdrop-blur-md sm:left-4 sm:right-4 ${embeddedWorkspace ? 'fm-document-format-panel-embedded fm-document-format-panel-hide-scrollbar' : 'top-12'}`}>
                 <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 lg:border-white/10">
                   <select
                     value={orientation}
@@ -2429,15 +2556,31 @@ export default function DocumentStudio({
               </div>
             )}
 
-            <div className="fm-document-canvas mt-2 min-h-0 min-w-0 flex-1 overflow-auto rounded-xl bg-[#202124] p-2 sm:p-5 lg:mt-3 lg:p-8">
+            <div ref={liveCanvasRef} className={`fm-document-canvas absolute inset-0 min-h-0 min-w-0 overflow-auto bg-[#111112] ${embeddedWorkspace ? 'fm-document-live-canvas p-0' : 'px-2 pb-32 pt-14 sm:px-5 sm:pb-36 sm:pt-16'}`}>
               {documentLoadWarning && (
-                <p className="mx-auto mb-3 max-w-4xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100" role="alert">
+                <p className="mx-auto mb-3 max-w-4xl rounded-lg border border-amber-500/30 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
                   {documentLoadWarning}
                 </p>
               )}
-              <div className="mx-auto w-full" style={{ maxWidth: pageWidthPx }}>
+              <div
+                className={`mx-auto w-full ${embeddedWorkspace ? 'fm-document-live-page-wrap' : ''}`}
+                style={{
+                  maxWidth: embeddedWorkspace ? 'none' : pageWidthPx,
+                  width: embeddedWorkspace && livePageSize.width
+                    ? `${Math.max(livePageSize.canvasWidth, livePageSize.width * zoom / 100)}px`
+                    : undefined,
+                }}
+              >
                 <div
-                  className={`fm-document-page mx-auto bg-white text-slate-900 shadow-[0_12px_40px_rgba(0,0,0,0.35)]${isClassicCv ? ' fm-document-classic-cv' : ''}`}
+                  className={embeddedWorkspace ? 'fm-document-live-page-frame' : undefined}
+                  style={embeddedWorkspace ? {
+                    width: livePageSize.width ? `${livePageSize.width * zoom / 100}px` : undefined,
+                    height: livePageSize.height ? `${livePageSize.height * zoom / 100}px` : undefined,
+                  } : undefined}
+                >
+                <div
+                  ref={livePageRef}
+                  className={`fm-document-page mx-auto border border-slate-200 bg-white text-slate-900 shadow-[0_8px_32px_rgba(15,23,42,0.16)]${isClassicCv ? ' fm-document-classic-cv' : ''}${embeddedWorkspace ? ' fm-document-live-page' : ''}`}
                   data-template={template}
                   data-template-variant={selectedTemplate?.variant || 'default'}
                   data-hide-classic-header-nodes={classicHeaderNodeCount || undefined}
@@ -2446,34 +2589,73 @@ export default function DocumentStudio({
                   aria-label={`Document page, A4 ${orientation}`}
                   tabIndex={0}
                   style={{
-                    width: '100%',
-                    maxWidth: pageWidthPx,
-                    minHeight: 0,
-                    aspectRatio: pageOrientation === 'portrait' ? '210 / 297' : '297 / 210',
-                    zoom: zoom / 100,
+                    width: embeddedWorkspace ? pageWidthPx : '100%',
+                    maxWidth: embeddedWorkspace ? undefined : pageWidthPx,
+                    minHeight: embeddedWorkspace ? pageHeightPx : 0,
+                    aspectRatio: embeddedWorkspace ? undefined : pageOrientation === 'portrait' ? '210 / 297' : '297 / 210',
+                    position: embeddedWorkspace ? 'absolute' : undefined,
+                    top: embeddedWorkspace ? 0 : undefined,
+                    left: embeddedWorkspace ? 0 : undefined,
+                    transform: embeddedWorkspace ? `scale(${zoom / 100})` : undefined,
+                    transformOrigin: embeddedWorkspace ? 'top left' : undefined,
+                    zoom: embeddedWorkspace ? undefined : zoom / 100,
                   }}
                 >
-                  <div className="w-full p-7 sm:p-12">
+                  <div className={`w-full ${embeddedWorkspace ? 'fm-document-live-page-content' : 'p-7 sm:p-12'}`}>
                     {isClassicCv && <ClassicCvHeader form={form} />}
                     <EditorContent editor={editor} className="document-editor" />
                   </div>
                 </div>
+                </div>
               </div>
             </div>
 
+            {resizeOpen && (
+              <section
+                className="absolute bottom-[calc(env(safe-area-inset-bottom)_+_8.5rem)] left-1/2 z-40 flex w-[min(90vw,20rem)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/10 bg-[#181819]/[0.98] px-4 py-3 text-white shadow-xl backdrop-blur-md"
+                aria-label="Document page size"
+              >
+                <ZoomIn className="h-4 w-4 shrink-0 text-white/65" />
+                <input type="range" min="10" max="200" step="5" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label="Document zoom" className="min-w-0 flex-1 accent-white" />
+                <span className="w-10 text-right text-xs tabular-nums text-white/75">{zoom}%</span>
+              </section>
+            )}
+
+            <nav
+              aria-label="Document editing tools"
+              className="fm-document-bottom-controls absolute bottom-[calc(env(safe-area-inset-bottom)_+_4.15rem)] left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-start justify-center gap-1 sm:gap-3"
+            >
+              <button type="button" className="flex w-[4.25rem] shrink-0 flex-col items-center gap-1.5 text-[10px] font-medium text-white sm:w-[4.5rem] sm:text-xs" aria-label="Edit document details" aria-pressed={detailsOpen} onClick={() => { setAdvancedFormattingOpen(false); setResizeOpen(false); setDetailsOpen((open) => !open); }}>
+                <span className={`fm-document-control-button flex h-10 w-10 items-center justify-center rounded-full ${detailsOpen ? 'ring-2 ring-white/40' : ''}`}><UserRound className="h-5 w-5" /></span>
+                Edit
+              </button>
+              <button type="button" className="flex w-[4.25rem] shrink-0 flex-col items-center gap-1.5 text-[10px] font-medium text-white sm:w-[4.5rem] sm:text-xs" aria-label="Markup and format document" aria-pressed={advancedFormattingOpen} onClick={() => { setDetailsOpen(false); setResizeOpen(false); setAdvancedFormattingOpen((open) => !open); }}>
+                <span className={`fm-document-control-button flex h-10 w-10 items-center justify-center rounded-full ${advancedFormattingOpen ? 'ring-2 ring-white/40' : ''}`}><Pencil className="h-5 w-5" /></span>
+                Markup
+              </button>
+              <button type="button" className="flex w-[4.25rem] shrink-0 flex-col items-center gap-1.5 text-[10px] font-medium text-white sm:w-[4.5rem] sm:text-xs" aria-label="Resize document page" aria-pressed={resizeOpen} onClick={() => { setDetailsOpen(false); setAdvancedFormattingOpen(false); setResizeOpen((open) => !open); }}>
+                <span className={`fm-document-control-button flex h-10 w-10 items-center justify-center rounded-full ${resizeOpen ? 'ring-2 ring-white/40' : ''}`}><ZoomIn className="h-5 w-5" /></span>
+                Resize
+              </button>
+              <button type="button" className="flex w-[4.25rem] shrink-0 flex-col items-center gap-1.5 text-[10px] font-medium text-white sm:w-[4.5rem] sm:text-xs" aria-label="Remove document content" onClick={removeDocumentContent}>
+                <span className="fm-document-control-button flex h-10 w-10 items-center justify-center rounded-full"><Eraser className="h-5 w-5" /></span>
+                Remove
+              </button>
+            </nav>
+
             {(coachResponse || coachSuggestion) && (
-              <section className="fm-document-response mt-2 max-h-[30vh] shrink-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 shadow-sm lg:border-white/10 lg:bg-[#171717] lg:text-white" aria-live="polite" aria-label="FaceMeX answer">
+              <section className="fm-document-response absolute bottom-[calc(env(safe-area-inset-bottom)_+_5.1rem)] left-2 right-2 z-20 max-h-[30dvh] overflow-y-auto rounded-2xl border border-white/10 bg-[#171717] px-4 py-3 text-white shadow-xl sm:left-4 sm:right-4 lg:left-1/2 lg:right-auto lg:w-full lg:max-w-4xl lg:-translate-x-1/2" aria-live="polite" aria-label="FaceMeX answer">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 lg:bg-white/[0.08] lg:text-white/80">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-white/80">
                       <Sparkles className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 lg:text-white">FaceMeX</p>
-                      <p className="text-[11px] text-slate-500 lg:text-white/45">{coachSuggestion ? 'Suggested edit' : 'Document assistant'}</p>
+                      <p className="text-sm font-semibold text-white">FaceMeX</p>
+                      <p className="text-[11px] text-white/45">{coachSuggestion ? 'Suggested edit' : 'Document assistant'}</p>
                     </div>
                   </div>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => { setCoachResponse(''); setCoachSuggestion(null); }} className="h-8 w-8 shrink-0 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:text-white/55 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Dismiss response">
+                  <Button type="button" variant="ghost" size="icon" onClick={() => { setCoachResponse(''); setCoachSuggestion(null); }} className="h-8 w-8 shrink-0 rounded-full border border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.1] hover:text-white" aria-label="Dismiss response">
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -2488,50 +2670,96 @@ export default function DocumentStudio({
                       {renderDocumentMarkdown(coachSuggestion.suggested)}
                     </div>
                     {coachSuggestion.explanation && (
-                      <p className="mt-3 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600 lg:border-white/10 lg:text-white/60">
+                      <p className="mt-3 border-t border-white/10 pt-3 text-sm leading-6 text-white/60">
                         {coachSuggestion.explanation}
                       </p>
                     )}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button type="button" onClick={applyCoachSuggestion} className="h-9 rounded-full bg-blue-600 px-4 text-white hover:bg-blue-700">Apply edit</Button>
-                      <Button type="button" variant="outline" onClick={() => setCoachSuggestion(null)} className="h-9 rounded-full border-slate-200 bg-white px-4 text-slate-700 hover:bg-slate-50 lg:border-white/10 lg:bg-white/[0.04] lg:text-white lg:hover:bg-white/10">Keep original</Button>
+                      <Button type="button" onClick={applyCoachSuggestion} className="h-9 rounded-xl border border-white/20 bg-white/[0.14] px-4 text-sm font-medium text-white shadow-sm hover:bg-white/[0.2]">Apply edit</Button>
+                      <Button type="button" variant="outline" onClick={() => setCoachSuggestion(null)} className="h-9 rounded-xl border-white/15 bg-white/[0.04] px-4 text-sm font-medium text-white/80 hover:bg-white/[0.1] hover:text-white">Keep original</Button>
                     </div>
                   </>
                 )}
               </section>
             )}
 
-            <div className="fm-document-composer-shell shrink-0 px-0 pt-2 sm:px-2 lg:pt-3">
-              <div className="mx-auto w-full max-w-4xl">
-                <div className="fm-document-composer flex items-end gap-2">
-                  <select
-                    value={coachMode}
-                    onChange={(event) => {
-                      const nextMode = event.target.value as typeof coachMode;
-                      if (nextMode === 'edit' && editor) {
-                        const { from, to } = editor.state.selection;
-                        if (from !== to) {
-                          coachSelectionRef.current = {
-                            from,
-                            to,
-                            original: editor.state.doc.textBetween(from, to, '\n'),
-                          };
-                          setHasCoachSelection(true);
-                        }
-                      }
-                      setCoachMode(nextMode);
-                      setCoachResponse('');
-                      setCoachSuggestion(null);
-                    }}
-                    aria-label="Choose document AI action"
-                    disabled={coachBusy || freeAiLimitReached}
-                    className="fm-document-mode-select mb-1 h-8 max-w-[40%] min-w-0 shrink-0 rounded-full border-0 bg-white/10 px-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
+            <div className={`fm-document-composer-shell absolute z-30 !bg-transparent !p-0 ${embeddedWorkspace ? 'inset-x-3 bottom-[calc(env(safe-area-inset-bottom)_+_0.8rem)]' : 'inset-x-2 bottom-[calc(env(safe-area-inset-bottom)_+_0.85rem)] sm:inset-x-4 lg:left-1/2 lg:right-auto lg:w-full lg:max-w-4xl lg:-translate-x-1/2'}`}>
+              {embeddedWorkspace && composerMenuOpen && (
+                <div className="absolute bottom-full left-0 z-40 mb-2 w-[min(14rem,calc(100vw-1.5rem))] rounded-2xl border border-white/10 bg-[#171717] p-1.5 text-white shadow-2xl">
+                  <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/45">AI action</p>
+                  {([
+                    { value: 'draft', label: 'Edit document' },
+                    { value: 'ask', label: 'Ask' },
+                    { value: 'review', label: 'Review' },
+                    { value: 'edit', label: 'Edit selection' },
+                  ] as const).map((action) => (
+                    <button
+                      key={action.value}
+                      type="button"
+                      aria-pressed={coachMode === action.value}
+                      disabled={coachBusy || freeAiLimitReached}
+                      onClick={() => {
+                        changeCoachMode(action.value);
+                        setComposerMenuOpen(false);
+                      }}
+                      className={`mb-0.5 flex w-full items-center rounded-xl border px-2.5 py-2 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                        coachMode === action.value
+                          ? 'border-white/15 bg-white/[0.1] text-white'
+                          : 'border-transparent bg-transparent text-white/65 hover:bg-white/[0.06] hover:text-white'
+                      }`}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { setComposerMenuOpen(false); documentUploadRef.current?.click(); }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-white/85 hover:bg-white/10"
                   >
-                    <option value="draft">Edit document</option>
-                    <option value="ask">Ask</option>
-                    <option value="review">Review</option>
-                    <option value="edit">Edit selection</option>
-                  </select>
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span>Upload document</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setComposerMenuOpen(false); imageUploadRef.current?.click(); }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-white/85 hover:bg-white/10"
+                  >
+                    <ImageIcon className="h-4 w-4 shrink-0" />
+                    <span>Upload image</span>
+                  </button>
+                </div>
+              )}
+              <div className="mx-auto w-full">
+                <div className={`fm-document-composer flex items-center gap-2 ${embeddedWorkspace ? 'fm-document-composer-embedded min-h-[58px] rounded-full px-2.5 py-1.5' : 'items-end'}`}>
+                  {embeddedWorkspace && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setComposerMenuOpen((open) => !open)}
+                      aria-label="Open document and image actions"
+                      title="Add or edit document"
+                      aria-haspopup="true"
+                      aria-expanded={composerMenuOpen}
+                      className="fm-document-control-button h-10 w-10 shrink-0 rounded-full"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                  )}
+                  {embeddedWorkspace && coachImage && (
+                    <span className="flex min-w-0 max-w-24 shrink items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[10px] text-white/75" title={coachImage.name}>
+                      <ImageIcon className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{coachImage.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCoachImage(null)}
+                        aria-label={`Remove attached image ${coachImage.name}`}
+                        className="shrink-0 rounded-full p-0.5 hover:bg-white/15"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
                   <Textarea
                     ref={coachTextareaRef}
                     rows={1}
@@ -2543,9 +2771,9 @@ export default function DocumentStudio({
                         void askDocumentCoach(coachMode);
                       }
                     }}
-                    placeholder={composerPlaceholder}
+                    placeholder={embeddedWorkspace && !coachPrompt && coachMode === 'ask' ? 'Ask FaceMeX' : composerPlaceholder}
                     aria-label="Describe document changes for FaceMeX"
-                    className="min-h-8 max-h-[120px] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-[15px] leading-5 text-white/90 shadow-none placeholder:text-white/45 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className={`min-h-8 max-h-[120px] min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-[15px] leading-5 text-white/90 shadow-none placeholder:text-white/45 focus-visible:ring-0 focus-visible:ring-offset-0 ${embeddedWorkspace ? 'pl-0' : ''}`}
                     disabled={coachBusy || freeAiLimitReached}
                   />
                   <Button
@@ -2554,14 +2782,14 @@ export default function DocumentStudio({
                     disabled={
                       coachBusy ||
                       freeAiLimitReached ||
-                      (coachMode !== 'review' && !coachPrompt.trim()) ||
+                      (coachMode !== 'review' && !coachPrompt.trim() && !coachImage) ||
                       (coachMode === 'edit' && !hasCoachSelection)
                     }
                     aria-label={coachBusy ? 'FaceMeX is updating your document' : `Send ${coachMode} request to FaceMeX`}
                     title={coachBusy ? 'FaceMeX is working' : 'Send to FaceMeX'}
-                    className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 p-0 text-white shadow-lg shadow-black/10 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-[#2b2b2b] disabled:text-white/40"
+                    className={`fm-document-send-button mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 ${embeddedWorkspace ? 'fm-document-control-button' : 'bg-white/10 shadow-lg hover:bg-white/20 disabled:bg-[#2b2b2b] disabled:text-white/40'}`}
                   >
-                    {coachBusy ? <Sparkles className="h-4 w-4 animate-pulse" /> : <ArrowUp className="h-4 w-4" />}
+                    {coachBusy ? <Sparkles className="h-4 w-4 animate-pulse" /> : <ArrowUp className="h-5 w-5" />}
                   </Button>
                 </div>
               </div>
