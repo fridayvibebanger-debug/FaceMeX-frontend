@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/store/userStore';
 
@@ -50,7 +50,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!isSupabaseConfigured) {
       throw new Error('supabase_not_configured');
     }
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await getSupabaseClient().auth.signInWithPassword({ email, password });
     if (error) {
       const msg = error.message || '';
       if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
@@ -103,7 +103,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     const baseUrl = import.meta.env.BASE_URL || '/';
     const emailRedirectTo = new URL(baseUrl, window.location.origin).toString();
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await getSupabaseClient().auth.signUp({
       email,
       password,
       options: {
@@ -157,7 +157,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   logout: async () => {
     if (isSupabaseConfigured) {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await getSupabaseClient().auth.signOut();
       if (error) throw error;
     }
     set({ user: null, isAuthenticated: false });
@@ -193,7 +193,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (!authListenerInitialized) {
       authListenerInitialized = true;
-      supabase.auth.onAuthStateChange((_event, session) => {
+      getSupabaseClient().auth.onAuthStateChange((_event, session) => {
         const supaUser = session?.user;
         if (!supaUser) {
           set({ user: null, isAuthenticated: false, isInitialized: true });
@@ -232,7 +232,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     }
 
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await getSupabaseClient().auth.getSession();
     const session = data?.session;
     const supaUser = session?.user;
     if (error || !supaUser) {

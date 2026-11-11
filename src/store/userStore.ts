@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export type Tier = 'free' | 'plus' | 'pro' | 'creator' | 'business' | 'exclusive';
 
@@ -68,11 +68,11 @@ export const useUserStore = create<UserState>((set, get) => ({
       let profileProfessional: any | null = null;
       if (isSupabaseConfigured) {
         try {
-          const { data } = await supabase.auth.getSession();
+          const { data } = await getSupabaseClient().auth.getSession();
           const u = data.session?.user;
           if (u && String(me.id || '') === String(u.id || '')) {
             try {
-              const { data: profile } = await supabase
+              const { data: profile } = await getSupabaseClient()
                 .from('profiles')
                 .select('tier,display_name,avatar_url,professional')
                 .eq('id', u.id)
@@ -125,7 +125,7 @@ export const useUserStore = create<UserState>((set, get) => ({
       // derive id/name/tier from Supabase auth session + profiles table.
       if (isSupabaseConfigured) {
         try {
-          const { data } = await supabase.auth.getSession();
+          const { data } = await getSupabaseClient().auth.getSession();
           const u = data.session?.user;
           if (u) {
             let profileTier: string | null = null;
@@ -133,7 +133,7 @@ export const useUserStore = create<UserState>((set, get) => ({
             let profileAvatar: string | null = null;
             let profileProfessional: any | null = null;
             try {
-              const { data: profile } = await supabase
+              const { data: profile } = await getSupabaseClient()
                 .from('profiles')
                 .select('tier,display_name,avatar_url,professional')
                 .eq('id', u.id)
@@ -227,10 +227,10 @@ export const useUserStore = create<UserState>((set, get) => ({
       // Production/dist fallback: persist directly to Supabase profiles table
       if (isSupabaseConfigured && !import.meta.env.DEV) {
         try {
-          const { data } = await supabase.auth.getSession();
+          const { data } = await getSupabaseClient().auth.getSession();
           const u = data.session?.user;
           if (u) {
-            await supabase
+            await getSupabaseClient()
               .from('profiles')
               .update({ professional: profile as any })
               .eq('id', u.id);
