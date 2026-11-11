@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { getPersonalizationProfile, savePersonalizationProfile, type PersonalizationProfile } from '@/lib/personalization';
 import { applyAppearanceMode, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 
@@ -34,7 +34,7 @@ function requireSupabase() {
   if (!isSupabaseConfigured) {
     throw new Error('FaceMeX account settings require Supabase configuration.');
   }
-  return supabase;
+  return getSupabaseClient();
 }
 
 function normalizeSettings(value: unknown): AccountSettings {
@@ -43,9 +43,7 @@ function normalizeSettings(value: unknown): AccountSettings {
   const profile = raw.personalization as Partial<PersonalizationProfile> | undefined;
   return {
     version: 1,
-    appearance: raw.appearance === 'light' || raw.appearance === 'dark'
-      ? raw.appearance
-      : defaultAccountSettings.appearance,
+    appearance: 'dark',
     primaryLanguage: typeof raw.primaryLanguage === 'string'
       ? raw.primaryLanguage
       : defaultAccountSettings.primaryLanguage,
