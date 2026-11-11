@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/authStore';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 import { SEO_SITE_ORIGIN } from '@/lib/seo';
 import {
   screenShareRequest,
@@ -852,7 +852,7 @@ export default function ScreenSharePage() {
     setBusyAction('guest-request');
     setActionError('');
     try {
-      const { data, error } = await supabase.auth.signInAnonymously({
+      const { data, error } = await getSupabaseClient().auth.signInAnonymously({
         options: { data: { full_name: displayName } },
       });
       if (error) {
@@ -992,7 +992,7 @@ export default function ScreenSharePage() {
     try {
       await stopLocalMedia();
       if (session?.isGuest) {
-        const { error } = await supabase.auth.signOut();
+        const { error } = await getSupabaseClient().auth.signOut();
         if (error) throw error;
         navigate('/', { replace: true });
         return;

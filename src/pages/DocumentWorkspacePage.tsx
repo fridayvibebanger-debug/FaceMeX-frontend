@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, FileText, Menu, MoreHorizontal, Plus, Search, X } from 'lucide-react';
+import { FileText, MoreHorizontal, Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import DocumentStudio, { type DocumentKind } from '@/components/documents/DocumentStudio';
@@ -12,7 +12,6 @@ import {
 } from '@/lib/documents';
 import { useUserStore } from '@/store/userStore';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 
 type WorkspaceDocument = {
   id: string;
@@ -110,7 +109,6 @@ export default function DocumentWorkspacePage() {
   const [renameValue, setRenameValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [appearance, setAppearance] = useState<AppearanceMode>(() => getAppearanceMode());
   const [visualViewport, setVisualViewport] = useState<{ height: number; offsetTop: number }>();
 
   useEffect(() => {
@@ -133,15 +131,6 @@ export default function DocumentWorkspacePage() {
       window.visualViewport?.removeEventListener('resize', updateViewport);
       window.visualViewport?.removeEventListener('scroll', updateViewport);
     };
-  }, []);
-
-  useEffect(() => {
-    const handleAppearanceChange = (event: Event) => {
-      const mode = (event as CustomEvent<AppearanceMode>).detail;
-      setAppearance(mode === 'light' ? 'light' : 'dark');
-    };
-    window.addEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
-    return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, handleAppearanceChange);
   }, []);
 
   const createLocalStarter = useCallback((): WorkspaceDocument => ({
@@ -331,23 +320,14 @@ export default function DocumentWorkspacePage() {
 
   const documentList = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-white/10 p-3">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={backToWorkspace}
-          className="h-10 min-w-0 flex-1 justify-start rounded-lg px-3 text-white/70 hover:bg-white/[0.08] hover:text-white"
-          aria-label="Back to workspace"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4 shrink-0" />
-          <span className="truncate">Back to workspace</span>
-        </Button>
+      <div className="flex items-center justify-between border-b border-white/10 p-3">
+        <span className="px-1 text-sm font-semibold text-white/85">Your documents</span>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           onClick={() => setSidebarOpen(false)}
-          className="h-10 w-10 shrink-0 text-white/55 hover:bg-white/[0.08] hover:text-white lg:hidden"
+          className="h-9 w-9 shrink-0 text-white/55 hover:bg-white/[0.08] hover:text-white"
           aria-label="Close documents sidebar"
         >
           <X className="h-4 w-4" />
@@ -501,7 +481,7 @@ export default function DocumentWorkspacePage() {
 
   return (
     <div
-      className={`fm-document-workspace-root fm-theme-${appearance} fixed inset-x-0 top-0 z-40 flex h-screen h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-[#0b0b0b] text-white`}
+      className="fm-document-workspace-root fm-theme-dark fixed inset-x-0 top-0 z-40 flex h-screen h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-[#111112] text-white"
       style={visualViewport
         ? {
             top: `${visualViewport.offsetTop}px`,
@@ -510,24 +490,22 @@ export default function DocumentWorkspacePage() {
           }
         : undefined}
     >
-      <header className="fm-documents-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#111111] px-3 sm:px-4">
+      <header
+        className="fm-document-workspace-close-controls pointer-events-none absolute left-3 right-3 z-[60] flex items-center justify-between gap-2"
+        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.65rem)' }}
+      >
         <div className="flex min-w-0 items-center gap-2">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => setSidebarOpen(true)}
-            className="h-9 w-9 text-white/75 lg:hidden"
-            aria-label="Open documents sidebar"
+            onClick={backToWorkspace}
+            className="fm-document-control-button pointer-events-auto h-11 w-11 shrink-0 rounded-full"
+            aria-label="Close documents workspace"
+            title="Close"
           >
-            <Menu className="h-5 w-5" />
+            <X className="h-6 w-6" />
           </Button>
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-600">
-            <FileText className="h-4 w-4 text-white" />
-          </div>
-          <span className="truncate text-sm font-semibold tracking-tight">FaceMeX</span>
-          <span className="hidden text-white/30 sm:inline">/</span>
-          <span className="hidden text-sm text-white/60 sm:inline">Documents</span>
         </div>
       </header>
 
@@ -538,18 +516,22 @@ export default function DocumentWorkspacePage() {
       )}
 
       <div className="fm-document-workspace-stage flex min-h-0 min-w-0 flex-1">
-        <aside className="fm-documents-sidebar hidden w-[260px] shrink-0 flex-col border-r border-white/10 bg-[#171717] lg:flex" aria-label="Documents workspace">
-          {documentList}
-        </aside>
         {sidebarOpen && (
           <>
             <button
               type="button"
-              className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+              className="fixed inset-0 z-30 bg-black/45 backdrop-blur-[2px]"
               onClick={() => setSidebarOpen(false)}
               aria-label="Close documents sidebar"
             />
-            <aside className="fm-documents-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(88vw,340px)] flex-col border-r border-white/10 bg-[#171717] lg:hidden" aria-label="Documents workspace">
+            <aside
+              className="fm-documents-sidebar fixed left-3 z-50 flex w-[min(88vw,340px)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#171717]/[0.98] shadow-2xl"
+              style={{
+                top: 'calc(env(safe-area-inset-top) + 4.25rem)',
+                bottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)',
+              }}
+              aria-label="Documents workspace"
+            >
               {documentList}
             </aside>
           </>
@@ -563,6 +545,7 @@ export default function DocumentWorkspacePage() {
               documentName={selectedDocument.name}
               projectId={projectId}
               onDocumentSaved={handleDocumentSaved}
+              onOpenDocuments={() => setSidebarOpen(true)}
               embeddedWorkspace
             />
           ) : (

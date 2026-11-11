@@ -5,7 +5,7 @@ import { UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
 type Profile = {
   id: string;
@@ -37,7 +37,7 @@ export default function ConnectPage() {
     fetchUsers();
 
     // 🔄 REALTIME LISTENER
-    const channel = supabase
+    const channel = getSupabaseClient()
       .channel('profiles-changes')
       .on(
         'postgres_changes',
@@ -53,7 +53,7 @@ export default function ConnectPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      getSupabaseClient().removeChannel(channel);
     };
   }, []);
 
@@ -64,9 +64,9 @@ export default function ConnectPage() {
     try {
       const {
         data: { user: currentUser },
-      } = await supabase.auth.getUser();
+      } = await getSupabaseClient().auth.getUser();
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabaseClient()
         .from('profiles')
         .select(`
           id,

@@ -77,7 +77,7 @@ import { toast } from '@/components/ui/use-toast';
 import { useUserStore } from '@/store/userStore';
 import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from '@/lib/appearance';
 import { buildPersonalizationContext, getPersonalizationProfile, PERSONALIZATION_CHANGE_EVENT, type PersonalizationProfile } from '@/lib/personalization';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 import {
   createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
@@ -6258,7 +6258,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     const youtubeVideoUrl = extractYouTubeUrlFromText(finalPrompt);
     if (youtubeVideoUrl && isYouTubeSummaryRequest(finalPrompt) && !hasImages) {
       try {
-        const { data, error: sessionError } = await supabase.auth.getSession();
+        const { data, error: sessionError } = await getSupabaseClient().auth.getSession();
         if (sessionError) throw sessionError;
         if (!data.session?.access_token) {
           throw new Error('Sign in to summarize a YouTube video.');

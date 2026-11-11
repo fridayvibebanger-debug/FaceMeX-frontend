@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
 type AnalyticsReport = {
   overview: {
@@ -110,7 +110,7 @@ export default function AdminAnalyticsPage() {
         return;
       }
 
-      const { data, error: sessionError } = await supabase.auth.getSession();
+      const { data, error: sessionError } = await getSupabaseClient().auth.getSession();
       if (sessionError) throw sessionError;
       if (!data.session?.access_token) throw new Error('Sign in to view product analytics.');
       const response = await fetch('/.netlify/functions/analytics', {
