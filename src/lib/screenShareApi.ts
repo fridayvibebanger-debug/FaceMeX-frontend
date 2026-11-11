@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
 const SCREEN_SHARE_FUNCTION_PATH = '/.netlify/functions/screen-share';
 
@@ -33,7 +33,7 @@ export async function screenShareRequest<T>(
   action: string,
   values: Record<string, unknown> = {}
 ): Promise<T> {
-  const { data, error: sessionError } = await supabase.auth.getSession();
+  const { data, error: sessionError } = await getSupabaseClient().auth.getSession();
   if (sessionError) {
     throw new Error(`Could not verify your FaceMeX sign-in: ${sessionError.message}`);
   }

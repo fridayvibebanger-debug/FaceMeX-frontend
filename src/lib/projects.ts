@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export type WorkspaceProject = {
   id: string;
@@ -56,7 +56,7 @@ function requireSupabase() {
   if (!isSupabaseConfigured) {
     throw new Error('Project storage requires Supabase configuration.');
   }
-  return supabase;
+  return getSupabaseClient();
 }
 
 function throwIfError(error: { message: string } | null) {

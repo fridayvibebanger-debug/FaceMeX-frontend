@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 type AnalyticsPayload = Record<string, unknown>;
 type AnalyticsEvent = {
@@ -133,10 +133,11 @@ export async function trackEvent(
   payload?: AnalyticsPayload,
 ): Promise<void> {
   if (typeof window === 'undefined' || getAnalyticsConsent() !== 'granted') return;
+  if (!isSupabaseConfigured) return;
   if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(event)) return;
 
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await getSupabaseClient().auth.getSession();
     if (error || !data.session?.access_token) return;
     const eventPayload: AnalyticsEvent & { outcome?: string } = {
       event_id: crypto.randomUUID(),

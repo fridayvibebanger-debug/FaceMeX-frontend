@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { toSameOriginAIProxyPath } from './aiProxyPath.js';
 
 export const API_URL =
@@ -74,7 +74,7 @@ async function getSupabaseSessionData() {
   }
 
   try {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await getSupabaseClient().auth.getSession();
     const session = data.session;
     const user = session?.user;
 

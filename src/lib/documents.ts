@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export type PersistedDocument = {
   id: string;
@@ -23,7 +23,7 @@ export type DocumentDraft = {
 
 function requireSupabase() {
   if (!isSupabaseConfigured) throw new Error('Document sync requires Supabase configuration.');
-  return supabase;
+  return getSupabaseClient();
 }
 
 function fail(error: { message: string } | null): void {
