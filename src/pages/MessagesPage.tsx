@@ -577,19 +577,10 @@ export default function MessagesPage() {
   const ensurePeerConnection = async (type: 'voice' | 'video') => {
     if (pcRef.current) return pcRef.current;
 
-    const extraIceServers: RTCIceServer[] = [];
-    const turnUrl = (import.meta as any).env?.VITE_TURN_URL as string | undefined;
-    const turnUser = (import.meta as any).env?.VITE_TURN_USERNAME as string | undefined;
-    const turnCred = (import.meta as any).env?.VITE_TURN_CREDENTIAL as string | undefined;
-    if (turnUrl && turnUser && turnCred) {
-      extraIceServers.push({ urls: turnUrl, username: turnUser, credential: turnCred });
-    }
-
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        ...extraIceServers,
       ],
     });
     pc.onicecandidate = (event) => {

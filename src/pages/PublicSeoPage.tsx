@@ -774,11 +774,3 @@ export default function PublicSeoPage() {
     </SeoSiteFrame>
   );
 }
-
-export function isPublicSeoPath(path: string) {
-  const normalizedPath = path.replace(/\/+$/, '') || '/';
-  return normalizedPath === '/' ||
-    normalizedPath === '/resources' ||
-    Boolean(getSeoPage(normalizedPath)) ||
-    Boolean(getSeoArticle(normalizedPath));
-}
