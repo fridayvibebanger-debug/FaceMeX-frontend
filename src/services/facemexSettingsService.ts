@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { getPersonalizationProfile, savePersonalizationProfile } from '@/lib/personalization';
 import { applyAppearanceMode } from '@/lib/appearance';
 import type {
@@ -12,7 +12,7 @@ export const FACEMEX_SETTINGS_CHANGED_EVENT = 'facemex:settings-changed';
 export const FACEMEX_SETTINGS_DEFAULTS: FaceMeXSettings = {
   version: 1,
   general: {
-    appearance: 'system',
+    appearance: 'dark',
     primaryLanguage: 'en',
     accentColor: 'blue',
   },
@@ -87,7 +87,6 @@ export function normalizeFaceMeXSettings(value: unknown): FaceMeXSettings {
   const general = raw.general && typeof raw.general === 'object'
     ? raw.general as Partial<FaceMeXSettings['general']>
     : {};
-  const appearance = general.appearance;
   const language = general.primaryLanguage;
   const memory = raw.memory && typeof raw.memory === 'object'
     ? raw.memory as Partial<FaceMeXSettings['memory']>
@@ -95,9 +94,7 @@ export function normalizeFaceMeXSettings(value: unknown): FaceMeXSettings {
   return {
     version: 1,
     general: {
-      appearance: appearance === 'system' || appearance === 'light' || appearance === 'dark'
-        ? appearance
-        : FACEMEX_SETTINGS_DEFAULTS.general.appearance,
+      appearance: 'dark',
       primaryLanguage: typeof language === 'string' && validLanguages.has(language)
         ? language
         : FACEMEX_SETTINGS_DEFAULTS.general.primaryLanguage,
@@ -127,7 +124,7 @@ function requireSupabase() {
   if (!isSupabaseConfigured) {
     throw new Error('FaceMeX settings need an active Supabase connection. Please try again later.');
   }
-  return supabase;
+  return getSupabaseClient();
 }
 
 async function requireSignedInUser() {
@@ -149,7 +146,7 @@ export function cacheFaceMeXAccountSettings(userId: string, settings: FaceMeXSet
   } catch (error) {
     console.warn('FaceMeX settings cache could not be updated; cloud settings are still saved.', error);
   }
-  savePersonalizationProfile(userId, settings.personalization);
+  savePersonalizationProfile(userId, settings.personalization, settings.memory.enabled);
   window.dispatchEvent(new CustomEvent(FACEMEX_SETTINGS_CHANGED_EVENT, { detail: { userId, settings } }));
 }
 

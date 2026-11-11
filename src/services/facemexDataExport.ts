@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 type ExportRow = Record<string, unknown>;
 
@@ -18,35 +18,36 @@ async function fetchAllPages(
 
 export async function createFaceMeXDataExport() {
   if (!isSupabaseConfigured) throw new Error('Data export needs an active FaceMeX connection. Please try again later.');
-  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const { data: authData, error: authError } = await getSupabaseClient().auth.getUser();
   if (authError) throw new Error(`Could not verify your account: ${authError.message}`);
   const user = authData.user;
   if (!user) throw new Error('Sign in to export your FaceMeX data.');
+  const client = getSupabaseClient();
 
   const [profileResult, settingsResult, projects, conversations, documents] = await Promise.all([
-    supabase
+    client
       .from('profiles')
       .select('display_name,avatar_url,professional,tier')
       .eq('id', user.id)
       .maybeSingle(),
-    supabase
+    client
       .from('facemex_user_settings')
       .select('settings,created_at,updated_at')
       .eq('user_id', user.id)
       .maybeSingle(),
-    fetchAllPages((from, to) => supabase
+    fetchAllPages((from, to) => client
       .from('workspace_projects')
       .select('id,name,description,created_at,updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
       .range(from, to)),
-    fetchAllPages((from, to) => supabase
+    fetchAllPages((from, to) => client
       .from('workspace_conversations')
       .select('id,project_id,title,metadata,created_at,updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
       .range(from, to)),
-    fetchAllPages((from, to) => supabase
+    fetchAllPages((from, to) => client
       .from('documents')
       .select('id,project_id,document_key,title,document_type,content,metadata,created_at,updated_at')
       .eq('user_id', user.id)
@@ -64,7 +65,7 @@ export async function createFaceMeXDataExport() {
       .map((conversation) => conversation.id)
       .filter((id): id is string => typeof id === 'string');
     if (conversationIds.length === 0) continue;
-    const conversationMessages = await fetchAllPages((from, to) => supabase
+    const conversationMessages = await fetchAllPages((from, to) => client
       .from('workspace_messages')
       .select('id,conversation_id,role,content,metadata,created_at')
       .in('conversation_id', conversationIds)
