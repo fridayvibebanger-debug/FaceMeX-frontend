@@ -11,74 +11,73 @@ import {
 import { useAuthStore } from './store/authStore';
 
 import AuthPage from './components/auth/AuthPage';
-import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
-import EmotionAIPage from './pages/EmotionAIPage';
-import MEXA from "./components/MEXA";
-import MEXAUpgrade from "./pages/MEXAUpgrade";
-import FacemexPlusPage from './pages/FacemexPlusPage';
-import FeedPage from './pages/FeedPage';
-import WatchPage from './pages/WatchPage';
-import ProfilePage from './pages/ProfilePage';
-import ResetPasswordPage from '@/pages/ResetPasswordPage';
-import MessagesPage from './pages/MessagesPage';
-import VirtualWorldsPage from './pages/VirtualWorldsPage';
-import WorldPage from './pages/WorldPage';
-import BoothPage from './pages/BoothPage';
-import StagePage from './pages/StagePage';
-import CommunitiesPage from './pages/CommunitiesPage';
-import CirclePage from './pages/CirclePage';
-import ContentSharePage from './pages/ContentSharePage';
-import EventsPage from './pages/EventsPage';
-import PremiumMarketplacePage from './pages/PremiumMarketplacePage';
-import MediaShopPage from './pages/MediaShopPage';
-import SubscriptionsPage from './pages/SubscriptionsPage';
-import MentalHealthPage from './pages/MentalHealthPage';
-import EmpowermentToolsPage from './pages/EmpowermentToolsPage';
-import StoriesPage from './pages/StoriesPage';
-import JobsPage from './pages/JobsPage';
-import ProfessionalGroupsPage from './pages/ProfessionalGroupsPage';
-import ProGroupDetailPage from './pages/ProGroupDetailPage';
-import SavedPostsPage from './pages/SavedPostsPage';
-import AIResumePage from './pages/AIResumePage';
-import AIJobAssistantPage from './pages/AIJobAssistantPage';
+const AdminAnalyticsPage = lazy(() => import('./pages/AdminAnalyticsPage'));
+const EmotionAIPage = lazy(() => import('./pages/EmotionAIPage'));
+const MEXA = lazy(() => import('./components/MEXA'));
+const MEXAUpgrade = lazy(() => import('./pages/MEXAUpgrade'));
+const FacemexPlusPage = lazy(() => import('./pages/FacemexPlusPage'));
+const FeedPage = lazy(() => import('./pages/FeedPage'));
+const WatchPage = lazy(() => import('./pages/WatchPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
+const MessagesPage = lazy(() => import('./pages/MessagesPage'));
+const VirtualWorldsPage = lazy(() => import('./pages/VirtualWorldsPage'));
+const WorldPage = lazy(() => import('./pages/WorldPage'));
+const BoothPage = lazy(() => import('./pages/BoothPage'));
+const StagePage = lazy(() => import('./pages/StagePage'));
+const CommunitiesPage = lazy(() => import('./pages/CommunitiesPage'));
+const CirclePage = lazy(() => import('./pages/CirclePage'));
+const ContentSharePage = lazy(() => import('./pages/ContentSharePage'));
+const EventsPage = lazy(() => import('./pages/EventsPage'));
+const PremiumMarketplacePage = lazy(() => import('./pages/PremiumMarketplacePage'));
+const MediaShopPage = lazy(() => import('./pages/MediaShopPage'));
+const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'));
+const MentalHealthPage = lazy(() => import('./pages/MentalHealthPage'));
+const EmpowermentToolsPage = lazy(() => import('./pages/EmpowermentToolsPage'));
+const StoriesPage = lazy(() => import('./pages/StoriesPage'));
+const JobsPage = lazy(() => import('./pages/JobsPage'));
+const ProfessionalGroupsPage = lazy(() => import('./pages/ProfessionalGroupsPage'));
+const ProGroupDetailPage = lazy(() => import('./pages/ProGroupDetailPage'));
+const SavedPostsPage = lazy(() => import('./pages/SavedPostsPage'));
+const AIResumePage = lazy(() => import('./pages/AIResumePage'));
+const AIJobAssistantPage = lazy(() => import('./pages/AIJobAssistantPage'));
 import FaceMeXSettingsSync from './components/facemex-settings/FaceMeXSettingsSync';
-import AccountSettingsPage from './pages/AccountSettingsPage';
-import PersonalizationSettingsPage from './pages/PersonalizationSettingsPage';
-import DataControlsPage from './pages/DataControlsPage';
-import PrivacyCenterPage from './pages/PrivacyCenterPage';
-import PrivacyCenterDetailPage from './pages/PrivacyCenterDetailPage';
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-import PrivacyGuidePage from './pages/PrivacyGuidePage';
-import SettingsHomePage from './features/settings/pages/SettingsHomePage';
-import SettingsCategoryPage from './features/settings/pages/SettingsCategoryPage';
-import PricingPage from './pages/PricingPage';
+const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage'));
+const PersonalizationSettingsPage = lazy(() => import('./pages/PersonalizationSettingsPage'));
+const DataControlsPage = lazy(() => import('./pages/DataControlsPage'));
+const PrivacyCenterPage = lazy(() => import('./pages/PrivacyCenterPage'));
+const PrivacyCenterDetailPage = lazy(() => import('./pages/PrivacyCenterDetailPage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const PrivacyGuidePage = lazy(() => import('./pages/PrivacyGuidePage'));
+const SettingsHomePage = lazy(() => import('./features/settings/pages/SettingsHomePage'));
+const SettingsCategoryPage = lazy(() => import('./features/settings/pages/SettingsCategoryPage'));
+const PricingPage = lazy(() => import('./pages/PricingPage'));
 import TierGate from './components/auth/TierGate';
-import PRDPage from './pages/PRDPage';
-import AdsDraftsPage from './pages/AdsDraftsPage';
-import WorldManagePage from './pages/WorldManagePage';
-import WorldEventsPage from './pages/WorldEventsPage';
-import WorldEventDetailPage from './pages/WorldEventDetailPage';
-import TrustDashboard from './pages/TrustDashboard';
-import TermsOfService from './pages/policies/TermsOfService';
-import EthicsPolicy from './pages/policies/EthicsPolicy';
-import ScreenshotPolicy from './pages/policies/ScreenshotPolicy';
-import CommunityRules from './pages/policies/CommunityRules';
-import RecruiterPortalPage from './pages/RecruiterPortalPage';
-import TestAI from './pages/TestAI';
+const PRDPage = lazy(() => import('./pages/PRDPage'));
+const AdsDraftsPage = lazy(() => import('./pages/AdsDraftsPage'));
+const WorldManagePage = lazy(() => import('./pages/WorldManagePage'));
+const WorldEventsPage = lazy(() => import('./pages/WorldEventsPage'));
+const WorldEventDetailPage = lazy(() => import('./pages/WorldEventDetailPage'));
+const TrustDashboard = lazy(() => import('./pages/TrustDashboard'));
+const TermsOfService = lazy(() => import('./pages/policies/TermsOfService'));
+const EthicsPolicy = lazy(() => import('./pages/policies/EthicsPolicy'));
+const ScreenshotPolicy = lazy(() => import('./pages/policies/ScreenshotPolicy'));
+const CommunityRules = lazy(() => import('./pages/policies/CommunityRules'));
+const RecruiterPortalPage = lazy(() => import('./pages/RecruiterPortalPage'));
+const TestAI = lazy(() => import('./pages/TestAI'));
 import TierSync from '@/components/auth/TierSync';
 import LiveNotificationListener from '@/components/LiveNotificationListener';
 import GlobalCallListener from '@/components/calls/GlobalCallListener';
-import AiUtilsTest from './pages/AiUtilsTest';
-import CareerAIPage from './pages/CareerAIPage';
-import PublicSeoPage, { isPublicSeoPath } from './pages/PublicSeoPage';
-import { getSeoMetadata, SEO_SITE_ORIGIN } from './lib/seo';
-
+const AiUtilsTest = lazy(() => import('./pages/AiUtilsTest'));
+const CareerAIPage = lazy(() => import('./pages/CareerAIPage'));
+const PublicSeoPage = lazy(() => import('./pages/PublicSeoPage'));
+import { getSeoMetadata, isPublicSeoPath, SEO_SITE_ORIGIN } from './lib/seo';
 const PracticalLabLibrary = lazy(() => import('./pages/PracticalLabLibrary'));
-import NotificationsPage from './pages/NotificationsPage';
-import ConnectPage from './pages/ConnectPage';
-import CallPage from './pages/CallPage';
-import EnterpriseHomePage from './enterprise/pages/EnterpriseHomePage';
-import DepartmentDetailPage from './enterprise/pages/DepartmentDetailPage';
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const ConnectPage = lazy(() => import('./pages/ConnectPage'));
+const CallPage = lazy(() => import('./pages/CallPage'));
+const EnterpriseHomePage = lazy(() => import('./enterprise/pages/EnterpriseHomePage'));
+const DepartmentDetailPage = lazy(() => import('./enterprise/pages/DepartmentDetailPage'));
 
 const DEFAULT_AUTHENTICATED_ROUTE = '/ai/job-assistant';
 
@@ -314,6 +313,7 @@ function App() {
       <AppAnalyticsTracker />
       <AnalyticsConsentNotice />
 
+      <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#0b0b0b] text-sm text-white/60">Loading FaceMeX…</div>}>
       <Routes>
         <Route path="/" element={<PublicHomeRoute />} />
         <Route path="/login" element={<PublicAuthRoute />} />
@@ -858,6 +858,7 @@ function App() {
 
         <Route path="*" element={<PublicSeoPage />} />
       </Routes>
+      </Suspense>
     </>
   );
 }
