@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, MailCheck } from 'lucide-react';
 
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useAuthStore } from '@/store/authStore';
 import { getAuthenticatedReturnTo } from '@/lib/authReturnTo';
 
@@ -104,7 +104,7 @@ export default function AuthPage() {
     try {
       setResettingPassword(true);
 
-      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      const { error } = await getSupabaseClient().auth.resetPasswordForEmail(cleanEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
 
