@@ -348,6 +348,14 @@ export function getSeoArticle(path: string) {
   return seoArticles.find((article) => article.slug === slug);
 }
 
+export function isPublicSeoPath(path: string) {
+  const normalizedPath = path.replace(/\/+$/, '') || '/';
+  return normalizedPath === '/' ||
+    normalizedPath === '/resources' ||
+    Boolean(getSeoPage(normalizedPath)) ||
+    Boolean(getSeoArticle(normalizedPath));
+}
+
 export const nonIndexableSeoRoutes: Record<string, { title: string; description: string }> = {
   '/login': {
     title: 'Sign In | FaceMeX',
