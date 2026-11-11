@@ -5,6 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_STORAGE_BUCKET"
 
 [functions]
   node_bundler = "esbuild"
