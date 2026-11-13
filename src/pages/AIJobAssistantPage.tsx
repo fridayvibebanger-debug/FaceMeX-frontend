@@ -112,6 +112,10 @@ import {
 } from '@/lib/workspaceLearningEngine';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import {
+  buildWorkspaceQualityInstruction,
+  createDeliveryProfitAnswer,
+} from '@/lib/workspaceBusinessReasoning.js';
+import {
   createLinearFunctionExplanation,
   createIncompleteEquationClarification,
   createQuadraticFunctionExplanation,
@@ -6216,6 +6220,30 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       return;
     }
 
+    const deterministicBusinessAnswer = createDeliveryProfitAnswer(finalPrompt);
+    if (deterministicBusinessAnswer) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: safeId(),
+          role: 'assistant',
+          content: deterministicBusinessAnswer,
+          createdAt: new Date().toISOString(),
+          saved: shouldAutoSaveEducation,
+          savedCategory: suggestedSavedCategory,
+          intent,
+        },
+      ]);
+      recordAIUse();
+      trackWorkspaceResponse({
+        intent,
+        source: 'verified_delivery_unit_economics',
+        answer_length: deterministicBusinessAnswer.length,
+      });
+      setBusy(false);
+      return;
+    }
+
     const previousAssistantResponse = [...promptHistory]
       .reverse()
       .find((message) => message.role === 'assistant')?.content || '';
@@ -6401,6 +6429,10 @@ FaceMeX intelligence rules:
 - If the user asks about university, college, TVET, NSFAS, bursaries, grants, funding, investors or pitch decks, answer like an application assistant and guide them toward applying or scheduling follow-up.
 - Never mix Library sections. Students = school/university/NSFAS. Investors = grants/funding/investors/pitching. Jobs = jobs/CV/interviews/learnerships.
 
+${buildWorkspaceQualityInstruction([
+  ...promptHistory.slice(-6).map((message) => message.content),
+  finalPrompt,
+].join('\n'))}
 ${mathematicsLearningGuidance}
 ${adaptiveLearningGuidance}
 
