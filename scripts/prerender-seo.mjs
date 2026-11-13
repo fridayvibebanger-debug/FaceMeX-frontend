@@ -1,9 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import React from 'react';
-import { renderToString } from 'react-dom/server';
-import { StaticRouter } from 'react-router-dom/server.js';
 import { createServer } from 'vite';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,10 +12,7 @@ const vite = await createServer({
 });
 
 try {
-  const [{ default: PublicSeoPage }, { getSeoMetadata, seoLandingPages, seoArticles, nonIndexableSeoRoutes }] = await Promise.all([
-    vite.ssrLoadModule('/src/pages/PublicSeoPage.tsx'),
-    vite.ssrLoadModule('/src/lib/seo.ts'),
-  ]);
+  const { getSeoMetadata, seoLandingPages, seoArticles, nonIndexableSeoRoutes } = await vite.ssrLoadModule('/src/lib/seo.ts');
   const baseHtml = await readFile(path.join(outputRoot, 'index.html'), 'utf8');
   const routes = [
     ...seoLandingPages.map((page) => page.path),
@@ -49,16 +43,9 @@ try {
 
   for (const route of [...new Set(routes)]) {
     const metadata = getSeoMetadata(route);
-    const rendered = renderToString(
-      React.createElement(
-        StaticRouter,
-        { location: route },
-        React.createElement(PublicSeoPage),
-      ),
-    );
     let html = baseHtml
       .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(metadata.title)}</title>`)
-      .replace(/<div id="root"><\/div>/, `<div id="root">${rendered}</div>`);
+      .replace(/<div id="root"><\/div>/, '<div id="root"></div>');
 
     html = replaceMeta(html, 'name', 'description', metadata.description);
     html = replaceMeta(html, 'name', 'robots', 'index, follow');
