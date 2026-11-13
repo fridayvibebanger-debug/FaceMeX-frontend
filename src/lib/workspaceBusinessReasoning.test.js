@@ -86,21 +86,21 @@ test('business guidance requires evidence, complete costs and a candid correctio
   const guidance = buildWorkspaceQualityInstruction(
     'Should my South African business register with CIPC, and can you show profit from revenue and expenses?',
   );
-  assert.match(guidance, /Distinguish information supplied.*verified facts.*estimates.*assumptions/i);
+  assert.match(guidance, /Distinguish information supplied.*verified information.*estimates.*assumptions/i);
   assert.match(guidance, /Never invent statistics.*case studies.*legal requirements/i);
   assert.match(guidance, /Do not automatically agree.*correct it directly/i);
   assert.match(guidance, /Keep revenue distinct from profit/);
   assert.match(guidance, /Never treat missing costs as zero/);
-  assert.match(guidance, /current CIPC, SARS.*trustworthy source/i);
-  assert.match(guidance, /sole proprietors must register a company with CIPC/i);
+  assert.match(guidance, /Treat CIPC, SARS.*verified from the responsible official source/i);
+  assert.match(guidance, /do not claim that a sole proprietor must register a company with CIPC/i);
 });
 
 test('South African registration answers are instructed not to invent CIPC obligations', () => {
   const guidance = buildWorkspaceQualityInstruction(
     'Does my sole proprietor business need CIPC registration in South Africa?',
   );
-  assert.match(guidance, /Do not state current CIPC, SARS.*trustworthy source/i);
-  assert.match(guidance, /Do not claim that sole proprietors must register a company with CIPC/i);
+  assert.match(guidance, /Treat CIPC, SARS.*verified from the responsible official source/i);
+  assert.match(guidance, /do not claim that a sole proprietor must register a company with CIPC/i);
 });
 
 test('unsupported business case studies and statistics must be identified, not invented', () => {
@@ -108,7 +108,62 @@ test('unsupported business case studies and statistics must be identified, not i
     'Give me a case study and customer growth statistics for a small business.',
   );
   assert.match(guidance, /Never invent statistics, customer counts, prices, case studies/i);
-  assert.match(guidance, /cannot be verified.*say so/i);
+  assert.match(guidance, /If evidence is unavailable or inconclusive, say what is uncertain/i);
+});
+
+test('factual claims distinguish checked evidence from model knowledge and avoid fake citations', () => {
+  const guidance = buildWorkspaceQualityInstruction('What facts can you verify about this company?');
+  assert.match(guidance, /verified information, general knowledge, estimates, assumptions/i);
+  assert.match(guidance, /only when you actually checked a trustworthy source/i);
+  assert.match(guidance, /Never imply that you searched, checked, confirmed, or consulted a source/i);
+  assert.match(guidance, /Never invent.*citations, sources/i);
+  assert.match(guidance, /Do not invent numerical confidence scores/i);
+});
+
+test('high-risk claims require current authoritative verification or explicit uncertainty', () => {
+  const guidance = buildWorkspaceQualityInstruction(
+    'What are the current legal requirements, tax thresholds, and payment processing fees?',
+  );
+  assert.match(guidance, /Apply stricter verification to current or high-impact claims/i);
+  assert.match(guidance, /responsible official institution/i);
+  assert.match(guidance, /update\/publication date/i);
+  assert.match(guidance, /Cite or link only sources actually consulted/i);
+  assert.match(guidance, /If no suitable source is available, clearly say current details are unverified/i);
+});
+
+test('South African institution and funding claims require official-source checking', () => {
+  const guidance = buildWorkspaceQualityInstruction(
+    'Check NYDA grant eligibility, SEDA and SEFA funding, and the relevant municipality programme in South Africa.',
+  );
+  assert.match(guidance, /CIPC, SARS, NYDA, SEDA, SEFA or any successor/i);
+  assert.match(guidance, /responsible official source/i);
+  assert.match(guidance, /Never invent a grant, successor agency.*eligibility rule/i);
+});
+
+test('fact-verification regression prompts cover requested risky claim categories', async (t) => {
+  const prompts = [
+    ['sole proprietor vs CIPC company registration', 'Does a sole proprietor need to register a company with CIPC?'],
+    ['South African tax obligations', 'What are my current SARS and VAT obligations in South Africa?'],
+    ['NYDA grant eligibility', 'Am I eligible for an NYDA grant and what documents are required?'],
+    ['government funding verification', 'What current government funding programmes can my startup apply for?'],
+    ['payment gateway fees', 'What are the current payment gateway processing fees?'],
+    ['delivery pricing and profit', 'A customer pays R30 for a delivery. The driver receives R15 and fuel costs R7.50. What is profit?'],
+    ['unsupported market statistics', 'Give me verified market statistics and customer growth figures for this business.'],
+    ['outdated legal information', 'Are these current labour-law requirements still valid?'],
+    ['unsupported business examples', 'Give me a real business case study proving this strategy works.'],
+    ['missing sources', 'Cite the official source for these current grant requirements.'],
+  ];
+
+  for (const [name, prompt] of prompts) {
+    await t.test(name, () => {
+      const guidance = buildWorkspaceQualityInstruction(prompt);
+      assert.match(guidance, /verified information, general knowledge, estimates, assumptions/i);
+      assert.match(guidance, /Never invent statistics.*citations, sources/i);
+      if (/\b(?:current|grant|grant requirements|tax|VAT|law|legal|fee|eligib|CIPC|NYDA|funding)\b/i.test(prompt)) {
+        assert.match(guidance, /Apply stricter verification/i);
+      }
+    });
+  }
 });
 
 test('self-correction, conflicting assumptions and multi-step instructions are explicit quality checks', () => {

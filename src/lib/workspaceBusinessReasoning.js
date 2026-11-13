@@ -144,23 +144,28 @@ export function createDeliveryProfitAnswer(prompt) {
   ].join('\n');
 }
 
-const SOUTH_AFRICA_CONTEXT_PATTERN = /\b(?:south africa|south african|cipc|sars|popia|zar|rand|rands)\b/i;
+const SOUTH_AFRICA_CONTEXT_PATTERN = /\b(?:south africa|south african|cipc|sars|popia|nyda|seda|sefa|department of small business development|dsbd|municipalit(?:y|ies)|zar|rand|rands)\b/i;
 const BUSINESS_CONTEXT_PATTERN = /\b(?:business|businesses|revenue|profit|margin|costs?|expenses?|pricing|commission|break[- ]even|unit economics|interest|tax|vat|customer acquisition|startup|cash flow|case stud(?:y|ies))\b/i;
+const HIGH_RISK_FACT_PATTERN = /\b(?:law|legal|regulat(?:ion|ions|ory)|tax|taxation|sars|cipc|registration|grant|funding|eligib(?:le|ility)|application deadline|programme|program|government|payment gateway|processing fee|transaction fee|price|pricing|medical|medicine|health|safety|financial advice|interest rate|vat|popia|nyda|seda|sefa|municipalit(?:y|ies)|department of small business development|dsbd)\b/i;
 
 export function buildWorkspaceQualityInstruction(prompt = '') {
   const text = String(prompt || '');
   const businessContext = BUSINESS_CONTEXT_PATTERN.test(text);
   const southAfricaContext = SOUTH_AFRICA_CONTEXT_PATTERN.test(text);
+  const highRiskContext = HIGH_RISK_FACT_PATTERN.test(text);
 
   return [
     'Before answering, silently check that you answered the actual request, followed its instructions, checked internal consistency and arithmetic, included important risks, and made the next step actionable. Do not reveal private chain-of-thought; give only concise reasoning, calculations and conclusions.',
-    'Distinguish information supplied by the user, verified facts, estimates, assumptions, examples and opinions. Never invent statistics, customer counts, prices, case studies, legal requirements or market evidence. If a claim cannot be verified from provided or available trustworthy information, say so and identify what should be checked.',
+    'Distinguish information supplied by the user, verified information, general knowledge, estimates, assumptions, illustrative examples, opinions, and unverified claims. A claim is verified only when you actually checked a trustworthy source available in this interaction or it is directly supported by supplied evidence; do not describe memory or model knowledge as externally verified. Never invent statistics, customer counts, prices, case studies, legal requirements, citations, sources, or market evidence. Never imply that you searched, checked, confirmed, or consulted a source unless you actually did. If evidence is unavailable or inconclusive, say what is uncertain and what should be verified. Do not invent numerical confidence scores.',
     'Do not automatically agree with the user or defend an earlier answer. Point out weak assumptions, missing information and contradictions respectfully. If an earlier answer was wrong, acknowledge and correct it directly.',
+    highRiskContext
+      ? 'Apply stricter verification to current or high-impact claims about law, tax, registration, funding, eligibility, deadlines, financial recommendations, medical or safety information, prices, and payment-processing fees. If a trusted search or retrieval source is available, prefer the responsible official institution, check the source and its update/publication date, and cross-check material claims where practical. Cite or link only sources actually consulted. If no suitable source is available, clearly say current details are unverified and direct the user to the responsible official source before they act; do not guess amounts, thresholds, fees, rules, or eligibility.'
+      : '',
     businessContext
       ? 'For business and financial questions, use the stated currency and show a compact calculation when useful. Keep revenue distinct from profit. Include all stated relevant costs; distinguish gross profit from net profit and calculate each margin as profit divided by revenue. Never treat missing costs as zero: ask for essential missing amounts or label results explicitly as estimates or profit before the missing overheads. Check calculations independently before responding. Prefer practical options within the user’s stated budget and explain lower-cost alternatives.'
       : '',
     southAfricaContext
-      ? 'For South African questions, do not assume the user is in South Africa unless the prompt supports it. Use rand when appropriate. Distinguish South African rules from other jurisdictions. Do not state current CIPC, SARS, VAT, labour, consumer-protection or POPIA obligations as verified unless a current trustworthy source is available; otherwise qualify the limitation and direct the user to the relevant official source. Do not claim that sole proprietors must register a company with CIPC.'
+      ? 'For South African questions, do not assume the user is in South Africa unless the prompt supports it. Use rand when appropriate and distinguish local rules from other jurisdictions. Treat CIPC, SARS, NYDA, SEDA, SEFA or any successor, the Department of Small Business Development, and municipal programme information as current only when verified from the responsible official source. Distinguish a sole proprietor from a registered company; do not claim that a sole proprietor must register a company with CIPC. Never invent a grant, successor agency, fee, tax threshold, programme, eligibility rule, or application requirement.'
       : '',
   ].filter(Boolean).join('\n');
 }
