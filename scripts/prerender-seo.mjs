@@ -1,18 +1,30 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'vite';
+import ts from 'typescript';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputRoot = path.join(projectRoot, 'dist');
-const vite = await createServer({
-  configFile: path.join(projectRoot, 'vite.config.ts'),
-  server: { middlewareMode: true },
-  appType: 'custom',
-});
 
-try {
-  const { getSeoMetadata, seoLandingPages, seoArticles, nonIndexableSeoRoutes } = await vite.ssrLoadModule('/src/lib/seo.ts');
+{
+  const seoSource = await readFile(path.join(projectRoot, 'src', 'lib', 'seo.ts'), 'utf8');
+  const { outputText, diagnostics = [] } = ts.transpileModule(seoSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+    reportDiagnostics: true,
+  });
+  const errors = diagnostics.filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
+  if (errors.length) {
+    throw new Error(ts.formatDiagnosticsWithColorAndContext(errors, {
+      getCurrentDirectory: () => projectRoot,
+      getCanonicalFileName: (fileName) => fileName,
+      getNewLine: () => '\n',
+    }));
+  }
+  const metadataModuleUrl = `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`;
+  const { getSeoMetadata, seoLandingPages, seoArticles, nonIndexableSeoRoutes } = await import(metadataModuleUrl);
   const baseHtml = await readFile(path.join(outputRoot, 'index.html'), 'utf8');
   const routes = [
     ...seoLandingPages.map((page) => page.path),
@@ -82,6 +94,4 @@ try {
   }
 
   console.log(`Pre-rendered ${new Set(routes).size} public SEO routes and ${Object.keys(nonIndexableSeoRoutes).length} noindex routes.`);
-} finally {
-  await vite.close();
 }
