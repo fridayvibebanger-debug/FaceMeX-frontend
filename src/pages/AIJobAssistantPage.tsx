@@ -112,8 +112,8 @@ import {
 } from '@/lib/workspaceLearningEngine';
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import {
+  createBusinessCalculationAnswer,
   buildWorkspaceQualityInstruction,
-  createDeliveryProfitAnswer,
 } from '@/lib/workspaceBusinessReasoning.js';
 import {
   createLinearFunctionExplanation,
@@ -6220,7 +6220,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       return;
     }
 
-    const deterministicBusinessAnswer = createDeliveryProfitAnswer(finalPrompt);
+    const deterministicBusinessAnswer = createBusinessCalculationAnswer(finalPrompt);
     if (deterministicBusinessAnswer) {
       setMessages((previous) => [
         ...previous,
@@ -6237,7 +6237,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       recordAIUse();
       trackWorkspaceResponse({
         intent,
-        source: 'verified_delivery_unit_economics',
+        source: 'deterministic_business_calculation',
         answer_length: deterministicBusinessAnswer.length,
       });
       setBusy(false);
@@ -6431,6 +6431,7 @@ FaceMeX intelligence rules:
 
 ${buildWorkspaceQualityInstruction([
   ...promptHistory.slice(-6).map((message) => message.content),
+  projectHistoryContext,
   finalPrompt,
 ].join('\n'))}
 ${mathematicsLearningGuidance}
