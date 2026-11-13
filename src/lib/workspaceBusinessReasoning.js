@@ -6,6 +6,12 @@ function requireFiniteNonNegative(value, name) {
   }
 }
 
+function requireFinite(value, name) {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${name} must be a finite number.`);
+  }
+}
+
 function roundToCents(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -95,6 +101,335 @@ export function calculateBreakEvenUnits(fixedCosts, pricePerUnit, variableCostPe
   return Math.ceil(fixedCosts / contributionPerUnit);
 }
 
+export function calculateBusinessScenario({
+  unitsSold,
+  pricePerUnit,
+  variableCostPerUnit,
+  operatingCosts,
+}) {
+  requireFiniteNonNegative(unitsSold, 'Units sold');
+  requireFiniteNonNegative(pricePerUnit, 'Price per unit');
+  requireFiniteNonNegative(variableCostPerUnit, 'Variable cost per unit');
+  if (operatingCosts !== undefined) {
+    if (!Array.isArray(operatingCosts)) throw new TypeError('Operating costs must be provided as an array.');
+    operatingCosts.forEach((cost) => requireFiniteNonNegative(cost, 'Operating cost'));
+  }
+
+  const revenue = calculateRevenue(pricePerUnit, unitsSold);
+  const variableCostTotal = roundToCents(variableCostPerUnit * unitsSold);
+  const contribution = roundToCents(revenue - variableCostTotal);
+  const operatingCostTotal = operatingCosts === undefined
+    ? null
+    : roundToCents(operatingCosts.reduce((total, cost) => total + cost, 0));
+  const netProfit = operatingCostTotal === null
+    ? null
+    : roundToCents(contribution - operatingCostTotal);
+
+  return {
+    revenue,
+    variableCostTotal,
+    contribution,
+    operatingCostTotal,
+    netProfit,
+    netMarginPercent: revenue > 0 && netProfit !== null
+      ? roundToCents((netProfit / revenue) * 100)
+      : null,
+    missingOperatingCosts: operatingCostTotal === null,
+  };
+}
+
+export function calculateCashFlow({ openingBalance, inflows, outflows }) {
+  requireFinite(openingBalance, 'Opening balance');
+  if (!Array.isArray(inflows) || !Array.isArray(outflows)) {
+    throw new TypeError('Cash inflows and outflows must be provided as arrays.');
+  }
+  inflows.forEach((amount) => requireFiniteNonNegative(amount, 'Cash inflow'));
+  outflows.forEach((amount) => requireFiniteNonNegative(amount, 'Cash outflow'));
+
+  const totalInflows = roundToCents(inflows.reduce((total, amount) => total + amount, 0));
+  const totalOutflows = roundToCents(outflows.reduce((total, amount) => total + amount, 0));
+  const netCashFlow = roundToCents(totalInflows - totalOutflows);
+
+  return {
+    openingBalance: roundToCents(openingBalance),
+    totalInflows,
+    totalOutflows,
+    netCashFlow,
+    closingBalance: roundToCents(openingBalance + netCashFlow),
+  };
+}
+
+export function calculateCustomerAcquisitionCost(marketingSpend, customersAcquired) {
+  requireFiniteNonNegative(marketingSpend, 'Marketing spend');
+  requireFiniteNonNegative(customersAcquired, 'Customers acquired');
+  if (!Number.isInteger(customersAcquired)) {
+    throw new RangeError('Customers acquired must be a whole number.');
+  }
+  return customersAcquired === 0 ? null : roundToCents(marketingSpend / customersAcquired);
+}
+
+export function calculateCustomerLifetimeValue({
+  averageOrderValue,
+  purchasesPerPeriod,
+  grossMarginPercent,
+  customerLifetimePeriods,
+}) {
+  requireFiniteNonNegative(averageOrderValue, 'Average order value');
+  requireFiniteNonNegative(purchasesPerPeriod, 'Purchases per period');
+  requireFiniteNonNegative(grossMarginPercent, 'Gross margin');
+  if (grossMarginPercent > 100) throw new RangeError('Gross margin must not exceed 100 percent.');
+  requireFiniteNonNegative(customerLifetimePeriods, 'Customer lifetime');
+  return roundToCents(
+    averageOrderValue *
+    purchasesPerPeriod *
+    (grossMarginPercent / 100) *
+    customerLifetimePeriods,
+  );
+}
+
+export function calculateReturnOnInvestment(totalReturn, investment) {
+  requireFiniteNonNegative(totalReturn, 'Total return');
+  requireFiniteNonNegative(investment, 'Investment');
+  return investment === 0
+    ? null
+    : roundToCents(((totalReturn - investment) / investment) * 100);
+}
+
+export function calculateLoanPayment(principal, annualRatePercent, termPayments, paymentsPerYear = 12) {
+  requireFiniteNonNegative(principal, 'Principal');
+  requireFiniteNonNegative(annualRatePercent, 'Annual rate');
+  if (!Number.isInteger(termPayments) || termPayments <= 0) {
+    throw new RangeError('Loan term must be a positive whole number of payments.');
+  }
+  if (!Number.isInteger(paymentsPerYear) || paymentsPerYear <= 0) {
+    throw new RangeError('Payments per year must be a positive integer.');
+  }
+
+  const periodicRate = annualRatePercent / 100 / paymentsPerYear;
+  if (periodicRate === 0) return roundToCents(principal / termPayments);
+
+  const growth = (1 + periodicRate) ** termPayments;
+  return roundToCents((principal * periodicRate * growth) / (growth - 1));
+}
+
+export function formatBusinessCurrency(amount, currency = 'ZAR', locale = 'en-US') {
+  requireFinite(amount, 'Amount');
+  if (!/^[A-Z]{3}$/.test(currency)) throw new RangeError('Currency must be a three-letter ISO 4217 code.');
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function extractLabeledAmount(text, labelPattern) {
+  const match = text.match(new RegExp(
+    `(?:${labelPattern})\\s*(?::|=|is|of)?\\s*(?:(\\b(?:ZAR|USD|EUR|GBP|CAD|AUD|NZD|JPY|CHF|INR|NGN|KES|BWP)\\b)\\s*|([R$€])\\s*)?(${MONEY_PATTERN})\\s*(%?)`,
+    'i',
+  ));
+  if (!match) return null;
+
+  const currencyMarker = (match[1] || match[2] || '').toUpperCase();
+  const currency = currencyMarker === 'R' ? 'ZAR'
+    : currencyMarker === '€' ? 'EUR'
+      : match[1] ? currencyMarker
+        : null;
+
+  return {
+    value: Number(match[3].replace(/,/g, '')),
+    currency,
+    currencySymbol: currencyMarker === '$' ? '$' : null,
+    isPercent: Boolean(match[4]),
+  };
+}
+
+function getPromptNumbers(text) {
+  return text.match(/(?:(?:ZAR|USD|EUR)\s*|[R$€]\s*)?\d[\d,]*(?:\.\d+)?%?/gi) || [];
+}
+
+function formatCalculatedAmount(amount, currency, currencySymbol) {
+  const formatted = currency
+    ? formatBusinessCurrency(amount, currency)
+    : new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(roundToCents(amount));
+  return currencySymbol ? `${currencySymbol}${formatted}` : formatted;
+}
+
+function getConsistentCurrency(values) {
+  const currencies = new Set(values.map((value) => value.currency || value.currencySymbol).filter(Boolean));
+  return currencies.size > 1
+    ? { valid: false, currency: null, currencySymbol: null }
+    : {
+      valid: true,
+      currency: values.find((value) => value.currency)?.currency || null,
+      currencySymbol: values.find((value) => value.currencySymbol)?.currencySymbol || null,
+    };
+}
+
+function hasDirectCalculationIntent(text, metricPattern) {
+  return /\b(?:calculate|work out|what is|find|how much)\b/i.test(text) &&
+    metricPattern.test(text);
+}
+
+export function createBusinessCalculationAnswer(prompt) {
+  const text = String(prompt || '');
+  const deliveryAnswer = createDeliveryProfitAnswer(text);
+  if (deliveryAnswer) return deliveryAnswer;
+
+  const cashFlowRequest = /\b(?:cash flow|cash position)\b/i.test(text) &&
+    hasDirectCalculationIntent(text, /\b(?:cash flow|cash position)\b/i);
+  if (cashFlowRequest) {
+    const openingBalance = extractLabeledAmount(text, 'opening balance|opening cash');
+    const inflows = extractLabeledAmount(text, 'total (?:cash )?inflows|inflows');
+    const outflows = extractLabeledAmount(text, 'total (?:cash )?outflows|outflows');
+    if (!openingBalance || !inflows || !outflows || getPromptNumbers(text).length !== 3) return null;
+    const currencyContext = getConsistentCurrency([openingBalance, inflows, outflows]);
+    if (!currencyContext.valid) return null;
+    const result = calculateCashFlow({
+      openingBalance: openingBalance.value,
+      inflows: [inflows.value],
+      outflows: [outflows.value],
+    });
+    const { currency, currencySymbol } = currencyContext;
+    return [
+      `Opening balance: ${formatCalculatedAmount(result.openingBalance, currency, currencySymbol)}`,
+      `Total inflows: ${formatCalculatedAmount(result.totalInflows, currency, currencySymbol)}`,
+      `Total outflows: ${formatCalculatedAmount(result.totalOutflows, currency, currencySymbol)}`,
+      `Net cash flow: ${formatCalculatedAmount(result.netCashFlow, currency, currencySymbol)}`,
+      `Closing balance: ${formatCalculatedAmount(result.closingBalance, currency, currencySymbol)}`,
+      'Cash flow is not the same as accounting profit.',
+    ].join('\n');
+  }
+
+  const acquisitionRequest = /\b(?:cac|customer acquisition cost)\b/i.test(text) &&
+    hasDirectCalculationIntent(text, /\b(?:cac|customer acquisition cost)\b/i);
+  if (acquisitionRequest) {
+    const spend = extractLabeledAmount(text, 'marketing spend|acquisition spend');
+    const customers = extractLabeledAmount(text, 'customers acquired|new customers|acquired customers');
+    if (!spend || !customers || getPromptNumbers(text).length !== 2 || !Number.isInteger(customers.value)) return null;
+    const result = calculateCustomerAcquisitionCost(spend.value, customers.value);
+    if (result === null) return null;
+    const { currency, currencySymbol } = getConsistentCurrency([spend]);
+    return [
+      `Customer acquisition cost (CAC): ${formatCalculatedAmount(result, currency, currencySymbol)} per customer`,
+      `Calculation: ${formatCalculatedAmount(spend.value, currency, currencySymbol)} ÷ ${customers.value} acquired customers.`,
+      'This uses only the stated marketing or acquisition spend; include other acquisition costs if they were excluded.',
+    ].join('\n');
+  }
+
+  const lifetimeValueRequest = /\b(?:ltv|customer lifetime value|lifetime value)\b/i.test(text) &&
+    hasDirectCalculationIntent(text, /\b(?:ltv|customer lifetime value|lifetime value)\b/i);
+  if (lifetimeValueRequest) {
+    const averageOrderValue = extractLabeledAmount(text, 'average order value');
+    const purchasesPerPeriod = extractLabeledAmount(text, 'purchases per period');
+    const grossMargin = extractLabeledAmount(text, 'gross margin');
+    const lifetimePeriods = extractLabeledAmount(text, 'customer lifetime periods|lifetime periods');
+    if (
+      !averageOrderValue ||
+      !purchasesPerPeriod ||
+      !grossMargin ||
+      !lifetimePeriods ||
+      !grossMargin.isPercent ||
+      getPromptNumbers(text).length !== 4
+    ) return null;
+    const currencyContext = getConsistentCurrency([averageOrderValue]);
+    if (!currencyContext.valid) return null;
+    const result = calculateCustomerLifetimeValue({
+      averageOrderValue: averageOrderValue.value,
+      purchasesPerPeriod: purchasesPerPeriod.value,
+      grossMarginPercent: grossMargin.value,
+      customerLifetimePeriods: lifetimePeriods.value,
+    });
+    const { currency, currencySymbol } = currencyContext;
+    return [
+      `Estimated gross-profit customer lifetime value: ${formatCalculatedAmount(result, currency, currencySymbol)}`,
+      `Calculation: ${formatCalculatedAmount(averageOrderValue.value, currency, currencySymbol)} average order value × ${purchasesPerPeriod.value} purchases per period × ${grossMargin.value}% gross margin × ${lifetimePeriods.value} periods.`,
+      'This simple estimate assumes the stated purchase frequency and lifetime remain constant; it does not discount future cash flows or model churn.',
+    ].join('\n');
+  }
+
+  const roiRequest = /\b(?:roi|return on investment)\b/i.test(text) &&
+    hasDirectCalculationIntent(text, /\b(?:roi|return on investment)\b/i);
+  if (roiRequest) {
+    const totalReturn = extractLabeledAmount(text, 'total return|return received');
+    const investment = extractLabeledAmount(text, 'initial investment|investment');
+    if (!totalReturn || !investment || getPromptNumbers(text).length !== 2 || investment.value === 0) return null;
+    const currencyContext = getConsistentCurrency([totalReturn, investment]);
+    if (!currencyContext.valid) return null;
+    const result = calculateReturnOnInvestment(totalReturn.value, investment.value);
+    const { currency, currencySymbol } = currencyContext;
+    return [
+      `Return on investment (ROI): ${result}%`,
+      `Calculation: (${formatCalculatedAmount(totalReturn.value, currency, currencySymbol)} total return − ${formatCalculatedAmount(investment.value, currency, currencySymbol)} investment) ÷ ${formatCalculatedAmount(investment.value, currency, currencySymbol)} × 100.`,
+      'This uses only the stated total return and investment; it excludes any taxes, fees, or additional costs not included in those figures.',
+    ].join('\n');
+  }
+
+  const loanRequest = /\b(?:loan payment|loan repayment|monthly repayment|debt repayment)\b/i.test(text) &&
+    hasDirectCalculationIntent(text, /\b(?:loan payment|loan repayment|monthly repayment|debt repayment)\b/i);
+  if (loanRequest) {
+    const principal = extractLabeledAmount(text, 'loan principal|principal');
+    const annualRate = extractLabeledAmount(text, 'annual interest rate|annual rate');
+    const term = extractLabeledAmount(text, 'term payments|term months|number of monthly payments');
+    if (
+      !principal ||
+      !annualRate ||
+      !term ||
+      !annualRate.isPercent ||
+      getPromptNumbers(text).length !== 3 ||
+      !Number.isInteger(term.value) ||
+      term.value <= 0
+    ) return null;
+    const currencyContext = getConsistentCurrency([principal]);
+    if (!currencyContext.valid) return null;
+    const result = calculateLoanPayment(principal.value, annualRate.value, term.value);
+    const { currency, currencySymbol } = currencyContext;
+    return [
+      `Estimated monthly payment: ${formatCalculatedAmount(result, currency, currencySymbol)}`,
+      `Calculation uses a principal of ${formatCalculatedAmount(principal.value, currency, currencySymbol)}, ${annualRate.value}% annual rate, and ${term.value} monthly payments.`,
+      'This assumes a fixed annual rate with monthly payments and excludes lender fees, insurance, taxes, and rate changes.',
+    ].join('\n');
+  }
+
+  const scenarioRequest = /\b(?:business scenario|scenario analysis|net profit|operating scenario)\b/i.test(text) &&
+    hasDirectCalculationIntent(text, /\b(?:business scenario|scenario analysis|net profit|operating scenario)\b/i);
+  if (scenarioRequest) {
+    const unitsSold = extractLabeledAmount(text, 'units sold');
+    const pricePerUnit = extractLabeledAmount(text, 'price per unit|selling price per unit');
+    const variableCostPerUnit = extractLabeledAmount(text, 'variable cost per unit');
+    const operatingCosts = extractLabeledAmount(text, 'operating costs|total operating costs');
+    if (
+      !unitsSold ||
+      !pricePerUnit ||
+      !variableCostPerUnit ||
+      !operatingCosts ||
+      getPromptNumbers(text).length !== 4
+    ) return null;
+    const currencyContext = getConsistentCurrency([pricePerUnit, variableCostPerUnit, operatingCosts]);
+    if (!currencyContext.valid) return null;
+    const result = calculateBusinessScenario({
+      unitsSold: unitsSold.value,
+      pricePerUnit: pricePerUnit.value,
+      variableCostPerUnit: variableCostPerUnit.value,
+      operatingCosts: [operatingCosts.value],
+    });
+    const { currency, currencySymbol } = currencyContext;
+    return [
+      `Revenue: ${formatCalculatedAmount(result.revenue, currency, currencySymbol)}`,
+      `Variable costs: ${formatCalculatedAmount(result.variableCostTotal, currency, currencySymbol)}`,
+      `Contribution before operating costs: ${formatCalculatedAmount(result.contribution, currency, currencySymbol)}`,
+      `Stated operating costs: ${formatCalculatedAmount(result.operatingCostTotal, currency, currencySymbol)}`,
+      `Net profit before taxes, financing, and other unstated costs: ${formatCalculatedAmount(result.netProfit, currency, currencySymbol)}`,
+      `Net margin before taxes, financing, and other unstated costs: ${result.netMarginPercent === null ? 'not defined because revenue is zero' : `${result.netMarginPercent}%`}`,
+    ].join('\n');
+  }
+
+  return null;
+}
+
 export function createDeliveryProfitAnswer(prompt) {
   const text = String(prompt || '');
   const revenue = extractNamedZarAmount(
@@ -145,14 +480,103 @@ export function createDeliveryProfitAnswer(prompt) {
 }
 
 const SOUTH_AFRICA_CONTEXT_PATTERN = /\b(?:south africa|south african|cipc|sars|popia|nyda|seda|sefa|department of small business development|dsbd|municipalit(?:y|ies)|zar|rand|rands)\b/i;
-const BUSINESS_CONTEXT_PATTERN = /\b(?:business|businesses|revenue|profit|margin|costs?|expenses?|pricing|commission|break[- ]even|unit economics|interest|tax|vat|customer acquisition|startup|cash flow|case stud(?:y|ies))\b/i;
+const BUSINESS_CONTEXT_PATTERN = /\b(?:business|businesses|revenue|profit|margin|costs?|expenses?|pricing|commission|break[- ]even|unit economics|interest|tax|vat|customer acquisition|startup|cash flow|case stud(?:y|ies)|market|competitor|sales|marketing|brand|inventory|supplier|operations?|staff|employee|human resources|funding|investor|pitch|business plan|proposal|automation|crm|scal(?:e|ing)|growth|retention|conversion|customer lifetime value|roi|return on investment|working capital|procurement|logistics|manufactur(?:e|ing)|e-commerce|software|consult(?:ing|ancy)|restaurant|mvp|minimum viable product)\b/i;
 const HIGH_RISK_FACT_PATTERN = /\b(?:law|legal|regulat(?:ion|ions|ory)|tax|taxation|sars|cipc|registration|grant|funding|eligib(?:le|ility)|application deadline|programme|program|government|payment gateway|processing fee|transaction fee|price|pricing|medical|medicine|health|safety|financial advice|interest rate|vat|popia|nyda|seda|sefa|municipalit(?:y|ies)|department of small business development|dsbd)\b/i;
+
+const BUSINESS_DOMAIN_RULES = [
+  { key: 'validation', pattern: /\b(?:idea|validate|validation|customer problem|market demand|mvp|minimum viable product|test assumptions?)\b/i },
+  { key: 'planning', pattern: /\b(?:business plan|business model|value proposition|revenue model|operating plan|roadmap|proposal)\b/i },
+  { key: 'financials', pattern: /\b(?:financial|revenue|profit|margin|cash flow|budget|forecast|break[- ]even|unit economics|working capital|customer acquisition cost|lifetime value|roi|loan|debt|equity dilution|pricing)\b/i },
+  { key: 'sales', pattern: /\b(?:sales?|customer acquisition|sales funnel|conversion|objection|retention|partnership|outreach|repeat purchase|first customers?)\b/i },
+  { key: 'marketing', pattern: /\b(?:marketing|brand|seo|social media|campaign|advertising|content calendar|email marketing|whatsapp marketing|referral|reputation)\b/i },
+  { key: 'operations', pattern: /\b(?:operations?|sop|standard operating procedure|inventory|supplier|procurement|logistics|quality control|customer support|business continuity)\b/i },
+  { key: 'people', pattern: /\b(?:human resources|workforce|job description|recruit(?:ment|ing)|onboarding|staff|employee|compensation|leadership|team structure)\b/i },
+  { key: 'compliance', pattern: /\b(?:legal|law|compliance|tax|registration|licen[cs]e|permit|contract|consumer protection|data privacy|intellectual property|employment regulation)\b/i },
+  { key: 'funding', pattern: /\b(?:funding|grant|investor|pitch deck|valuation|due diligence|funding application|capital raise)\b/i },
+  { key: 'market', pattern: /\b(?:market|competitor|competitive|swot|market gap|market trend|differentiation|industry research)\b/i },
+  { key: 'technology', pattern: /\b(?:technology|automation|crm|accounting system|inventory software|e-commerce|api integration|dashboard|workflow)\b/i },
+  { key: 'growth', pattern: /\b(?:scal(?:e|ing)|expan(?:d|sion)|new market|product line|franchis(?:e|ing)|international|growth strategy)\b/i },
+];
+
+const INDUSTRY_MODEL_GUIDANCE = [
+  {
+    key: 'delivery',
+    pattern: /\b(?:delivery|courier|dispatch|last[- ]mile|logistics)\b/i,
+    instruction: 'For delivery or logistics, adapt operations to dispatch, route density, driver capacity and cost, service coverage, and proof of delivery.',
+  },
+  {
+    key: 'manufacturing',
+    pattern: /\b(?:manufactur(?:e|er|ing)|factory|production)\b/i,
+    instruction: 'For manufacturing, account for raw materials, production capacity, machinery, quality control, stock, and distribution.',
+  },
+  {
+    key: 'ecommerce',
+    pattern: /\b(?:e[- ]commerce|online store|online shop)\b/i,
+    instruction: 'For e-commerce, account for inventory, orders, payments, fulfilment, returns, and customer acquisition.',
+  },
+  {
+    key: 'software',
+    pattern: /\b(?:software|saas|app|technology startup)\b/i,
+    instruction: 'For software, account for product development, user acquisition, activation, retention, infrastructure, and support.',
+  },
+  {
+    key: 'consulting',
+    pattern: /\b(?:consult(?:ing|ant|ancy)|professional services)\b/i,
+    instruction: 'For consulting or professional services, account for expertise, client acquisition, scoped delivery, utilisation, and repeat work.',
+  },
+  {
+    key: 'restaurant',
+    pattern: /\b(?:restaurant|cafe|café|food business|catering)\b/i,
+    instruction: 'For restaurants or food businesses, account for stock control, food safety, staff scheduling, waste, and customer service.',
+  },
+];
+
+export function classifyBusinessDomains(prompt = '') {
+  const text = String(prompt || '');
+  return BUSINESS_DOMAIN_RULES
+    .filter(({ pattern }) => pattern.test(text))
+    .map(({ key }) => key);
+}
+
+export function buildWorkspaceBusinessInstruction(prompt = '') {
+  const text = String(prompt || '');
+  const domains = classifyBusinessDomains(text);
+  if (!BUSINESS_CONTEXT_PATTERN.test(text) && domains.length === 0) return '';
+
+  const industryGuidance = INDUSTRY_MODEL_GUIDANCE
+    .filter(({ pattern }) => pattern.test(text))
+    .map(({ instruction }) => instruction);
+  const stage = /\b(?:scale|scaling|expand|expansion|new market|franchise|international)\b/i.test(text)
+    ? 'scaling or expansion'
+    : /\b(?:already operating|existing customers|current customers|my business|our business|we sell|we currently)\b/i.test(text)
+      ? 'operating'
+      : /\b(?:launch|starting|start a business|set up|opening|first customers)\b/i.test(text)
+        ? 'launch'
+        : /\b(?:idea|validate|test demand|mvp|minimum viable product)\b/i.test(text)
+          ? 'validation or ideation'
+          : '';
+
+  return [
+    `Business response focus: ${domains.length ? domains.join(', ') : 'identify the user’s actual objective before choosing an approach'}.`,
+    `Adapt recommendations to the stated business model, industry, stage${stage ? ` (the prompt suggests ${stage}; treat this as an inference, not a confirmed fact)` : ''}, country, budget, resources, audience, and objective. Do not assume missing details. If industry clues match, apply only the relevant guidance: ${industryGuidance.length ? industryGuidance.join(' ') : 'do not force an industry-specific template onto the business.'}`,
+    'Distinguish a promising idea from validated demand. Separate user-provided facts, research-backed findings, estimates, assumptions, and recommendations; never guarantee success or invent customers, competitors, market statistics, programmes, or results.',
+    'Make advice executable when useful: identify the lowest-cost immediate action, what requires money, what requires external approval, the responsible person, a measurable indicator, and the next review point. Match paid marketing or technology recommendations to the stated budget; include an organic or lower-cost alternative when relevant.',
+    'For substantial plans, keep customer, operating, staffing, pricing, and financial assumptions consistent across sections. Name material omissions instead of silently treating them as zero. Ask at most one focused question when missing information would materially change the recommendation; otherwise state a reasonable, clearly marked assumption and proceed.',
+    domains.includes('market')
+      ? 'For competitor and market analysis, distinguish sourced information from analysis and hypotheses. Without current sources, provide a research method or comparison template rather than invented market facts.'
+      : '',
+    domains.includes('compliance') || domains.includes('funding')
+      ? 'For legal, tax, compliance, and funding matters, provide general information rather than professional advice. Verify current jurisdiction-specific claims against the responsible official source when retrieval is available; otherwise say current details need confirmation and never invent requirements, fees, deadlines, eligibility, or approval.'
+      : '',
+  ].filter(Boolean).join('\n');
+}
 
 export function buildWorkspaceQualityInstruction(prompt = '') {
   const text = String(prompt || '');
   const businessContext = BUSINESS_CONTEXT_PATTERN.test(text);
   const southAfricaContext = SOUTH_AFRICA_CONTEXT_PATTERN.test(text);
   const highRiskContext = HIGH_RISK_FACT_PATTERN.test(text);
+  const businessInstruction = buildWorkspaceBusinessInstruction(text);
 
   return [
     'Before answering, silently check that you answered the actual request, followed its instructions, checked internal consistency and arithmetic, included important risks, and made the next step actionable. Do not reveal private chain-of-thought; give only concise reasoning, calculations and conclusions.',
@@ -162,10 +586,11 @@ export function buildWorkspaceQualityInstruction(prompt = '') {
       ? 'Apply stricter verification to current or high-impact claims about law, tax, registration, funding, eligibility, deadlines, financial recommendations, medical or safety information, prices, and payment-processing fees. If a trusted search or retrieval source is available, prefer the responsible official institution, check the source and its update/publication date, and cross-check material claims where practical. Cite or link only sources actually consulted. If no suitable source is available, clearly say current details are unverified and direct the user to the responsible official source before they act; do not guess amounts, thresholds, fees, rules, or eligibility.'
       : '',
     businessContext
-      ? 'For business and financial questions, use the stated currency and show a compact calculation when useful. Keep revenue distinct from profit. Include all stated relevant costs; distinguish gross profit from net profit and calculate each margin as profit divided by revenue. Never treat missing costs as zero: ask for essential missing amounts or label results explicitly as estimates or profit before the missing overheads. Check calculations independently before responding. Prefer practical options within the user’s stated budget and explain lower-cost alternatives.'
+      ? 'For business and financial questions, use the stated currency and show a compact calculation when useful. Keep revenue distinct from profit. Include all stated relevant costs; distinguish gross profit from net profit and calculate each margin as profit divided by revenue. Treat cash flow separately from accounting profit. CAC is acquisition spend divided by new customers; simple gross-profit LTV needs average order value, purchase frequency, gross margin, and customer lifetime, with those assumptions stated; ROI is (total return minus investment) divided by investment; loan payments require the rate, term, and payment frequency. Never treat missing costs as zero: ask for essential missing amounts or label results explicitly as estimates or profit before the missing overheads. Check calculations independently before responding. Do not convert currencies without a rate and date from a trustworthy source. Prefer practical options within the user’s stated budget and explain lower-cost alternatives.'
       : '',
     southAfricaContext
       ? 'For South African questions, do not assume the user is in South Africa unless the prompt supports it. Use rand when appropriate and distinguish local rules from other jurisdictions. Treat CIPC, SARS, NYDA, SEDA, SEFA or any successor, the Department of Small Business Development, and municipal programme information as current only when verified from the responsible official source. Distinguish a sole proprietor from a registered company; do not claim that a sole proprietor must register a company with CIPC. Never invent a grant, successor agency, fee, tax threshold, programme, eligibility rule, or application requirement.'
       : '',
+    businessInstruction,
   ].filter(Boolean).join('\n');
 }

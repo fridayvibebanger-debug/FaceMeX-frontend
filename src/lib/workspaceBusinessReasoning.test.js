@@ -2,13 +2,23 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   buildWorkspaceQualityInstruction,
+  buildWorkspaceBusinessInstruction,
+  calculateBusinessScenario,
+  calculateCashFlow,
+  calculateCustomerAcquisitionCost,
+  calculateCustomerLifetimeValue,
   calculateBreakEvenUnits,
   calculateBusinessProfit,
   calculateCompoundInterest,
+  calculateLoanPayment,
   calculatePercentage,
   calculateRevenue,
+  calculateReturnOnInvestment,
   calculateSimpleInterest,
+  classifyBusinessDomains,
+  createBusinessCalculationAnswer,
   createDeliveryProfitAnswer,
+  formatBusinessCurrency,
 } from './workspaceBusinessReasoning.js';
 
 test('calculates the delivery regression as revenue less driver and fuel costs', () => {
@@ -82,6 +92,146 @@ test('calculates interest, percentages and break-even units deterministically', 
   assert.throws(() => calculateBreakEvenUnits(1000, 30, 30), /must exceed variable cost/);
 });
 
+test('calculates reconciled operating scenarios and does not infer missing overheads', () => {
+  assert.deepEqual(calculateBusinessScenario({
+    unitsSold: 100,
+    pricePerUnit: 20,
+    variableCostPerUnit: 8,
+    operatingCosts: [500, 100],
+  }), {
+    revenue: 2000,
+    variableCostTotal: 800,
+    contribution: 1200,
+    operatingCostTotal: 600,
+    netProfit: 600,
+    netMarginPercent: 30,
+    missingOperatingCosts: false,
+  });
+  assert.deepEqual(calculateBusinessScenario({
+    unitsSold: 10,
+    pricePerUnit: 30,
+    variableCostPerUnit: 10,
+  }), {
+    revenue: 300,
+    variableCostTotal: 100,
+    contribution: 200,
+    operatingCostTotal: null,
+    netProfit: null,
+    netMarginPercent: null,
+    missingOperatingCosts: true,
+  });
+});
+
+test('calculates cash flow, customer economics, ROI, debt service, and currency formatting', () => {
+  assert.deepEqual(calculateCashFlow({
+    openingBalance: 1000,
+    inflows: [500, 200],
+    outflows: [300, 250],
+  }), {
+    openingBalance: 1000,
+    totalInflows: 700,
+    totalOutflows: 550,
+    netCashFlow: 150,
+    closingBalance: 1150,
+  });
+  assert.equal(calculateCustomerAcquisitionCost(6000, 120), 50);
+  assert.equal(calculateCustomerAcquisitionCost(6000, 0), null);
+  assert.equal(calculateCustomerLifetimeValue({
+    averageOrderValue: 100,
+    purchasesPerPeriod: 2,
+    grossMarginPercent: 60,
+    customerLifetimePeriods: 12,
+  }), 1440);
+  assert.throws(() => calculateCustomerLifetimeValue({
+    averageOrderValue: 100,
+    purchasesPerPeriod: 2,
+    grossMarginPercent: 101,
+    customerLifetimePeriods: 12,
+  }), /must not exceed 100 percent/);
+  assert.equal(calculateReturnOnInvestment(1200, 1000), 20);
+  assert.equal(calculateReturnOnInvestment(800, 1000), -20);
+  assert.equal(calculateReturnOnInvestment(100, 0), null);
+  assert.equal(calculateLoanPayment(1200, 0, 12), 100);
+  assert.equal(calculateLoanPayment(1200, 12, 12), 106.62);
+  assert.match(formatBusinessCurrency(1234.5, 'ZAR'), /ZAR/);
+  assert.match(formatBusinessCurrency(1234.5, 'USD'), /\$/);
+  assert.match(formatBusinessCurrency(1234.5, 'EUR'), /€/);
+  assert.throws(() => formatBusinessCurrency(10, 'US'), /three-letter ISO 4217/);
+});
+
+test('routes explicitly labeled financial inputs through deterministic calculations', () => {
+  const cashFlow = createBusinessCalculationAnswer(
+    'Calculate cash flow: opening balance R1000, total inflows R700, total outflows R550.',
+  );
+  assert.match(cashFlow, /Net cash flow: ZAR\s+150\.00/);
+  assert.match(cashFlow, /Closing balance: ZAR\s+1,150\.00/);
+  assert.match(cashFlow, /not the same as accounting profit/i);
+
+  const cac = createBusinessCalculationAnswer(
+    'Calculate CAC: marketing spend USD 6000, customers acquired 120.',
+  );
+  assert.match(cac, /Customer acquisition cost \(CAC\): \$50\.00 per customer/);
+  assert.match(cac, /6,000\.00 ÷ 120 acquired customers/);
+  const ambiguousDollarCAC = createBusinessCalculationAnswer(
+    'Calculate CAC: marketing spend $6000, customers acquired 120.',
+  );
+  assert.match(ambiguousDollarCAC, /Customer acquisition cost \(CAC\): \$50\.00 per customer/);
+  assert.doesNotMatch(ambiguousDollarCAC, /USD/);
+
+  const ltv = createBusinessCalculationAnswer(
+    'Calculate customer lifetime value: average order value EUR 100, purchases per period 2, gross margin 60%, customer lifetime periods 12.',
+  );
+  assert.match(ltv, /Estimated gross-profit customer lifetime value: €1,440\.00/);
+
+  const roi = createBusinessCalculationAnswer(
+    'Calculate ROI: total return R1200, initial investment R1000.',
+  );
+  assert.match(roi, /Return on investment \(ROI\): 20%/);
+
+  const repayment = createBusinessCalculationAnswer(
+    'Calculate monthly loan repayment: loan principal R1200, annual interest rate 12%, term months 12.',
+  );
+  assert.match(repayment, /Estimated monthly payment: ZAR\s+106\.62/);
+
+  const scenario = createBusinessCalculationAnswer(
+    'Calculate this business scenario net profit: units sold 100, price per unit R20, variable cost per unit R8, operating costs R600.',
+  );
+  assert.match(scenario, /Revenue: ZAR\s+2,000\.00/);
+  assert.match(scenario, /Contribution before operating costs: ZAR\s+1,200\.00/);
+  assert.match(scenario, /Net profit before taxes, financing, and other unstated costs: ZAR\s+600\.00/);
+});
+
+test('declines deterministic financial output when required inputs are absent or ambiguous', () => {
+  assert.equal(
+    createBusinessCalculationAnswer('Calculate CAC: marketing spend R6000.'),
+    null,
+  );
+  assert.equal(
+    createBusinessCalculationAnswer('Calculate ROI: total return R1200, investment R1000, plus fees R100.'),
+    null,
+  );
+  assert.equal(
+    createBusinessCalculationAnswer('Calculate loan repayment: principal R1200, annual rate 12%, term 12 months.'),
+    null,
+  );
+  assert.equal(
+    createBusinessCalculationAnswer('Calculate ROI: total return R1200, initial investment USD1000.'),
+    null,
+  );
+});
+
+test('business-plan guidance preserves evidence and reconciles assumptions across sections', () => {
+  const guidance = buildWorkspaceQualityInstruction(
+    'Create a business plan and investor proposal for a South African online store with a tight budget.',
+  );
+  assert.match(guidance, /customer, operating, staffing, pricing, and financial assumptions consistent across sections/i);
+  assert.match(guidance, /lowest-cost immediate action/i);
+  assert.match(guidance, /organic or lower-cost alternative/i);
+  assert.match(guidance, /research-backed findings, estimates, assumptions, and recommendations/i);
+  assert.match(guidance, /Never invent statistics/i);
+  assert.match(guidance, /do not convert currencies without a rate and date/i);
+});
+
 test('business guidance requires evidence, complete costs and a candid correction', () => {
   const guidance = buildWorkspaceQualityInstruction(
     'Should my South African business register with CIPC, and can you show profit from revenue and expenses?',
@@ -138,6 +288,55 @@ test('South African institution and funding claims require official-source check
   assert.match(guidance, /CIPC, SARS, NYDA, SEDA, SEFA or any successor/i);
   assert.match(guidance, /responsible official source/i);
   assert.match(guidance, /Never invent a grant, successor agency.*eligibility rule/i);
+});
+
+test('classifies all major business disciplines for task-specific guidance', () => {
+  const cases = [
+    ['validation', 'Validate demand for my business idea and test the MVP assumptions.'],
+    ['planning', 'Build a business plan and revenue model.'],
+    ['financials', 'Forecast cash flow, ROI, CAC, LTV and break-even.'],
+    ['sales', 'Write an outreach script and improve sales conversion.'],
+    ['marketing', 'Plan an organic social media campaign and content calendar.'],
+    ['operations', 'Create an inventory SOP and supplier procurement process.'],
+    ['people', 'Write a job description and onboarding plan for staff.'],
+    ['compliance', 'Check local tax, licensing and data privacy compliance.'],
+    ['funding', 'Prepare a funding application and investor pitch deck.'],
+    ['market', 'Compare competitors and identify market gaps.'],
+    ['technology', 'Choose CRM and workflow automation software.'],
+    ['growth', 'Plan scaling into a new market and expanding product lines.'],
+  ];
+
+  for (const [domain, prompt] of cases) {
+    assert.ok(classifyBusinessDomains(prompt).includes(domain), `${domain}: ${prompt}`);
+  }
+});
+
+test('adapts business guidance to industry, stage, budget, execution, and uncertainty', () => {
+  const guidance = buildWorkspaceBusinessInstruction(
+    'I am launching a delivery business. I have R500, need to validate demand and find first customers. Make a low-cost plan.',
+  );
+  assert.match(guidance, /Business response focus: validation, sales/);
+  assert.match(guidance, /delivery or logistics/i);
+  assert.match(guidance, /launch/i);
+  assert.match(guidance, /lowest-cost immediate action/i);
+  assert.match(guidance, /what requires money.*external approval/i);
+  assert.match(guidance, /Do not assume missing details/i);
+  assert.match(guidance, /Distinguish a promising idea from validated demand/i);
+  assert.match(guidance, /measurable indicator/i);
+  assert.doesNotMatch(buildWorkspaceBusinessInstruction('Explain photosynthesis.'), /Business response focus/);
+});
+
+test('tailors practical operating guidance to distinct business models', () => {
+  const cases = [
+    ['manufacturing', 'Plan a manufacturing business production and quality control workflow.'],
+    ['e-commerce', 'Create an e-commerce business order and fulfilment plan.'],
+    ['software', 'Help my software startup improve user retention.'],
+    ['consulting', 'Build a consulting business client delivery model.'],
+    ['restaurant', 'Create a restaurant business stock and staff scheduling process.'],
+  ];
+  for (const [industry, prompt] of cases) {
+    assert.match(buildWorkspaceBusinessInstruction(prompt), new RegExp(industry, 'i'));
+  }
 });
 
 test('fact-verification regression prompts cover requested risky claim categories', async (t) => {
