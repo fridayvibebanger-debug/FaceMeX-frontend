@@ -44,6 +44,7 @@ import { api } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 import { getDocument, saveDocument, type PersistedDocument } from '@/lib/documents';
 import { parseMarkdownTable, renderMarkdownToEditorHtml } from '@/lib/documentMarkdown';
+import { buildWorkspaceQualityInstruction } from '@/lib/workspaceBusinessReasoning.js';
 import { useUserStore } from '@/store/userStore';
 import SensitiveContentShield from '@/components/safety/SensitiveContentShield';
 import EditorToolbar from './EditorToolbar';
@@ -2110,6 +2111,13 @@ export default function DocumentStudio({
                 : `Apply the user's requested changes to one existing section of this ${kind}. Return only a JSON object with string properties targetHeading (the exact text of one existing section heading, copied exactly) and replacementBody (only that section's new body in Markdown, without repeating its heading).${profileOutput} Do not return the whole document and do not change other sections. If no single relevant existing heading can be identified, return an empty targetHeading. Preserve all facts and never invent qualifications, skills, experience, dates, contact details, or achievements. User request: ${userQuestion}`;
           })()
           : `Answer the user's document-writing question in a clear, conversational, helpful style. Use short paragraphs and Markdown headings or bullets when they improve readability. Never invent personal facts. Question: ${userQuestion}`;
+    const businessDocumentGuidance = kind === 'business-plan' || kind === 'proposal' || kind === 'presentation'
+      ? buildWorkspaceQualityInstruction([
+        `Business document type: ${kind}`,
+        userQuestion,
+        draftDocumentText,
+      ].join('\n'))
+      : '';
 
     if (mode === 'edit' || mode === 'draft') trackDocumentEvent('edit', 'started');
     setCoachBusy(true);
@@ -2121,7 +2129,7 @@ export default function DocumentStudio({
       const response = await api.postViaSameOriginProxy('/api/ai/workspace', {
         messages: [{
           role: 'user',
-          content: `${instruction}${coachImage ? `\n\nThe user attached an image named "${coachImage.name}". Use it as user-provided context for this request, and do not infer facts that are not visible or clearly supported.` : ''}\n\nDocument type: ${kind}\nSelected template: ${selectedTemplate ? `${selectedTemplate.name} — ${selectedTemplate.description}` : 'Blank or imported document'}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(userDetails)}`,
+          content: `${instruction}${businessDocumentGuidance ? `\n\nBusiness document quality controls:\n${businessDocumentGuidance}` : ''}${coachImage ? `\n\nThe user attached an image named "${coachImage.name}". Use it as user-provided context for this request, and do not infer facts that are not visible or clearly supported.` : ''}\n\nDocument type: ${kind}\nSelected template: ${selectedTemplate ? `${selectedTemplate.name} — ${selectedTemplate.description}` : 'Blank or imported document'}\nDocument content:\n${editor?.getText() || content}\n\nUser-provided details:\n${JSON.stringify(userDetails)}`,
         }],
         intent: 'document_analysis',
         source: 'facemex-document-coach',
