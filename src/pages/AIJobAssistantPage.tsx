@@ -2690,6 +2690,31 @@ function WorkspacePracticeCard({
   );
 }
 
+function WorkspaceInteractiveQuestionPreview({ form }: { form: WorkspaceInteractiveForm }) {
+  return (
+    <section className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-[#101010] px-4 py-4 sm:px-5">
+      {form.title && <h3 className="mb-4 text-base font-semibold text-white">{form.title}</h3>}
+      <div className="divide-y divide-white/10">
+        {form.questions.map((item, index) => (
+          <section key={`${item.question}-${index}`} className="py-4 first:pt-0 last:pb-0">
+            <h4 className="text-sm font-medium leading-6 text-white/90">{item.question}</h4>
+            {item.type === 'text' ? (
+              <p className="mt-2 text-sm text-white/55">Text answer requested</p>
+            ) : (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-white/70 marker:text-white/40">
+                {item.options.map((option) => <li key={option}>{option}</li>)}
+              </ul>
+            )}
+          </section>
+        ))}
+      </div>
+      <p className="mt-4 border-t border-white/10 pt-3 text-xs text-white/50">
+        Open this response in a conversation to submit answers.
+      </p>
+    </section>
+  );
+}
+
 function getResponseSectionIcon(name: string) {
   const icons = {
     book: BookOpen,
@@ -3580,7 +3605,7 @@ function ChatGPTStyleText({
   visualReference?: ReactNode;
   sourcePrompt?: string;
   onPracticeAttempt?: (question: string, answer: string) => void;
-  onInteractiveSubmit: (answers: Array<{ question: string; answer: string }>) => void;
+  onInteractiveSubmit?: (answers: Array<{ question: string; answer: string }>) => void;
   disabled?: boolean;
 }) {
   const safeText = normalizeBrokenMarkdownLinks(normalizeWorkspaceAnswerForDisplay(text, sourcePrompt));
@@ -3683,14 +3708,17 @@ function ChatGPTStyleText({
       }
       if (block.language.toLowerCase() === 'interactive') {
         const form = parseWorkspaceInteractiveForm(block.text);
-        return form
+        if (!form) {
+          return <MarkdownCodeBlock key={`interactive-fallback-${index}`} code={block.text} language="interactive form data" />;
+        }
+        return onInteractiveSubmit
           ? <WorkspaceInteractiveQuestionCard
               key={`interactive-${index}`}
               form={form}
               onSubmit={onInteractiveSubmit}
               disabled={disabled}
             />
-          : <MarkdownCodeBlock key={`interactive-fallback-${index}`} code={block.text} language="interactive form data" />;
+          : <WorkspaceInteractiveQuestionPreview key={`interactive-preview-${index}`} form={form} />;
       }
       if (block.language.toLowerCase() === 'sections') {
         const response = parseWorkspaceSections(block.text);
