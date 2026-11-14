@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
-import { ArrowUp, FileText, Loader2, Maximize2, Mic, Plus, X } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
+import { ArrowUp, Check, ChevronLeft, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +11,15 @@ export type ComposerAttachment = {
   previewUrl?: string;
 };
 
+export type ComposerMenuOption = {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  onSelect: () => void;
+};
+
+export type ComposerMode = 'student' | 'teacher' | 'career';
+
 type UniversalComposerProps = {
   value: string;
   onChange: (value: string) => void;
@@ -21,7 +30,9 @@ type UniversalComposerProps = {
   onClearAttachments?: () => void;
   onPickAttachments?: () => void;
   attachmentPicker?: ReactNode;
-  leadingControl?: ReactNode;
+  menuOptions?: ComposerMenuOption[];
+  selectedMode?: ComposerMode | null;
+  onSelectMode?: (mode: ComposerMode) => void;
   onVoiceToggle?: () => void;
   voiceListening?: boolean;
   busy?: boolean;
@@ -42,7 +53,9 @@ export default function UniversalComposer({
   onClearAttachments,
   onPickAttachments,
   attachmentPicker,
-  leadingControl,
+  menuOptions = [],
+  selectedMode = null,
+  onSelectMode,
   onVoiceToggle,
   voiceListening = false,
   busy = false,
@@ -53,15 +66,18 @@ export default function UniversalComposer({
   onClick,
 }: UniversalComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [modeOpen, setModeOpen] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
   const isLight = tone === 'light';
 
-  const setRefs = (element: HTMLTextAreaElement | null) => {
+  const setRefs = useCallback((element: HTMLTextAreaElement | null) => {
     inputRef.current = element;
     if (textareaRef) textareaRef.current = element;
-  };
+  }, [textareaRef]);
 
   useLayoutEffect(() => {
     const textarea = inputRef.current;
@@ -73,7 +89,7 @@ export default function UniversalComposer({
     textarea.style.height = `${nextHeight}px`;
     textarea.style.maxHeight = `${maxHeight}px`;
     textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
-  }, [value]);
+  }, [keyboardInset, value]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -89,6 +105,28 @@ export default function UniversalComposer({
       viewport.removeEventListener('scroll', updateKeyboardInset);
     };
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) {
+        setMenuOpen(false);
+        setModeOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        setModeOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [menuOpen]);
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (
@@ -110,7 +148,7 @@ export default function UniversalComposer({
 
   return (
     <div
-      className="mx-auto w-full max-w-3xl lg:max-w-[840px]"
+      className="relative mx-auto w-full max-w-3xl lg:max-w-[840px]"
       style={keyboardInset ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
     >
       {attachments.length > 0 && (
@@ -118,7 +156,9 @@ export default function UniversalComposer({
           {attachments.map((attachment) => (
             <div
               key={attachment.id}
-              className="relative flex min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-white/10 bg-[#202020] p-2"
+              className={`relative flex min-w-0 items-center gap-2 overflow-hidden rounded-xl border p-2 ${
+                isLight ? 'border-black/10 bg-white text-slate-900' : 'border-white/10 bg-[#202020] text-white'
+              }`}
             >
               {attachment.previewUrl ? (
                 <img
@@ -127,17 +167,21 @@ export default function UniversalComposer({
                   className="h-10 w-10 shrink-0 rounded-lg object-cover"
                 />
               ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/60">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                  isLight ? 'bg-slate-100 text-slate-600' : 'bg-white/[0.06] text-white/60'
+                }`}>
                   <FileText className="h-4 w-4" aria-hidden="true" />
                 </span>
               )}
-              <span className="min-w-0 flex-1 truncate text-xs text-white/75">{attachment.name}</span>
+              <span className={`min-w-0 flex-1 truncate text-xs ${isLight ? 'text-slate-700' : 'text-white/75'}`}>{attachment.name}</span>
               {onRemoveAttachment && (
                 <button
                   type="button"
                   onClick={() => onRemoveAttachment(attachment.id)}
                   aria-label={`Remove ${attachment.name}`}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                    isLight ? 'text-slate-500 hover:bg-black/5 hover:text-slate-900' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                  }`}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -151,18 +195,144 @@ export default function UniversalComposer({
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
         <div className="flex min-h-11 items-end gap-1.5 sm:gap-2">
-          {leadingControl}
-          {onPickAttachments && (
-            <button
-              type="button"
-              onClick={onPickAttachments}
-              aria-label="Add an image or document"
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
-                isLight ? 'text-slate-600 hover:bg-black/5 hover:text-slate-900' : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <Plus className="h-5 w-5" />
-            </button>
+          {(onPickAttachments || menuOptions.length > 0) && (
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (menuOptions.length > 0) {
+                    setMenuOpen((open) => !open);
+                    setModeOpen(false);
+                  } else {
+                    onPickAttachments?.();
+                  }
+                }}
+                aria-label="Add attachments and tools"
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                  isLight ? 'text-slate-600 hover:bg-black/5 hover:text-slate-900' : 'text-white/70 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+              {menuOpen && (
+                <div
+                  className={`absolute bottom-full left-0 z-50 mb-3 w-[min(19rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border p-2 shadow-2xl ${
+                    isLight ? 'border-slate-200 bg-white text-slate-900' : 'border-white/10 bg-[#242424] text-white'
+                  }`}
+                  role="menu"
+                  aria-label={modeOpen ? 'Choose response mode' : 'Attachments and tools'}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]'));
+                    if (!items.length) return;
+                    event.preventDefault();
+                    const currentIndex = items.findIndex((item) => item === document.activeElement);
+                    const offset = event.key === 'ArrowDown' ? 1 : -1;
+                    const nextIndex = currentIndex < 0
+                      ? event.key === 'ArrowDown' ? 0 : items.length - 1
+                      : (currentIndex + offset + items.length) % items.length;
+                    items[nextIndex].focus();
+                  }}
+                >
+                  {modeOpen ? (
+                    <div className="p-1">
+                      <div className="flex items-center gap-2 px-2 pb-2">
+                        <button
+                          type="button"
+                          onClick={() => setModeOpen(false)}
+                          aria-label="Back to attachments and tools"
+                          className={`flex h-9 w-9 items-center justify-center rounded-full ${
+                            isLight ? 'hover:bg-slate-100' : 'hover:bg-white/10'
+                          }`}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <div>
+                          <p className="text-sm font-semibold">Choose a mode</p>
+                          <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-white/50'}`}>
+                            Tailor how FaceMeX explains and advises.
+                          </p>
+                        </div>
+                      </div>
+                      {([
+                        ['student', 'Student', 'Clear explanations and study support.'],
+                        ['teacher', 'Teacher', 'Teaching, lesson planning, and classroom support.'],
+                        ['career', 'Career', 'Professional guidance and practical next steps.'],
+                      ] as const).map(([id, label, description]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selectedMode === id}
+                          onClick={() => {
+                            onSelectMode?.(id);
+                            setMenuOpen(false);
+                            setModeOpen(false);
+                          }}
+                          className={`flex min-h-14 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${
+                            isLight ? 'hover:bg-slate-100' : 'hover:bg-white/[0.08]'
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-medium">{label}</span>
+                            <span className={`mt-0.5 block text-xs ${isLight ? 'text-slate-500' : 'text-white/50'}`}>{description}</span>
+                          </span>
+                          {selectedMode === id && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      {menuOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            option.onSelect();
+                          }}
+                          className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition ${
+                            isLight ? 'hover:bg-slate-100' : 'hover:bg-white/[0.08]'
+                          }`}
+                        >
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                            isLight ? 'bg-slate-100 text-slate-700' : 'bg-white/10 text-white/85'
+                          }`}>
+                            {option.icon}
+                          </span>
+                          {option.label}
+                        </button>
+                      ))}
+                      {onSelectMode && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => setModeOpen(true)}
+                          className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition ${
+                            isLight ? 'hover:bg-slate-100' : 'hover:bg-white/[0.08]'
+                          }`}
+                        >
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                            isLight ? 'bg-slate-100 text-slate-700' : 'bg-white/10 text-white/85'
+                          }`}>
+                            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                          <span className="min-w-0 flex-1">Mode</span>
+                          {selectedMode && (
+                            <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-white/50'}`}>
+                              {selectedMode.charAt(0).toUpperCase() + selectedMode.slice(1)}
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           <Textarea
@@ -220,7 +390,7 @@ export default function UniversalComposer({
             size="icon"
             onClick={submit}
             disabled={busy || !canSend}
-            aria-label="Send to FaceMeX"
+            aria-label="Send message"
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed ${
               isLight
                 ? 'bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-300 disabled:text-white/70'
@@ -232,10 +402,14 @@ export default function UniversalComposer({
         </div>
 
         {attachments.length > 0 && (
-          <div className="mt-1 flex items-center justify-between px-2 text-[11px] text-white/45">
+          <div className={`mt-1 flex items-center justify-between px-2 text-[11px] ${isLight ? 'text-slate-500' : 'text-white/45'}`}>
             <span>{attachments.length} attachment{attachments.length === 1 ? '' : 's'} ready</span>
             {onClearAttachments && (
-              <button type="button" onClick={onClearAttachments} className="min-h-8 px-2 font-medium text-white/65 hover:text-white">
+              <button
+                type="button"
+                onClick={onClearAttachments}
+                className={`min-h-8 px-2 font-medium ${isLight ? 'text-slate-600 hover:text-slate-900' : 'text-white/65 hover:text-white'}`}
+              >
                 Remove all
               </button>
             )}
