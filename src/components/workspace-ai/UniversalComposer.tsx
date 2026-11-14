@@ -191,10 +191,10 @@ export default function UniversalComposer({
         </div>
       )}
 
-      <div className={`fm-universal-composer-card rounded-[32px] border px-2 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 ${
+      <div className={`fm-universal-composer-card box-border w-full rounded-[999px] border px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 ${
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
-        <div className="flex min-h-11 items-center gap-1 sm:gap-1.5">
+        <div className="flex min-h-10 w-full min-w-0 flex-row items-center gap-1 sm:min-h-11 sm:gap-1.5">
           {(onPickAttachments || menuOptions.length > 0) && (
             <div className="relative" ref={menuRef}>
               <button
@@ -210,7 +210,7 @@ export default function UniversalComposer({
                 aria-label="Add attachments and tools"
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
                   isLight ? 'text-slate-600 hover:bg-black/5 hover:text-slate-900' : 'text-white/70 hover:bg-white/10 hover:text-white'
                 }`}
               >
@@ -346,11 +346,11 @@ export default function UniversalComposer({
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               aria-label="Message FaceMeX"
-              className={`min-h-10 min-w-0 w-full resize-none border-0 bg-transparent py-2.5 pl-1 pr-9 text-[15px] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+              className={`min-h-10 min-w-0 w-full resize-none border-0 bg-transparent py-2 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:min-h-11 ${
                 isLight
                   ? 'text-slate-800 placeholder:text-slate-400'
                   : 'text-white/90 placeholder:text-white/45'
-              }`}
+              } ${value.trim() ? 'pr-9' : 'pr-1'}`}
             />
             {value.trim() && (
               <button
@@ -376,7 +376,7 @@ export default function UniversalComposer({
               aria-label={voiceListening ? 'Stop voice input' : 'Start voice input'}
               aria-pressed={voiceListening}
               title={voiceListening ? 'Listening' : 'Voice input'}
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
                 voiceListening
                   ? 'bg-red-500/15 text-red-500'
                   : isLight
@@ -394,7 +394,7 @@ export default function UniversalComposer({
             onClick={submit}
             disabled={busy || !canSend}
             aria-label="Send message"
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed ${
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
               isLight
                 ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
                 : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
