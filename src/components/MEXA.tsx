@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { ArrowUp, Mic, Briefcase, GraduationCap, Building2, MonitorUp, Sparkles } from "lucide-react";
+import { Mic, Briefcase, GraduationCap, Building2, MonitorUp, Sparkles } from "lucide-react";
 import UniversalComposer from "@/components/workspace-ai/UniversalComposer";
 
 type AssistantStatus = "idle" | "listening" | "thinking" | "speaking";
@@ -571,7 +571,7 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                         busy={isBusy}
                         enterToSend={false}
                         tone="light"
-                        placeholder="Message MEXA..."
+                        placeholder="Ask FaceMeX anything..."
                       />
                     </div>
                   
@@ -832,80 +832,80 @@ export default function MEXA({ embedded = false }: MEXAProps) {
               </div>
             </div>
 
-            {activeModuleConfig && (
-              <motion.div
-                className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-[6px]"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
-              >
-                <motion.div
-                  className="w-full max-w-xl rounded-[28px] border border-white/10 bg-slate-950/88 px-5 py-6 text-center shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
-                  initial={{ opacity: 0, scale: 0.985, y: 8 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.985, y: 8 }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
-                >
-                  <div className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_14px_36px_rgba(0,0,0,0.3)]">
-                    <span className="text-[26px] text-cyan-300">✦</span>
-                  </div>
-
-                  <p className="mt-3 text-[10px] uppercase tracking-[0.3em] text-slate-400">MEXA✦</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-white">{activeModuleConfig.label}</h2>
-
-                  <div className="mt-4 rounded-[20px] border border-white/10 bg-white/5 px-4 py-4">
-                    <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Listening...</p>
-                    <p className="mt-2 text-base font-medium text-white">{activeModuleConfig.prompt}</p>
-                  </div>
-
-                  {activeModuleConfig.label === "Workspace" ? (
-                    <div className="mt-4 grid gap-2 text-left sm:grid-cols-2">
-                      {workspaceTools.map((tool) => (
-                        <button
-                          key={tool}
-                          type="button"
-                          onClick={() => setDraft(tool)}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-slate-200 transition hover:bg-white/10"
-                        >
-                          • {tool}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid gap-2 text-left sm:grid-cols-2">
-                      {activeModuleConfig.suggestions.map((suggestion) => (
-                        <div
-                          key={suggestion}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-200"
-                        >
-                          • {suggestion}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex items-center justify-center">
-                    <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-cyan-500/15 ring-1 ring-cyan-300/40 shadow-[0_0_40px_rgba(34,211,238,0.24)]">
-                      <div className="absolute h-[82px] w-[82px] rounded-full border border-cyan-300/25 animate-pulse" />
-                      <Mic size={28} className="relative z-10 text-cyan-200" />
-                    </div>
-                  </div>
-
-                  <p className="mt-3 text-sm text-slate-300">Tap or say “Hey MEXA”</p>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveModule(null)}
-                    className="mt-5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-medium text-white transition hover:bg-white/10"
-                  >
-                    Close
-                  </button>
-                </motion.div>
-              </motion.div>
-            )}
           </main>
         </div>
+      )}
+      {activeModuleConfig && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-[6px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+        >
+          <motion.div
+            className="w-full max-w-xl rounded-[28px] border border-white/10 bg-slate-950/88 px-5 py-6 text-center shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
+            initial={{ opacity: 0, scale: 0.985, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.985, y: 8 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            <div className="mx-auto flex h-[64px] w-[64px] items-center justify-center rounded-full bg-gradient-to-br from-[#081C38] via-[#0B2247] to-[#071322] shadow-[0_14px_36px_rgba(0,0,0,0.3)]">
+              <span className="text-[26px] text-cyan-300">✦</span>
+            </div>
+
+            <p className="mt-3 text-[10px] uppercase tracking-[0.3em] text-slate-400">MEXA✦</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">{activeModuleConfig.label}</h2>
+
+            <div className="mt-4 rounded-[20px] border border-white/10 bg-white/5 px-4 py-4">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Listening...</p>
+              <p className="mt-2 text-base font-medium text-white">{activeModuleConfig.prompt}</p>
+            </div>
+
+            {activeModuleConfig.label === "Workspace" ? (
+              <div className="mt-4 grid gap-2 text-left sm:grid-cols-2">
+                {workspaceTools.map((tool) => (
+                  <button
+                    key={tool}
+                    type="button"
+                    onClick={() => setDraft(tool)}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-[11px] text-slate-200 transition hover:bg-white/10"
+                  >
+                    • {tool}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-2 text-left sm:grid-cols-2">
+                {activeModuleConfig.suggestions.map((suggestion) => (
+                  <div
+                    key={suggestion}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-200"
+                  >
+                    • {suggestion}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center justify-center">
+              <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-cyan-500/15 ring-1 ring-cyan-300/40 shadow-[0_0_40px_rgba(34,211,238,0.24)]">
+                <div className="absolute h-[82px] w-[82px] rounded-full border border-cyan-300/25 animate-pulse" />
+                <Mic size={28} className="relative z-10 text-cyan-200" />
+              </div>
+            </div>
+
+            <p className="mt-3 text-sm text-slate-300">Tap or say “Hey MEXA”</p>
+
+            <button
+              type="button"
+              onClick={() => setActiveModule(null)}
+              className="mt-5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-medium text-white transition hover:bg-white/10"
+            >
+              Close
+            </button>
+          </motion.div>
+        </motion.div>
       )}
     </>
   );
