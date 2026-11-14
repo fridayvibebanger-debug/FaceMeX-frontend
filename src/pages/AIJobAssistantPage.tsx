@@ -9,6 +9,7 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  Camera,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -48,7 +49,10 @@ import {
 
 import { Button } from '@/components/ui/button';
 import WorkspaceSmartboard from '@/components/WorkspaceSmartboard';
-import UniversalComposer from '@/components/workspace-ai/UniversalComposer';
+import UniversalComposer, {
+  type ComposerMenuOption,
+  type ComposerMode,
+} from '@/components/workspace-ai/UniversalComposer';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
@@ -2304,12 +2308,21 @@ function resizeImageDataUrl(dataUrl: string, maxWidth = 1280, quality = 0.82) {
 
 async function imageFileToWorkspaceImage(file: File): Promise<WorkspaceImage> {
   const raw = await readFileAsDataUrl(file);
-  const dataUrl = await resizeImageDataUrl(raw);
+  const extension = file.name.toLowerCase().split('.').pop();
+  const detectedType = file.type || ({
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    txt: 'text/plain',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }[extension || ''] || 'image/jpeg');
+  const isImage = detectedType.startsWith('image/');
+  const dataUrl = isImage ? await resizeImageDataUrl(raw) : raw;
 
   return {
     id: safeId(),
     name: file.name || 'image',
-    type: file.type || 'image/jpeg',
+    type: detectedType,
     size: file.size,
     dataUrl,
   };
@@ -4081,6 +4094,8 @@ export default function AIJobAssistantPage() {
   const location = useLocation();
   const { projectId: routeProjectId } = useParams<{ projectId?: string }>();
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -4162,11 +4177,8 @@ const [developerPlan, setDeveloperPlan] = useState<
     jobs: [] as LocalVerifiedJob[],
   });
   const [watchPanelOpen, setWatchPanelOpen] = useState(false);
-  const [mexaMode, setMexaMode] = useState<
-  "auto" | "study" | "career" | "business" | "research" | "creative" | "coding"
->("auto");
-
-const [modeMenuOpen, setModeMenuOpen] = useState(false);
+    const [responseMode, setResponseMode] = useState<ComposerMode | null>(null);
+    const [smartboardOpen, setSmartboardOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projectFilter, setProjectFilter] = useState<'all' | 'created'>('all');
@@ -4928,9 +4940,32 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     return `No clear local ${searchLabel} found ${areaLabel}`;
   };
 
-  const handlePickImages = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
+  const handlePickAttachments = async (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || []);
     event.currentTarget.value = '';
+
+    const supportedDocument =
+      /\.(pdf|doc|docx|txt|xlsx)$/i;
+    const supportedMimeTypes = new Set([
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ]);
+    const files = selectedFiles.filter((file) =>
+      file.type.startsWith('image/') ||
+      supportedMimeTypes.has(file.type) ||
+      supportedDocument.test(file.name)
+    );
+
+    if (files.length !== selectedFiles.length) {
+      toast({
+        title: 'Unsupported file',
+        description: 'Attach images or PDF, DOC, DOCX, TXT, or XLSX documents.',
+        variant: 'destructive',
+      });
+    }
 
     if (!files.length) return;
 
@@ -4938,8 +4973,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
     if (remaining <= 0) {
       toast({
-        title: 'Image limit reached',
-        description: `You can upload up to ${MAX_WORKSPACE_IMAGES} images.`,
+        title: 'Attachment limit reached',
+        description: `You can upload up to ${MAX_WORKSPACE_IMAGES} attachments.`,
         variant: 'destructive',
       });
       return;
@@ -4950,8 +4985,8 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
     if (tooLarge) {
       toast({
-        title: 'Image too large',
-        description: `Each image must be under ${MAX_IMAGE_SIZE_MB}MB.`,
+        title: 'Attachment too large',
+        description: `Each image or PDF must be under ${MAX_IMAGE_SIZE_MB}MB.`,
         variant: 'destructive',
       });
       return;
@@ -4961,20 +4996,23 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       const converted = await Promise.all(filesToUse.map(imageFileToWorkspaceImage));
       setSelectedImages((prev) => [...prev, ...converted].slice(0, MAX_WORKSPACE_IMAGES));
 
-      trackUpload({
-        uploadType: 'image',
-        count: converted.length,
-        metadata: {
-          feature: 'FaceMeX Career Workspace',
-          action: 'workspace_images_selected',
-        },
-      });
+      const imageCount = converted.filter((file) => file.type.startsWith('image/')).length;
+      if (imageCount) {
+        trackUpload({
+          uploadType: 'image',
+          count: imageCount,
+          metadata: {
+            feature: 'FaceMeX Career Workspace',
+            action: 'workspace_images_selected',
+          },
+        });
+      }
     } catch (error: any) {
-      trackError('workspace_image_select_failed', error?.message || 'Could not select image.');
+      trackError('workspace_attachment_select_failed', error?.message || 'Could not select attachment.');
 
       toast({
-        title: 'Image failed',
-        description: 'Could not prepare the image. Try another screenshot.',
+        title: 'Attachment failed',
+        description: 'Could not prepare the selected file. Try another image or PDF.',
         variant: 'destructive',
       });
     }
@@ -6054,14 +6092,18 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
   ): Promise<string | undefined> => {
     const cleanPrompt = clean(overridePrompt !== undefined ? overridePrompt : prompt);
     const attachedImages = options?.images ?? selectedImages;
-    const hasImages = attachedImages.length > 0;
+    const hasAttachments = attachedImages.length > 0;
+    const imageCount = attachedImages.filter((file) => file.type.startsWith('image/')).length;
+    const hasImages = imageCount > 0;
     const promptHistory = options?.contextMessages ?? messages;
 
-    if (!cleanPrompt && !hasImages) return;
+    if (!cleanPrompt && !hasAttachments) return;
 
     const finalPrompt =
       cleanPrompt ||
-      'Please analyse these images and tell me what they show, what I should check, and what action I should take.';
+      (hasImages
+        ? 'Please analyse these images and tell me what they show, what I should check, and what action I should take.'
+        : 'Please analyse the attached document and tell me what it contains, what I should check, and what action I should take.');
 
     if (activeProject && !activeProjectConversationId) {
       try {
@@ -6101,7 +6143,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       ? `${projectPromptPrefix}\n\n${finalPrompt}`
       : finalPrompt;
 
-    const intent = detectIntent(finalPrompt, hasImages);
+    const intent = detectIntent(finalPrompt, hasAttachments);
     const trimmedPrompt = finalPrompt.trim();
     const isLearningFollowUp =
       /^(?:(?:why|how|what|can you explain|please explain|explain)\b.*\b(?:that|it|this|those|these|step|example|method)\b|make it (?:simpler|clearer|more advanced)\b|explain (?:more simply|more clearly|simply)\b|go deeper\b|give me a more advanced explanation of that topic\b|my answer\b|i tried this practice\b)/i.test(trimmedPrompt) ||
@@ -6151,15 +6193,16 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       prompt: finalPrompt,
       intent,
       metadata: {
-        image_count: attachedImages.length,
+        image_count: imageCount,
+        attachment_count: attachedImages.length,
         has_images: hasImages,
         tier: currentTier,
         auto_job_search: intent === 'job-search',
       },
     });
 
-    if (hasImages) {
-      trackImageAnalysis(attachedImages.length, finalPrompt, undefined, {
+    if (imageCount) {
+      trackImageAnalysis(imageCount, finalPrompt, undefined, {
         intent,
         tier: currentTier,
       });
@@ -6188,7 +6231,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
     const shouldAutoSearchJobs =
       intent === 'job-search' &&
-      !hasImages &&
+      !hasAttachments &&
       hasJobSearchWords(finalPrompt);
 
     if (shouldAutoSearchJobs) {
@@ -6292,7 +6335,7 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     }
 
     const youtubeVideoUrl = extractYouTubeUrlFromText(finalPrompt);
-    if (youtubeVideoUrl && isYouTubeSummaryRequest(finalPrompt) && !hasImages) {
+    if (youtubeVideoUrl && isYouTubeSummaryRequest(finalPrompt) && !hasAttachments) {
       try {
         const { data, error: sessionError } = await getSupabaseClient().auth.getSession();
         if (sessionError) throw sessionError;
@@ -6384,11 +6427,11 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       const mathLearningRequest = isMathematicsQuestion(finalPrompt);
       const adaptiveLearningGuidance = activeLearningContext
         ? `\n\n${buildLearningInstruction(activeLearningContext)}`
-        : hasImages
-          ? `\n\nImage-aware learning guidance:
-- Inspect the attached image itself. If it contains a school or academic question, diagram, chart, handwritten work or worksheet, identify the subject and topic from what is visible and teach it using a suitable level and method.
-- Distinguish visible details from inference. Preserve the exact question, values, units and labels; ask about unclear handwriting rather than guessing.
-- Use a supported, validated FaceMeX visual only when it improves the explanation and its facts are grounded. Otherwise give a complete text explanation. If the image is not educational, answer its actual request normally.`
+        : hasAttachments
+          ? `\n\nAttachment-aware guidance:
+- Inspect each attached image or document itself. If it contains a school or academic question, diagram, chart, handwritten work or worksheet, identify the subject and topic from what is visible and teach it using a suitable level and method.
+- Distinguish visible details from inference. Preserve the exact question, values, units and labels; ask about unclear handwriting or unreadable document content rather than guessing.
+- Use a supported, validated FaceMeX visual only when it improves the explanation and its facts are grounded. Otherwise give a complete text explanation. If the attachment is not educational, answer its actual request normally.`
         : '';
       const mathematicsLearningGuidance = mathLearningRequest ? `
 
@@ -6410,7 +6453,17 @@ For charts, calculate every plotted value from the stated equation. Never use a 
 \`\`\`
 Keep the question visible and do not reveal its solution elsewhere in the answer; the student reveals it with the "Reveal solution" control. Use LaTeX delimiters inside the JSON strings for formulas.
 ` : '';
-      const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
+        const responseModeInstruction = responseMode
+          ? `\n\nSelected response mode: ${responseMode}.
+- Adapt explanations and recommendations for a ${responseMode === 'student' ? 'student' : responseMode === 'teacher' ? 'teacher or educator' : 'career-focused user'}.
+- ${responseMode === 'student'
+      ? 'Use accessible language, supportive explanations, and manageable learning steps when relevant.'
+      : responseMode === 'teacher'
+        ? 'Emphasize teaching goals, classroom-ready explanations, lesson planning, and learner understanding when relevant.'
+        : 'Emphasize professional goals, job-search or workplace context, and practical career next steps when relevant.'}
+- Follow the user’s explicit request if it asks for a different audience or style.`
+          : '';
+        const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
     ${personalizationContext ? `\n\n${personalizationContext}\n` : ''}
 
 FaceMeX intelligence rules:
@@ -6444,6 +6497,7 @@ ${buildWorkspaceQualityInstruction([
 ].join('\n'))}
 ${mathematicsLearningGuidance}
 ${adaptiveLearningGuidance}
+${responseModeInstruction}
 
 User name: ${userDisplayName}
 Current automatic job results in FaceMeX:
@@ -6626,7 +6680,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
       trackWorkspaceResponse({
         intent,
-        image_count: attachedImages.length,
+        image_count: imageCount,
+        attachment_count: attachedImages.length,
         source: data?.source || 'unknown',
         answer_length: answer.length,
       });
@@ -6665,7 +6720,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
       trackError('workspace_ai_failed', error?.message || 'AI failed', {
         intent,
-        image_count: attachedImages.length,
+        image_count: imageCount,
+        attachment_count: attachedImages.length,
       });
     } finally {
       setBusy(false);
@@ -7095,14 +7151,21 @@ Apply link: ${job.applyUrl}`;
         {images.slice(0, 4).map((image) => (
           <div
             key={image.id}
-            className="overflow-hidden rounded-2xl border border-black/5 bg-slate-100 dark:border-white/10 dark:bg-white/[0.06]"
+            className="overflow-hidden rounded-xl border border-black/5 bg-slate-100 dark:border-white/10 dark:bg-white/[0.06]"
           >
-            <img
-              src={image.dataUrl}
-              alt={image.name}
-              className="h-28 w-full object-cover sm:h-40"
-              loading="lazy"
-            />
+            {image.type.startsWith('image/') ? (
+              <img
+                src={image.dataUrl}
+                alt={image.name}
+                className="h-28 w-full object-cover sm:h-40"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex min-h-16 items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-white/80">
+                <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{image.name}</span>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -10818,6 +10881,8 @@ Start with the most useful next action. Do not invent personal details, course r
               onChange={setPrompt}
               onSend={() => sendPrompt()}
               textareaRef={composerTextareaRef}
+              tone={appearanceMode === 'light' ? 'light' : 'dark'}
+              placeholder={composerPlaceholder}
               attachments={selectedImages.map((image) => ({
                 id: image.id,
                 name: image.name,
@@ -10826,33 +10891,78 @@ Start with the most useful next action. Do not invent personal details, course r
               }))}
               onRemoveAttachment={removeSelectedImage}
               onClearAttachments={clearSelectedImages}
-              onPickAttachments={() => imageInputRef.current?.click()}
+              menuOptions={[
+                {
+                  id: 'camera',
+                  label: 'Camera',
+                  icon: <Camera className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: () => cameraInputRef.current?.click(),
+                },
+                {
+                  id: 'photos',
+                  label: 'Photos',
+                  icon: <ImagePlus className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: () => imageInputRef.current?.click(),
+                },
+                {
+                  id: 'files',
+                  label: 'Files',
+                  icon: <FileText className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: () => fileInputRef.current?.click(),
+                },
+                {
+                  id: 'smartboard',
+                  label: 'Smartboard',
+                  icon: <MonitorUp className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: () => setSmartboardOpen(true),
+                },
+              ] satisfies ComposerMenuOption[]}
+              selectedMode={responseMode}
+              onSelectMode={setResponseMode}
               attachmentPicker={(
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/*,.pdf,.doc,.docx,.txt,.xlsx"
-                  multiple
-                  className="hidden"
-                  onChange={handlePickImages}
-                />
-              )}
-              leadingControl={(
-                <WorkspaceSmartboard
-                  onRecognizeDrawing={recognizeSmartboardDrawing}
-                  onSolve={solveSmartboardExpression}
-                  onAnalyzeDrawing={analyzeSmartboardDrawing}
-                  onSearchReferenceImage={searchSmartboardReferenceImage}
-                  onSaveLesson={saveSmartboardLesson}
-                  onListLessons={listSmartboardLessons}
-                  onSendToWorkspace={sendSmartboardResponseToWorkspace}
-                />
+                <>
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handlePickAttachments}
+                  />
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handlePickAttachments}
+                  />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    multiple
+                    className="hidden"
+                    onChange={handlePickAttachments}
+                  />
+                  <WorkspaceSmartboard
+                    onRecognizeDrawing={recognizeSmartboardDrawing}
+                    onSolve={solveSmartboardExpression}
+                    onAnalyzeDrawing={analyzeSmartboardDrawing}
+                    onSearchReferenceImage={searchSmartboardReferenceImage}
+                    onSaveLesson={saveSmartboardLesson}
+                    onListLessons={listSmartboardLessons}
+                    onSendToWorkspace={sendSmartboardResponseToWorkspace}
+                    hideTrigger
+                    open={smartboardOpen}
+                    onOpenChange={setSmartboardOpen}
+                  />
+                </>
               )}
               onVoiceToggle={toggleVoiceInput}
               voiceListening={voiceListening}
               busy={busy}
               enterToSend={!isMobileViewport}
-              placeholder="Ask FaceMeX"
               onFocus={() => {
                 setFollowUpExpanded(true);
                 setComposerVisible(true);
