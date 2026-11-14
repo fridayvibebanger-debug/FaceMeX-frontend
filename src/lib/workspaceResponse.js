@@ -2,6 +2,11 @@ const MAX_CHART_POINTS = 12;
 const MAX_MULTI_LINE_POINTS = 64;
 const MAX_FLOW_STEPS = 8;
 const MAX_FOLLOW_UP_OPTIONS = 5;
+const MAX_INTERACTIVE_QUESTIONS = 5;
+const MAX_INTERACTIVE_OPTIONS = 8;
+const RESPONSE_SECTION_ICONS = new Set([
+  'book', 'briefcase', 'calendar', 'check', 'document', 'globe', 'growth', 'list', 'mail', 'users',
+]);
 
 function safeLabel(value, maxLength) {
   if (typeof value !== 'string') return null;
@@ -153,12 +158,116 @@ export function parseWorkspaceVisualization(kind, source) {
 
   if (kind === 'diagram' && value.type === 'flow' && Array.isArray(value.steps) &&
     value.steps.length >= 2 && value.steps.length <= MAX_FLOW_STEPS) {
-    const steps = value.steps.map((step) => safeLabel(step, 180));
+    const steps = value.steps.map((step) => {
+      if (typeof step === 'string') return safeLabel(step, 180);
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return null;
+      const stepTitle = safeLabel(step.title, 100);
+      const description = step.description === undefined
+        ? ''
+        : typeof step.description === 'string' && step.description.length <= 280
+          ? step.description.trim()
+          : null;
+      return stepTitle && description !== null ? { title: stepTitle, description } : null;
+    });
     if (steps.some((step) => step === null)) return null;
     return { kind: 'diagram', diagramType: 'flow', title, steps };
   }
 
   return null;
+}
+
+export function parseWorkspaceInteractiveForm(source) {
+  if (typeof source !== 'string' || source.length > 10_000) return null;
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    !Array.isArray(value.questions) || value.questions.length < 1 ||
+    value.questions.length > MAX_INTERACTIVE_QUESTIONS) return null;
+
+  const title = value.title === undefined ? '' : safeLabel(value.title, 100);
+  const submitLabel = safeLabel(value.submitLabel, 80);
+  if (title === null || !submitLabel) return null;
+
+  const questions = value.questions.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+      !['single', 'multiple', 'text'].includes(item.type)) return null;
+    const question = safeLabel(item.question, 300);
+    if (!question) return null;
+    if (item.type === 'text') {
+      if (item.options !== undefined && (!Array.isArray(item.options) || item.options.length !== 0)) return null;
+      return { question, type: item.type, options: [] };
+    }
+    if (!Array.isArray(item.options) || item.options.length < 2 ||
+      item.options.length > MAX_INTERACTIVE_OPTIONS) return null;
+    const options = item.options.map((option) => safeLabel(option, 120));
+    if (options.some((option) => !option) || new Set(options).size !== options.length) return null;
+    return { question, type: item.type, options };
+  });
+  if (questions.some((question) => question === null)) return null;
+  return { title, questions, submitLabel };
+}
+
+export function parseWorkspaceSections(source) {
+  if (typeof source !== 'string' || source.length > 12_000) return null;
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    !Array.isArray(value.sections) || value.sections.length < 1 || value.sections.length > 8) return null;
+
+  const title = safeLabel(value.title, 120);
+  if (!title) return null;
+  const sections = value.sections.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const heading = safeLabel(item.heading, 120);
+    const body = item.body === undefined
+      ? ''
+      : typeof item.body === 'string' && item.body.length <= 1200
+        ? item.body.trim()
+        : null;
+    const icon = item.icon === undefined ? 'list' : item.icon;
+    if (!heading || body === null || typeof icon !== 'string' || !RESPONSE_SECTION_ICONS.has(icon)) return null;
+    const items = item.items === undefined
+      ? []
+      : Array.isArray(item.items) && item.items.length <= 10
+        ? item.items.map((entry) => safeLabel(entry, 300))
+        : null;
+    if (!items || items.some((entry) => !entry) || (!body && !items.length)) return null;
+    return { heading, body, items, icon };
+  });
+  return sections.some((section) => section === null) ? null : { title, sections };
+}
+
+export function parseWorkspaceSteps(source) {
+  if (typeof source !== 'string' || source.length > 12_000) return null;
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    !Array.isArray(value.steps) || value.steps.length < 2 || value.steps.length > MAX_FLOW_STEPS) return null;
+
+  const title = safeLabel(value.title, 120);
+  if (!title) return null;
+  const steps = value.steps.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const heading = safeLabel(item.heading, 120);
+    const body = safeLabel(item.body, 1200);
+    const icon = item.icon === undefined ? 'list' : item.icon;
+    return heading && body && typeof icon === 'string' && RESPONSE_SECTION_ICONS.has(icon)
+      ? { heading, body, icon }
+      : null;
+  });
+  return steps.some((step) => step === null) ? null : { title, steps };
 }
 
 export function parseWorkspacePractice(source) {
@@ -911,6 +1020,7 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
 
   text = text.replace(/```([^\n`]*)\n([\s\S]*?)```/g, (block, rawLanguage, body) => {
     const language = String(rawLanguage || '').trim().toLowerCase();
+    if (['interactive', 'sections', 'steps'].includes(language)) return block;
     if (['chart', 'diagram'].includes(language)) {
       return parseWorkspaceVisualization(language, body) ? block : '';
     }

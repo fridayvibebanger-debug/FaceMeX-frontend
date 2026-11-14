@@ -15,6 +15,9 @@ import {
   parseWorkspaceEquationBalance,
   parseWorkspacePractice,
   parseWorkspaceUnderstanding,
+  parseWorkspaceInteractiveForm,
+  parseWorkspaceSections,
+  parseWorkspaceSteps,
   parseWorkspaceVisualization,
   selectRelevantWorkspaceImages,
   selectRelevantYouTubeLessonVideos,
@@ -56,6 +59,65 @@ test('validates grounded understanding quizzes before rendering', () => {
     'Text.\n\n```understanding\n{"questions":[{"question":"Only one"}]}\n```',
     'Explain water.',
   ), /```understanding/);
+});
+
+test('validates interactive response forms and their supported selection types', () => {
+  const form = {
+    title: 'Choose your cooking details',
+    questions: [
+      { question: 'What kind of chicken do you have?', type: 'single', options: ['Wings', 'Drumsticks'] },
+      { question: 'What will you cook it in?', type: 'single', options: ['Frying pan', 'Air fryer'] },
+      { question: 'Any dietary requirements?', type: 'text' },
+      { question: 'Which sides would you like?', type: 'multiple', options: ['Rice', 'Salad'] },
+    ],
+    submitLabel: 'Give me exact cooking times',
+  };
+  assert.deepEqual(parseWorkspaceInteractiveForm(JSON.stringify(form)), form);
+  assert.equal(parseWorkspaceInteractiveForm('{'), null);
+  assert.equal(parseWorkspaceInteractiveForm(JSON.stringify({
+    ...form,
+    questions: [{ question: 'Pick one', type: 'single', options: ['Only one'] }],
+  })), null);
+  assert.equal(parseWorkspaceInteractiveForm(JSON.stringify({
+    ...form,
+    questions: [{ question: 'Pick one', type: 'unknown', options: ['One', 'Two'] }],
+  })), null);
+  assert.equal(parseWorkspaceInteractiveForm(JSON.stringify({
+    ...form,
+    questions: [{ question: 'Pick one', type: 'text', options: ['unexpected'] }],
+  })), null);
+  const mixedResponse = normalizeWorkspaceAnswerForDisplay(
+    `Here are your choices.\n\n\`\`\`interactive\n${JSON.stringify(form)}\n\`\`\`\n\nI’ll use these details for the next answer.`,
+    'Help me decide what to cook.',
+  );
+  assert.match(mixedResponse, /Here are your choices/);
+  assert.match(mixedResponse, /```interactive/);
+  assert.match(mixedResponse, /I’ll use these details for the next answer/);
+});
+
+test('validates structured informational sections and instructional steps', () => {
+  const sections = {
+    title: 'Marketing routine',
+    sections: [
+      { heading: 'Daily — 20 minutes', body: 'Post a useful update.', items: ['Share a product demo.'], icon: 'calendar' },
+      { heading: 'Weekly target', body: 'Track meaningful engagement.', items: ['Aim for five conversations.'], icon: 'growth' },
+    ],
+  };
+  assert.deepEqual(parseWorkspaceSections(JSON.stringify(sections)), sections);
+  assert.equal(parseWorkspaceSections(JSON.stringify({
+    ...sections,
+    sections: [{ heading: 'Empty', items: [] }],
+  })), null);
+
+  const steps = {
+    title: 'Follow this setup',
+    steps: [
+      { heading: 'Today — wait for the review', body: 'Read new messages.', icon: 'mail' },
+      { heading: 'Prepare evidence', body: 'Find the related record.', icon: 'document' },
+    ],
+  };
+  assert.deepEqual(parseWorkspaceSteps(JSON.stringify(steps)), steps);
+  assert.equal(parseWorkspaceSteps(JSON.stringify({ ...steps, steps: [steps.steps[0]] })), null);
 });
 
 test('validates equation-balancing data against parsed atom counts and coefficients', () => {
@@ -281,6 +343,30 @@ test('accepts a renderable process flow with concise labeled stages', () => {
       steps: ['Frontend sends request', 'Backend validates and processes', 'Database returns data'],
     },
   );
+  assert.deepEqual(
+    parseWorkspaceVisualization('diagram', JSON.stringify({
+      type: 'flow',
+      title: 'Request path',
+      steps: [
+        { title: 'FaceMeX website', description: 'You send a message.' },
+        { title: 'AI proxy', description: 'Routes your request.' },
+      ],
+    })),
+    {
+      kind: 'diagram',
+      diagramType: 'flow',
+      title: 'Request path',
+      steps: [
+        { title: 'FaceMeX website', description: 'You send a message.' },
+        { title: 'AI proxy', description: 'Routes your request.' },
+      ],
+    },
+  );
+  assert.equal(parseWorkspaceVisualization('diagram', JSON.stringify({
+    type: 'flow',
+    title: 'Bad step',
+    steps: [{ title: 'Website', description: 12 }, { title: 'Backend', description: 'Process it.' }],
+  })), null);
 });
 
 test('validates compact timelines and rejects malformed historical event data', () => {

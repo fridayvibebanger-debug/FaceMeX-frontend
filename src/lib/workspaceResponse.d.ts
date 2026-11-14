@@ -28,7 +28,7 @@ export type WorkspaceVisualization =
       kind: 'diagram';
       diagramType: 'flow';
       title: string;
-      steps: string[];
+      steps: Array<string | { title: string; description: string }>;
     }
   | {
       kind: 'diagram';
@@ -62,6 +62,41 @@ export function parseWorkspaceVisualization(
   kind: string,
   source: string,
 ): WorkspaceVisualization | null;
+
+export type WorkspaceInteractiveForm = {
+  title: string;
+  questions: Array<{
+    question: string;
+    type: 'single' | 'multiple' | 'text';
+    options: string[];
+  }>;
+  submitLabel: string;
+};
+
+export function parseWorkspaceInteractiveForm(source: string): WorkspaceInteractiveForm | null;
+
+export type WorkspaceResponseSections = {
+  title: string;
+  sections: Array<{
+    heading: string;
+    body: string;
+    items: string[];
+    icon: string;
+  }>;
+};
+
+export function parseWorkspaceSections(source: string): WorkspaceResponseSections | null;
+
+export type WorkspaceResponseSteps = {
+  title: string;
+  steps: Array<{
+    heading: string;
+    body: string;
+    icon: string;
+  }>;
+};
+
+export function parseWorkspaceSteps(source: string): WorkspaceResponseSteps | null;
 
 export type WorkspacePractice = {
   question: string;
