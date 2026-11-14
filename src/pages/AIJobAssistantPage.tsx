@@ -27,7 +27,6 @@ import {
   Mail,
   MapPin,
   Menu,
-  Mic,
   MonitorUp,
   MoreVertical,
   Pin,
@@ -49,6 +48,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import WorkspaceSmartboard from '@/components/WorkspaceSmartboard';
+import UniversalComposer from '@/components/workspace-ai/UniversalComposer';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
@@ -2536,45 +2536,78 @@ function renderMarkdownTable(
 ) {
   const columnCount = Math.max(headers.length, ...rows.map((row) => row.length));
   const tableWidth = columnCount > 3 ? 'min-w-[520px]' : 'min-w-full';
+  const useStackedLayout = columnCount > 1 && columnCount <= 3 && rows.length > 0;
 
   return (
-    <div
-      key={key}
-      className="fm-markdown-table my-4 w-full max-w-full overflow-x-auto rounded-xl border border-white/10 bg-[#171717]"
-    >
-      <table className={`w-full ${tableWidth} table-fixed border-collapse text-left text-xs sm:text-sm lg:text-white`}>
-        <thead className="fm-markdown-table-head bg-[#222222]">
-          <tr>
-            {Array.from({ length: columnCount }).map((_, index) => (
-              <th
-                key={`head-${index}`}
-                scope="col"
-                className="break-words border-b border-white/10 px-2 py-2 font-semibold text-white [overflow-wrap:anywhere] sm:px-3 sm:py-3"
-              >
-                {renderInlineText(headers[index] || '', onLinkClick)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
+    <div key={key} className="fm-markdown-table my-4 w-full max-w-full">
+      {useStackedLayout && (
+        <div className="space-y-2 sm:hidden">
           {rows.map((row, rowIndex) => (
-            <tr
-              key={`row-${rowIndex}`}
-              className="border-b border-white/10 last:border-0"
+            <section
+              key={`mobile-row-${rowIndex}`}
+              className="min-w-0 rounded-xl border border-white/10 bg-[#171717] px-3 py-3"
             >
-              {Array.from({ length: columnCount }).map((_, cellIndex) => (
-                <td
-                  key={`cell-${rowIndex}-${cellIndex}`}
-                  className="break-words align-top px-2 py-2 text-white/80 [overflow-wrap:anywhere] sm:px-3 sm:py-3"
+              <p className="text-[11px] font-medium text-white/45">{headers[0] || ''}</p>
+              <h3 className="break-words text-sm font-semibold text-white [overflow-wrap:anywhere]">
+                {renderInlineText(row[0] || '', onLinkClick)}
+              </h3>
+              {columnCount > 1 && (
+                <dl className="mt-2 grid gap-2">
+                  {Array.from({ length: columnCount - 1 }).map((_, index) => {
+                    const cellIndex = index + 1;
+                    return (
+                      <div key={`mobile-cell-${rowIndex}-${cellIndex}`} className="grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 border-t border-white/[0.07] pt-2">
+                        <dt className="break-words text-xs font-medium text-white/55 [overflow-wrap:anywhere]">
+                          {renderInlineText(headers[cellIndex] || '', onLinkClick)}
+                        </dt>
+                        <dd className="m-0 min-w-0 break-words text-right text-sm text-white/85 [overflow-wrap:anywhere]">
+                          {renderInlineText(row[cellIndex] || '', onLinkClick)}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+
+      <div className={`${useStackedLayout ? 'hidden sm:block' : ''} w-full max-w-full overflow-x-auto rounded-xl border border-white/10 bg-[#171717]`}>
+        <table className={`w-full ${tableWidth} table-fixed border-collapse text-left text-xs sm:text-sm lg:text-white`}>
+          <thead className="fm-markdown-table-head bg-[#222222]">
+            <tr>
+              {Array.from({ length: columnCount }).map((_, index) => (
+                <th
+                  key={`head-${index}`}
+                  scope="col"
+                  className="break-words border-b border-white/10 px-2 py-2 font-semibold text-white [overflow-wrap:anywhere] sm:px-3 sm:py-3"
                 >
-                  {renderInlineText(row[cellIndex] || '', onLinkClick)}
-                </td>
+                  {renderInlineText(headers[index] || '', onLinkClick)}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr
+                key={`row-${rowIndex}`}
+                className="border-b border-white/10 last:border-0"
+              >
+                {Array.from({ length: columnCount }).map((_, cellIndex) => (
+                  <td
+                    key={`cell-${rowIndex}-${cellIndex}`}
+                    className="break-words align-top px-2 py-2 text-white/80 [overflow-wrap:anywhere] sm:px-3 sm:py-3"
+                  >
+                    {renderInlineText(row[cellIndex] || '', onLinkClick)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -2961,6 +2994,7 @@ function WorkspaceHydrogenWaterDiagram() {
 
 function MarkdownCodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
+  const highlightedCode = code.split(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\/[^\n]*|#[^\n]*|\b\d+(?:\.\d+)?\b|\b(?:const|let|var|function|return|if|else|for|while|class|new|import|from|export|default|async|await|try|catch|throw|true|false|null|undefined|def|print|public|private|static|void|int|string|boolean|interface|type|extends|implements|SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|CREATE|TABLE|JOIN|GROUP|ORDER|BY|LIMIT)\b)/g);
 
   const copyCode = async () => {
     if (!navigator.clipboard?.writeText) {
@@ -2986,7 +3020,15 @@ function MarkdownCodeBlock({ code, language }: { code: string; language: string 
         </Button>
       </div>
       <pre className="fm-markdown-code max-w-full overflow-x-auto p-4 font-mono text-[13px] leading-6 text-white/90">
-        <code>{code}</code>
+        <code>{highlightedCode.map((token, index) => {
+          if (!token) return null;
+          let className = '';
+          if (/^(["'`])/.test(token)) className = 'text-emerald-300';
+          else if (/^(\/\/|#)/.test(token)) className = 'text-white/45';
+          else if (/^\d/.test(token)) className = 'text-amber-200';
+          else if (/^(?:const|let|var|function|return|if|else|for|while|class|new|import|from|export|default|async|await|try|catch|throw|true|false|null|undefined|def|print|public|private|static|void|int|string|boolean|interface|type|extends|implements|SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|CREATE|TABLE|JOIN|GROUP|ORDER|BY|LIMIT)$/.test(token)) className = 'text-sky-300';
+          return className ? <span key={index} className={className}>{token}</span> : token;
+        })}</code>
       </pre>
     </div>
   );
@@ -3646,37 +3688,22 @@ function WorkspaceFollowUp({
   disabled: boolean;
   onContinue: (answer: string) => void;
 }) {
-  const [selected, setSelected] = useState('');
   return (
-    <section className="mt-5 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4" aria-label="Choose a follow-up answer">
-      <p className="mb-3 text-sm font-semibold text-white">{question}</p>
+    <section className="mt-4 max-w-3xl" aria-label="Choose a follow-up answer">
+      <p className="mb-2 text-sm font-medium text-white/65">{question}</p>
       <div className="flex flex-wrap gap-2">
         {options.map((option) => (
           <button
             key={option}
             type="button"
             disabled={disabled}
-            aria-pressed={selected === option}
-            onClick={() => setSelected(option)}
-            className={`min-h-9 rounded-full border px-3 py-1.5 text-sm transition ${
-              selected === option
-                ? 'border-white/50 bg-white text-black'
-                : 'border-white/15 bg-white/[0.04] text-white/80 hover:bg-white/10'
-            } disabled:cursor-not-allowed disabled:opacity-50`}
+            onClick={() => onContinue(option)}
+            className="min-h-9 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-sm text-white/75 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {option}
           </button>
         ))}
       </div>
-      <Button
-        type="button"
-        size="sm"
-        disabled={!selected || disabled}
-        onClick={() => onContinue(selected)}
-        className="mt-4 h-9 rounded-lg bg-white px-4 text-black hover:bg-white/90"
-      >
-        Continue
-      </Button>
     </section>
   );
 }
@@ -4241,7 +4268,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
     return chatMessages.some((message) => message.role === 'assistant' && Boolean(message.jobs?.length));
   }, [chatMessages]);
 
-  const inputHasContent = prompt.trim().length > 0 || selectedImages.length > 0;
   const showMobileBlankWorkspace = !isDesktopViewport && chatMessages.length === 0 && !busy && !selectedWatchVideo && !selectedProjectId;
 
   const composerPlaceholder = practicalLabOpen
@@ -4438,24 +4464,6 @@ const [modeMenuOpen, setModeMenuOpen] = useState(false);
       if (composerHideTimerRef.current !== null) window.clearTimeout(composerHideTimerRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    const textarea = composerTextareaRef.current;
-    if (!textarea) return;
-
-    const resizeTextarea = () => {
-      textarea.style.height = 'auto';
-      const viewportHeight = window.visualViewport?.height || window.innerHeight;
-      const maxHeight = Math.min(240, Math.max(120, Math.floor(viewportHeight * 0.35)));
-      const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
-      textarea.style.height = `${nextHeight}px`;
-      textarea.style.maxHeight = `${maxHeight}px`;
-      textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
-    };
-    resizeTextarea();
-    window.visualViewport?.addEventListener('resize', resizeTextarea);
-    return () => window.visualViewport?.removeEventListener('resize', resizeTextarea);
-  }, [prompt, selectedImages.length]);
 
   useEffect(() => () => {
     speechRecognitionRef.current?.stop?.();
@@ -10805,111 +10813,21 @@ Start with the most useful next action. Do not invent personal details, course r
             }}
             className={`absolute inset-x-0 bottom-0 z-10 border-t border-white/5 bg-[#0d0d0d]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/5 dark:bg-[#111]/95 sm:p-4 lg:border-white/10 lg:bg-[#111111] lg:px-6 lg:pb-6 ${composerVisible ? 'translate-y-0 opacity-100' : 'translate-y-[calc(100%_-_12px)] opacity-55'}`}
           >
-            <div className="mx-auto w-full max-w-3xl lg:flex lg:max-w-[840px] lg:flex-col">
-              {selectedImages.length > 0 && (
-                <div className="mb-2 grid grid-cols-4 gap-2 lg:order-1">
-                  {selectedImages.map((image) => (
-                    <div key={image.id} className="relative overflow-hidden rounded-2xl bg-black">
-                      <img src={image.dataUrl} alt={image.name} className="h-16 w-full object-cover sm:h-20" />
-
-                      <button
-                        type="button"
-                        onClick={() => removeSelectedImage(image.id)}
-                        className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white"
-                        aria-label="Remove image"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="fm-composer-card rounded-full lg:order-3">
-                <div className="flex min-h-8 items-center gap-2">
-                  <WorkspaceSmartboard
-                    onRecognizeDrawing={recognizeSmartboardDrawing}
-                    onSolve={solveSmartboardExpression}
-                    onAnalyzeDrawing={analyzeSmartboardDrawing}
-                    onSearchReferenceImage={searchSmartboardReferenceImage}
-                    onSaveLesson={saveSmartboardLesson}
-                    onListLessons={listSmartboardLessons}
-                    onSendToWorkspace={sendSmartboardResponseToWorkspace}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => imageInputRef.current?.click()}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/75 transition active:scale-[0.98] hover:bg-white/10"
-                    aria-label="Upload image or document"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-
-                  <div className="flex min-w-0 flex-1 items-center rounded-full px-1">
-                    <Textarea
-                      ref={composerTextareaRef}
-                      rows={1}
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
-                      onFocus={() => {
-                        setFollowUpExpanded(true);
-                        setComposerVisible(true);
-                      }}
-                      onClick={() => setComposerVisible(true)}
-                      placeholder="Ask FaceMeX"
-                      className="min-h-[32px] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[15px] leading-5 text-white/90 placeholder:text-white/45 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          if (!busy && (prompt.trim() || selectedImages.length > 0)) {
-                            sendPrompt();
-                          }
-                        }
-                      }}
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={toggleVoiceInput}
-                    aria-label={voiceListening ? 'Stop voice input' : 'Start voice input'}
-                    aria-pressed={voiceListening}
-                    title={voiceListening ? 'Listening' : 'Voice input'}
-                    className={`hidden h-8 w-8 shrink-0 items-center justify-center rounded-full transition active:scale-[0.98] hover:bg-white/10 lg:flex ${voiceListening ? 'bg-red-500/20 text-red-300' : 'text-white/75'}`}
-                  >
-                    <Mic className="h-4 w-4" />
-                  </button>
-
-                  <Button
-                    size="icon"
-                    onClick={() => sendPrompt()}
-                    disabled={busy || (!prompt.trim() && selectedImages.length === 0)}
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-lg shadow-black/10 transition ${
-                      inputHasContent && !busy
-                        ? 'bg-black text-white hover:bg-[#111111] disabled:bg-black disabled:text-white'
-                        : 'bg-[#2b2b2b] text-white/40 disabled:bg-[#2b2b2b] disabled:text-white/40'
-                    }`}
-                    aria-label="Send"
-                  >
-                    {busy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : isMobileViewport ? (
-                      <ArrowUp className="h-4 w-4" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-
-                {selectedImages.length > 0 && (
-                  <div className="mt-1 flex items-center justify-between px-2 text-[11px] text-slate-500 lg:text-white/45">
-                    <span>{selectedImages.length} image{selectedImages.length > 1 ? 's' : ''} ready</span>
-                    <button type="button" onClick={clearSelectedImages} className="font-semibold text-red-500">
-                      Clear
-                    </button>
-                  </div>
-                )}
-
+            <UniversalComposer
+              value={prompt}
+              onChange={setPrompt}
+              onSend={() => sendPrompt()}
+              textareaRef={composerTextareaRef}
+              attachments={selectedImages.map((image) => ({
+                id: image.id,
+                name: image.name,
+                type: image.type,
+                previewUrl: image.type.startsWith('image/') ? image.dataUrl : undefined,
+              }))}
+              onRemoveAttachment={removeSelectedImage}
+              onClearAttachments={clearSelectedImages}
+              onPickAttachments={() => imageInputRef.current?.click()}
+              attachmentPicker={(
                 <input
                   ref={imageInputRef}
                   type="file"
@@ -10918,9 +10836,29 @@ Start with the most useful next action. Do not invent personal details, course r
                   className="hidden"
                   onChange={handlePickImages}
                 />
-              </div>
-
-           </div>
+              )}
+              leadingControl={(
+                <WorkspaceSmartboard
+                  onRecognizeDrawing={recognizeSmartboardDrawing}
+                  onSolve={solveSmartboardExpression}
+                  onAnalyzeDrawing={analyzeSmartboardDrawing}
+                  onSearchReferenceImage={searchSmartboardReferenceImage}
+                  onSaveLesson={saveSmartboardLesson}
+                  onListLessons={listSmartboardLessons}
+                  onSendToWorkspace={sendSmartboardResponseToWorkspace}
+                />
+              )}
+              onVoiceToggle={toggleVoiceInput}
+              voiceListening={voiceListening}
+              busy={busy}
+              enterToSend={!isMobileViewport}
+              placeholder="Ask FaceMeX"
+              onFocus={() => {
+                setFollowUpExpanded(true);
+                setComposerVisible(true);
+              }}
+              onClick={() => setComposerVisible(true)}
+            />
           </footer>
         </section>
       </main>
