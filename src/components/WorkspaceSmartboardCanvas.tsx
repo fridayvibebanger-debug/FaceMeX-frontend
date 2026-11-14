@@ -42,6 +42,12 @@ import {
 } from '@/lib/workspaceGraph';
 import { formatWorkspaceMathForBoard } from '@/lib/workspaceMarkdown';
 import type { WorkspaceSmartboardLesson, WorkspaceSmartboardLessonDraft } from '@/lib/projects';
+import {
+  getSmartboardRecoveryKey,
+  parseSmartboardRecovery,
+  serializeSmartboardRecovery,
+} from '@/lib/workspaceSmartboardPersistence.js';
+import { useUserStore } from '@/store/userStore';
 
 type Tool = 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'triangle';
 type BoardStroke = {
@@ -696,6 +702,11 @@ export default function WorkspaceSmartboardCanvas({
   const [mathKeyboardOpen, setMathKeyboardOpen] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [boardInteractionVersion, setBoardInteractionVersion] = useState(0);
+  const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveryWriteEnabled, setRecoveryWriteEnabled] = useState(false);
+  const [recoveryStatus, setRecoveryStatus] = useState<'loading' | 'ready' | 'saving' | 'saved' | 'error'>('loading');
+  const [recoveryMessage, setRecoveryMessage] = useState('');
+  const userId = useUserStore((state) => state.id);
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
   const boardImageRef = useRef(image);
@@ -719,6 +730,7 @@ export default function WorkspaceSmartboardCanvas({
   const imageRef = useRef<HTMLImageElement | null>(null);
   const referenceImagesRef = useRef(new Map<string, HTMLImageElement>());
   const moreMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const recoveryOwnerRef = useRef<string | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const analyzeDrawingRef = useRef(onAnalyzeDrawing);
   const recognitionTimerRef = useRef<number | null>(null);
@@ -2528,6 +2540,118 @@ export default function WorkspaceSmartboardCanvas({
     setNotice('Board restored.');
   };
 
+  useEffect(() => {
+    if (recoveryOwnerRef.current !== userId) {
+      const hadOwner = recoveryOwnerRef.current !== null;
+      recoveryOwnerRef.current = userId;
+      setRecoveryReady(false);
+      setRecoveryWriteEnabled(false);
+      setRecoveryStatus(userId ? 'loading' : 'error');
+      setRecoveryMessage('');
+      if (hadOwner) {
+        setScene(emptyScene());
+        setImage(null);
+        setSavedBoard(null);
+        setSavedBoards([]);
+        setBoardTitle('Untitled board');
+        setSuggestion('');
+        setHistory([]);
+        setFuture([]);
+      }
+    }
+    if (!open || recoveryReady) return;
+    if (!userId) {
+      setRecoveryStatus('error');
+      setRecoveryMessage('Sign in to enable user-specific device recovery.');
+      setRecoveryReady(true);
+      return;
+    }
+
+    try {
+      const key = getSmartboardRecoveryKey(userId);
+      const result = parseSmartboardRecovery(window.localStorage.getItem(key));
+      if (result.status === 'invalid') {
+        setRecoveryStatus('error');
+        setRecoveryMessage('The device recovery copy is unreadable and was preserved. Cloud save is still available.');
+        setRecoveryWriteEnabled(false);
+      } else {
+        setRecoveryWriteEnabled(true);
+        if (result.status === 'valid') {
+          const draft = result.recovery;
+          restoreBoard({
+            id: draft.savedBoard?.id || crypto.randomUUID(),
+            conversationId: draft.savedBoard?.conversationId || '',
+            createdAt: draft.savedBoard?.createdAt || draft.savedAt,
+            title: draft.title,
+            scene: draft.scene,
+            ...(draft.image ? {
+              image: { id: crypto.randomUUID(), name: 'Board image', dataUrl: draft.image },
+            } : {}),
+          });
+          setRecoveryStatus('saved');
+          setRecoveryMessage(`Recovered a device draft from ${new Date(draft.savedAt).toLocaleString()}. Save board to sync it to your account.`);
+        } else {
+          setRecoveryStatus('ready');
+          setRecoveryMessage('Device recovery is ready. This copy is separate from your saved FaceMeX boards.');
+        }
+      }
+    } catch (reason) {
+      setRecoveryStatus('error');
+      setRecoveryMessage(reason instanceof Error
+        ? `Device recovery could not be read: ${reason.message}`
+        : 'Device recovery could not be read. Cloud save is still available.');
+      setRecoveryWriteEnabled(false);
+    } finally {
+      setRecoveryReady(true);
+    }
+  }, [open, recoveryReady, restoreBoard, userId]);
+
+  useEffect(() => {
+    if (!recoveryReady || !recoveryWriteEnabled || !userId) return undefined;
+
+    setRecoveryStatus('saving');
+    const timer = window.setTimeout(() => {
+      try {
+        const bounds = canvasRef.current?.getBoundingClientRect();
+        const sceneSnapshot = {
+          strokes: scene.strokes,
+          labels: scene.texts,
+          visuals: scene.visuals,
+          graphOnBoard: scene.graphOnBoard,
+          equation: scene.equation,
+          boardSize: scene.boardSize,
+          canvasStyle: 'whiteboard',
+          boardDimensions: bounds ? { width: Math.round(bounds.width), height: Math.round(bounds.height) } : null,
+          view,
+          recognizedText: scene.recognizedText,
+          subject: scene.subject,
+          visualModel: scene.visualModel,
+          suggestion,
+        };
+        const serialized = serializeSmartboardRecovery({
+          savedAt: new Date().toISOString(),
+          title: boardTitle,
+          scene: sceneSnapshot,
+          image,
+          view,
+          savedBoard: savedBoard
+            ? { id: savedBoard.id, conversationId: savedBoard.conversationId, createdAt: savedBoard.createdAt }
+            : null,
+        });
+        window.localStorage.setItem(getSmartboardRecoveryKey(userId), serialized);
+        setRecoveryStatus('saved');
+        setRecoveryMessage('Latest changes are saved on this device. Use Save board to sync to your FaceMeX account.');
+      } catch (reason) {
+        setRecoveryStatus('error');
+        setRecoveryMessage(reason instanceof Error
+          ? `Device recovery could not be saved: ${reason.message}`
+          : 'Device recovery could not be saved. Use Save board to save to your account.');
+      }
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [boardTitle, image, recoveryReady, recoveryWriteEnabled, savedBoard, scene, suggestion, userId, view]);
+
   const downloadBoard = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -2689,6 +2813,14 @@ export default function WorkspaceSmartboardCanvas({
                       Board name
                       <input value={boardTitle} onChange={(event) => setBoardTitle(event.target.value)} maxLength={120} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-slate-400" />
                     </label>
+                    <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3" role="status" aria-live="polite">
+                      <p className="text-xs font-medium text-slate-900">
+                        Device recovery: {recoveryStatus === 'loading' ? 'Checking…' : recoveryStatus === 'ready' ? 'Ready' : recoveryStatus === 'saving' ? 'Saving…' : recoveryStatus === 'saved' ? 'Saved on this device' : 'Unavailable'}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                        {recoveryMessage || 'This private browser copy is separate from cloud-saved boards.'}
+                      </p>
+                    </div>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <Button type="button" className="col-span-2 min-h-10 bg-slate-900 text-white hover:bg-slate-700" disabled={busy} onClick={() => { moreMenuRef.current?.removeAttribute('open'); void demonstrateBoard(); }}><Sparkles className="mr-2 h-4 w-4" />Create visual demonstration</Button>
                       <Button type="button" variant="outline" className="min-h-10 border-slate-200 bg-white text-slate-700 hover:bg-slate-50" disabled={busy} onClick={() => void saveBoard()}><Save className="mr-2 h-4 w-4" />Save board</Button>
