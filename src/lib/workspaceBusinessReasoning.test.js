@@ -3,8 +3,11 @@ import { test } from 'node:test';
 import {
   buildWorkspaceQualityInstruction,
   buildWorkspaceBusinessInstruction,
+  calculateBreakEvenAnalysis,
+  calculateBusinessFinancials,
   calculateBusinessScenario,
   calculateCashFlow,
+  calculateCommission,
   calculateCustomerAcquisitionCost,
   calculateCustomerLifetimeValue,
   calculateBreakEvenUnits,
@@ -15,6 +18,7 @@ import {
   calculateRevenue,
   calculateReturnOnInvestment,
   calculateSimpleInterest,
+  calculateUnitContribution,
   classifyBusinessDomains,
   createBusinessCalculationAnswer,
   createDeliveryProfitAnswer,
@@ -81,6 +85,175 @@ test('calculates revenue, profit, gross and net margins without treating missing
     netMarginPercent: 40,
     missingOperatingCosts: false,
   });
+});
+
+test('reconciles an explicit financial statement without double-counting unique expense lines', () => {
+  const result = calculateBusinessFinancials({
+    accountingRevenue: 10000,
+    customerPayments: 11000,
+    collectedForOthers: 1000,
+    expenseItems: [
+      { id: 'materials', category: 'costOfSales', amount: 4000 },
+      { id: 'variable-delivery', category: 'variableOperating', amount: 500 },
+      { id: 'sales-commission', category: 'commission', amount: 500 },
+      { id: 'rent', category: 'fixedOperating', amount: 1000 },
+      { id: 'utilities', category: 'fixedOperating', amount: 500 },
+      { id: 'salaries', category: 'salary', amount: 2000 },
+      { id: 'contractor', category: 'contractor', amount: 500 },
+      { id: 'interest', category: 'otherNonOperating', amount: 100 },
+    ],
+    tax: { ratePercent: 20, taxableProfitBase: 900 },
+  });
+
+  assert.deepEqual({
+    accountingRevenue: result.accountingRevenue,
+    customerPayments: result.customerPayments,
+    collectedForOthers: result.collectedForOthers,
+    cashCollectionDifference: result.cashCollectionDifference,
+    costOfSalesTotal: result.costOfSalesTotal,
+    grossProfit: result.grossProfit,
+    grossMarginPercent: result.grossMarginPercent,
+    contributionMargin: result.contributionMargin,
+    contributionMarginPercent: result.contributionMarginPercent,
+    operatingExpenseTotal: result.operatingExpenseTotal,
+    operatingProfit: result.operatingProfit,
+    otherNonOperatingCostTotal: result.otherNonOperatingCostTotal,
+    profitBeforeTax: result.profitBeforeTax,
+    taxEstimate: result.taxEstimate,
+    netProfit: result.netProfit,
+    netMarginPercent: result.netMarginPercent,
+  }, {
+    accountingRevenue: 10000,
+    customerPayments: 11000,
+    collectedForOthers: 1000,
+    cashCollectionDifference: 1000,
+    costOfSalesTotal: 4000,
+    grossProfit: 6000,
+    grossMarginPercent: 60,
+    contributionMargin: 5000,
+    contributionMarginPercent: 50,
+    operatingExpenseTotal: 5000,
+    operatingProfit: 1000,
+    otherNonOperatingCostTotal: 100,
+    profitBeforeTax: 900,
+    taxEstimate: 180,
+    netProfit: 720,
+    netMarginPercent: 7.2,
+  });
+  assert.equal(result.working.grossProfit, '10000 - 4000 = 6000');
+  assert.equal(result.working.contributionMargin, '6000 - 500 - 500 = 5000');
+  assert.equal(result.working.operatingProfit, '6000 - 5000 = 1000');
+  assert.equal(result.working.profitBeforeTax, '1000 - 100 = 900');
+  assert.equal(result.working.netProfit, '900 - 180 = 720');
+  assert.match(result.completenessNote, /financing and other non-operating costs/i);
+  assert.match(result.taxAssumption, /not legal or tax advice/);
+  assert.match(result.accountingNote, /principal-versus-agent/i);
+});
+
+test('requires complete expense inputs, unique expense ids, and explicit tax assumptions', () => {
+  const base = {
+    accountingRevenue: 1000,
+    expenseItems: [{ id: 'rent', category: 'fixedOperating', amount: 100 }],
+  };
+  assert.throws(() => calculateBusinessFinancials({ accountingRevenue: 1000 }), /Expense items must be provided/);
+  assert.throws(() => calculateBusinessFinancials({
+    ...base,
+    expenseItems: [
+      { id: 'rent', category: 'fixedOperating', amount: 100 },
+      { id: ' rent ', category: 'fixedOperating', amount: 100 },
+    ],
+  }), /Duplicate expense id/);
+  assert.throws(() => calculateBusinessFinancials({
+    ...base,
+    expenseItems: [{ id: 'rent', category: 'fixedOperating', amount: 100 }],
+    tax: { ratePercent: 20 },
+  }), /explicit amount or both ratePercent and taxableProfitBase/);
+  assert.throws(() => calculateBusinessFinancials({
+    ...base,
+    expenseItems: [{ id: 'rent', category: 'fixedOperating', amount: 100 }],
+    tax: { amount: 100, ratePercent: 20, taxableProfitBase: 500 },
+  }), /either a tax amount or a rate/);
+  assert.throws(() => calculateBusinessFinancials({
+    ...base,
+    customerPayments: 100,
+    collectedForOthers: 101,
+  }), /cannot exceed customer payments/);
+  const withoutTax = calculateBusinessFinancials(base);
+  assert.equal(withoutTax.taxEstimate, null);
+  assert.equal(withoutTax.netProfit, null);
+});
+
+test('calculates commission, unit contribution, and commission-aware break-even', () => {
+  assert.deepEqual(calculateCommission(100, 10, 2), {
+    percentageCommission: 10,
+    fixedCommissionPerSale: 2,
+    totalCommission: 12,
+    proceedsAfterCommission: 88,
+  });
+  assert.deepEqual(calculateUnitContribution({
+    pricePerUnit: 100,
+    costOfSalesPerUnit: 30,
+    variableOperatingCostPerUnit: 10,
+    commissionRatePercent: 10,
+    fixedCommissionPerUnit: 2,
+  }), {
+    pricePerUnit: 100,
+    costOfSalesPerUnit: 30,
+    variableOperatingCostPerUnit: 10,
+    commissionCostPerUnit: 12,
+    contribution: 48,
+    contributionMarginPercent: 48,
+  });
+  assert.equal(calculateBreakEvenUnits(480, 100, 40, 10, 2), 10);
+  assert.deepEqual(calculateBreakEvenAnalysis({
+    fixedCosts: 480,
+    pricePerUnit: 100,
+    variableCostPerUnit: 40,
+    commissionRatePercent: 10,
+    fixedCommissionPerUnit: 2,
+  }), {
+    fixedCosts: 480,
+    pricePerUnit: 100,
+    variableCostPerUnit: 40,
+    commissionCostPerUnit: 12,
+    contributionPerUnit: 48,
+    exactUnits: 10,
+    breakEvenUnits: 10,
+    working: '100 - 40 - 12 commission = 48 contribution per unit; 480 fixed costs ÷ 48 = 10 units, rounded up to 10.',
+  });
+  assert.throws(() => calculateCommission(100, -1), /non-negative/);
+});
+
+test('calculates separate deterministic examples across seven business models', () => {
+  const examples = [
+    { industry: 'zero-capital delivery', revenue: 0, expenses: [], gross: 0, contribution: 0, operating: 0 },
+    { industry: 'manufacturing', revenue: 10000, expenses: [['costOfSales', 4000], ['variableOperating', 500], ['commission', 500], ['fixedOperating', 1500], ['salary', 2000], ['contractor', 500]], gross: 6000, contribution: 5000, operating: 1000 },
+    { industry: 'restaurant', revenue: 2000, expenses: [['costOfSales', 700], ['variableOperating', 100], ['commission', 60], ['fixedOperating', 200], ['salary', 400], ['contractor', 100]], gross: 1300, contribution: 1140, operating: 440 },
+    { industry: 'online store', revenue: 5000, expenses: [['costOfSales', 2000], ['variableOperating', 100], ['commission', 250], ['fixedOperating', 100]], gross: 3000, contribution: 2650, operating: 2550 },
+    { industry: 'software startup', revenue: 3000, expenses: [['costOfSales', 300], ['variableOperating', 50], ['fixedOperating', 1000], ['salary', 1000], ['contractor', 400]], gross: 2700, contribution: 2650, operating: 250 },
+    { industry: 'consulting', revenue: 4000, expenses: [['variableOperating', 100], ['fixedOperating', 200], ['salary', 1500], ['contractor', 500]], gross: 4000, contribution: 3900, operating: 1700 },
+    { industry: 'small construction', revenue: 12000, expenses: [['costOfSales', 5000], ['variableOperating', 300], ['fixedOperating', 500], ['salary', 2500], ['contractor', 2000]], gross: 7000, contribution: 6700, operating: 1700 },
+  ];
+
+  for (const example of examples) {
+    const result = calculateBusinessFinancials({
+      accountingRevenue: example.revenue,
+      expenseItems: example.expenses.map(([category, amount], lineIndex) => ({
+        id: `${example.industry}-${lineIndex}`,
+        category,
+        amount,
+      })),
+      tax: { amount: 0 },
+    });
+    assert.equal(result.grossProfit, example.gross, `${example.industry} gross profit`);
+    assert.equal(result.contributionMargin, example.contribution, `${example.industry} contribution`);
+    assert.equal(result.operatingProfit, example.operating, `${example.industry} operating profit`);
+    assert.equal(result.netProfit, example.operating, `${example.industry} net after explicitly supplied zero tax`);
+    assert.equal(
+      result.grossMarginPercent,
+      example.revenue > 0 ? Math.round((example.gross / example.revenue * 100) * 100) / 100 : null,
+    );
+  }
 });
 
 test('calculates interest, percentages and break-even units deterministically', () => {
@@ -199,6 +372,31 @@ test('routes explicitly labeled financial inputs through deterministic calculati
   assert.match(scenario, /Revenue: ZAR\s+2,000\.00/);
   assert.match(scenario, /Contribution before operating costs: ZAR\s+1,200\.00/);
   assert.match(scenario, /Net profit before taxes, financing, and other unstated costs: ZAR\s+600\.00/);
+  assert.match(scenario, /100 units × ZAR\s+20\.00 = ZAR\s+2,000\.00 revenue/);
+  assert.match(scenario, /ZAR\s+1,200\.00 - ZAR\s+600\.00 = ZAR\s+600\.00 before unstated costs/);
+
+  const financialStatement = createBusinessCalculationAnswer(
+    'Calculate income statement: accounting revenue ZAR 10000, cost of sales ZAR 4000, variable operating costs ZAR 500, fixed operating costs ZAR 1500, salary costs ZAR 2000, contractor payments ZAR 500, commission costs ZAR 500, other non-operating costs ZAR 100, tax rate 20%, taxable profit base ZAR 900.',
+  );
+  assert.match(financialStatement, /Gross profit: ZAR\s+6,000\.00 \(60% gross margin\)/);
+  assert.match(financialStatement, /Contribution margin: ZAR\s+5,000\.00 \(50%\)/);
+  assert.match(financialStatement, /Operating profit: ZAR\s+1,000\.00/);
+  assert.match(financialStatement, /Profit before tax: ZAR\s+900\.00/);
+  assert.match(financialStatement, /Net profit using the supplied tax assumption: ZAR\s+720\.00/);
+  assert.match(financialStatement, /ZAR\s+1,000\.00 - ZAR\s+100\.00 other non-operating costs = ZAR\s+900\.00 profit before tax/);
+  assert.match(financialStatement, /principal-versus-agent treatment/);
+
+  const missingTax = createBusinessCalculationAnswer(
+    'Calculate financial statement: revenue ZAR 10000, cost of sales ZAR 4000, variable operating costs ZAR 500, fixed operating costs ZAR 1500, salary costs ZAR 2000, contractor payments ZAR 500, commission costs ZAR 500, other non-operating costs ZAR 100.',
+  );
+  assert.match(missingTax, /Net profit: not calculated because no explicit tax amount or rate-and-taxable-base assumption was supplied/);
+
+  const breakEven = createBusinessCalculationAnswer(
+    'Calculate break-even: fixed costs R480, price per unit R100, variable cost per unit R40, commission rate 10%, fixed commission per unit R2.',
+  );
+  assert.match(breakEven, /Contribution per unit: ZAR\s+48\.00/);
+  assert.match(breakEven, /Break-even point: 10 units/);
+  assert.match(breakEven, /ZAR\s+480\.00 fixed costs ÷ ZAR\s+48\.00 = 10 units, rounded up to 10/);
 });
 
 test('declines deterministic financial output when required inputs are absent or ambiguous', () => {
@@ -216,6 +414,22 @@ test('declines deterministic financial output when required inputs are absent or
   );
   assert.equal(
     createBusinessCalculationAnswer('Calculate ROI: total return R1200, initial investment USD1000.'),
+    null,
+  );
+  assert.equal(
+    createBusinessCalculationAnswer('Calculate income statement: revenue ZAR 10000, cost of sales ZAR 4000.'),
+    null,
+  );
+  assert.equal(
+    createBusinessCalculationAnswer(
+      'Calculate income statement: revenue ZAR 10000, cost of sales USD 4000, variable operating costs ZAR 500, fixed operating costs ZAR 1500, salary costs ZAR 2000, contractor payments ZAR 500, commission costs ZAR 500, other non-operating costs ZAR 100.',
+    ),
+    null,
+  );
+  assert.equal(
+    createBusinessCalculationAnswer(
+      'Calculate break-even: fixed costs R1000, price per unit R30, variable cost per unit R30.',
+    ),
     null,
   );
 });
@@ -333,10 +547,38 @@ test('tailors practical operating guidance to distinct business models', () => {
     ['software', 'Help my software startup improve user retention.'],
     ['consulting', 'Build a consulting business client delivery model.'],
     ['restaurant', 'Create a restaurant business stock and staff scheduling process.'],
+    ['construction', 'Plan a small construction business with subcontractors and site safety.'],
   ];
   for (const [industry, prompt] of cases) {
     assert.match(buildWorkspaceBusinessInstruction(prompt), new RegExp(industry, 'i'));
   }
+});
+
+test('low-capital advice and operational controls are proportional and actionable', () => {
+  const guidance = buildWorkspaceBusinessInstruction(
+    'I have R0 and want to test a delivery business before spending money. Help me find first customers safely.',
+  );
+  assert.match(guidance, /no- or low-capital pilots.*customer discovery and demand tests/i);
+  assert.match(guidance, /before registration costs, software subscriptions, hiring, vehicles, offices, or paid advertising/i);
+  assert.match(guidance, /financial, legal\/compliance, customer, supplier\/contractor, safety, data-protection, payment\/fraud, and continuity risks/i);
+
+  const construction = buildWorkspaceBusinessInstruction(
+    'I am a small South African construction contractor; which permits and safety processes do I need?',
+  );
+  assert.match(construction, /construction.*project-based quotes.*materials.*labour.*site safety/i);
+  assert.match(construction, /verify legal and municipal requirements for the specific location/i);
+});
+
+test('South African legal and funding claims require current official sources without fabricated citations', () => {
+  const guidance = buildWorkspaceQualityInstruction(
+    'In South Africa, how do SARS VAT, POPIA, the Consumer Protection Act, contractor classification, transport permits and municipal requirements apply? Check current NYDA funding eligibility.',
+  );
+  assert.match(guidance, /CIPC, SARS, NYDA, SEDA, SEFA or any successor, VAT, POPIA/i);
+  assert.match(guidance, /Consumer Protection Act, employment or independent-contractor classification, transport and municipal requirements/i);
+  assert.match(guidance, /verified from the responsible official source/i);
+  assert.match(guidance, /include the actual consulted source and date where retrieval is available/i);
+  assert.match(guidance, /if not, identify the detail as unverified/i);
+  assert.match(guidance, /Never invent.*eligibility rule/i);
 });
 
 test('fact-verification regression prompts cover requested risky claim categories', async (t) => {
