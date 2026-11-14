@@ -2691,3 +2691,51 @@
       min-height: calc(100dvh - 13rem);
     }
   }
+
+  .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card {
+    border-color: #424242 !important;
+    background: #1d1d1d !important;
+    box-shadow: none !important;
+  }
+
+  .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card textarea {
+    color: #f5f5f5 !important;
+  }
+
+  .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card textarea::placeholder {
+    color: #aaa !important;
+  }
+
+  .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"] {
+    background: #383838 !important;
+    color: #f5f5f5 !important;
+  }
+
+  .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"]:not(:disabled) {
+    background: #f1f1f1 !important;
+    color: #202020 !important;
+  }
+
+  .fm-ai-workspace.fm-theme-light .fm-universal-composer-card {
+    border-color: #dedede !important;
+    background: #fff !important;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06) !important;
+  }
+
+  .fm-ai-workspace.fm-theme-light .fm-universal-composer-card textarea {
+    color: #252525 !important;
+  }
+
+  .fm-ai-workspace.fm-theme-light .fm-universal-composer-card textarea::placeholder {
+    color: #777 !important;
+  }
+
+  .fm-ai-workspace.fm-theme-light .fm-universal-composer-card button[aria-label="Send message"] {
+    background: #222 !important;
+    color: #fff !important;
+  }
+
+  .fm-ai-workspace.fm-theme-light .fm-universal-composer-card button[aria-label="Send message"]:disabled {
+    background: #e7e7e7 !important;
+    color: #666 !important;
+  }
