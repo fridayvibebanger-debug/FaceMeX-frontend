@@ -120,6 +120,9 @@ type Props = {
   onSaveLesson: (lesson: WorkspaceSmartboardLessonDraft) => Promise<WorkspaceSmartboardLesson>;
   onListLessons: () => Promise<WorkspaceSmartboardLesson[]>;
   onSendToWorkspace?: (content: string) => void;
+  hideTrigger?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 type SpeechRecognitionLike = {
@@ -666,8 +669,16 @@ export default function WorkspaceSmartboardCanvas({
   onSaveLesson,
   onListLessons,
   onSendToWorkspace,
+  hideTrigger = false,
+  open: controlledOpen,
+  onOpenChange,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (nextOpen: boolean) => {
+    if (controlledOpen === undefined) setUncontrolledOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scene, setScene] = useState<Scene>(emptyScene);
   const [history, setHistory] = useState<Snapshot[]>([]);
@@ -2718,16 +2729,18 @@ export default function WorkspaceSmartboardCanvas({
 
   return (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={() => { setAnalyzing(false); setOpen(true); }}
-        className="h-9 shrink-0 gap-2 rounded-full border border-white/10 px-3 text-white/80 hover:bg-white/10 hover:text-white"
-        aria-label="Open AI Smartboard"
-      >
-        <Pencil className="h-4 w-4" aria-hidden="true" />
-        <span className="hidden sm:inline">Smartboard</span>
-      </Button>
+      {!hideTrigger && (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => { setAnalyzing(false); setOpen(true); }}
+          className="h-9 shrink-0 gap-2 rounded-full border border-white/10 px-3 text-white/80 hover:bg-white/10 hover:text-white"
+          aria-label="Open AI Smartboard"
+        >
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+          <span className="hidden sm:inline">Smartboard</span>
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           analysisRequestRef.current += 1;
