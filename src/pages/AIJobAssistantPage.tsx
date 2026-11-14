@@ -94,12 +94,18 @@ import {
   selectRelevantWorkspaceImages,
   parseWorkspacePractice,
   parseWorkspaceUnderstanding,
+  parseWorkspaceInteractiveForm,
+  parseWorkspaceSections,
+  parseWorkspaceSteps,
   parseWorkspaceEquationBalance,
   parseWorkspaceFollowUp,
   parseWorkspaceVisualization,
   selectRelevantYouTubeLessonVideos,
   type WorkspaceVisualization,
   type WorkspaceUnderstanding,
+  type WorkspaceInteractiveForm,
+  type WorkspaceResponseSections,
+  type WorkspaceResponseSteps,
   type WorkspaceEquationBalance,
 } from '@/lib/workspaceResponse';
 import {
@@ -2684,6 +2690,191 @@ function WorkspacePracticeCard({
   );
 }
 
+function getResponseSectionIcon(name: string) {
+  const icons = {
+    book: BookOpen,
+    briefcase: Briefcase,
+    calendar: CalendarDays,
+    check: CheckCircle2,
+    document: FileText,
+    globe: Globe2,
+    growth: Sparkles,
+    list: ChevronRight,
+    mail: Mail,
+    users: Users,
+  };
+  return icons[name as keyof typeof icons] || ChevronRight;
+}
+
+function WorkspaceInteractiveQuestionCard({
+  form,
+  onSubmit,
+  disabled = false,
+}: {
+  form: WorkspaceInteractiveForm;
+  onSubmit: (answers: Array<{ question: string; answer: string }>) => void;
+  disabled?: boolean;
+}) {
+  const formId = useId();
+  const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
+  const isComplete = form.questions.every((item, index) => {
+    const answer = answers[index];
+    if (Array.isArray(answer)) return answer.length > 0;
+    return typeof answer === 'string' && Boolean(answer.trim());
+  });
+
+  const submitAnswers = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (disabled || !isComplete) return;
+    onSubmit(form.questions.map((item, index) => {
+      const answer = answers[index];
+      return {
+        question: item.question,
+        answer: Array.isArray(answer) ? answer.join(', ') : typeof answer === 'string' ? answer : '',
+      };
+    }));
+  };
+
+  return (
+    <form
+      onSubmit={submitAnswers}
+      className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-[#101010] px-4 py-4 sm:px-5"
+    >
+      {form.title && <h3 className="mb-4 text-base font-semibold text-white">{form.title}</h3>}
+      <div className="divide-y divide-white/10">
+        {form.questions.map((item, questionIndex) => {
+          const currentAnswer = answers[questionIndex];
+          return (
+            <fieldset key={`${item.question}-${questionIndex}`} className="min-w-0 space-y-3 py-4 first:pt-0 last:pb-0">
+              <legend className="max-w-full break-words pb-2 text-sm font-medium leading-6 text-white/90">
+                {item.question}
+              </legend>
+              {item.type === 'text' ? (
+                <input
+                  type="text"
+                  value={typeof currentAnswer === 'string' ? currentAnswer : ''}
+                  onChange={(event) => setAnswers((previous) => ({
+                    ...previous,
+                    [questionIndex]: event.target.value,
+                  }))}
+                  aria-label={item.question}
+                  maxLength={300}
+                  disabled={disabled}
+                  className="min-h-11 w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm text-white placeholder:text-white/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/40 disabled:opacity-50"
+                  placeholder="Type your answer"
+                />
+              ) : (
+                <div className="grid gap-2">
+                  {item.options.map((option, optionIndex) => {
+                    const checked = Array.isArray(currentAnswer)
+                      ? currentAnswer.includes(option)
+                      : currentAnswer === option;
+                    const inputId = `${formId}-${questionIndex}-${optionIndex}`;
+                    return (
+                      <label
+                        key={option}
+                        htmlFor={inputId}
+                        className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${
+                          checked
+                            ? 'border-white/30 bg-white/[0.09] text-white'
+                            : 'border-white/10 bg-white/[0.025] text-white/80 hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        <input
+                          id={inputId}
+                          type={item.type === 'single' ? 'radio' : 'checkbox'}
+                          name={`${formId}-${questionIndex}`}
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => setAnswers((previous) => {
+                            if (item.type === 'single') return { ...previous, [questionIndex]: option };
+                            const previousAnswer = previous[questionIndex];
+                            const selected = Array.isArray(previousAnswer) ? previousAnswer : [];
+                            return {
+                              ...previous,
+                              [questionIndex]: checked
+                                ? selected.filter((selectedOption) => selectedOption !== option)
+                                : [...selected, option],
+                            };
+                          })}
+                          className="h-4 w-4 shrink-0 accent-white"
+                        />
+                        <span className="min-w-0 break-words">{option}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </fieldset>
+          );
+        })}
+      </div>
+      <Button
+        type="submit"
+        disabled={disabled || !isComplete}
+        className="mt-5 min-h-11 w-full rounded-xl bg-white/[0.12] text-sm font-medium text-white hover:bg-white/[0.18] disabled:bg-white/[0.06] disabled:text-white/40"
+      >
+        {form.submitLabel}
+      </Button>
+    </form>
+  );
+}
+
+function WorkspaceStructuredSections({ response }: { response: WorkspaceResponseSections }) {
+  return (
+    <section className="my-4 w-full max-w-3xl rounded-xl border border-white/10 bg-[#101010] px-4 py-4 sm:px-5" aria-label={response.title}>
+      <h3 className="mb-1 text-base font-semibold text-white">{response.title}</h3>
+      <div className="divide-y divide-white/10">
+        {response.sections.map((section, index) => {
+          const Icon = getResponseSectionIcon(section.icon);
+          return (
+            <section key={`${section.heading}-${index}`} className="py-4 first:pb-4 last:pb-0">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-white">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-white/75">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                {section.heading}
+              </h4>
+              {section.body && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-white/75">{renderInlineText(section.body)}</p>}
+              {section.items.length > 0 && (
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-white/80 marker:text-white/45">
+                  {section.items.map((item) => <li key={item} className="break-words">{renderInlineText(item)}</li>)}
+                </ul>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceInstructionalSteps({ response }: { response: WorkspaceResponseSteps }) {
+  return (
+    <section className="my-4 w-full max-w-3xl" aria-label={response.title}>
+      <h3 className="mb-3 text-base font-semibold text-white">{response.title}</h3>
+      <ol className="divide-y divide-white/10">
+        {response.steps.map((step, index) => {
+          const Icon = getResponseSectionIcon(step.icon);
+          return (
+            <li key={`${step.heading}-${index}`} className="flex min-w-0 gap-3 py-4 first:pt-1">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-white/75">
+                <Icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h4 className="text-sm font-semibold leading-6 text-white">
+                  <span className="mr-1.5 text-white/55">{index + 1}.</span>{step.heading}
+                </h4>
+                <p className="mt-1 whitespace-pre-line break-words text-sm leading-6 text-white/75">{renderInlineText(step.body)}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function WorkspaceUnderstandingCard({ quiz }: { quiz: WorkspaceUnderstanding }) {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [attempted, setAttempted] = useState<Record<number, boolean>>({});
@@ -3178,16 +3369,20 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
     return (
       <section className="my-4 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4" aria-label={visualization.title}>
         <h3 className="mb-4 text-base font-semibold text-white">{visualization.title}</h3>
-        <ol className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <ol className="flex flex-col items-center gap-2">
           {visualization.steps.map((step, index) => (
-            <Fragment key={`${index}-${step}`}>
-              <li className="flex min-w-0 flex-1 items-center justify-center rounded-lg border border-white/10 bg-black/15 px-3 py-3 text-center text-sm text-white/85">
-                {step}
+            <Fragment key={`${index}-${typeof step === 'string' ? step : step.title}`}>
+              <li className="w-full max-w-2xl rounded-xl border border-white/10 bg-black/15 px-4 py-3">
+                <h4 className="text-sm font-semibold text-white">
+                  {typeof step === 'string' ? step : step.title}
+                </h4>
+                {typeof step !== 'string' && step.description && (
+                  <p className="mt-1 text-sm leading-6 text-white/70">{step.description}</p>
+                )}
               </li>
               {index < visualization.steps.length - 1 && (
-                <li aria-hidden="true" className="flex items-center justify-center text-white/40 sm:px-1">
-                  <span className="sm:hidden">↓</span>
-                  <span className="hidden sm:inline">→</span>
+                <li aria-hidden="true" className="flex items-center justify-center text-white/45">
+                  <ChevronDown className="h-4 w-4" />
                 </li>
               )}
             </Fragment>
@@ -3377,6 +3572,7 @@ function ChatGPTStyleText({
   visualReference,
   sourcePrompt,
   onPracticeAttempt,
+  onInteractiveSubmit,
   disabled,
 }: {
   text: string;
@@ -3384,6 +3580,7 @@ function ChatGPTStyleText({
   visualReference?: ReactNode;
   sourcePrompt?: string;
   onPracticeAttempt?: (question: string, answer: string) => void;
+  onInteractiveSubmit: (answers: Array<{ question: string; answer: string }>) => void;
   disabled?: boolean;
 }) {
   const safeText = normalizeBrokenMarkdownLinks(normalizeWorkspaceAnswerForDisplay(text, sourcePrompt));
@@ -3483,6 +3680,29 @@ function ChatGPTStyleText({
         return quiz
           ? <WorkspaceUnderstandingCard key={`understanding-${index}`} quiz={quiz} />
           : null;
+      }
+      if (block.language.toLowerCase() === 'interactive') {
+        const form = parseWorkspaceInteractiveForm(block.text);
+        return form
+          ? <WorkspaceInteractiveQuestionCard
+              key={`interactive-${index}`}
+              form={form}
+              onSubmit={onInteractiveSubmit}
+              disabled={disabled}
+            />
+          : <MarkdownCodeBlock key={`interactive-fallback-${index}`} code={block.text} language="interactive form data" />;
+      }
+      if (block.language.toLowerCase() === 'sections') {
+        const response = parseWorkspaceSections(block.text);
+        return response
+          ? <WorkspaceStructuredSections key={`sections-${index}`} response={response} />
+          : <MarkdownCodeBlock key={`sections-fallback-${index}`} code={block.text} language="structured response data" />;
+      }
+      if (block.language.toLowerCase() === 'steps') {
+        const response = parseWorkspaceSteps(block.text);
+        return response
+          ? <WorkspaceInstructionalSteps key={`steps-${index}`} response={response} />
+          : <MarkdownCodeBlock key={`steps-fallback-${index}`} code={block.text} language="instruction steps data" />;
       }
       if (block.language.toLowerCase() === 'chart' || block.language.toLowerCase() === 'diagram') {
         const visualization = parseWorkspaceVisualization(block.language.toLowerCase(), block.text);
@@ -4276,21 +4496,9 @@ const [developerPlan, setDeveloperPlan] = useState<
 
   const lastChatMessage = chatMessages[chatMessages.length - 1];
 
-  const hasJobResultsOnScreen = useMemo(() => {
-    return chatMessages.some((message) => message.role === 'assistant' && Boolean(message.jobs?.length));
-  }, [chatMessages]);
-
   const showMobileBlankWorkspace = !isDesktopViewport && chatMessages.length === 0 && !busy && !selectedWatchVideo && !selectedProjectId;
 
-  const composerPlaceholder = practicalLabOpen
-    ? 'Ask FaceMeX about this simulation...'
-    : watchPanelOpen
-      ? 'Ask FaceMeX about this lesson...'
-      : jobsOpen || trackerOpen
-        ? 'Ask FaceMeX about this work...'
-        : hasJobResultsOnScreen
-          ? 'Ask a follow-up...'
-          : 'Ask FaceMeX anything...';
+  const composerPlaceholder = 'Ask FaceMeX anything...';
 
   const savedMessages = useMemo(() => {
     return messages.filter((message) => message.saved && message.savedCategory);
@@ -6477,6 +6685,9 @@ FaceMeX intelligence rules:
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
 - When a relevant photograph would materially improve the answer, the existing media integration may show a separately retrieved, relevance-checked image card. Never output a visual marker or placeholder, and never invent image URLs, results, or captions.
 - When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block so the visual is actually rendered. Use numeric scatter points calculated from the supplied function; use a contour only when its values are derived from the exact supported quadratic; and use a labeled multi-line chart for conceptual relationships such as supply and demand, explicitly marked as illustrative unless sourced. Use only factual values grounded in the user's input or a reliable source; never present invented data as factual.
+- For a task that genuinely needs the user to choose or provide details before you can continue, include a fenced \`interactive\` JSON block with a concise title, a \`questions\` array, and a \`submitLabel\`. Each question has a \`question\`, a \`type\` of \`single\`, \`multiple\`, or \`text\`, and an \`options\` array for single/multiple choices (omit options for text). Do not use a form for ordinary answers or invent missing options.
+- For a useful action plan, use a \`sections\` fenced JSON block with \`title\` and \`sections\` entries containing \`heading\`, optional \`body\`, optional \`items\`, and an optional icon from \`book\`, \`briefcase\`, \`calendar\`, \`check\`, \`document\`, \`globe\`, \`growth\`, \`list\`, \`mail\`, or \`users\`. For sequential instructions, use a \`steps\` fenced JSON block with \`title\` and at least two \`steps\` containing \`heading\`, \`body\`, and an optional supported \`icon\`. Use normal Markdown when it is clearer.
+- For a workflow diagram, use the \`diagram\` JSON format with \`type\` set to \`flow\`, a \`title\`, and two to eight \`steps\`. A step may be a short string or an object with \`title\` and \`description\`. Use only the actual workflow details established by the conversation.
 - Format Markdown for readability. Use fenced code blocks for code, tables only for useful comparisons, and never output raw HTML or scripts.
 - Use the preceding user and assistant messages in this request as the active conversation. Resolve follow-ups from that history, preserve the user's details, and continue the task without restarting or asking them to repeat information.
 - If an earlier message refers to an image or file that is not attached now, do not claim to see it; ask the user to attach it again if needed.
@@ -10742,6 +10953,14 @@ Start with the most useful next action. Do not invent personal details, course r
                                   onLinkClick={handleGeneratedLinkClick}
                                   sourcePrompt={previousUserText}
                                   disabled={busy}
+                                  onInteractiveSubmit={(answers) => {
+                                    const answerDetails = answers
+                                      .map(({ question, answer }) => `Question: ${question}\nAnswer: ${answer}`)
+                                      .join('\n\n');
+                                    void sendPrompt(
+                                      `Please continue based on my answers to the questions you asked.\n\n${answerDetails}`
+                                    );
+                                  }}
                                   onPracticeAttempt={message.learning
                                     ? (question, answer) => {
                                         void sendPrompt(
