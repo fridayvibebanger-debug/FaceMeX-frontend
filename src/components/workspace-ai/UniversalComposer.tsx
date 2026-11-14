@@ -61,7 +61,7 @@ export default function UniversalComposer({
   busy = false,
   enterToSend = true,
   tone = 'dark',
-  placeholder = 'Message FaceMeX',
+  placeholder = 'Ask FaceMeX anything...',
   onFocus,
   onClick,
 }: UniversalComposerProps) {
@@ -191,10 +191,10 @@ export default function UniversalComposer({
         </div>
       )}
 
-      <div className={`fm-universal-composer-card rounded-[24px] border px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 ${
+      <div className={`fm-universal-composer-card rounded-[32px] border px-2 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 ${
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
-        <div className="flex min-h-11 items-end gap-1.5 sm:gap-2">
+        <div className="flex min-h-11 items-center gap-1 sm:gap-1.5">
           {(onPickAttachments || menuOptions.length > 0) && (
             <div className="relative" ref={menuRef}>
               <button
@@ -335,36 +335,39 @@ export default function UniversalComposer({
             </div>
           )}
 
-          <Textarea
-            ref={setRefs}
-            rows={1}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onFocus={onFocus}
-            onClick={onClick}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            aria-label="Message FaceMeX"
-            className={`min-h-11 min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-3 text-[15px] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
-              isLight
-                ? 'text-slate-800 placeholder:text-slate-400'
-                : 'text-white/90 placeholder:text-white/45'
-            }`}
-          />
-
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            aria-label="Expand writing area"
-            aria-expanded={expanded}
-            aria-haspopup="dialog"
-            title="Expand writing area"
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
-              isLight ? 'text-slate-500 hover:bg-black/5 hover:text-slate-900' : 'text-white/65 hover:bg-white/10 hover:text-white'
-            }`}
-          >
-            <Maximize2 className="h-4 w-4" />
-          </button>
+          <div className="relative min-w-0 flex-1">
+            <Textarea
+              ref={setRefs}
+              rows={1}
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onFocus={onFocus}
+              onClick={onClick}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              aria-label="Message FaceMeX"
+              className={`min-h-10 min-w-0 w-full resize-none border-0 bg-transparent py-2.5 pl-1 pr-9 text-[15px] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                isLight
+                  ? 'text-slate-800 placeholder:text-slate-400'
+                  : 'text-white/90 placeholder:text-white/45'
+              }`}
+            />
+            {value.trim() && (
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                aria-label="Expand writing area"
+                aria-expanded={expanded}
+                aria-haspopup="dialog"
+                title="Expand writing area"
+                className={`absolute bottom-1 right-0 flex h-8 w-8 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                  isLight ? 'text-slate-500 hover:bg-black/5 hover:text-slate-900' : 'text-white/65 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
 
           {onVoiceToggle && (
             <button
@@ -393,8 +396,8 @@ export default function UniversalComposer({
             aria-label="Send message"
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed ${
               isLight
-                ? 'bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-300 disabled:text-white/70'
-                : 'bg-white text-[#171717] hover:bg-white/90 disabled:bg-white/10 disabled:text-white/40'
+                ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
+                : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
             }`}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
@@ -458,8 +461,8 @@ export default function UniversalComposer({
               disabled={busy || !canSend}
               className={`min-h-11 rounded-full px-5 ${
                 isLight
-                  ? 'bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-300'
-                  : 'bg-white text-[#171717] hover:bg-white/90 disabled:bg-white/10 disabled:text-white/40'
+                  ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
+                  : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
               }`}
             >
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowUp className="mr-2 h-4 w-4" />}
