@@ -2708,12 +2708,16 @@
 
   .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"] {
     background: #383838 !important;
-    color: #f5f5f5 !important;
+    color: rgba(255, 255, 255, 0.85) !important;
   }
 
   .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"]:not(:disabled) {
-    background: #f1f1f1 !important;
-    color: #202020 !important;
+    background: #383838 !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+
+  .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"]:not(:disabled):hover {
+    background: #484848 !important;
   }
 
   .fm-ai-workspace.fm-theme-light .fm-universal-composer-card {
@@ -2731,8 +2735,12 @@
   }
 
   .fm-ai-workspace.fm-theme-light .fm-universal-composer-card button[aria-label="Send message"] {
-    background: #222 !important;
-    color: #fff !important;
+    background: #dedede !important;
+    color: #3a3a3a !important;
+  }
+
+  .fm-ai-workspace.fm-theme-light .fm-universal-composer-card button[aria-label="Send message"]:not(:disabled):hover {
+    background: #d2d2d2 !important;
   }
 
   .fm-ai-workspace.fm-theme-light .fm-universal-composer-card button[aria-label="Send message"]:disabled {
