@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { ArrowUp, Mic, Briefcase, GraduationCap, Building2, Sparkles } from "lucide-react";
+import { ArrowUp, Mic, Briefcase, GraduationCap, Building2, MonitorUp, Sparkles } from "lucide-react";
+import UniversalComposer from "@/components/workspace-ai/UniversalComposer";
 
 type AssistantStatus = "idle" | "listening" | "thinking" | "speaking";
 
@@ -320,6 +321,12 @@ export default function MEXA({ embedded = false }: MEXAProps) {
       suggestions: ["Explain YouTube lesson", "Create notes", "Generate quiz", "Summarize video"],
       buttonClassName: "border-white/10 bg-white/5",
     },
+    {
+      label: "Screen share",
+      prompt: "Share your screen privately with approved FaceMeX users.",
+      suggestions: ["Create a private invitation", "Approve each viewer", "Stop sharing at any time"],
+      buttonClassName: "border-cyan-300/50 bg-cyan-50/70",
+    },
   ] as const;
 
   const workspaceTools = [
@@ -334,6 +341,11 @@ export default function MEXA({ embedded = false }: MEXAProps) {
   const activeModuleConfig = moduleConfigs.find((item) => item.label === activeModule) ?? null;
 
   const handleModuleClick = (label: string) => {
+    if (label === "Screen share") {
+      navigate("/screen-share");
+      return;
+    }
+
     if (label === "Business") {
       navigate("/enterprise");
       return;
@@ -549,65 +561,18 @@ export default function MEXA({ embedded = false }: MEXAProps) {
 
                   {showKeyboard && (
                   
-                    <div className="fixed bottom-[90px] left-0 right-0 z-40 px-4">
-                  
-                      <div
-                        className="
-                        mx-auto
-                        flex
-                        max-w-md
-                        items-center
-                        rounded-full
-                        border
-                        border-black/5
-                        bg-white/95
-                        px-5
-                        py-3
-                        shadow-[0_10px_35px_rgba(15,23,42,.10)]
-                        backdrop-blur-3xl
-                      "
-                      >
-                  
-                        <input
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              handleSubmit();
-                            }
-                          }}
-                          placeholder="Message MEXA..."
-                          className="
-                          flex-1
-                          bg-transparent
-                          text-[15px]
-                          text-slate-800
-                          outline-none
-                          placeholder:text-slate-400
-                        "
-                        />
-                  
-                        <button
-                          onClick={handleSubmit}
-                          className="
-                          ml-3
-                          flex
-                          h-10
-                          w-10
-                          items-center
-                          justify-center
-                          rounded-full
-                          bg-slate-900
-                          transition
-                          hover:scale-105
-                        "
-                        >
-                          <ArrowUp size={18} className="text-white"/>
-                        </button>
-                  
-                      </div>
-                  
+                    <div className="fixed bottom-[calc(90px+env(safe-area-inset-bottom))] left-0 right-0 z-40 px-4">
+                      <UniversalComposer
+                        value={draft}
+                        onChange={setDraft}
+                        onSend={handleSubmit}
+                        onVoiceToggle={() => status === "listening" ? stopListening() : startListening()}
+                        voiceListening={status === "listening"}
+                        busy={isBusy}
+                        enterToSend={false}
+                        tone="light"
+                        placeholder="Message MEXA..."
+                      />
                     </div>
                   
                   )}
@@ -800,6 +765,15 @@ export default function MEXA({ embedded = false }: MEXAProps) {
                             Business
                           </span>
                   
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleModuleClick("Screen share")}
+                          className="flex flex-col items-center gap-1 transition-opacity hover:opacity-100"
+                        >
+                          <MonitorUp size={18} className="text-slate-500" />
+                          <span className="text-[10px] text-slate-500">Share</span>
                         </button>
                   
                       </div>
