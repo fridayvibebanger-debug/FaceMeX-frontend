@@ -71,6 +71,7 @@ export default function UniversalComposer({
   const [menuOpen, setMenuOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const [visibleViewportHeight, setVisibleViewportHeight] = useState(0);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
   const isLight = tone === 'light';
@@ -93,27 +94,45 @@ export default function UniversalComposer({
     const textarea = inputRef.current;
     if (!textarea) return;
     textarea.style.height = 'auto';
-    const maxHeight = window.innerWidth < 768 ? 144 : 240;
+    const viewportHeight = visibleViewportHeight || window.visualViewport?.height || window.innerHeight;
+    const maxHeight = window.innerWidth < 768
+      ? Math.max(38, Math.min(144, Math.floor(viewportHeight * 0.42)))
+      : 240;
     const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
     textarea.style.height = `${nextHeight}px`;
     textarea.style.maxHeight = `${maxHeight}px`;
     textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
-  }, [value]);
+  }, [value, visibleViewportHeight]);
+
+  const updateViewportPosition = useCallback(() => {
+    const viewport = window.visualViewport;
+    setVisibleViewportHeight(viewport?.height || window.innerHeight);
+    if (!viewport) {
+      setKeyboardInset(0);
+      return;
+    }
+
+    const visibleBottom = viewport.offsetTop + viewport.height;
+    const inset = window.innerWidth < 1024
+      ? Math.max(0, window.innerHeight - visibleBottom)
+      : 0;
+    setKeyboardInset(inset);
+  }, []);
 
   useEffect(() => {
     const viewport = window.visualViewport;
-    if (!viewport) return;
-    const updateKeyboardInset = () => {
-      if (inputRef.current !== document.activeElement) {
-        setKeyboardInset(0);
-        return;
-      }
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      setKeyboardInset(inset > 80 ? inset : 0);
+    updateViewportPosition();
+    viewport?.addEventListener('resize', updateViewportPosition);
+    viewport?.addEventListener('scroll', updateViewportPosition);
+    window.addEventListener('resize', updateViewportPosition);
+    window.addEventListener('orientationchange', updateViewportPosition);
+    return () => {
+      viewport?.removeEventListener('resize', updateViewportPosition);
+      viewport?.removeEventListener('scroll', updateViewportPosition);
+      window.removeEventListener('resize', updateViewportPosition);
+      window.removeEventListener('orientationchange', updateViewportPosition);
     };
-    viewport.addEventListener('resize', updateKeyboardInset);
-    return () => viewport.removeEventListener('resize', updateKeyboardInset);
-  }, []);
+  }, [updateViewportPosition]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -371,14 +390,9 @@ export default function UniversalComposer({
               onChange={(event) => onChange(event.target.value)}
               onFocus={() => {
                 onFocus?.();
-                const viewport = window.visualViewport;
-                if (!viewport) return;
-                requestAnimationFrame(() => {
-                  if (inputRef.current !== document.activeElement) return;
-                  const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-                  setKeyboardInset(inset > 80 ? inset : 0);
-                });
+                requestAnimationFrame(updateViewportPosition);
               }}
+              onBlur={() => requestAnimationFrame(updateViewportPosition)}
               onClick={onClick}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
