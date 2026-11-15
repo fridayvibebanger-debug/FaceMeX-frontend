@@ -41,6 +41,8 @@ type UniversalComposerProps = {
   placeholder?: string;
   onFocus?: () => void;
   onClick?: () => void;
+  onKeyboardVisibilityChange?: (visible: boolean) => void;
+  mobileViewportAware?: boolean;
 };
 
 export default function UniversalComposer({
@@ -64,14 +66,23 @@ export default function UniversalComposer({
   placeholder = 'Ask FaceMeX anything...',
   onFocus,
   onClick,
+  onKeyboardVisibilityChange,
+  mobileViewportAware = false,
 }: UniversalComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const textareaHasFocusRef = useRef(false);
+  const baselineViewportHeightRef = useRef(0);
+  const keyboardVisibilityRef = useRef(false);
+  const keyboardVisibilityCallbackRef = useRef(onKeyboardVisibilityChange);
+  keyboardVisibilityCallbackRef.current = onKeyboardVisibilityChange;
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [visibleViewportHeight, setVisibleViewportHeight] = useState(0);
+  const [visibleViewportBottom, setVisibleViewportBottom] = useState(0);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
   const isLight = tone === 'light';
@@ -95,44 +106,115 @@ export default function UniversalComposer({
     if (!textarea) return;
     textarea.style.height = 'auto';
     const viewportHeight = visibleViewportHeight || window.visualViewport?.height || window.innerHeight;
-    const maxHeight = window.innerWidth < 768
-      ? Math.max(38, Math.min(144, Math.floor(viewportHeight * 0.42)))
-      : 240;
+    const maxHeight = mobileViewportAware
+      ? window.innerWidth < 1024
+        ? Math.max(38, Math.min(144, Math.floor(viewportHeight * 0.42)))
+        : 240
+      : window.innerWidth < 768 ? 144 : 240;
     const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
     textarea.style.height = `${nextHeight}px`;
     textarea.style.maxHeight = `${maxHeight}px`;
     textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
-  }, [value, visibleViewportHeight]);
+  }, [mobileViewportAware, value, visibleViewportHeight]);
 
   const updateViewportPosition = useCallback(() => {
     const viewport = window.visualViewport;
-    setVisibleViewportHeight(viewport?.height || window.innerHeight);
-    if (!viewport) {
-      setKeyboardInset(0);
+    if (!mobileViewportAware) {
+      if (!viewport) return;
+      if (inputRef.current !== document.activeElement) {
+        setKeyboardInset(0);
+        return;
+      }
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setKeyboardInset(inset > 80 ? inset : 0);
       return;
     }
 
-    const visibleBottom = viewport.offsetTop + viewport.height;
-    const inset = window.innerWidth < 1024
+    const height = viewport?.height || window.innerHeight;
+    const visibleBottom = viewport
+      ? viewport.offsetTop + viewport.height
+      : window.innerHeight;
+    setVisibleViewportHeight(height);
+    setVisibleViewportBottom(visibleBottom);
+    if (!textareaHasFocusRef.current) {
+      baselineViewportHeightRef.current = height;
+    }
+
+    const viewportReduced = baselineViewportHeightRef.current > 0
+      && height < baselineViewportHeightRef.current;
+    const viewportBottomInset = viewport
       ? Math.max(0, window.innerHeight - visibleBottom)
       : 0;
-    setKeyboardInset(inset);
-  }, []);
+    const isMobile = window.innerWidth < 1024;
+    const nextKeyboardVisible = isMobile
+      && textareaHasFocusRef.current
+      && (viewportReduced || viewportBottomInset > 0);
+
+    if (inputRef.current !== document.activeElement && !nextKeyboardVisible) {
+      textareaHasFocusRef.current = false;
+      baselineViewportHeightRef.current = height;
+    }
+    setKeyboardVisible(nextKeyboardVisible);
+    if (keyboardVisibilityRef.current !== nextKeyboardVisible) {
+      keyboardVisibilityRef.current = nextKeyboardVisible;
+      keyboardVisibilityCallbackRef.current?.(nextKeyboardVisible);
+    }
+  }, [mobileViewportAware]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
-    updateViewportPosition();
-    viewport?.addEventListener('resize', updateViewportPosition);
-    viewport?.addEventListener('scroll', updateViewportPosition);
-    window.addEventListener('resize', updateViewportPosition);
-    window.addEventListener('orientationchange', updateViewportPosition);
-    return () => {
-      viewport?.removeEventListener('resize', updateViewportPosition);
-      viewport?.removeEventListener('scroll', updateViewportPosition);
-      window.removeEventListener('resize', updateViewportPosition);
-      window.removeEventListener('orientationchange', updateViewportPosition);
+    if (!mobileViewportAware) {
+      if (!viewport) return;
+      updateViewportPosition();
+      viewport.addEventListener('resize', updateViewportPosition);
+      return () => viewport.removeEventListener('resize', updateViewportPosition);
+    }
+
+    let frame = 0;
+    const scheduleUpdate = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        updateViewportPosition();
+      });
     };
-  }, [updateViewportPosition]);
+    updateViewportPosition();
+    viewport?.addEventListener('resize', scheduleUpdate);
+    viewport?.addEventListener('scroll', scheduleUpdate);
+    window.addEventListener('resize', scheduleUpdate);
+    window.addEventListener('orientationchange', scheduleUpdate);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      viewport?.removeEventListener('resize', scheduleUpdate);
+      viewport?.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      window.removeEventListener('orientationchange', scheduleUpdate);
+    };
+  }, [mobileViewportAware, updateViewportPosition]);
+
+  useLayoutEffect(() => {
+    if (!mobileViewportAware) return;
+    if (!keyboardVisible || window.innerWidth >= 1024) {
+      setKeyboardInset((currentInset) => currentInset === 0 ? currentInset : 0);
+      return;
+    }
+
+    const composer = inputRef.current?.closest('div.relative.mx-auto');
+    const footer = composer?.closest('footer');
+    if (!composer || !footer) {
+      const inset = Math.max(0, window.innerHeight - visibleViewportBottom);
+      setKeyboardInset((currentInset) => Math.abs(currentInset - inset) < 0.5 ? currentInset : inset);
+      return;
+    }
+
+    const footerStyle = window.getComputedStyle(footer);
+    const footerRect = footer.getBoundingClientRect();
+    const contentBottom = footerRect.bottom
+      - (Number.parseFloat(footerStyle.borderBottomWidth) || 0)
+      - (Number.parseFloat(footerStyle.paddingBottom) || 0);
+    const inset = Math.max(0, contentBottom - visibleViewportBottom);
+    setKeyboardInset((currentInset) => Math.abs(currentInset - inset) < 0.5 ? currentInset : inset);
+  });
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -389,6 +471,7 @@ export default function UniversalComposer({
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onFocus={() => {
+                textareaHasFocusRef.current = true;
                 onFocus?.();
                 requestAnimationFrame(updateViewportPosition);
               }}
