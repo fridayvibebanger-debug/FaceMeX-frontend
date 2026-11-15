@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
-import { ArrowUp, Check, ChevronLeft, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowUp, AudioLines, Check, ChevronLeft, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -34,6 +34,7 @@ type UniversalComposerProps = {
   selectedMode?: ComposerMode | null;
   onSelectMode?: (mode: ComposerMode) => void;
   onVoiceToggle?: () => void;
+  onVoiceModeToggle?: () => void;
   voiceListening?: boolean;
   busy?: boolean;
   enterToSend?: boolean;
@@ -57,6 +58,7 @@ export default function UniversalComposer({
   selectedMode = null,
   onSelectMode,
   onVoiceToggle,
+  onVoiceModeToggle,
   voiceListening = false,
   busy = false,
   enterToSend = true,
@@ -71,8 +73,18 @@ export default function UniversalComposer({
   const [menuOpen, setMenuOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
   const isLight = tone === 'light';
+
+  useEffect(() => {
+    if (!voiceListening) {
+      setVoiceSeconds(0);
+      return;
+    }
+    const timer = window.setInterval(() => setVoiceSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [voiceListening]);
 
   const setRefs = useCallback((element: HTMLTextAreaElement | null) => {
     inputRef.current = element;
@@ -84,7 +96,8 @@ export default function UniversalComposer({
     if (!textarea) return;
     textarea.style.height = 'auto';
     const viewportHeight = window.visualViewport?.height || window.innerHeight;
-    const maxHeight = Math.min(240, Math.max(96, Math.floor(viewportHeight * 0.32)));
+    const mobileMaxHeight = window.innerWidth < 768 ? 152 : 240;
+    const maxHeight = Math.min(mobileMaxHeight, Math.max(72, Math.floor(viewportHeight * 0.32)));
     const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
     textarea.style.height = `${nextHeight}px`;
     textarea.style.maxHeight = `${maxHeight}px`;
@@ -145,6 +158,7 @@ export default function UniversalComposer({
     setExpanded(false);
     onSend();
   };
+  const voiceDuration = `${Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:${(voiceSeconds % 60).toString().padStart(2, '0')}`;
 
   return (
     <div
@@ -188,6 +202,24 @@ export default function UniversalComposer({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {voiceListening && (
+        <div className={`mb-2 flex min-h-10 items-center gap-2 px-2 text-sm ${
+          isLight ? 'text-slate-700' : 'text-white/80'
+        }`} role="status" aria-live="polite">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden="true" />
+          <span className="min-w-0 flex-1">Listening · {voiceDuration}</span>
+          <button
+            type="button"
+            onClick={onVoiceToggle}
+            className={`min-h-9 rounded-full px-3 text-xs font-medium ${
+              isLight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/10 hover:bg-white/15'
+            }`}
+          >
+            Stop
+          </button>
         </div>
       )}
 
@@ -346,7 +378,7 @@ export default function UniversalComposer({
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               aria-label="Message FaceMeX"
-              className={`min-h-10 min-w-0 w-full resize-none border-0 bg-transparent py-2 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:min-h-11 ${
+              className={`min-h-10 min-w-0 w-full resize-none overflow-x-hidden border-0 bg-transparent py-2 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:whitespace-nowrap sm:min-h-11 ${
                 isLight
                   ? 'text-slate-800 placeholder:text-slate-400'
                   : 'text-white/90 placeholder:text-white/45'
@@ -388,20 +420,34 @@ export default function UniversalComposer({
             </button>
           )}
 
-          <Button
-            type="button"
-            size="icon"
-            onClick={submit}
-            disabled={busy || !canSend}
-            aria-label="Send message"
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
-              isLight
-                ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
-                : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
-            }`}
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
-          </Button>
+          {onVoiceModeToggle && !canSend && !busy ? (
+            <button
+              type="button"
+              onClick={onVoiceModeToggle}
+              aria-label="Start voice conversation"
+              title="Start voice conversation"
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
+                isLight ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2]' : 'bg-[#383838] text-white/75 hover:bg-[#484848]'
+              }`}
+            >
+              <AudioLines className="h-5 w-5" aria-hidden="true" />
+            </button>
+          ) : (
+            <Button
+              type="button"
+              size="icon"
+              onClick={submit}
+              disabled={busy || !canSend}
+              aria-label="Send message"
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
+                isLight
+                  ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
+                  : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
+              }`}
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
+            </Button>
+          )}
         </div>
 
         {attachments.length > 0 && (
