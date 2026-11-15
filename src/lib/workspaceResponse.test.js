@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  buildWorkspaceModeInstruction,
   extractYouTubeUrlFromText,
   extractYouTubeVideoId,
   createSolveForXGuidanceResponse,
@@ -22,6 +23,64 @@ import {
   selectRelevantWorkspaceImages,
   selectRelevantYouTubeLessonVideos,
 } from './workspaceResponse.js';
+import {
+  prepareWorkspaceSpeechText,
+  selectWorkspaceSpeechVoice,
+} from './workspaceSpeech.js';
+
+test('prepares readable speech without Markdown symbols or code blocks', () => {
+  const spoken = prepareWorkspaceSpeechText(
+    '## **Next steps**\n\n1. *Review* the plan.\n\n```javascript\nconst total = 3;\n```\n\n[Open the guide](https://example.com)',
+  );
+  assert.match(spoken, /Next steps/);
+  assert.match(spoken, /Review the plan/);
+  assert.match(spoken, /Open the guide/);
+  assert.doesNotMatch(spoken, /[#*_`]|javascript|const total|https:/);
+});
+
+test('speaks common currency symbols and ISO currency codes as currency names', () => {
+  const spoken = prepareWorkspaceSpeechText(
+    'Budget: $25, €30, £40, R500, USD 60, CAD 70, JPY 800.',
+  );
+  assert.match(spoken, /\b25 dollars\b/);
+  assert.match(spoken, /euros/);
+  assert.match(spoken, /British pounds/);
+  assert.match(spoken, /South African rand/);
+  assert.match(spoken, /US dollars/);
+  assert.match(spoken, /Canadian dollars/);
+  assert.match(spoken, /Japanese yen/);
+  assert.doesNotMatch(spoken, /\bUSD\b|\bCAD\b|\bJPY\b/);
+});
+
+test('prefers a natural English speech voice suited to the requested locale', () => {
+  const voices = [
+    { name: 'Default Voice', lang: 'en-US', default: true },
+    { name: 'Natural South African English', lang: 'en-ZA', default: false },
+    { name: 'French Voice', lang: 'fr-FR', default: false },
+  ];
+  assert.equal(selectWorkspaceSpeechVoice(voices, 'en-ZA'), voices[1]);
+  assert.equal(selectWorkspaceSpeechVoice([], 'en-ZA'), null);
+});
+
+test('builds distinct actionable student, teacher, and career response modes', () => {
+  const student = buildWorkspaceModeInstruction('student');
+  const teacher = buildWorkspaceModeInstruction('teacher');
+  const career = buildWorkspaceModeInstruction('career');
+
+  assert.match(student, /ACTIVE FACEMEX RESPONSE MODE: STUDENT/);
+  assert.match(student, /practice task/);
+  assert.match(teacher, /ACTIVE FACEMEX RESPONSE MODE: TEACHER/);
+  assert.match(teacher, /learning goal/);
+  assert.match(career, /ACTIVE FACEMEX RESPONSE MODE: CAREER/);
+  assert.match(career, /concrete next steps/);
+
+  for (const instruction of [student, teacher, career]) {
+    assert.match(instruction, /Do not include programming-language names, source code/);
+    assert.match(instruction, /make the most useful next action clear/);
+  }
+  assert.equal(buildWorkspaceModeInstruction(null), '');
+  assert.equal(buildWorkspaceModeInstruction('unknown'), '');
+});
 
 test('validates grounded understanding quizzes before rendering', () => {
   const quiz = {

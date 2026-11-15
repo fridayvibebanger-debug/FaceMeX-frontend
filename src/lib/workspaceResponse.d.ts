@@ -58,6 +58,12 @@ export type WorkspaceVisualization =
       events: Array<{ date: string; label: string; description: string }>;
     };
 
+export type WorkspaceResponseMode = 'student' | 'teacher' | 'career';
+
+export function buildWorkspaceModeInstruction(
+  mode: WorkspaceResponseMode | null | undefined,
+): string;
+
 export function parseWorkspaceVisualization(
   kind: string,
   source: string,
