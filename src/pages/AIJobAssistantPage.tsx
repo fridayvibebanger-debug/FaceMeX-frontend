@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowUp,
+  AudioLines,
   BookOpen,
   Briefcase,
   Building2,
@@ -28,10 +29,15 @@ import {
   Mail,
   MapPin,
   Menu,
+  Mic,
+  MicOff,
   MonitorUp,
   MoreVertical,
   Pin,
   PinOff,
+  Pause,
+  PhoneOff,
+  Play,
   RefreshCw,
   Save,
   Search,
@@ -44,6 +50,7 @@ import {
   Trash2,
   Users,
   UserRound,
+  Volume2,
   X,
 } from 'lucide-react';
 
@@ -4351,6 +4358,13 @@ export default function AIJobAssistantPage() {
   const promptSubmissionRef = useRef(false);
   const speechRecognitionRef = useRef<any>(null);
   const screenShareStreamRef = useRef<MediaStream | null>(null);
+  const voiceModeRecognitionRef = useRef<any>(null);
+  const voiceModeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const messageUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const voiceModeTimerRef = useRef<number | null>(null);
+  const voiceModeActiveRef = useRef(false);
+  const voiceModePausedRef = useRef(false);
+  const voiceModeWasSpeakingRef = useRef(false);
 
   const userStore = useUserStore() as any;
   const { tier, hasTier } = userStore;
@@ -4444,6 +4458,13 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [projectRenameValue, setProjectRenameValue] = useState('');
   const [composerVisible, setComposerVisible] = useState(true);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceModeOpen, setVoiceModeOpen] = useState(false);
+  const [voiceModeStatus, setVoiceModeStatus] = useState<
+    'connecting' | 'listening' | 'processing' | 'generating' | 'speaking' | 'paused' | 'error'
+  >('connecting');
+  const [voiceModeTranscript, setVoiceModeTranscript] = useState('');
+  const [voiceModeAssistantText, setVoiceModeAssistantText] = useState('');
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [workspaceProjects, setWorkspaceProjects] = useState<WorkspaceProject[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [desktopProjectsExpanded, setDesktopProjectsExpanded] = useState(true);
@@ -4715,6 +4736,12 @@ const [developerPlan, setDeveloperPlan] = useState<
 
   useEffect(() => () => {
     speechRecognitionRef.current?.stop?.();
+    voiceModeActiveRef.current = false;
+    voiceModeRecognitionRef.current?.stop?.();
+    voiceModeUtteranceRef.current = null;
+    messageUtteranceRef.current = null;
+    if (voiceModeTimerRef.current !== null) window.clearTimeout(voiceModeTimerRef.current);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     screenShareStreamRef.current?.getTracks().forEach((track) => track.stop());
     screenShareStreamRef.current = null;
   }, []);
@@ -6462,7 +6489,7 @@ const [developerPlan, setDeveloperPlan] = useState<
         answer_length: clarification.length,
       });
       setBusy(false);
-      return;
+      return clarification;
     }
 
     const shouldAutoSearchJobs =
@@ -6496,7 +6523,7 @@ const [developerPlan, setDeveloperPlan] = useState<
         ]);
         setBusy(false);
         setBusy(false);
-        return;
+        return answer;
       } catch {
         // continue to AI fallback
       }
@@ -6528,7 +6555,7 @@ const [developerPlan, setDeveloperPlan] = useState<
         answer_length: deterministicBusinessAnswer.length,
       });
       setBusy(false);
-      return;
+      return deterministicBusinessAnswer;
     }
 
     const previousAssistantResponse = [...promptHistory]
@@ -6567,7 +6594,7 @@ const [developerPlan, setDeveloperPlan] = useState<
         answer_length: answer.length,
       });
       setBusy(false);
-      return;
+      return answer;
     }
 
     const youtubeVideoUrl = extractYouTubeUrlFromText(finalPrompt);
@@ -6982,6 +7009,170 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     }
   };
 
+  const startVoiceModeListening = () => {
+    if (!voiceModeActiveRef.current || voiceModePausedRef.current) return;
+    const speechWindow = window as Window & {
+      SpeechRecognition?: new () => any;
+      webkitSpeechRecognition?: new () => any;
+    };
+    const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!SpeechRecognition || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      setVoiceModeStatus('error');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    let finalTranscript = '';
+    let recognitionFailed = false;
+    recognition.lang = 'en-ZA';
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setVoiceModeStatus('listening');
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript || '';
+        if (result?.isFinal) finalTranscript += `${transcript} `;
+        else interimTranscript += transcript;
+      }
+      const currentTranscript = clean(`${finalTranscript} ${interimTranscript}`);
+      if (currentTranscript) setVoiceModeTranscript(currentTranscript);
+      if (finalTranscript.trim()) setVoiceModeStatus('processing');
+    };
+    recognition.onerror = (event: any) => {
+      if (!voiceModeActiveRef.current || event?.error === 'aborted') return;
+      recognitionFailed = true;
+      setVoiceModeStatus('error');
+    };
+    recognition.onend = () => {
+      if (!voiceModeActiveRef.current || voiceModePausedRef.current || recognitionFailed) return;
+      const userPrompt = clean(finalTranscript);
+      if (!userPrompt) {
+        setVoiceModeStatus('connecting');
+        voiceModeTimerRef.current = window.setTimeout(startVoiceModeListening, 350);
+        return;
+      }
+
+      setVoiceModeTranscript(userPrompt);
+      setVoiceModeStatus('generating');
+      void sendPrompt(userPrompt).then((answer) => {
+        if (!voiceModeActiveRef.current) return;
+        if (!answer?.trim()) {
+          setVoiceModeStatus('error');
+          return;
+        }
+
+        setVoiceModeAssistantText(answer);
+        const spokenAnswer = answer
+          .replace(/```[\s\S]*?```/g, ' ')
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(/[`*_#>]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const utterance = new SpeechSynthesisUtterance(spokenAnswer);
+        utterance.lang = 'en-ZA';
+        utterance.onstart = () => {
+          voiceModeWasSpeakingRef.current = true;
+          setVoiceModeStatus('speaking');
+        };
+        utterance.onend = () => {
+          voiceModeWasSpeakingRef.current = false;
+          voiceModeUtteranceRef.current = null;
+          if (!voiceModeActiveRef.current) return;
+          setVoiceModeStatus('connecting');
+          voiceModeTimerRef.current = window.setTimeout(startVoiceModeListening, 350);
+        };
+        utterance.onerror = () => {
+          voiceModeWasSpeakingRef.current = false;
+          voiceModeUtteranceRef.current = null;
+          if (voiceModeActiveRef.current) setVoiceModeStatus('error');
+        };
+        voiceModeUtteranceRef.current = utterance;
+        window.speechSynthesis.speak(utterance);
+      }).catch(() => {
+        if (voiceModeActiveRef.current) setVoiceModeStatus('error');
+      });
+    };
+
+    try {
+      voiceModeRecognitionRef.current = recognition;
+      recognition.start();
+      setVoiceModeStatus('connecting');
+    } catch {
+      setVoiceModeStatus('error');
+    }
+  };
+
+  const endVoiceMode = () => {
+    voiceModeActiveRef.current = false;
+    voiceModePausedRef.current = false;
+    voiceModeWasSpeakingRef.current = false;
+    if (voiceModeTimerRef.current !== null) {
+      window.clearTimeout(voiceModeTimerRef.current);
+      voiceModeTimerRef.current = null;
+    }
+    voiceModeRecognitionRef.current?.stop?.();
+    voiceModeRecognitionRef.current = null;
+    voiceModeUtteranceRef.current = null;
+    messageUtteranceRef.current = null;
+    setSpeakingMessageId(null);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setVoiceModeOpen(false);
+  };
+
+  const startVoiceMode = () => {
+    messageUtteranceRef.current = null;
+    setSpeakingMessageId(null);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    const speechWindow = window as Window & {
+      SpeechRecognition?: new () => unknown;
+      webkitSpeechRecognition?: new () => unknown;
+    };
+    if (
+      !(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition) ||
+      !('speechSynthesis' in window) ||
+      typeof SpeechSynthesisUtterance === 'undefined'
+    ) {
+      setVoiceModeStatus('error');
+      setVoiceModeTranscript('');
+      setVoiceModeAssistantText('');
+      setVoiceModeOpen(true);
+      return;
+    }
+    if (voiceModeActiveRef.current) {
+      endVoiceMode();
+      return;
+    }
+    voiceModeActiveRef.current = true;
+    voiceModePausedRef.current = false;
+    setVoiceModeStatus('connecting');
+    setVoiceModeTranscript('');
+    setVoiceModeAssistantText('');
+    setVoiceModeOpen(true);
+    startVoiceModeListening();
+  };
+
+  const toggleVoiceModePause = () => {
+    if (voiceModeStatus === 'paused') {
+      voiceModePausedRef.current = false;
+      if (voiceModeWasSpeakingRef.current && 'speechSynthesis' in window) {
+        window.speechSynthesis.resume();
+        setVoiceModeStatus('speaking');
+      } else {
+        startVoiceModeListening();
+      }
+      return;
+    }
+    voiceModePausedRef.current = true;
+    if (voiceModeStatus === 'speaking' && 'speechSynthesis' in window) {
+      window.speechSynthesis.pause();
+    } else {
+      voiceModeRecognitionRef.current?.stop?.();
+    }
+    setVoiceModeStatus('paused');
+  };
+
   const requestSmartboardAI = async (
     instruction: string,
     imageDataUrl?: string,
@@ -7166,6 +7357,46 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
     } catch {
       toast({ title: 'Copy failed', description: 'Please copy manually.', variant: 'destructive' });
     }
+  };
+
+  const toggleMessageSpeech = (message: ChatMessage) => {
+    if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      toast({
+        title: 'Read aloud unavailable',
+        description: 'This browser does not support speech playback.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (speakingMessageId === message.id && !window.speechSynthesis.paused) {
+      messageUtteranceRef.current = null;
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    messageUtteranceRef.current = null;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(normalizeUssdCodes(message.content));
+    utterance.lang = 'en-ZA';
+    utterance.onend = () => {
+      if (messageUtteranceRef.current !== utterance) return;
+      messageUtteranceRef.current = null;
+      setSpeakingMessageId(null);
+    };
+    utterance.onerror = () => {
+      if (messageUtteranceRef.current !== utterance) return;
+      messageUtteranceRef.current = null;
+      setSpeakingMessageId(null);
+      toast({
+        title: 'Read aloud failed',
+        description: 'The browser could not play this response.',
+        variant: 'destructive',
+      });
+    };
+    messageUtteranceRef.current = utterance;
+    setSpeakingMessageId(message.id);
+    window.speechSynthesis.speak(utterance);
   };
 
   const rateAssistantMessage = (message: ChatMessage, rating: 'positive' | 'negative') => {
@@ -7840,6 +8071,16 @@ Start with the most useful next action. Do not invent personal details, course r
             <Button
               size="sm"
               variant="ghost"
+              onClick={() => toggleMessageSpeech(message)}
+              className={`h-8 rounded-full px-2 ${speakingMessageId === message.id ? 'text-foreground' : ''}`}
+              aria-label={speakingMessageId === message.id ? 'Stop reading answer aloud' : 'Read answer aloud'}
+              title={speakingMessageId === message.id ? 'Stop reading' : 'Read aloud'}
+            >
+              <Volume2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               disabled={busy}
               onClick={() => regenerateAssistantMessage(message)}
               className="h-8 gap-1 rounded-full px-2"
@@ -7929,6 +8170,18 @@ Start with the most useful next action. Do not invent personal details, course r
 
         {message.role === 'assistant' && (
           <>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => toggleMessageSpeech(message)}
+              title={speakingMessageId === message.id ? 'Stop reading' : 'Read aloud'}
+              aria-label={speakingMessageId === message.id ? 'Stop reading answer aloud' : 'Read answer aloud'}
+              className={`h-9 w-9 rounded-full transition duration-200 ease-in-out hover:bg-white/10 active:scale-95 ${
+                speakingMessageId === message.id ? 'bg-white/10 text-white' : 'text-white/70'
+              }`}
+            >
+              <Volume2 className="h-4 w-4" />
+            </Button>
             <Button
               size="icon"
               variant="ghost"
@@ -11207,6 +11460,7 @@ Start with the most useful next action. Do not invent personal details, course r
                 </>
               )}
               onVoiceToggle={toggleVoiceInput}
+              onVoiceModeToggle={startVoiceMode}
               voiceListening={voiceListening}
               busy={busy}
               enterToSend={!isMobileViewport}
@@ -11217,6 +11471,92 @@ Start with the most useful next action. Do not invent personal details, course r
               onClick={() => setComposerVisible(true)}
             />
           </footer>
+          <Dialog
+            open={voiceModeOpen}
+            onOpenChange={(open) => {
+              if (!open) endVoiceMode();
+            }}
+          >
+            <DialogContent className="w-[calc(100%-1rem)] max-w-md border-white/10 bg-[#101010] p-5 text-white sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <DialogTitle className="text-base font-semibold">FaceMeX voice</DialogTitle>
+                <span className="text-xs text-white/55" role="status" aria-live="polite">
+                  {voiceModeStatus === 'connecting' ? 'Connecting…'
+                    : voiceModeStatus === 'listening' ? 'Listening'
+                      : voiceModeStatus === 'processing' ? 'Processing speech…'
+                        : voiceModeStatus === 'generating' ? 'Preparing a response…'
+                          : voiceModeStatus === 'speaking' ? 'FaceMeX is speaking'
+                            : voiceModeStatus === 'paused' ? 'Paused'
+                              : 'Voice mode unavailable'}
+                </span>
+              </div>
+              <div className="flex flex-col items-center py-8 text-center">
+                <div className={`flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-white/[0.07] ${
+                  voiceModeStatus === 'listening' ? 'text-white' : 'text-white/65'
+                }`}>
+                  {voiceModeStatus === 'speaking'
+                    ? <AudioLines className="h-10 w-10" aria-hidden="true" />
+                    : voiceModeStatus === 'paused'
+                      ? <MicOff className="h-9 w-9" aria-hidden="true" />
+                      : <Mic className="h-9 w-9" aria-hidden="true" />}
+                </div>
+                <p className="mt-5 text-sm text-white/75" aria-live="polite">
+                  {voiceModeStatus === 'connecting' ? 'Connecting to your microphone…'
+                    : voiceModeStatus === 'listening' ? 'Speak naturally. Your message will be sent to FaceMeX.'
+                      : voiceModeStatus === 'processing' ? 'Recognising your speech…'
+                        : voiceModeStatus === 'generating' ? 'FaceMeX is generating a reply…'
+                          : voiceModeStatus === 'speaking' ? 'Speaking the reply aloud…'
+                            : voiceModeStatus === 'paused' ? 'Voice conversation paused.'
+                              : 'Voice input or speech playback is unavailable. Check browser support and microphone permission.'}
+                </p>
+                {voiceModeTranscript && (
+                  <p className="mt-4 max-h-24 w-full overflow-y-auto rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm leading-6 text-white/65">
+                    {voiceModeTranscript}
+                  </p>
+                )}
+                {voiceModeAssistantText && (
+                  <p className="mt-3 max-h-32 w-full overflow-y-auto text-left text-sm leading-6 text-white/80">
+                    {voiceModeAssistantText}
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-center gap-3">
+                {voiceModeStatus === 'error' ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      voiceModeActiveRef.current = true;
+                      voiceModePausedRef.current = false;
+                      setVoiceModeStatus('connecting');
+                      startVoiceModeListening();
+                    }}
+                    className="min-h-11 rounded-full bg-white/10 px-5 text-white hover:bg-white/15"
+                  >
+                    Try again
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={toggleVoiceModePause}
+                    disabled={voiceModeStatus === 'generating' || voiceModeStatus === 'processing'}
+                    className="min-h-11 rounded-full bg-white/10 px-5 text-white hover:bg-white/15 disabled:opacity-40"
+                  >
+                    {voiceModeStatus === 'paused'
+                      ? <><Play className="mr-2 h-4 w-4" />Resume</>
+                      : <><Pause className="mr-2 h-4 w-4" />Pause</>}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  onClick={endVoiceMode}
+                  className="min-h-11 rounded-full bg-white px-5 text-black hover:bg-white/90"
+                >
+                  <PhoneOff className="mr-2 h-4 w-4" />
+                  End
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </section>
       </main>
       </div>
