@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
-import { ArrowUp, AudioLines, Check, ChevronLeft, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronLeft, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -34,7 +34,6 @@ type UniversalComposerProps = {
   selectedMode?: ComposerMode | null;
   onSelectMode?: (mode: ComposerMode) => void;
   onVoiceToggle?: () => void;
-  onVoiceModeToggle?: () => void;
   voiceListening?: boolean;
   busy?: boolean;
   enterToSend?: boolean;
@@ -58,7 +57,6 @@ export default function UniversalComposer({
   selectedMode = null,
   onSelectMode,
   onVoiceToggle,
-  onVoiceModeToggle,
   voiceListening = false,
   busy = false,
   enterToSend = true,
@@ -95,28 +93,26 @@ export default function UniversalComposer({
     const textarea = inputRef.current;
     if (!textarea) return;
     textarea.style.height = 'auto';
-    const viewportHeight = window.visualViewport?.height || window.innerHeight;
-    const mobileMaxHeight = window.innerWidth < 768 ? 152 : 240;
-    const maxHeight = Math.min(mobileMaxHeight, Math.max(72, Math.floor(viewportHeight * 0.32)));
+    const maxHeight = window.innerWidth < 768 ? 144 : 240;
     const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
     textarea.style.height = `${nextHeight}px`;
     textarea.style.maxHeight = `${maxHeight}px`;
     textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
-  }, [keyboardInset, value]);
+  }, [value]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
     const updateKeyboardInset = () => {
-      setKeyboardInset(Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop));
+      if (inputRef.current !== document.activeElement) {
+        setKeyboardInset(0);
+        return;
+      }
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setKeyboardInset(inset > 80 ? inset : 0);
     };
-    updateKeyboardInset();
     viewport.addEventListener('resize', updateKeyboardInset);
-    viewport.addEventListener('scroll', updateKeyboardInset);
-    return () => {
-      viewport.removeEventListener('resize', updateKeyboardInset);
-      viewport.removeEventListener('scroll', updateKeyboardInset);
-    };
+    return () => viewport.removeEventListener('resize', updateKeyboardInset);
   }, []);
 
   useEffect(() => {
@@ -223,10 +219,10 @@ export default function UniversalComposer({
         </div>
       )}
 
-      <div className={`fm-universal-composer-card box-border w-full rounded-[999px] border px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 ${
+      <div className={`fm-universal-composer-card box-border w-full rounded-[999px] border px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 ${
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
-        <div className="flex min-h-10 w-full min-w-0 flex-row items-center gap-1 sm:min-h-11 sm:gap-1.5">
+        <div className="flex min-h-[38px] w-full min-w-0 flex-row items-center gap-1 sm:min-h-11 sm:gap-1.5">
           {(onPickAttachments || menuOptions.length > 0) && (
             <div className="relative" ref={menuRef}>
               <button
@@ -242,7 +238,7 @@ export default function UniversalComposer({
                 aria-label="Add attachments and tools"
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
+                className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
                   isLight ? 'text-slate-600 hover:bg-black/5 hover:text-slate-900' : 'text-white/70 hover:bg-white/10 hover:text-white'
                 }`}
               >
@@ -373,12 +369,21 @@ export default function UniversalComposer({
               rows={1}
               value={value}
               onChange={(event) => onChange(event.target.value)}
-              onFocus={onFocus}
+              onFocus={() => {
+                onFocus?.();
+                const viewport = window.visualViewport;
+                if (!viewport) return;
+                requestAnimationFrame(() => {
+                  if (inputRef.current !== document.activeElement) return;
+                  const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+                  setKeyboardInset(inset > 80 ? inset : 0);
+                });
+              }}
               onClick={onClick}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               aria-label="Message FaceMeX"
-              className={`min-h-10 min-w-0 w-full resize-none overflow-x-hidden border-0 bg-transparent py-2 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:whitespace-nowrap sm:min-h-11 ${
+              className={`min-h-[38px] min-w-0 w-full resize-none overflow-x-hidden border-0 bg-transparent py-1.5 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:whitespace-nowrap sm:min-h-11 sm:py-2 ${
                 isLight
                   ? 'text-slate-800 placeholder:text-slate-400'
                   : 'text-white/90 placeholder:text-white/45'
@@ -408,7 +413,7 @@ export default function UniversalComposer({
               aria-label={voiceListening ? 'Stop voice input' : 'Start voice input'}
               aria-pressed={voiceListening}
               title={voiceListening ? 'Listening' : 'Voice input'}
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
+              className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
                 voiceListening
                   ? 'bg-red-500/15 text-red-500'
                   : isLight
@@ -420,34 +425,20 @@ export default function UniversalComposer({
             </button>
           )}
 
-          {onVoiceModeToggle && !canSend && !busy ? (
-            <button
-              type="button"
-              onClick={onVoiceModeToggle}
-              aria-label="Start voice conversation"
-              title="Start voice conversation"
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
-                isLight ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2]' : 'bg-[#383838] text-white/75 hover:bg-[#484848]'
-              }`}
-            >
-              <AudioLines className="h-5 w-5" aria-hidden="true" />
-            </button>
-          ) : (
-            <Button
-              type="button"
-              size="icon"
-              onClick={submit}
-              disabled={busy || !canSend}
-              aria-label="Send message"
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
-                isLight
-                  ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
-                  : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
-              }`}
-            >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
-            </Button>
-          )}
+          <Button
+            type="button"
+            size="icon"
+            onClick={submit}
+            disabled={busy || !canSend}
+            aria-label="Send message"
+            className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
+              isLight
+                ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
+                : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
+            }`}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
+          </Button>
         </div>
 
         {attachments.length > 0 && (
