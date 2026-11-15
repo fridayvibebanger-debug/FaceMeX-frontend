@@ -90,6 +90,11 @@ import { APPEARANCE_CHANGE_EVENT, getAppearanceMode, type AppearanceMode } from 
 import { buildPersonalizationContext, getPersonalizationProfile, PERSONALIZATION_CHANGE_EVENT, type PersonalizationProfile } from '@/lib/personalization';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import {
+  prepareWorkspaceSpeechText,
+  selectWorkspaceSpeechVoice,
+} from '@/lib/workspaceSpeech';
+import {
+  buildWorkspaceModeInstruction,
   createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
   extractYouTubeUrlFromText,
@@ -1353,6 +1358,24 @@ Open in FaceMeX: ${url}`,
 function safeId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createWorkspaceSpeechUtterance(text: string) {
+  const spokenText = prepareWorkspaceSpeechText(text);
+  if (!spokenText || typeof SpeechSynthesisUtterance === 'undefined') return null;
+
+  const utterance = new SpeechSynthesisUtterance(spokenText);
+  const voice = selectWorkspaceSpeechVoice(window.speechSynthesis.getVoices(), 'en-ZA');
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang = voice.lang || 'en-ZA';
+  } else {
+    utterance.lang = 'en-ZA';
+  }
+  utterance.rate = 0.96;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  return utterance;
 }
 
 function todayKey() {
@@ -2854,28 +2877,30 @@ function WorkspaceInteractiveQuestionCard({
 
 function WorkspaceStructuredSections({ response }: { response: WorkspaceResponseSections }) {
   return (
-    <section className="my-4 w-full max-w-3xl rounded-xl border border-white/10 bg-[#101010] px-4 py-4 sm:px-5" aria-label={response.title}>
-      <h3 className="mb-1 text-base font-semibold text-white">{response.title}</h3>
-      <div className="divide-y divide-white/10">
-        {response.sections.map((section, index) => {
-          const Icon = getResponseSectionIcon(section.icon);
-          return (
-            <section key={`${section.heading}-${index}`} className="py-4 first:pb-4 last:pb-0">
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-white">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-white/75">
+    <section className="my-4 w-full max-w-3xl" aria-label={response.title}>
+      <h3 className="mb-3 text-base font-semibold text-white">{response.title}</h3>
+      <div className="fm-response-sections-card overflow-hidden rounded-xl border border-white/10 bg-[#171717] px-4 sm:px-5">
+        <div className="divide-y divide-white/10">
+          {response.sections.map((section, index) => {
+            const Icon = getResponseSectionIcon(section.icon);
+            return (
+              <section key={`${section.heading}-${index}`} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3 py-4 first:pt-4 last:pb-4">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-white/80">
                   <Icon className="h-4 w-4" aria-hidden="true" />
                 </span>
-                {section.heading}
-              </h4>
-              {section.body && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-white/75">{renderInlineText(section.body)}</p>}
-              {section.items.length > 0 && (
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-white/80 marker:text-white/45">
-                  {section.items.map((item) => <li key={item} className="break-words">{renderInlineText(item)}</li>)}
-                </ul>
-              )}
-            </section>
-          );
-        })}
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold leading-6 text-white">{section.heading}</h4>
+                  {section.body && <p className="mt-2 whitespace-pre-line text-sm leading-6 text-white/75">{renderInlineText(section.body)}</p>}
+                  {section.items.length > 0 && (
+                    <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-6 text-white/80 marker:text-white/45">
+                      {section.items.map((item) => <li key={item} className="break-words">{renderInlineText(item)}</li>)}
+                    </ul>
+                  )}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -4354,7 +4379,6 @@ export default function AIJobAssistantPage() {
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const composerHideTimerRef = useRef<number | null>(null);
   const promptSubmissionRef = useRef(false);
   const speechRecognitionRef = useRef<any>(null);
   const screenShareStreamRef = useRef<MediaStream | null>(null);
@@ -4456,7 +4480,6 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [newSubfolderName, setNewSubfolderName] = useState('');
   const [projectRenameId, setProjectRenameId] = useState<string | null>(null);
   const [projectRenameValue, setProjectRenameValue] = useState('');
-  const [composerVisible, setComposerVisible] = useState(true);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceModeOpen, setVoiceModeOpen] = useState(false);
   const [voiceModeStatus, setVoiceModeStatus] = useState<
@@ -4726,13 +4749,6 @@ const [developerPlan, setDeveloperPlan] = useState<
       });
     return () => { cancelled = true; };
   }, [userStore.id]);
-
-  useEffect(() => {
-    setComposerVisible(true);
-    return () => {
-      if (composerHideTimerRef.current !== null) window.clearTimeout(composerHideTimerRef.current);
-    };
-  }, []);
 
   useEffect(() => () => {
     speechRecognitionRef.current?.stop?.();
@@ -5312,7 +5328,6 @@ const [developerPlan, setDeveloperPlan] = useState<
       speechRecognitionRef.current = recognition;
       recognition.start();
       setVoiceListening(true);
-      setComposerVisible(true);
     } catch {
       setVoiceListening(false);
       toast({ title: 'Voice input failed', description: 'The microphone could not be started.', variant: 'destructive' });
@@ -5547,7 +5562,6 @@ const [developerPlan, setDeveloperPlan] = useState<
       setActiveProjectConversationId(conversation.id);
       setActiveSessionId(conversation.id);
       setMessages(restoredMessages);
-      setComposerVisible(true);
       if (routeProjectId !== project.id) navigate(`/projects/${project.id}`, { replace: false });
     } catch (error: any) {
       setMessages([]);
@@ -6716,26 +6730,17 @@ For charts, calculate every plotted value from the stated equation. Never use a 
 \`\`\`
 Keep the question visible and do not reveal its solution elsewhere in the answer; the student reveals it with the "Reveal solution" control. Use LaTeX delimiters inside the JSON strings for formulas.
 ` : '';
-        const responseModeInstruction = responseMode
-          ? `\n\nSelected response mode: ${responseMode}.
-- Adapt explanations and recommendations for a ${responseMode === 'student' ? 'student' : responseMode === 'teacher' ? 'teacher or educator' : 'career-focused user'}.
-- ${responseMode === 'student'
-      ? 'Use accessible language, supportive explanations, and manageable learning steps when relevant.'
-      : responseMode === 'teacher'
-        ? 'Emphasize teaching goals, classroom-ready explanations, lesson planning, and learner understanding when relevant.'
-        : 'Emphasize professional goals, job-search or workplace context, and practical career next steps when relevant.'}
-- Follow the user’s explicit request if it asks for a different audience or style.`
-          : '';
+        const responseModeInstruction = buildWorkspaceModeInstruction(responseMode);
         const fullSystemInstruction = `${FACE_MEX_ANSWER_STYLE}
     ${personalizationContext ? `\n\n${personalizationContext}\n` : ''}
 
 FaceMeX intelligence rules:
 - Behave like a polished ChatGPT-style assistant, but focused on FaceMeX users: jobs, students, founders, funding, applications, business and daily practical help.
-- Give a direct answer first, then choose only the headings, examples, steps, tables, equations, warnings, and links that genuinely help with this request. Include source code only when the user explicitly asks for code or programming help. Never force a fixed recipe, lesson, career, or tutorial template onto unrelated questions, and avoid filler or invented details.
-- For everyday questions, answer in natural, plain language. Do not include source code, terminal commands, raw JSON, API payloads, database records, HTML, internal instructions, or technical diagnostics unless the user explicitly asks for programming, code, or technical output.
+- Give a direct answer first, then choose only the headings, examples, steps, tables, equations, warnings, and links that genuinely help with this request. Never force a fixed recipe, lesson, career, or tutorial template onto unrelated questions, and avoid filler or invented details.
+- For everyday questions, answer in natural, plain language. Do not include programming-language names, source code, code examples, pseudocode, scripts, terminal commands, raw JSON, API payloads, database records, HTML, internal instructions, or technical diagnostics.
 - For non-programming requests, do not answer in programming syntax, pseudocode, or software jargon. If a technical or digital concept is relevant, explain it in ordinary language and briefly define any necessary term.
 - For teaching, explain the idea in a supportive, well-ordered way and connect each step to the learner's question. For business or career requests, use a professional, practical tone: state the key point, explain its implications, and give clear next steps.
-- Do not add code merely because it might be useful. For explicit programming requests, provide correct code in a fenced block with a brief explanation. For all other requests, explain the answer in ordinary language and readable Markdown.
+- For programming or technical questions, explain the relevant idea in ordinary language and give practical non-code next steps. Never switch to programming syntax, even when the user asks for an implementation.
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
 - When a relevant photograph would materially improve the answer, the existing media integration may show a separately retrieved, relevance-checked image card. Never output a visual marker or placeholder, and never invent image URLs, results, or captions.
@@ -7064,14 +7069,12 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         }
 
         setVoiceModeAssistantText(answer);
-        const spokenAnswer = answer
-          .replace(/```[\s\S]*?```/g, ' ')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/[`*_#>]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        const utterance = new SpeechSynthesisUtterance(spokenAnswer);
-        utterance.lang = 'en-ZA';
+        const utterance = createWorkspaceSpeechUtterance(answer);
+        if (!utterance) {
+          setVoiceModeStatus('connecting');
+          voiceModeTimerRef.current = window.setTimeout(startVoiceModeListening, 350);
+          return;
+        }
         utterance.onstart = () => {
           voiceModeWasSpeakingRef.current = true;
           setVoiceModeStatus('speaking');
@@ -7377,8 +7380,14 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
 
     messageUtteranceRef.current = null;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(normalizeUssdCodes(message.content));
-    utterance.lang = 'en-ZA';
+    const utterance = createWorkspaceSpeechUtterance(message.content);
+    if (!utterance) {
+      toast({
+        title: 'Nothing readable to play',
+        description: 'This response does not contain any text to read aloud.',
+      });
+      return;
+    }
     utterance.onend = () => {
       if (messageUtteranceRef.current !== utterance) return;
       messageUtteranceRef.current = null;
@@ -9107,6 +9116,11 @@ Start with the most useful next action. Do not invent personal details, course r
             min-width: 42px;
           }
 
+          .fm-ai-workspace .fm-universal-composer-card button[aria-label] {
+            min-height: 38px;
+            min-width: 38px;
+          }
+
           .fm-user-prompt-bubble,
           .dark .fm-user-prompt-bubble {
             background: #2f2f2f !important;
@@ -9202,7 +9216,7 @@ Start with the most useful next action. Do not invent personal details, course r
             padding-top: 56px;
           }
 
-          .fm-ai-workspace.fm-theme-dark section {
+          .fm-ai-workspace.fm-theme-dark .fm-mobile-chat-shell > .fm-conversation-panel {
             max-width: 760px;
             margin: 0 auto;
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -9215,10 +9229,30 @@ Start with the most useful next action. Do not invent personal details, course r
             background: #fff !important;
           }
 
-          .fm-ai-workspace.fm-theme-light .fm-assistant-message section {
+          .fm-ai-workspace.fm-theme-light .fm-mobile-chat-shell > .fm-conversation-panel {
             border-color: #e5e5e5 !important;
             background: #fff !important;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06) !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-content .fm-response-sections-card {
+            border-color: #333 !important;
+            background: #171717 !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace.fm-theme-dark .fm-assistant-content .fm-response-sections-card > div > section {
+            border-color: rgba(255, 255, 255, 0.1) !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-response-sections-card {
+            border-color: #dedede !important;
+            background: #fff !important;
+            box-shadow: none !important;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-assistant-content .fm-response-sections-card > div > section {
+            border-color: #e5e5e5 !important;
           }
 
           .fm-chat-scroll {
@@ -11367,15 +11401,7 @@ Start with the most useful next action. Do not invent personal details, course r
             </div>
           </div>
 
-          <footer
-            onClickCapture={() => {
-              if (!composerVisible) {
-                setComposerVisible(true);
-                window.setTimeout(() => composerTextareaRef.current?.focus(), 0);
-              }
-            }}
-            className={`absolute inset-x-0 bottom-0 z-10 border-t border-white/5 bg-[#0d0d0d]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/5 dark:bg-[#111]/95 sm:p-4 lg:border-white/10 lg:bg-[#111111] lg:px-6 lg:pb-6 ${composerVisible ? 'translate-y-0 opacity-100' : 'translate-y-[calc(100%_-_12px)] opacity-55'}`}
-          >
+          <footer className="absolute inset-x-0 bottom-0 z-10 border-t border-white/5 bg-[#0d0d0d]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] dark:border-white/5 dark:bg-[#111]/95 sm:p-4 lg:border-white/10 lg:bg-[#111111] lg:px-6 lg:pb-6">
             <UniversalComposer
               value={prompt}
               onChange={setPrompt}
@@ -11409,6 +11435,12 @@ Start with the most useful next action. Do not invent personal details, course r
                   label: 'Files',
                   icon: <FileText className="h-4 w-4" aria-hidden="true" />,
                   onSelect: () => fileInputRef.current?.click(),
+                },
+                {
+                  id: 'voice-mode',
+                  label: 'Voice conversation',
+                  icon: <AudioLines className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: startVoiceMode,
                 },
                 {
                   id: 'smartboard',
@@ -11460,15 +11492,12 @@ Start with the most useful next action. Do not invent personal details, course r
                 </>
               )}
               onVoiceToggle={toggleVoiceInput}
-              onVoiceModeToggle={startVoiceMode}
               voiceListening={voiceListening}
               busy={busy}
               enterToSend={!isMobileViewport}
               onFocus={() => {
                 setFollowUpExpanded(true);
-                setComposerVisible(true);
               }}
-              onClick={() => setComposerVisible(true)}
             />
           </footer>
           <Dialog
