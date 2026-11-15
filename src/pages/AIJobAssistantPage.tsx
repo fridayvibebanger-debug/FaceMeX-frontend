@@ -4439,6 +4439,7 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [jobsOpen, setJobsOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth < 1024 : false));
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : false));
+  const [composerKeyboardOpen, setComposerKeyboardOpen] = useState(false);
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(() => getAppearanceMode());
   const [personalizationProfile, setPersonalizationProfile] = useState<PersonalizationProfile>(() => getPersonalizationProfile(userStore.id));
   const [screenShareActive, setScreenShareActive] = useState(false);
@@ -10509,6 +10510,12 @@ Start with the most useful next action. Do not invent personal details, course r
             padding: 0 12px !important;
             background: transparent !important;
           }
+
+          .fm-ai-workspace section.fm-mobile-empty.fm-mobile-keyboard-open footer {
+            top: auto !important;
+            bottom: 0 !important;
+            padding: 8px 12px calc(env(safe-area-inset-bottom) + 12px) !important;
+          }
         }
 
         .fm-ai-workspace.fm-theme-light .fm-screen-share-status {
@@ -11084,7 +11091,7 @@ Start with the most useful next action. Do not invent personal details, course r
         </div>
       )}
       <main className="fm-workspace-main fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[56px] text-white sm:px-3 sm:pb-3 lg:bg-white lg:px-0 lg:py-0 lg:pt-0 lg:text-[#262626]">
-        <section className={`fm-conversation-panel relative mx-auto flex h-full w-full max-w-[760px] flex-col overflow-hidden rounded-none border-0 bg-[#0d0d0d] text-white shadow-none lg:max-w-none lg:rounded-none lg:border-0 lg:bg-white lg:text-[#262626] lg:shadow-none ${showDesktopEmptyState ? 'fm-desktop-empty' : ''} ${showMobileBlankWorkspace ? 'fm-mobile-empty' : ''}`}>
+        <section className={`fm-conversation-panel relative mx-auto flex h-full w-full max-w-[760px] flex-col overflow-hidden rounded-none border-0 bg-[#0d0d0d] text-white shadow-none lg:max-w-none lg:rounded-none lg:border-0 lg:bg-white lg:text-[#262626] lg:shadow-none ${showDesktopEmptyState ? 'fm-desktop-empty' : ''} ${showMobileBlankWorkspace ? 'fm-mobile-empty' : ''} ${composerKeyboardOpen ? 'fm-mobile-keyboard-open' : ''}`}>
           <div ref={workspaceScrollRef} className="fm-chat-scroll relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[320px] pt-4 sm:px-5 sm:pb-[340px] lg:px-6 lg:pb-32 lg:pt-8">
             {!isMobileViewport && chatMessages.length === 0 && !busy && !selectedWatchVideo && !activeProject && (
               <div className="fm-desktop-empty-heading">
@@ -11409,6 +11416,8 @@ Start with the most useful next action. Do not invent personal details, course r
               textareaRef={composerTextareaRef}
               tone={appearanceMode === 'light' ? 'light' : 'dark'}
               placeholder={composerPlaceholder}
+              mobileViewportAware
+              onKeyboardVisibilityChange={setComposerKeyboardOpen}
               attachments={selectedImages.map((image) => ({
                 id: image.id,
                 name: image.name,
