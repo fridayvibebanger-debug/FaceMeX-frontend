@@ -63,7 +63,7 @@ export default function UniversalComposer({
   busy = false,
   enterToSend = true,
   tone = 'dark',
-  placeholder = 'Ask FaceMeX anything...',
+  placeholder = 'Ask FaceMeX',
   onFocus,
   onClick,
   onKeyboardVisibilityChange,
@@ -123,7 +123,7 @@ export default function UniversalComposer({
     const viewportHeight = visibleViewportHeight || window.visualViewport?.height || window.innerHeight;
     const requestedMaxHeight = mobileViewportAware
       ? window.innerWidth < 1024
-        ? Math.max(38, Math.min(144, Math.floor(viewportHeight * 0.42)))
+        ? Math.max(38, Math.min(560, Math.floor(viewportHeight * 0.56)))
         : 240
       : window.innerWidth < 768 ? 144 : 240;
     const maxHeight = Math.max(minimumHeight, requestedMaxHeight);
@@ -545,6 +545,7 @@ export default function UniversalComposer({
             size="icon"
             onClick={submit}
             disabled={busy || !canSend}
+            data-can-send={canSend ? 'true' : 'false'}
             aria-label="Send message"
             className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
               isLight
