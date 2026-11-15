@@ -4571,7 +4571,7 @@ const [developerPlan, setDeveloperPlan] = useState<
 
   const showMobileBlankWorkspace = !isDesktopViewport && chatMessages.length === 0 && !busy && !selectedWatchVideo && !selectedProjectId;
 
-  const composerPlaceholder = 'Ask FaceMeX anything...';
+  const composerPlaceholder = 'Ask FaceMeX';
 
   const savedMessages = useMemo(() => {
     return messages.filter((message) => message.saved && message.savedCategory);
