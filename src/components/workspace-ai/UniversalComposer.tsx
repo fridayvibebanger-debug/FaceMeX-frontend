@@ -83,6 +83,7 @@ export default function UniversalComposer({
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [visibleViewportHeight, setVisibleViewportHeight] = useState(0);
   const [visibleViewportBottom, setVisibleViewportBottom] = useState(0);
+  const [isMultiline, setIsMultiline] = useState(false);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
   const isLight = tone === 'light';
@@ -104,17 +105,34 @@ export default function UniversalComposer({
   useLayoutEffect(() => {
     const textarea = inputRef.current;
     if (!textarea) return;
+    const computedStyle = window.getComputedStyle(textarea);
+    const minimumHeight = Number.parseFloat(computedStyle.minHeight) || 38;
+    const lineHeight = Number.parseFloat(computedStyle.lineHeight) || 20;
+    const verticalPadding = (Number.parseFloat(computedStyle.paddingTop) || 0)
+      + (Number.parseFloat(computedStyle.paddingBottom) || 0);
+    const borderHeight = (Number.parseFloat(computedStyle.borderTopWidth) || 0)
+      + (Number.parseFloat(computedStyle.borderBottomWidth) || 0);
+    const oneLineHeight = lineHeight + verticalPadding + borderHeight;
+    const previousMinHeight = textarea.style.minHeight;
+    textarea.style.boxSizing = 'border-box';
+    textarea.style.minHeight = '0px';
+    textarea.style.maxHeight = 'none';
     textarea.style.height = 'auto';
+    const naturalHeight = textarea.scrollHeight + borderHeight;
+    textarea.style.minHeight = previousMinHeight;
     const viewportHeight = visibleViewportHeight || window.visualViewport?.height || window.innerHeight;
-    const maxHeight = mobileViewportAware
+    const requestedMaxHeight = mobileViewportAware
       ? window.innerWidth < 1024
         ? Math.max(38, Math.min(144, Math.floor(viewportHeight * 0.42)))
         : 240
       : window.innerWidth < 768 ? 144 : 240;
-    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    const maxHeight = Math.max(minimumHeight, requestedMaxHeight);
+    const nextHeight = Math.min(Math.max(minimumHeight, naturalHeight), maxHeight);
     textarea.style.height = `${nextHeight}px`;
     textarea.style.maxHeight = `${maxHeight}px`;
-    textarea.style.overflowY = nextHeight >= maxHeight ? 'auto' : 'hidden';
+    textarea.style.overflowY = naturalHeight > maxHeight ? 'auto' : 'hidden';
+    const nextIsMultiline = naturalHeight > oneLineHeight + 1 || value.includes('\n');
+    setIsMultiline((current) => current === nextIsMultiline ? current : nextIsMultiline);
   }, [mobileViewportAware, value, visibleViewportHeight]);
 
   const updateViewportPosition = useCallback(() => {
@@ -207,12 +225,8 @@ export default function UniversalComposer({
       return;
     }
 
-    const footerStyle = window.getComputedStyle(footer);
     const footerRect = footer.getBoundingClientRect();
-    const contentBottom = footerRect.bottom
-      - (Number.parseFloat(footerStyle.borderBottomWidth) || 0)
-      - (Number.parseFloat(footerStyle.paddingBottom) || 0);
-    const inset = Math.max(0, contentBottom - visibleViewportBottom);
+    const inset = Math.max(0, footerRect.bottom - visibleViewportBottom);
     setKeyboardInset((currentInset) => Math.abs(currentInset - inset) < 0.5 ? currentInset : inset);
   });
 
@@ -320,10 +334,14 @@ export default function UniversalComposer({
         </div>
       )}
 
-      <div className={`fm-universal-composer-card box-border w-full rounded-[999px] border px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 ${
+      <div className={`fm-universal-composer-card box-border w-full ${
+        mobileViewportAware && isMultiline ? 'rounded-[24px] lg:rounded-[999px]' : 'rounded-[999px]'
+      } border px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 ${
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
-        <div className="flex min-h-[38px] w-full min-w-0 flex-row items-center gap-1 sm:min-h-11 sm:gap-1.5">
+        <div className={`flex min-h-[38px] w-full min-w-0 flex-row gap-1 sm:min-h-11 sm:gap-1.5 ${
+          mobileViewportAware && isMultiline ? 'items-end lg:items-center' : 'items-center'
+        }`}>
           {(onPickAttachments || menuOptions.length > 0) && (
             <div className="relative" ref={menuRef}>
               <button
