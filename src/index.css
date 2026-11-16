@@ -2706,6 +2706,15 @@
     color: #aaa !important;
   }
 
+  .fm-universal-composer-card textarea.fm-universal-composer-hide-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .fm-universal-composer-card textarea.fm-universal-composer-hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"] {
     background: #383838 !important;
     color: rgba(255, 255, 255, 0.85) !important;
@@ -2718,17 +2727,6 @@
 
   .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"]:not(:disabled):hover {
     background: #484848 !important;
-  }
-
-  @media (max-width: 1023px) {
-    .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"][data-can-send="true"]:not(:disabled) {
-      background: #3367f0 !important;
-      color: #fff !important;
-    }
-
-    .fm-ai-workspace.fm-theme-dark .fm-universal-composer-card button[aria-label="Send message"][data-can-send="true"]:not(:disabled):hover {
-      background: #2858d8 !important;
-    }
   }
 
   .fm-ai-workspace.fm-theme-light .fm-universal-composer-card {
