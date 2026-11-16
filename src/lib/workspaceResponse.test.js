@@ -6,6 +6,7 @@ import {
   extractYouTubeVideoId,
   createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
+  isWorkspaceVideoRelevantToResponse,
   isExplicitTechnicalRequest,
   isMathematicsQuestion,
   isYouTubeSummaryRequest,
@@ -73,6 +74,12 @@ test('builds distinct actionable student, teacher, and career response modes', (
   assert.match(teacher, /learning goal/);
   assert.match(career, /ACTIVE FACEMEX RESPONSE MODE: CAREER/);
   assert.match(career, /concrete next steps/);
+  assert.match(student, /starting from zero/);
+  assert.match(teacher, /observable/);
+  assert.match(career, /early-career users/);
+  assert.match(career, /business starters/);
+  assert.match(career, /existing business owners/);
+  assert.match(career, /unsure what they can do/);
 
   for (const instruction of [student, teacher, career]) {
     assert.match(instruction, /Do not include programming-language names, source code/);
@@ -882,6 +889,25 @@ test('selects up to two distinct YouTube results that match the requested topic'
     ], 'Explain how solar panels generate electricity'),
     [{ videoId: 'solarright1', title: 'How solar panels generate electricity' }],
   );
+});
+
+test('only recommends videos when the reply itself covers their topic', () => {
+  assert.equal(
+    isWorkspaceVideoRelevantToResponse(
+      'Explain photosynthesis to a student',
+      'Photosynthesis is how green plants use light to make food.',
+    ),
+    true,
+  );
+  assert.equal(
+    isWorkspaceVideoRelevantToResponse(
+      'Explain solar panels generate electricity',
+      'Here is how to prepare for a job interview.',
+    ),
+    false,
+  );
+  assert.equal(isWorkspaceVideoRelevantToResponse('job career plan', 'Here are some next steps.'), false);
+  assert.equal(isWorkspaceVideoRelevantToResponse('compound interest', ''), false);
 });
 
 test('keeps accidental code and machine output out of everyday replies but preserves explicit technical answers', () => {

@@ -213,6 +213,8 @@ export function selectRelevantYouTubeLessonVideos<T extends {
   channelTitle?: string | null;
 }>(videos: T[], query: string, limit?: number): T[];
 
+export function isWorkspaceVideoRelevantToResponse(query: string, response: string): boolean;
+
 export type WorkspaceFollowUp = {
   question: string;
   options: string[];

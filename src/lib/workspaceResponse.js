@@ -10,19 +10,23 @@ const RESPONSE_SECTION_ICONS = new Set([
 
 const WORKSPACE_MODE_GUIDANCE = {
   student: `STUDENT MODE:
-- Teach for understanding, not just answer delivery. Match the explanation to the learner's question and use clear, age-appropriate language.
-- Break difficult ideas into manageable steps, define unfamiliar terms, and show accurate working for school subjects when useful.
-- Help the learner do the next part themselves: offer a small practice task, a way to check their work, or a clear study action when it fits.
+- Teach for understanding, not just answer delivery. Match the explanation to the learner's age, level, and question; if they are starting from zero, begin with the simplest useful idea and explain unfamiliar terms.
+- Break difficult ideas into manageable steps, connect new ideas to what the learner already knows, and show accurate working for school subjects when useful.
+- Help the learner move from their current understanding toward a clear learning goal. Make the next step achievable, then offer a small practice task, a way to check their work, or a study action when it fits.
+- If the learner does not know what to study or where to begin, help them identify a subject, curiosity, or immediate challenge and suggest one low-pressure first step instead of expecting them to define a complete plan.
 - For homework or assignments, explain the reasoning and support the learner's own work rather than encouraging copying.`,
   teacher: `TEACHER MODE:
-- Respond as a practical teaching partner. Help the educator prepare or carry out the requested classroom task, rather than only describing general principles.
-- For lessons or activities, include a clear learning goal, suitable materials, ordered teaching steps, and a quick way to check understanding when relevant.
-- Adapt examples and activity complexity to the age group or subject details the user provides; do not invent missing classroom constraints.
-- Include realistic differentiation or likely misconceptions only when they help the requested task.`,
+- Respond as a practical teaching partner. Help the educator prepare, deliver, and evaluate the requested classroom task, rather than only describing general principles.
+- For lessons or activities, make the learning goal observable, then provide suitable materials, ordered teaching steps, a quick check for understanding, and a useful next step when relevant.
+- Adapt examples and activity complexity to the age group, subject, available resources, and learner needs the user provides; do not invent missing classroom constraints.
+- When useful, include accessible entry points for learners who are new to the topic, an extension for learners who are ready to go further, and likely misconceptions with a way to address them.`,
   career: `CAREER MODE:
-- Focus on the user's stated work, job-search, application, interview, or professional-development goal.
+- Support early-career users, students and graduates entering work, job seekers, career changers, people starting a business, and existing business owners. Tailor advice to the user's actual stage and goal instead of assuming everyone is pursuing a conventional job.
+- Help users who are unsure what they can do discover a direction: start with their interests, strengths, experience, resources, and constraints; offer a small, low-risk way to explore options and help them choose a first goal.
+- Turn a broad or uncertain ambition into a realistic path from the user's starting point to a meaningful outcome, with manageable milestones, evidence of progress, and one clear next action.
+- For early-career users, make entry-level steps practical, including skill-building, experience, applications, and interview preparation. For business starters, help validate a customer problem and test a small first offer; for business owners, focus on the specific operating or growth challenge they describe.
 - Turn advice into concrete next steps, checklists, decision points, or ready-to-use wording when helpful; use the user's actual details and never invent qualifications or outcomes.
-- Prioritize actions the user can take now and explain what information or materials they need for each step.
+- Prioritize actions the user can take now and explain what information, support, or materials they need for each step.
 - Be realistic about job and career outcomes; do not promise employment or imply an application was submitted.`,
 };
 
@@ -1235,6 +1239,18 @@ export function selectRelevantYouTubeLessonVideos(videos, query, limit = 2) {
   }
 
   return selected;
+}
+
+export function isWorkspaceVideoRelevantToResponse(query, response) {
+  const terms = [...new Set(
+    (String(query || '').toLowerCase().match(/[a-z0-9]+/g) || [])
+      .filter((term) => term.length > 2 && !/^\d+$/.test(term) && !YOUTUBE_QUERY_STOP_WORDS.has(term)),
+  )];
+  if (!terms.length || typeof response !== 'string' || !response.trim()) return false;
+
+  const responseTerms = new Set(response.toLowerCase().match(/[a-z0-9]+/g) || []);
+  const matchedTerms = terms.filter((term) => responseTerms.has(term)).length;
+  return matchedTerms >= Math.max(1, Math.ceil(terms.length / 2));
 }
 
 export function parseWorkspaceFollowUp(input) {
