@@ -549,7 +549,6 @@ export default function UniversalComposer({
             {value.trim() && (
               <button
                 type="button"
-                onClick={() => setExpanded(true)}
                 aria-label="Expand writing area"
                 aria-expanded={expanded}
                 aria-haspopup="dialog"
