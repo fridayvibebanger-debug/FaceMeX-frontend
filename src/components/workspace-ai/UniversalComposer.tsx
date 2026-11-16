@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
 import { ArrowUp, Check, ChevronLeft, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+
+const MOBILE_KEYBOARD_VIEWPORT_THRESHOLD = 80;
 
 export type ComposerAttachment = {
   id: string;
@@ -70,9 +72,17 @@ export default function UniversalComposer({
   mobileViewportAware = false,
 }: UniversalComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const expandedInputRef = useRef<HTMLTextAreaElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const selectionRef = useRef<{
+    start: number;
+    end: number;
+    direction: 'forward' | 'backward' | 'none';
+  }>({ start: 0, end: 0, direction: 'none' });
+  const restoreInputFocusOnCloseRef = useRef(false);
   const textareaHasFocusRef = useRef(false);
   const baselineViewportHeightRef = useRef(0);
+  const baselineViewportWidthRef = useRef(0);
   const keyboardVisibilityRef = useRef(false);
   const keyboardVisibilityCallbackRef = useRef(onKeyboardVisibilityChange);
   keyboardVisibilityCallbackRef.current = onKeyboardVisibilityChange;
@@ -87,6 +97,8 @@ export default function UniversalComposer({
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
   const isLight = tone === 'light';
+  const isMobileMultiline = mobileViewportAware && isMultiline
+    && typeof window !== 'undefined' && window.innerWidth < 1024;
 
   useEffect(() => {
     if (!voiceListening) {
@@ -101,6 +113,14 @@ export default function UniversalComposer({
     inputRef.current = element;
     if (textareaRef) textareaRef.current = element;
   }, [textareaRef]);
+
+  const captureSelection = (textarea: HTMLTextAreaElement) => {
+    selectionRef.current = {
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+      direction: textarea.selectionDirection || 'none',
+    };
+  };
 
   useLayoutEffect(() => {
     const textarea = inputRef.current;
@@ -121,9 +141,10 @@ export default function UniversalComposer({
     const naturalHeight = textarea.scrollHeight + borderHeight;
     textarea.style.minHeight = previousMinHeight;
     const viewportHeight = visibleViewportHeight || window.visualViewport?.height || window.innerHeight;
+    const mobileMaxHeight = lineHeight * 5 + verticalPadding + borderHeight;
     const requestedMaxHeight = mobileViewportAware
       ? window.innerWidth < 1024
-        ? Math.max(38, Math.min(560, Math.floor(viewportHeight * 0.56)))
+        ? Math.max(minimumHeight, Math.min(mobileMaxHeight, Math.floor(viewportHeight * 0.3)))
         : 240
       : window.innerWidth < 768 ? 144 : 240;
     const maxHeight = Math.max(minimumHeight, requestedMaxHeight);
@@ -149,28 +170,37 @@ export default function UniversalComposer({
     }
 
     const height = viewport?.height || window.innerHeight;
+    const width = window.innerWidth;
     const visibleBottom = viewport
       ? viewport.offsetTop + viewport.height
       : window.innerHeight;
     setVisibleViewportHeight(height);
     setVisibleViewportBottom(visibleBottom);
-    if (!textareaHasFocusRef.current) {
+    const orientationChanged = baselineViewportWidthRef.current > 0
+      && Math.abs(width - baselineViewportWidthRef.current) > 80;
+    if (baselineViewportHeightRef.current === 0 || orientationChanged) {
       baselineViewportHeightRef.current = height;
+      baselineViewportWidthRef.current = width;
     }
 
+    const textareaFocused = textareaHasFocusRef.current || inputRef.current === document.activeElement;
     const viewportReduced = baselineViewportHeightRef.current > 0
-      && height < baselineViewportHeightRef.current;
+      && baselineViewportHeightRef.current - height > MOBILE_KEYBOARD_VIEWPORT_THRESHOLD;
     const viewportBottomInset = viewport
       ? Math.max(0, window.innerHeight - visibleBottom)
       : 0;
-    const isMobile = window.innerWidth < 1024;
+    const isMobile = width < 1024;
+    const hasKeyboardOcclusion = viewportReduced
+      || viewportBottomInset > MOBILE_KEYBOARD_VIEWPORT_THRESHOLD;
     const nextKeyboardVisible = isMobile
-      && textareaHasFocusRef.current
-      && (viewportReduced || viewportBottomInset > 0);
+      && !orientationChanged
+      && hasKeyboardOcclusion
+      && (textareaFocused || keyboardVisibilityRef.current);
 
-    if (inputRef.current !== document.activeElement && !nextKeyboardVisible) {
+    if (!textareaFocused && !nextKeyboardVisible) {
       textareaHasFocusRef.current = false;
       baselineViewportHeightRef.current = height;
+      baselineViewportWidthRef.current = width;
     }
     setKeyboardVisible(nextKeyboardVisible);
     if (keyboardVisibilityRef.current !== nextKeyboardVisible) {
@@ -266,6 +296,7 @@ export default function UniversalComposer({
 
   const submit = () => {
     if (busy || !canSend) return;
+    restoreInputFocusOnCloseRef.current = false;
     setExpanded(false);
     onSend();
   };
@@ -339,11 +370,13 @@ export default function UniversalComposer({
       } border px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 ${
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
-        <div className={`flex min-h-[38px] w-full min-w-0 flex-row gap-1 sm:min-h-11 sm:gap-1.5 ${
-          mobileViewportAware && isMultiline ? 'items-end lg:items-center' : 'items-center'
-        }`}>
+        <div className={`${
+          isMobileMultiline
+            ? 'grid grid-cols-[38px_minmax(0,1fr)_38px_38px] gap-x-1 gap-y-1 sm:grid-cols-[44px_minmax(0,1fr)_44px_44px]'
+            : 'flex flex-row items-center gap-1 sm:gap-1.5'
+        } min-h-[38px] w-full min-w-0 sm:min-h-11`}>
           {(onPickAttachments || menuOptions.length > 0) && (
-            <div className="relative" ref={menuRef}>
+            <div className={`relative ${isMobileMultiline ? 'col-start-1 row-start-2 self-end' : ''}`} ref={menuRef}>
               <button
                 type="button"
                 onClick={() => {
@@ -482,27 +515,36 @@ export default function UniversalComposer({
             </div>
           )}
 
-          <div className="relative min-w-0 flex-1">
+          <div className={isMobileMultiline ? 'contents' : 'relative min-w-0 flex-1'}>
             <Textarea
               ref={setRefs}
               rows={1}
               value={value}
-              onChange={(event) => onChange(event.target.value)}
+              onChange={(event) => {
+                onChange(event.target.value);
+                captureSelection(event.currentTarget);
+              }}
+              onSelect={(event) => captureSelection(event.currentTarget)}
               onFocus={() => {
                 textareaHasFocusRef.current = true;
+                baselineViewportHeightRef.current = window.visualViewport?.height || window.innerHeight;
+                baselineViewportWidthRef.current = window.innerWidth;
                 onFocus?.();
                 requestAnimationFrame(updateViewportPosition);
               }}
-              onBlur={() => requestAnimationFrame(updateViewportPosition)}
+              onBlur={() => {
+                requestAnimationFrame(updateViewportPosition);
+              }}
               onClick={onClick}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               aria-label="Message FaceMeX"
+              style={{ display: 'block' }}
               className={`min-h-[38px] min-w-0 w-full resize-none overflow-x-hidden border-0 bg-transparent py-1.5 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:whitespace-nowrap sm:min-h-11 sm:py-2 ${
                 isLight
                   ? 'text-slate-800 placeholder:text-slate-400'
                   : 'text-white/90 placeholder:text-white/45'
-              } ${value.trim() ? 'pr-9' : 'pr-1'}`}
+              } ${isMobileMultiline ? 'col-span-4 row-start-1 self-start pl-2 pr-1' : value.trim() ? 'pr-9' : 'pr-1'} ${mobileViewportAware ? 'fm-universal-composer-hide-scrollbar' : ''}`}
             />
             {value.trim() && (
               <button
@@ -512,7 +554,12 @@ export default function UniversalComposer({
                 aria-expanded={expanded}
                 aria-haspopup="dialog"
                 title="Expand writing area"
-                className={`absolute bottom-1 right-0 flex h-8 w-8 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                onClick={() => {
+                  if (inputRef.current) captureSelection(inputRef.current);
+                  restoreInputFocusOnCloseRef.current = true;
+                  setExpanded(true);
+                }}
+                className={`${isMobileMultiline ? 'static col-start-2 row-start-2 self-end' : 'absolute bottom-1 right-0'} flex h-8 w-8 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
                   isLight ? 'text-slate-500 hover:bg-black/5 hover:text-slate-900' : 'text-white/65 hover:bg-white/10 hover:text-white'
                 }`}
               >
@@ -529,6 +576,8 @@ export default function UniversalComposer({
               aria-pressed={voiceListening}
               title={voiceListening ? 'Listening' : 'Voice input'}
               className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
+                isMobileMultiline ? 'col-start-3 row-start-2 self-end' : ''
+              } ${
                 voiceListening
                   ? 'bg-red-500/15 text-red-500'
                   : isLight
@@ -548,6 +597,8 @@ export default function UniversalComposer({
             data-can-send={canSend ? 'true' : 'false'}
             aria-label="Send message"
             className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
+              isMobileMultiline ? 'col-start-4 row-start-2 self-end' : ''
+            } ${
               isLight
                 ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
                 : 'bg-[#383838] text-white/85 hover:bg-[#484848] disabled:bg-[#383838] disabled:text-white/35'
@@ -575,12 +626,43 @@ export default function UniversalComposer({
 
       {attachmentPicker}
 
-      <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent className={`w-[calc(100%-1rem)] max-w-3xl p-4 sm:p-6 ${
-          isLight ? 'border-slate-200 bg-white text-slate-900' : 'border-white/10 bg-[#171717] text-white'
-        }`}>
+      <Dialog
+        open={expanded}
+        onOpenChange={(open) => {
+          if (open) restoreInputFocusOnCloseRef.current = true;
+          setExpanded(open);
+        }}
+      >
+        <DialogContent
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            const textarea = expandedInputRef.current;
+            if (!textarea) return;
+            const { start, end, direction } = selectionRef.current;
+            textarea.blur();
+            textarea.setSelectionRange(start, end, direction);
+            textarea.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            if (!restoreInputFocusOnCloseRef.current) return;
+            event.preventDefault();
+            const textarea = inputRef.current;
+            if (!textarea) return;
+            const { start, end, direction } = selectionRef.current;
+            textarea.blur();
+            textarea.setSelectionRange(start, end, direction);
+            textarea.focus();
+            restoreInputFocusOnCloseRef.current = false;
+          }}
+          className={`w-[calc(100%-1rem)] max-w-3xl p-4 sm:p-6 ${
+            isLight ? 'border-slate-200 bg-white text-slate-900' : 'border-white/10 bg-[#171717] text-white'
+          }`}
+        >
           <div className="flex items-center justify-between gap-3">
             <DialogTitle className="text-base font-semibold">Write a message</DialogTitle>
+            <DialogDescription className="sr-only">
+              Continue writing from the current cursor position.
+            </DialogDescription>
             <Button
               type="button"
               variant="ghost"
@@ -595,12 +677,17 @@ export default function UniversalComposer({
             </Button>
           </div>
           <Textarea
+            ref={expandedInputRef}
             value={value}
-            onChange={(event) => onChange(event.target.value)}
+            onChange={(event) => {
+              onChange(event.target.value);
+              captureSelection(event.currentTarget);
+            }}
+            onSelect={(event) => captureSelection(event.currentTarget)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             aria-label="Expanded message editor"
-            autoFocus
+            style={{ display: 'block' }}
             className={`mt-3 min-h-[38dvh] resize-y text-[15px] leading-7 focus-visible:ring-sky-300 ${
               isLight
                 ? 'border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400'
