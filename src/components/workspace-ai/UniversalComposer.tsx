@@ -74,6 +74,7 @@ export default function UniversalComposer({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const expandedInputRef = useRef<HTMLTextAreaElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const compactTextareaWidthAdjustmentRef = useRef(0);
   const selectionRef = useRef<{
     start: number;
     end: number;
@@ -140,6 +141,44 @@ export default function UniversalComposer({
     textarea.style.height = 'auto';
     const naturalHeight = textarea.scrollHeight + borderHeight;
     textarea.style.minHeight = previousMinHeight;
+    let multilineMeasureHeight = naturalHeight;
+    if (mobileViewportAware && window.innerWidth < 1024) {
+      const wrapper = textarea.parentElement;
+      const layout = wrapper?.parentElement;
+      if (wrapper && layout) {
+        const layoutStyle = window.getComputedStyle(layout);
+        const siblingWidth = Array.from(layout.children)
+          .filter((child) => child !== wrapper)
+          .reduce((width, child) => width + child.getBoundingClientRect().width, 0);
+        const columnGap = Number.parseFloat(layoutStyle.columnGap) || 0;
+        const estimatedCompactWidth = layout.clientWidth - siblingWidth - columnGap * (layout.children.length - 1);
+        const currentTextareaWidth = textarea.getBoundingClientRect().width;
+        if (!isMultiline) {
+          compactTextareaWidthAdjustmentRef.current = currentTextareaWidth - estimatedCompactWidth;
+        }
+        const compactWidth = isMultiline
+          ? estimatedCompactWidth + compactTextareaWidthAdjustmentRef.current
+          : currentTextareaWidth;
+        if (compactWidth > 0) {
+          const measurement = textarea.cloneNode() as HTMLTextAreaElement;
+          measurement.value = value;
+          measurement.classList.remove('col-span-4', 'row-start-1', 'self-start', 'pl-2', 'pr-1', 'pr-9');
+          measurement.classList.add('pl-1', value.trim() ? 'pr-9' : 'pr-1');
+          measurement.style.position = 'fixed';
+          measurement.style.left = '-10000px';
+          measurement.style.top = '0';
+          measurement.style.width = `${compactWidth}px`;
+          measurement.style.height = 'auto';
+          measurement.style.minHeight = '0px';
+          measurement.style.maxHeight = 'none';
+          measurement.style.visibility = 'hidden';
+          measurement.style.overflowY = 'hidden';
+          document.body.appendChild(measurement);
+          multilineMeasureHeight = measurement.scrollHeight + borderHeight;
+          measurement.remove();
+        }
+      }
+    }
     const viewportHeight = visibleViewportHeight || window.visualViewport?.height || window.innerHeight;
     const mobileMaxHeight = lineHeight * 5 + verticalPadding + borderHeight;
     const requestedMaxHeight = mobileViewportAware
@@ -152,9 +191,9 @@ export default function UniversalComposer({
     textarea.style.height = `${nextHeight}px`;
     textarea.style.maxHeight = `${maxHeight}px`;
     textarea.style.overflowY = naturalHeight > maxHeight ? 'auto' : 'hidden';
-    const nextIsMultiline = naturalHeight > oneLineHeight + 1 || value.includes('\n');
+    const nextIsMultiline = multilineMeasureHeight > oneLineHeight + 1 || value.includes('\n');
     setIsMultiline((current) => current === nextIsMultiline ? current : nextIsMultiline);
-  }, [mobileViewportAware, value, visibleViewportHeight]);
+  }, [isMultiline, mobileViewportAware, value, visibleViewportHeight]);
 
   const updateViewportPosition = useCallback(() => {
     const viewport = window.visualViewport;
