@@ -98,6 +98,7 @@ import {
   createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
   extractYouTubeUrlFromText,
+  isWorkspaceVideoRelevantToResponse,
   isMathematicsQuestion,
   isYouTubeSummaryRequest,
   normalizeWorkspaceAnswerForDisplay,
@@ -6859,7 +6860,7 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
       const showResponseVideos = mediaPlan.showVideos && (
         !activeLearningContext ||
         /\b(?:video|youtube|watch|tutorial)\b|\bfind\b.{0,30}\blesson\b/i.test(finalPrompt)
-      );
+      ) && isWorkspaceVideoRelevantToResponse(mediaPlan.videoQuery, displayAnswer);
       const hasMediaPlan = !usageLimitReached && (showResponseImages || showResponseVideos);
 
       setMessages((prev) => [
