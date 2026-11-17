@@ -282,6 +282,7 @@ type ChatMessage = {
 };
 
 type VoiceActionKind = 'email' | 'sms' | 'photo' | 'social' | 'calendar' | 'cv' | 'lesson' | 'document';
+type VoiceModeStatus = VoiceSessionStatus | 'generating' | 'paused';
 type VoiceActionPreview = {
   kind: VoiceActionKind;
   application: string;
@@ -4488,9 +4489,7 @@ export default function AIJobAssistantPage() {
   const voiceModeListeningRef = useRef(false);
   const voiceModeStartListeningRef = useRef<() => void>(() => undefined);
   const voiceModeReconnectAttemptsRef = useRef(0);
-  const voiceModeStatusRef = useRef<
-    VoiceSessionStatus | 'generating' | 'paused'
-  >('connecting');
+  const voiceModeStatusRef = useRef<VoiceModeStatus>('connecting');
   const voiceModeActionRef = useRef<VoiceActionPreview | null>(null);
   const voiceModeActionPromptRef = useRef('');
   const voiceModeConversationModeRef = useRef<'continuous' | 'tap'>('continuous');
@@ -4588,9 +4587,8 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [projectRenameValue, setProjectRenameValue] = useState('');
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceModeOpen, setVoiceModeOpen] = useState(false);
-  const [voiceModeStatus, setVoiceModeStatus] = useState<
-    'idle' | 'connecting' | 'listening' | 'processing' | 'generating' | 'speaking' | 'paused' | 'interrupted' | 'disconnected' | 'error'
-  >('connecting');
+  const [voiceModeStatus, setVoiceModeStatus] =
+    useState<VoiceModeStatus>('connecting');
   const [voiceModeTranscript, setVoiceModeTranscript] = useState('');
   const [voiceModeAssistantText, setVoiceModeAssistantText] = useState('');
   const [voiceModeAction, setVoiceModeAction] = useState<VoiceActionPreview | null>(null);
@@ -7661,39 +7659,36 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
   };
 
   const toggleVoiceModePause = () => {
-    if (voiceModeStatus === 'speaking') {
-      voiceModePausedRef.current = false;
-      voiceModeWasSpeakingRef.current = false;
-      voiceModeUtteranceRef.current = null;
-      window.speechSynthesis.cancel();
-      voiceModeStatusRef.current = 'connecting';
-      setVoiceModeStatus('connecting');
-      voiceModeTimerRef.current = window.setTimeout(() => {
-        void startVoiceModeListening();
-      }, 200);
-      return;
-    }
-    if (voiceModeStatus === 'paused') {
-      voiceModePausedRef.current = false;
-      if (voiceModeWasSpeakingRef.current && 'speechSynthesis' in window) {
-        window.speechSynthesis.resume();
-        voiceModeStatusRef.current = 'speaking';
-        setVoiceModeStatus('speaking');
-      } else {
+    switch (voiceModeStatus) {
+      case 'speaking':
+        voiceModePausedRef.current = false;
+        voiceModeWasSpeakingRef.current = false;
+        voiceModeUtteranceRef.current = null;
+        window.speechSynthesis.cancel();
         voiceModeStatusRef.current = 'connecting';
         setVoiceModeStatus('connecting');
-        void startVoiceModeListening();
-      }
-      return;
+        voiceModeTimerRef.current = window.setTimeout(() => {
+          void startVoiceModeListening();
+        }, 200);
+        return;
+      case 'paused':
+        voiceModePausedRef.current = false;
+        if (voiceModeWasSpeakingRef.current && 'speechSynthesis' in window) {
+          window.speechSynthesis.resume();
+          voiceModeStatusRef.current = 'speaking';
+          setVoiceModeStatus('speaking');
+        } else {
+          voiceModeStatusRef.current = 'connecting';
+          setVoiceModeStatus('connecting');
+          void startVoiceModeListening();
+        }
+        return;
+      default:
+        voiceModePausedRef.current = true;
+        voiceModeStatusRef.current = 'paused';
+        voiceModeRecognitionRef.current?.stop?.();
+        setVoiceModeStatus('paused');
     }
-    voiceModePausedRef.current = true;
-    voiceModeStatusRef.current = 'paused';
-    if (voiceModeStatus === 'speaking' && 'speechSynthesis' in window) {
-      window.speechSynthesis.pause();
-    } else {
-      voiceModeRecognitionRef.current?.stop?.();
-    }
-    setVoiceModeStatus('paused');
   };
 
   const requestSmartboardAI = async (
