@@ -268,8 +268,10 @@ async function request(path: string, options: RequestInit = {}, baseUrl = API_UR
 
   const isFormData =
     typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const isBlob =
+    typeof Blob !== 'undefined' && options.body instanceof Blob;
 
-  const baseHeaders: Record<string, string> = isFormData
+  const baseHeaders: Record<string, string> = isFormData || isBlob
     ? {}
     : {
         'Content-Type': 'application/json',
@@ -310,7 +312,7 @@ export const api = {
       method: 'GET',
     }),
 
-  post: (path: string, body?: any) =>
+  post: (path: string, body?: any, signal?: AbortSignal) =>
     request(path, {
       method: 'POST',
       body:
@@ -319,9 +321,20 @@ export const api = {
           : body !== undefined
             ? JSON.stringify(body)
             : undefined,
+      signal,
     }),
 
-  postViaSameOriginProxy: (path: string, body?: any) =>
+  postAudio: (path: string, audio: Blob, signal?: AbortSignal) =>
+    request(path, {
+      method: 'POST',
+      body: audio,
+      signal,
+      headers: {
+        'Content-Type': audio.type || 'audio/webm',
+      },
+    }),
+
+  postViaSameOriginProxy: (path: string, body?: any, signal?: AbortSignal) =>
     request(
       toSameOriginAIProxyPath(path, import.meta.env.PROD),
       {
@@ -332,6 +345,7 @@ export const api = {
             : body !== undefined
               ? JSON.stringify(body)
               : undefined,
+        signal,
       },
       ''
     ),
