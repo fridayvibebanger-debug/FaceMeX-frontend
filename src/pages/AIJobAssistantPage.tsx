@@ -11942,6 +11942,12 @@ Start with the most useful next action. Do not invent personal details, course r
               onClearAttachments={clearSelectedImages}
               menuOptions={[
                 {
+                  id: 'email-assistant',
+                  label: 'Email Assistant',
+                  icon: <Mail className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: () => navigate('/email-assistant'),
+                },
+                {
                   id: 'camera',
                   label: 'Camera',
                   icon: <Camera className="h-4 w-4" aria-hidden="true" />,
