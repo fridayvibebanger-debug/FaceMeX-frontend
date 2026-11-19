@@ -41,6 +41,7 @@ const ProGroupDetailPage = lazy(() => import('./pages/ProGroupDetailPage'));
 const SavedPostsPage = lazy(() => import('./pages/SavedPostsPage'));
 const AIResumePage = lazy(() => import('./pages/AIResumePage'));
 const AIJobAssistantPage = lazy(() => import('./pages/AIJobAssistantPage'));
+const EmailAssistantPage = lazy(() => import('./pages/EmailAssistantPage'));
 import FaceMeXSettingsSync from './components/facemex-settings/FaceMeXSettingsSync';
 const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage'));
 const PersonalizationSettingsPage = lazy(() => import('./pages/PersonalizationSettingsPage'));
@@ -104,13 +105,17 @@ function PublicAuthRoute() {
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const { isAuthenticated, isInitialized } = useAuthStore();
+  const returnTo = `${location.pathname}${location.search}${location.hash}`;
 
   if (!isInitialized && !isAuthenticated) {
     return <AuthPage />;
   }
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  return isAuthenticated
+    ? <>{children}</>
+    : <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
 }
 
 function AppAnalyticsTracker() {
@@ -126,6 +131,7 @@ function AppAnalyticsTracker() {
   const trackCurrentPage = () => {
     const featureByRoute: Array<[RegExp, string]> = [
       [/^\/ai\/job-assistant/, 'ai_workspace'],
+      [/^\/email-assistant/, 'email_assistant'],
       [/^\/documents?/, 'documents'],
       [/^\/ai\/resume/, 'cv_tools'],
       [/^\/ai\/interview/, 'interview_prep'],
@@ -790,6 +796,15 @@ function App() {
           element={
             <ProtectedRoute>
               <EmpowermentToolsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/email-assistant"
+          element={
+            <ProtectedRoute>
+              <EmailAssistantPage />
             </ProtectedRoute>
           }
         />
