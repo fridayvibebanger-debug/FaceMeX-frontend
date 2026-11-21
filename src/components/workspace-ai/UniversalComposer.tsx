@@ -18,6 +18,8 @@ export type ComposerMenuOption = {
   label: string;
   icon: ReactNode;
   onSelect: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export type ComposerMode = 'student' | 'teacher' | 'career';
@@ -45,6 +47,7 @@ type UniversalComposerProps = {
   onClick?: () => void;
   onKeyboardVisibilityChange?: (visible: boolean) => void;
   mobileViewportAware?: boolean;
+  className?: string;
 };
 
 export default function UniversalComposer({
@@ -70,6 +73,7 @@ export default function UniversalComposer({
   onClick,
   onKeyboardVisibilityChange,
   mobileViewportAware = false,
+  className = '',
 }: UniversalComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const expandedInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -404,16 +408,16 @@ export default function UniversalComposer({
         </div>
       )}
 
-      <div className={`fm-universal-composer-card box-border w-full ${
+      <div className={`fm-universal-composer-card box-border w-full ${className} ${
         mobileViewportAware && isMultiline ? 'rounded-[24px] lg:rounded-[999px]' : 'rounded-[999px]'
-      } border px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 ${
+      } border px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 lg:min-h-[52px] lg:px-2 lg:py-1 ${
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
         <div className={`${
           isMobileMultiline
             ? 'grid grid-cols-[38px_minmax(0,1fr)_38px_38px] gap-x-1 gap-y-1 sm:grid-cols-[44px_minmax(0,1fr)_44px_44px]'
             : 'flex flex-row items-center gap-1 sm:gap-1.5'
-        } min-h-[38px] w-full min-w-0 sm:min-h-11`}>
+        } min-h-[38px] w-full min-w-0 sm:min-h-11 lg:min-h-[38px]`}>
           {(onPickAttachments || menuOptions.length > 0) && (
             <div className={`relative ${isMobileMultiline ? 'col-start-1 row-start-2 self-end' : ''}`} ref={menuRef}>
               <button
@@ -429,7 +433,7 @@ export default function UniversalComposer({
                 aria-label="Add attachments and tools"
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
-                className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
+                className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 lg:h-9 lg:w-9 ${
                   isLight ? 'text-slate-600 hover:bg-black/5 hover:text-slate-900' : 'text-white/70 hover:bg-white/10 hover:text-white'
                 }`}
               >
@@ -509,20 +513,33 @@ export default function UniversalComposer({
                           key={option.id}
                           type="button"
                           role="menuitem"
+                          disabled={option.disabled}
+                          aria-disabled={option.disabled || undefined}
+                          title={option.disabledReason}
                           onClick={() => {
+                            if (option.disabled) return;
                             setMenuOpen(false);
                             option.onSelect();
                           }}
                           className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition ${
-                            isLight ? 'hover:bg-slate-100' : 'hover:bg-white/[0.08]'
+                            option.disabled
+                              ? isLight ? 'cursor-not-allowed text-slate-400' : 'cursor-not-allowed text-white/35'
+                              : isLight ? 'hover:bg-slate-100' : 'hover:bg-white/[0.08]'
                           }`}
                         >
                           <span className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                            isLight ? 'bg-slate-100 text-slate-700' : 'bg-white/10 text-white/85'
+                            option.disabled
+                              ? isLight ? 'bg-slate-50 text-slate-400' : 'bg-white/[0.04] text-white/35'
+                              : isLight ? 'bg-slate-100 text-slate-700' : 'bg-white/10 text-white/85'
                           }`}>
                             {option.icon}
                           </span>
-                          {option.label}
+                          <span className="min-w-0 flex-1">{option.label}</span>
+                          {option.disabled && (
+                            <span className={`shrink-0 text-[10px] ${isLight ? 'text-slate-400' : 'text-white/35'}`}>
+                                Coming soon
+                            </span>
+                          )}
                         </button>
                       ))}
                       {onSelectMode && (
@@ -579,7 +596,7 @@ export default function UniversalComposer({
               placeholder={placeholder}
               aria-label="Message FaceMeX"
               style={{ display: 'block' }}
-              className={`min-h-[38px] min-w-0 w-full resize-none overflow-x-hidden border-0 bg-transparent py-1.5 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:whitespace-nowrap sm:min-h-11 sm:py-2 ${
+              className={`min-h-[38px] min-w-0 w-full resize-none overflow-x-hidden border-0 bg-transparent py-1.5 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:whitespace-nowrap sm:min-h-11 sm:py-2 lg:min-h-[30px] lg:py-1.5 ${
                 isLight
                   ? 'text-slate-800 placeholder:text-slate-400'
                   : 'text-white/90 placeholder:text-white/45'
@@ -613,7 +630,7 @@ export default function UniversalComposer({
               aria-label={voiceListening ? 'Stop voice input' : 'Start voice input'}
               aria-pressed={voiceListening}
               title={voiceListening ? 'Listening' : 'Voice input'}
-              className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 ${
+              className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 sm:h-11 sm:w-11 lg:h-9 lg:w-9 ${
                 isMobileMultiline ? 'col-start-3 row-start-2 self-end' : ''
               } ${
                 voiceListening
@@ -634,7 +651,7 @@ export default function UniversalComposer({
             disabled={busy || !canSend}
             data-can-send={canSend ? 'true' : 'false'}
             aria-label="Send message"
-            className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 ${
+            className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 lg:h-9 lg:w-9 ${
               isMobileMultiline ? 'col-start-4 row-start-2 self-end' : ''
             } ${
               isLight
