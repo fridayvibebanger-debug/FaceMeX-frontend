@@ -31,6 +31,65 @@ const WORKSPACE_CALCULATOR_DEFINITIONS = {
     { key: 'annualReturnPercent', label: 'Assumed annual return (%)', min: 0, max: 30, step: 0.1 },
     { key: 'years', label: 'Years invested', min: 1, max: 50, step: 1 },
   ],
+  'voice-capacity': [
+    { key: 'monthlyUsers', label: 'Monthly users', min: 1, max: 100_000, step: 1 },
+    { key: 'answersPerUserPerMonth', label: 'Voice answers per user/month', min: 1, max: 1_000, step: 1 },
+    { key: 'charactersPerAnswer', label: 'Average characters per answer', min: 1, max: 10_000, step: 1 },
+  ],
+  'voice-business-model': [
+    { key: 'payingSubscribers', label: 'Paying subscribers for estimate', min: 1, max: 100_000, step: 1 },
+  ],
+};
+const WORKSPACE_CALCULATOR_CHOICE_DEFINITIONS = {
+  'voice-capacity': [
+    {
+      key: 'monthlyCreditAllowance',
+      label: 'Monthly credits available',
+      options: [
+        { value: 10_000, label: '10,000 - free allowance example' },
+        { value: 30_000, label: '30,000 - Starter allowance example' },
+        { value: 121_000, label: '121,000 - Creator allowance example' },
+        { value: 33_000_000, label: '33 million - grant scenario (verify eligibility)' },
+      ],
+    },
+  ],
+  'voice-business-model': [
+    {
+      key: 'monthlyPrice',
+      label: 'Monthly subscription price',
+      options: [
+        { value: 199, label: 'R199' },
+        { value: 299, label: 'R299' },
+        { value: 480, label: 'R480' },
+      ],
+    },
+    {
+      key: 'monthlyVoiceAllowance',
+      label: 'Monthly voice allowance',
+      options: [
+        { value: 50_000, label: '50,000 characters' },
+        { value: 100_000, label: '100,000 characters' },
+        { value: 200_000, label: '200,000 characters' },
+      ],
+    },
+    {
+      key: 'freeTrialMinutes',
+      label: 'Free trial',
+      options: [
+        { value: 5, label: '5 minutes' },
+        { value: 10, label: '10 minutes' },
+        { value: 15, label: '15 minutes' },
+      ],
+    },
+    {
+      key: 'billing',
+      label: 'Billing',
+      options: [
+        { value: 'monthly-recurring', label: 'Monthly recurring subscription' },
+        { value: 'manual-renewal', label: 'Manual monthly renewal' },
+      ],
+    },
+  ],
 };
 const RESPONSE_SECTION_ICONS = new Set([
   'book', 'briefcase', 'calendar', 'check', 'document', 'globe', 'growth', 'list', 'mail', 'users',
@@ -107,9 +166,22 @@ export function parseWorkspaceCalculator(source) {
   });
   if (inputs.some((input) => input === null)) return null;
 
+  const choiceDefinition = WORKSPACE_CALCULATOR_CHOICE_DEFINITIONS[value.type] || [];
+  const suppliedChoices = value.choices === undefined ? {} : value.choices;
+  if (!suppliedChoices || typeof suppliedChoices !== 'object' || Array.isArray(suppliedChoices)) return null;
+  const choiceKeys = Object.keys(suppliedChoices);
+  if (choiceKeys.length !== choiceDefinition.length ||
+    choiceKeys.some((key) => !choiceDefinition.some((choice) => choice.key === key))) return null;
+  const choices = choiceDefinition.map((choice) => {
+    const option = choice.options.find(({ value: optionValue }) => optionValue === suppliedChoices[choice.key]);
+    return option ? { ...choice, value: option.value } : null;
+  });
+  if (choices.some((choice) => choice === null)) return null;
+
   const currency = value.currency === undefined ? null : value.currency;
   if (currency !== null &&
     (typeof currency !== 'string' || !WORKSPACE_CALCULATOR_CURRENCIES.has(currency))) return null;
+  if (value.type === 'voice-business-model' && currency !== null && currency !== 'ZAR') return null;
   const assumptions = value.assumptions === undefined
     ? ''
     : typeof value.assumptions === 'string' && value.assumptions.length <= 600
@@ -124,6 +196,23 @@ export function parseWorkspaceCalculator(source) {
     currency,
     assumptions,
     inputs,
+    choices,
+  };
+}
+
+export function calculateWorkspaceVoiceCapacity(
+  monthlyUsers,
+  answersPerUserPerMonth,
+  charactersPerAnswer,
+  monthlyCreditAllowance,
+) {
+  const creditsPerUser = answersPerUserPerMonth * charactersPerAnswer;
+  const monthlyDemand = monthlyUsers * creditsPerUser;
+  return {
+    monthlyDemand,
+    usersSupported: creditsPerUser > 0 ? Math.floor(monthlyCreditAllowance / creditsPerUser) : 0,
+    creditsAboveAllowance: Math.max(0, monthlyDemand - monthlyCreditAllowance),
+    creditsRemaining: Math.max(0, monthlyCreditAllowance - monthlyDemand),
   };
 }
 
@@ -1008,7 +1097,7 @@ const CODE_LANGUAGE_PATTERN = /^(?:[a-z][\w+-]*|)$/i;
 const CODE_SYNTAX_PATTERN = /(?:^|\n)\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|<\/?[a-z][^>]*>|[\w$]+\s*=>)/i;
 const CODE_LINE_PATTERN = /^\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|console\.(?:log|error|warn)\s*\(|\/\/|#include\b|<\/?[a-z][^>]*>)/i;
 const INTERNAL_OUTPUT_PATTERN = /(?:\b(?:system prompt|hidden instructions|developer message|internal reasoning|stack trace|traceback)\b|^\s*at\s+[\w.$]+\s*\(|\b(?:TypeError|ReferenceError|SyntaxError):\s)/im;
-const INTERNAL_JSON_MARKER = /"(?:questions|correctIndex|choices|provider|model|task|reactants|products|solution|inputs)"\s*:|"(?:type)"\s*:\s*"(?:calculator|delivery-revenue|subscription-revenue|profit-expenses|investment-growth|budget|chart|diagram|multi-line|scatter|bar|line|pie|triangle|contour|flow|timeline)"|"series"\s*:/i;
+const INTERNAL_JSON_MARKER = /"(?:questions|correctIndex|choices|provider|model|task|reactants|products|solution|inputs)"\s*:|"(?:type)"\s*:\s*"(?:calculator|delivery-revenue|subscription-revenue|profit-expenses|investment-growth|voice-capacity|voice-business-model|budget|chart|diagram|multi-line|scatter|bar|line|pie|triangle|contour|flow|timeline)"|"series"\s*:/i;
 
 function formatStructuredObject(value) {
   const source = JSON.stringify(value);

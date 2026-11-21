@@ -81,7 +81,9 @@ export type WorkspaceCalculatorType =
   | 'subscription-revenue'
   | 'profit-expenses'
   | 'budget'
-  | 'investment-growth';
+  | 'investment-growth'
+  | 'voice-capacity'
+  | 'voice-business-model';
 
 export type WorkspaceCalculator = {
   kind: 'calculator';
@@ -97,9 +99,27 @@ export type WorkspaceCalculator = {
     step: number;
     value: number;
   }>;
+  choices: Array<{
+    key: string;
+    label: string;
+    options: Array<{ value: number | string; label: string }>;
+    value: number | string;
+  }>;
 };
 
 export function parseWorkspaceCalculator(source: string): WorkspaceCalculator | null;
+
+export function calculateWorkspaceVoiceCapacity(
+  monthlyUsers: number,
+  answersPerUserPerMonth: number,
+  charactersPerAnswer: number,
+  monthlyCreditAllowance: number,
+): {
+  monthlyDemand: number;
+  usersSupported: number;
+  creditsAboveAllowance: number;
+  creditsRemaining: number;
+};
 
 export type WorkspaceInteractiveForm = {
   title: string;

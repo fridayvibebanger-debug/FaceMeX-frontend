@@ -13,6 +13,7 @@ import {
   normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
+  calculateWorkspaceVoiceCapacity,
   parseWorkspaceCalculator,
   parseWorkspaceFollowUp,
   parseWorkspaceEquationBalance,
@@ -303,6 +304,67 @@ test('validates supported business calculator inputs and preserves the written a
 
   const rawCalculator = normalizeWorkspaceAnswerForDisplay(JSON.stringify(calculator), 'Estimate delivery revenue.');
   assert.match(rawCalculator, /^```calculator/);
+});
+
+test('validates Voice+ capacity and business-model calculator choices', () => {
+  const capacity = {
+    type: 'voice-capacity',
+    title: 'Voice capacity calculator',
+    assumptions: 'Illustrative allowances; verify provider terms.',
+    inputs: {
+      monthlyUsers: 500,
+      answersPerUserPerMonth: 5,
+      charactersPerAnswer: 300,
+    },
+    choices: { monthlyCreditAllowance: 10_000 },
+  };
+  const parsedCapacity = parseWorkspaceCalculator(JSON.stringify(capacity));
+  assert.equal(parsedCapacity.calculatorType, 'voice-capacity');
+  assert.equal(parsedCapacity.choices[0].value, 10_000);
+  assert.deepEqual(calculateWorkspaceVoiceCapacity(500, 5, 300, 10_000), {
+    monthlyDemand: 750_000,
+    usersSupported: 6,
+    creditsAboveAllowance: 740_000,
+    creditsRemaining: 0,
+  });
+  assert.match(
+    normalizeWorkspaceAnswerForDisplay(JSON.stringify(capacity), 'Estimate voice capacity.'),
+    /^```calculator/,
+  );
+  assert.equal(parseWorkspaceCalculator(JSON.stringify({
+    ...capacity,
+    choices: { monthlyCreditAllowance: 10_001 },
+  })), null);
+
+  const businessModel = {
+    type: 'voice-business-model',
+    title: 'Voice+ business model',
+    currency: 'ZAR',
+    assumptions: 'Illustrative pricing options; confirm costs before publishing.',
+    inputs: { payingSubscribers: 100 },
+    choices: {
+      monthlyPrice: 480,
+      monthlyVoiceAllowance: 100_000,
+      freeTrialMinutes: 10,
+      billing: 'monthly-recurring',
+    },
+  };
+  const parsedBusinessModel = parseWorkspaceCalculator(JSON.stringify(businessModel));
+  assert.equal(parsedBusinessModel.calculatorType, 'voice-business-model');
+  assert.deepEqual(parsedBusinessModel.choices.map(({ key, value }) => ({ key, value })), [
+    { key: 'monthlyPrice', value: 480 },
+    { key: 'monthlyVoiceAllowance', value: 100_000 },
+    { key: 'freeTrialMinutes', value: 10 },
+    { key: 'billing', value: 'monthly-recurring' },
+  ]);
+  assert.equal(parseWorkspaceCalculator(JSON.stringify({
+    ...businessModel,
+    choices: { ...businessModel.choices, billing: 'annual' },
+  })), null);
+  assert.equal(parseWorkspaceCalculator(JSON.stringify({
+    ...businessModel,
+    currency: 'USD',
+  })), null);
 });
 
 test('validates pie chart values and identifies assumption-based data', () => {
