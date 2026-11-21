@@ -14,6 +14,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Copy,
@@ -21,9 +22,11 @@ import {
   ExternalLink,
   FileText,
   FolderKanban,
+  FolderPlus,
   Globe2,
   ImagePlus,
   Loader2,
+  LockKeyhole,
   Plus,
   Sparkles,
   Mail,
@@ -49,6 +52,7 @@ import {
   ThumbsDown,
   ThumbsUp,
   Trash2,
+  UnlockKeyhole,
   Users,
   UserRound,
   Volume2,
@@ -65,9 +69,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import {
+  FACEMEX_EMAIL_ASSISTANT_AVAILABLE,
+  FACEMEX_VOICE_CONVERSATION_AVAILABLE,
+} from '@/lib/featureAvailability';
+import {
   createProject as createProjectRecord,
   createProjectConversation,
   createWorkspaceConversation,
+  deleteWorkspaceConversation,
   deleteWorkspaceMessages,
   deleteProject as deleteProjectRecord,
   ensureProjectStorageFolders,
@@ -76,6 +85,7 @@ import {
   listProjects,
   listWorkspaceSmartboardLessons,
   listWorkspaceConversationSessions,
+  moveWorkspaceConversationToProject,
   renameProject as renameProjectRecord,
   searchProjectContext,
   saveProjectMessage,
@@ -108,6 +118,7 @@ import {
   selectRelevantWorkspaceImages,
   parseWorkspacePractice,
   parseWorkspaceUnderstanding,
+  parseWorkspaceCalculator,
   parseWorkspaceInteractiveForm,
   parseWorkspaceSections,
   parseWorkspaceSteps,
@@ -116,6 +127,7 @@ import {
   parseWorkspaceVisualization,
   selectRelevantYouTubeLessonVideos,
   type WorkspaceVisualization,
+  type WorkspaceCalculator,
   type WorkspaceUnderstanding,
   type WorkspaceInteractiveForm,
   type WorkspaceResponseSections,
@@ -414,6 +426,8 @@ const JOBS_BATCH_SIZE = 10;
 const WORKSPACE_STORAGE_KEY = 'facemex_opportunities_workspace_messages';
 const WORKSPACE_SESSIONS_STORAGE_KEY = 'facemex_opportunities_workspace_sessions';
 const WORKSPACE_ACTIVE_SESSION_STORAGE_KEY = 'facemex_opportunities_workspace_active_session';
+const WORKSPACE_PINNED_CHATS_STORAGE_KEY = 'facemex_workspace_pinned_chats';
+const WORKSPACE_LOCKED_CHATS_STORAGE_KEY = 'facemex_workspace_locked_chats';
 const WORKSPACE_SCHEDULES_STORAGE_KEY = 'facemex_opportunities_workspace_schedules';
 
 const BUILD_CV_QUICK_ACTION = '__OPEN_FACEMEX_AI_CV_BUILDER__';
@@ -2735,7 +2749,7 @@ function renderMarkdownTable(
             {rows.map((row, rowIndex) => (
               <tr
                 key={`row-${rowIndex}`}
-                className="border-b border-white/10 last:border-0"
+                className="border-b border-white/10 even:bg-white/[0.025] last:border-0"
               >
                 {Array.from({ length: columnCount }).map((_, cellIndex) => (
                   <td
@@ -3522,13 +3536,18 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
         <ol className="flex flex-col items-center gap-2">
           {visualization.steps.map((step, index) => (
             <Fragment key={`${index}-${typeof step === 'string' ? step : step.title}`}>
-              <li className="w-full max-w-2xl rounded-xl border border-white/10 bg-black/15 px-4 py-3">
-                <h4 className="text-sm font-semibold text-white">
-                  {typeof step === 'string' ? step : step.title}
-                </h4>
-                {typeof step !== 'string' && step.description && (
-                  <p className="mt-1 text-sm leading-6 text-white/70">{step.description}</p>
-                )}
+              <li className="flex w-full max-w-2xl items-start gap-3 rounded-xl border border-white/10 bg-black/15 px-4 py-3">
+                <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-xs font-semibold text-white/70">
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-white">
+                    {typeof step === 'string' ? step : step.title}
+                  </h4>
+                  {typeof step !== 'string' && step.description && (
+                    <p className="mt-1 text-sm leading-6 text-white/70">{step.description}</p>
+                  )}
+                </div>
               </li>
               {index < visualization.steps.length - 1 && (
                 <li aria-hidden="true" className="flex items-center justify-center text-white/45">
@@ -3539,6 +3558,75 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
           ))}
         </ol>
       </section>
+    );
+  }
+
+  if (visualization.chartType === 'pie') {
+    const total = visualization.data.reduce((sum, point) => sum + point.value, 0);
+    const colors = ['#8fb1ff', '#73d2a4', '#f4a261', '#d6a8ff', '#f28b9c', '#7dd3e8'];
+    const number = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 5 });
+    let angle = -Math.PI / 2;
+    const slices = visualization.data.map((point, index) => {
+      const sweep = (point.value / total) * Math.PI * 2;
+      const startX = 110 + 86 * Math.cos(angle);
+      const startY = 110 + 86 * Math.sin(angle);
+      const endAngle = angle + sweep;
+      const endX = 110 + 86 * Math.cos(endAngle);
+      const endY = 110 + 86 * Math.sin(endAngle);
+      angle = endAngle;
+      if (point.value === 0) return null;
+      if (sweep >= Math.PI * 2 - 1e-8) {
+        return <circle key={point.label} cx="110" cy="110" r="86" fill={colors[index % colors.length]} />;
+      }
+      return (
+        <path
+          key={point.label}
+          d={`M 110 110 L ${startX} ${startY} A 86 86 0 ${sweep > Math.PI ? 1 : 0} 1 ${endX} ${endY} Z`}
+          fill={colors[index % colors.length]}
+          stroke="#111"
+          strokeWidth="2"
+        >
+          <title>{`${point.label}: ${number.format(point.value)} (${((point.value / total) * 100).toFixed(1)}%)`}</title>
+        </path>
+      );
+    });
+
+    return (
+      <figure className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+        <figcaption className="mb-3 flex flex-wrap items-center gap-2 text-base font-semibold text-white">
+          <span>{visualization.title}</span>
+          {visualization.illustrative && (
+            <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55">
+              Illustrative assumptions
+            </span>
+          )}
+        </figcaption>
+        <div className="grid min-w-0 items-center gap-4 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <svg
+            viewBox="0 0 220 220"
+            role="img"
+            aria-label={`${visualization.title} pie chart`}
+            className="mx-auto block h-auto w-full max-w-[240px]"
+          >
+            {slices}
+          </svg>
+          <ul className="grid min-w-0 gap-2 text-sm text-white/75" aria-label="Chart legend">
+            {visualization.data.map((point, index) => (
+              <li key={point.label} className="flex min-w-0 items-start gap-2">
+                <span
+                  aria-hidden="true"
+                  className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
+                  style={{ backgroundColor: colors[index % colors.length] }}
+                />
+                <span className="min-w-0 flex-1 break-words">{point.label}</span>
+                <span className="shrink-0 text-right text-white/60">
+                  {number.format(point.value)} · {((point.value / total) * 100).toFixed(1)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </figure>
     );
   }
 
@@ -3716,6 +3804,215 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
   );
 }
 
+function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: WorkspaceCalculator }) {
+  const calculatorId = useId();
+  const [values, setValues] = useState<Record<string, number>>(() =>
+    Object.fromEntries(calculator.inputs.map((input) => [input.key, input.value]))
+  );
+  const value = (key: string) => values[key] ?? 0;
+  const formatMoney = (amount: number) => new Intl.NumberFormat(undefined, calculator.currency
+    ? { style: 'currency', currency: calculator.currency, maximumFractionDigits: 2 }
+    : { maximumFractionDigits: 2 }
+  ).format(amount);
+  const makeChart = (
+    title: string,
+    xLabel: string,
+    data: Array<{ label: string; value: number }>,
+    chartType: 'bar' | 'line' = 'bar',
+  ): WorkspaceVisualization => ({
+    kind: 'chart',
+    chartType,
+    title,
+    xLabel,
+    yLabel: calculator.currency || 'Amount',
+    data,
+  });
+
+  let results: Array<{ label: string; value: string }>;
+  let chart: WorkspaceVisualization;
+
+  if (calculator.calculatorType === 'delivery-revenue') {
+    const drivers = value('drivers');
+    const deliveries = value('deliveriesPerDriverPerDay');
+    const price = value('pricePerDelivery');
+    const workingDays = value('workingDaysPerMonth');
+    const dailyRevenue = drivers * deliveries * price;
+    const monthlyRevenue = dailyRevenue * workingDays;
+    const driverLimits = calculator.inputs.find((input) => input.key === 'drivers');
+    const driverScenarios = [...new Set([
+      Math.max(1, Math.round(drivers * 0.5)),
+      drivers,
+      Math.min(driverLimits?.max || 500, Math.max(1, Math.round(drivers * 1.5))),
+    ])];
+    results = [
+      { label: 'Estimated daily gross revenue', value: formatMoney(dailyRevenue) },
+      { label: 'Estimated monthly gross revenue', value: formatMoney(monthlyRevenue) },
+    ];
+    chart = makeChart(
+      'Monthly revenue by driver count',
+      'Drivers',
+      driverScenarios.map((scenarioDrivers) => ({
+        label: `${scenarioDrivers}`,
+        value: scenarioDrivers * deliveries * price * workingDays,
+      }))
+    );
+  } else if (calculator.calculatorType === 'subscription-revenue') {
+    const subscribers = value('subscribers');
+    const monthlyPrice = value('monthlyPrice');
+    const subscriberLimit = calculator.inputs.find((input) => input.key === 'subscribers');
+    const maxSubscribers = subscriberLimit?.max || 1_000_000;
+    const scenarios = [...new Set([
+      0,
+      Math.max(1, Math.round(subscribers * 0.5)),
+      subscribers,
+      Math.min(maxSubscribers, Math.max(2, Math.round(subscribers * 1.5))),
+    ])];
+    const monthlyRevenue = subscribers * monthlyPrice;
+    results = [
+      { label: 'Estimated monthly subscription revenue', value: formatMoney(monthlyRevenue) },
+      { label: 'Estimated annual subscription revenue', value: formatMoney(monthlyRevenue * 12) },
+    ];
+    chart = makeChart(
+      'Monthly revenue by subscriber count',
+      'Subscribers',
+      scenarios.map((scenarioSubscribers) => ({
+        label: new Intl.NumberFormat().format(scenarioSubscribers),
+        value: scenarioSubscribers * monthlyPrice,
+      }))
+    );
+  } else if (calculator.calculatorType === 'profit-expenses') {
+    const monthlyRevenue = value('monthlyRevenue');
+    const monthlyExpenses = value('monthlyExpenses');
+    const netProfit = monthlyRevenue - monthlyExpenses;
+    results = [
+      { label: 'Estimated monthly net profit', value: formatMoney(netProfit) },
+      { label: 'Estimated profit margin', value: `${monthlyRevenue > 0 ? (netProfit / monthlyRevenue) * 100 : 0}%` },
+    ];
+    chart = makeChart('Monthly cash flow', 'Category', [
+      { label: 'Revenue', value: monthlyRevenue },
+      { label: 'Expenses', value: monthlyExpenses },
+      { label: 'Net profit', value: netProfit },
+    ]);
+  } else if (calculator.calculatorType === 'budget') {
+    const monthlyIncome = value('monthlyIncome');
+    const monthlyExpenses = value('monthlyExpenses');
+    const savingsTarget = value('savingsTarget');
+    const balance = monthlyIncome - monthlyExpenses;
+    const targetCoverage = savingsTarget > 0
+      ? `${Math.max(0, Math.min(100, (balance / savingsTarget) * 100)).toFixed(1)}%`
+      : 'No target set';
+    results = [
+      { label: 'Estimated balance after expenses', value: formatMoney(balance) },
+      { label: 'Savings target coverage', value: targetCoverage },
+    ];
+    chart = makeChart('Monthly budget breakdown', 'Category', [
+      { label: 'Income', value: monthlyIncome },
+      { label: 'Expenses', value: monthlyExpenses },
+      { label: 'Balance', value: balance },
+    ]);
+  } else {
+    const initialInvestment = value('initialInvestment');
+    const monthlyContribution = value('monthlyContribution');
+    const annualReturnPercent = value('annualReturnPercent');
+    const years = value('years');
+    const monthlyRate = Math.pow(1 + annualReturnPercent / 100, 1 / 12) - 1;
+    const projectedBalance = (months: number) => {
+      if (monthlyRate === 0) return initialInvestment + monthlyContribution * months;
+      const growthFactor = Math.pow(1 + monthlyRate, months);
+      return initialInvestment * growthFactor + monthlyContribution * ((growthFactor - 1) / monthlyRate);
+    };
+    const totalMonths = years * 12;
+    const totalContributions = initialInvestment + monthlyContribution * totalMonths;
+    const finalBalance = projectedBalance(totalMonths);
+    results = [
+      { label: 'Projected balance', value: formatMoney(finalBalance) },
+      { label: 'Total contributions', value: formatMoney(totalContributions) },
+      { label: 'Estimated investment growth', value: formatMoney(finalBalance - totalContributions) },
+    ];
+    chart = makeChart(
+      'Illustrative investment growth',
+      'Years',
+      [...new Set([0, 0.25, 0.5, 0.75, 1].map((fraction) => Math.round(years * fraction)))].map((year) => ({
+        label: `${year}`,
+        value: projectedBalance(year * 12),
+      })),
+      'line'
+    );
+  }
+
+  return (
+    <section className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-[#111] p-4 sm:p-5" aria-label={calculator.title}>
+      <div className="mb-4">
+        <h3 className="text-base font-semibold text-white">{calculator.title}</h3>
+        {calculator.assumptions && (
+          <p className="mt-1 break-words text-sm leading-6 text-white/65">{calculator.assumptions}</p>
+        )}
+      </div>
+      <div className="divide-y divide-white/10">
+        {calculator.inputs.map((input) => {
+          const inputId = `${calculatorId}-${input.key}`;
+          return (
+            <div key={input.key} className="min-w-0 space-y-2 py-4 first:pt-0 last:pb-4">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <label htmlFor={inputId} className="min-w-0 flex-1 break-words text-sm font-medium text-white/80">
+                  {input.label}
+                </label>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-white">
+                  {new Intl.NumberFormat().format(value(input.key))}
+                  {input.key === 'annualReturnPercent' ? '%' : ''}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={input.min}
+                max={input.max}
+                step={input.step}
+                value={value(input.key)}
+                aria-label={`${input.label} slider`}
+                onChange={(event) => {
+                  const nextValue = event.currentTarget.valueAsNumber;
+                  if (Number.isFinite(nextValue)) {
+                    setValues((previous) => ({ ...previous, [input.key]: nextValue }));
+                  }
+                }}
+                className="min-h-8 w-full cursor-pointer accent-[#8fb1ff]"
+              />
+              <input
+                id={inputId}
+                type="number"
+                min={input.min}
+                max={input.max}
+                step={input.step}
+                value={value(input.key)}
+                inputMode="decimal"
+                onChange={(event) => {
+                  const nextValue = event.currentTarget.valueAsNumber;
+                  if (Number.isFinite(nextValue) && nextValue >= input.min && nextValue <= input.max) {
+                    setValues((previous) => ({ ...previous, [input.key]: nextValue }));
+                  }
+                }}
+                className="min-h-10 w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
+        {results.map((result) => (
+          <div key={result.label} className="min-w-0 rounded-lg bg-white/[0.045] p-3">
+            <p className="break-words text-xs leading-5 text-white/60">{result.label}</p>
+            <p className="mt-1 break-words text-lg font-semibold tabular-nums text-white">{result.value}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-5 text-white/50">
+        Estimates update with your inputs. Actual outcomes may differ.
+      </p>
+      <WorkspaceVisualizationCard visualization={chart} />
+    </section>
+  );
+}
+
 function ChatGPTStyleText({
   text,
   onLinkClick,
@@ -3844,6 +4141,12 @@ function ChatGPTStyleText({
               disabled={disabled}
             />
           : <WorkspaceInteractiveQuestionPreview key={`interactive-preview-${index}`} form={form} />;
+      }
+      if (block.language.toLowerCase() === 'calculator') {
+        const calculator = parseWorkspaceCalculator(block.text);
+        return calculator
+          ? <WorkspaceBusinessCalculatorCard key={`calculator-${index}`} calculator={calculator} />
+          : null;
       }
       if (block.language.toLowerCase() === 'sections') {
         const response = parseWorkspaceSections(block.text);
@@ -4216,6 +4519,51 @@ function FaceMeXFlowIcon({ className = '' }: { className?: string }) {
   );
 }
 
+function RotatingWelcomeHeading({
+  className = '',
+  firstName,
+  isReturning,
+}: {
+  className?: string;
+  firstName: string;
+  isReturning: boolean | null;
+}) {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const greetingName = firstName !== 'there' ? firstName : '';
+  const messages = useMemo(
+    () => [
+      isReturning
+        ? `Hi${greetingName ? ` ${greetingName}` : ''}, it’s been a while.`
+        : greetingName
+          ? `Hi ${greetingName}`
+          : 'Hi there',
+      "What's your next move?",
+      'Where do we begin?',
+      "Let's explore ideas.",
+    ],
+    [greetingName, isReturning]
+  );
+
+  useEffect(() => {
+    if (isReturning === null) return;
+
+    setMessageIndex(0);
+    const timer = window.setInterval(() => {
+      setMessageIndex((index) => (index + 1) % messages.length);
+    }, 11200);
+
+    return () => window.clearInterval(timer);
+  }, [firstName, isReturning, messages.length]);
+
+  return (
+    <h1 className={className}>
+      <span key={messageIndex} className="fm-welcome-message">
+        {isReturning === null ? '' : messages[messageIndex]}
+      </span>
+    </h1>
+  );
+}
+
 function WelcomeHero({
   firstName,
   onQuickAsk,
@@ -4518,6 +4866,8 @@ const [developerPlan, setDeveloperPlan] = useState<
 
   const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
   const firstName = useMemo(() => getFirstName(userDisplayName), [userDisplayName]);
+  const [isReturningWorkspaceUser, setIsReturningWorkspaceUser] = useState<boolean | null>(null);
+  const trackedWelcomeVisitKeysRef = useRef(new Set<string>());
   const ownedWorkspaceStorageKey = (key: string) => {
     const userId = clean(
       userStore.id ||
@@ -4528,6 +4878,33 @@ const [developerPlan, setDeveloperPlan] = useState<
     return `${key}:${userId}`;
   };
 
+  useEffect(() => {
+    try {
+      const userId = clean(
+        userStore.id ||
+        window.localStorage.getItem('faceme_user_id') ||
+        window.localStorage.getItem('facemex_user_id') ||
+        'unresolved-user'
+      );
+      const visitKey = `facemex_workspace_last_visit:${userId}`;
+      if (trackedWelcomeVisitKeysRef.current.has(visitKey)) return;
+      setIsReturningWorkspaceUser(null);
+      trackedWelcomeVisitKeysRef.current.add(visitKey);
+
+      const now = Date.now();
+      const previousVisit = Number(window.localStorage.getItem(visitKey));
+      const isReturning = Number.isFinite(previousVisit)
+        && previousVisit > 0
+        && now - previousVisit >= 7 * 24 * 60 * 60 * 1000;
+
+      window.localStorage.setItem(visitKey, String(now));
+      setIsReturningWorkspaceUser(isReturning);
+    } catch (error) {
+      console.error('Unable to read or save FaceMeX workspace visit time', error);
+      setIsReturningWorkspaceUser(false);
+    }
+  }, [userStore.id]);
+
   const [deepSeekUsage, setDeepSeekUsage] = useState(0);
   const [aiUsageLimitReached, setAiUsageLimitReached] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -4535,12 +4912,20 @@ const [developerPlan, setDeveloperPlan] = useState<
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageFeedback, setMessageFeedback] = useState<Record<string, 'positive' | 'negative'>>({});
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [pinnedChatIds, setPinnedChatIds] = useState<string[]>([]);
+  const [lockedChatIds, setLockedChatIds] = useState<string[]>([]);
+  const [lockedChatsOpen, setLockedChatsOpen] = useState(false);
+  const [chatActionsId, setChatActionsId] = useState<string | null>(null);
+  const [chatRenameId, setChatRenameId] = useState<string | null>(null);
+  const [chatRenameValue, setChatRenameValue] = useState('');
+  const [chatProjectSelectId, setChatProjectSelectId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState(() => safeId());
   const [activeWorkspaceConversationId, setActiveWorkspaceConversationId] = useState<string | null>(null);
   const [localJobs, setLocalJobs] = useState<LocalVerifiedJob[]>(OFFICIAL_JOB_SOURCE_CARDS);
   const [busy, setBusy] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth < 1024 : false));
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : false));
   const [composerKeyboardOpen, setComposerKeyboardOpen] = useState(false);
@@ -4691,9 +5076,30 @@ const [developerPlan, setDeveloperPlan] = useState<
   const chatMessages = useMemo(() => {
     return messages.filter((message) => !message.deletedFromChat);
   }, [messages]);
+  const recentChatSessions = useMemo(
+    () => chatSessions.filter((session) =>
+      session.messages.some((message) => !message.deletedFromChat) &&
+      !lockedChatIds.includes(session.id)
+    ),
+    [chatSessions, lockedChatIds]
+  );
+  const pinnedChatSessions = useMemo(
+    () => recentChatSessions
+      .filter((session) => pinnedChatIds.includes(session.id))
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
+    [pinnedChatIds, recentChatSessions]
+  );
   const groupedChatSessions = useMemo(
-    () => groupChatSessionsByDate(chatSessions.filter((session) => session.messages.some((message) => !message.deletedFromChat))),
-    [chatSessions]
+    () => groupChatSessionsByDate(recentChatSessions
+      .filter((session) => !pinnedChatIds.includes(session.id))
+      .slice(0, 12)),
+    [pinnedChatIds, recentChatSessions]
+  );
+  const lockedChatSessions = useMemo(
+    () => chatSessions
+      .filter((session) => lockedChatIds.includes(session.id))
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
+    [chatSessions, lockedChatIds]
   );
 
   const lastChatMessage = chatMessages[chatMessages.length - 1];
@@ -4968,22 +5374,41 @@ const [developerPlan, setDeveloperPlan] = useState<
   }, [currentTier]);
 
   useEffect(() => {
+    try {
+      const pinned = JSON.parse(localStorage.getItem(ownedWorkspaceStorageKey(WORKSPACE_PINNED_CHATS_STORAGE_KEY)) || '[]');
+      const locked = JSON.parse(localStorage.getItem(ownedWorkspaceStorageKey(WORKSPACE_LOCKED_CHATS_STORAGE_KEY)) || '[]');
+      setPinnedChatIds(Array.isArray(pinned) ? pinned.filter((id): id is string => typeof id === 'string') : []);
+      setLockedChatIds(Array.isArray(locked) ? locked.filter((id): id is string => typeof id === 'string') : []);
+    } catch (error) {
+      console.error('Unable to load saved chat actions', error);
+      toast({ title: 'Chat options unavailable', description: 'Pinned and locked chat settings could not be loaded.', variant: 'destructive' });
+    }
+  }, [userStore.id]);
+
+  useEffect(() => {
 
     let cancelled = false;
     const loadChats = async () => {
       let storedSessions: ChatSession[] = [];
       let storedActiveId = '';
       let storedMessages: ChatMessage[] = [];
+      let storedLockedIds: string[] = [];
       try {
         const rawSessions = localStorage.getItem(ownedWorkspaceStorageKey(WORKSPACE_SESSIONS_STORAGE_KEY));
         storedSessions = normalizeChatSessions(rawSessions ? JSON.parse(rawSessions) : []);
         storedActiveId = clean(localStorage.getItem(ownedWorkspaceStorageKey(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY)));
         const rawMessages = localStorage.getItem(ownedWorkspaceStorageKey(WORKSPACE_STORAGE_KEY));
         storedMessages = rawMessages ? JSON.parse(rawMessages) : [];
+        const rawLockedIds = localStorage.getItem(ownedWorkspaceStorageKey(WORKSPACE_LOCKED_CHATS_STORAGE_KEY));
+        const parsedLockedIds = rawLockedIds ? JSON.parse(rawLockedIds) : [];
+        storedLockedIds = Array.isArray(parsedLockedIds)
+          ? parsedLockedIds.filter((id): id is string => typeof id === 'string')
+          : [];
       } catch {
         storedSessions = [];
         storedMessages = [];
       }
+      setLockedChatIds(storedLockedIds);
 
       try {
         const remoteSessions = await listWorkspaceConversationSessions();
@@ -5002,17 +5427,27 @@ const [developerPlan, setDeveloperPlan] = useState<
             createdAt: message.createdAt,
           })),
         }));
-        setChatSessions(sessions);
-        const activeSession = sessions.find((session) => session.id === storedActiveId) || sessions[0];
+        const remoteSessionIds = new Set(sessions.map((session) => session.id));
+        const allSessions = [
+          ...sessions,
+          ...storedSessions.filter((session) => !remoteSessionIds.has(session.id)),
+        ];
+        setChatSessions(allSessions);
+        const activeSession = allSessions.find((session) => session.id === storedActiveId && !storedLockedIds.includes(session.id))
+          || allSessions.find((session) => !storedLockedIds.includes(session.id));
         if (activeSession) {
-          setActiveWorkspaceConversationId(activeSession.id);
+          setActiveWorkspaceConversationId(activeSession.remote ? activeSession.id : null);
           setActiveSessionId(activeSession.id);
           setMessages(activeSession.messages);
         } else if (storedSessions.length > 0 || storedMessages.length > 0) {
-          const legacySession = storedSessions.find((session) => session.id === storedActiveId);
+          const legacySession = storedSessions.find((session) =>
+            session.id === storedActiveId && !storedLockedIds.includes(session.id)
+          );
+          const fallbackSession = legacySession || storedSessions.find((session) => !storedLockedIds.includes(session.id));
+          const canRestoreStoredMessages = !storedLockedIds.includes(storedActiveId);
           setActiveWorkspaceConversationId(null);
-          setActiveSessionId(legacySession?.id || storedActiveId || safeId());
-          setMessages(legacySession?.messages || (Array.isArray(storedMessages) ? storedMessages : []));
+          setActiveSessionId(fallbackSession?.id || (canRestoreStoredMessages ? storedActiveId : '') || safeId());
+          setMessages(fallbackSession?.messages || (canRestoreStoredMessages && Array.isArray(storedMessages) ? storedMessages : []));
         } else {
           setActiveWorkspaceConversationId(null);
           setActiveSessionId(safeId());
@@ -5022,10 +5457,13 @@ const [developerPlan, setDeveloperPlan] = useState<
         console.error('FaceMeX workspace conversations could not be loaded', error);
         if (cancelled) return;
         setChatSessions(storedSessions);
-        const localSession = storedSessions.find((session) => session.id === storedActiveId);
+        const localSession = storedSessions.find((session) =>
+          session.id === storedActiveId && !storedLockedIds.includes(session.id)
+        ) || storedSessions.find((session) => !storedLockedIds.includes(session.id));
+        const canRestoreStoredMessages = !storedLockedIds.includes(storedActiveId);
         setActiveWorkspaceConversationId(null);
-        setActiveSessionId(localSession?.id || storedActiveId || safeId());
-        setMessages(localSession?.messages || (Array.isArray(storedMessages) ? storedMessages : []));
+        setActiveSessionId(localSession?.id || (canRestoreStoredMessages ? storedActiveId : '') || safeId());
+        setMessages(localSession?.messages || (canRestoreStoredMessages && Array.isArray(storedMessages) ? storedMessages : []));
         toast({ title: 'Saved conversations temporarily unavailable', description: 'Your existing device chats remain available. New chats will sync when the connection is restored.', variant: 'destructive' });
       }
     };
@@ -5857,9 +6295,8 @@ const [developerPlan, setDeveloperPlan] = useState<
   };
 
   const openJobTracker = () => {
-    if (isMobileViewport && !hasProAccess) {
-      setSubscriptionOpen(true);
-      toast({ title: 'Pro required', description: 'Unlock Job Tracker with FaceMeX Pro.' });
+    if (!hasProAccess) {
+      navigate('/facemex-plus');
       return;
     }
 
@@ -5867,9 +6304,8 @@ const [developerPlan, setDeveloperPlan] = useState<
   };
 
   const openPracticalLab = () => {
-    if (isMobileViewport && !hasProAccess) {
-      setSubscriptionOpen(true);
-      toast({ title: 'Pro required', description: 'Unlock the Practical Lab with FaceMeX Pro.' });
+    if (!hasProAccess) {
+      navigate('/facemex-plus');
       return;
     }
 
@@ -6099,6 +6535,359 @@ const [developerPlan, setDeveloperPlan] = useState<
     } catch {
       // ignore
     }
+  };
+
+  const persistChatIdList = (storageKey: string, ids: string[]) => {
+    try {
+      localStorage.setItem(ownedWorkspaceStorageKey(storageKey), JSON.stringify(ids));
+      return true;
+    } catch (error) {
+      console.error('Unable to save chat options', error);
+      toast({ title: 'Chat option was not saved', description: 'Check your device storage and try again.', variant: 'destructive' });
+      return false;
+    }
+  };
+
+  const updateStoredChatSessions = (sessions: ChatSession[]) => {
+    try {
+      localStorage.setItem(ownedWorkspaceStorageKey(WORKSPACE_SESSIONS_STORAGE_KEY), JSON.stringify(sessions));
+    } catch (error) {
+      console.error('Unable to save updated chat list', error);
+      toast({ title: 'Chat list could not be saved', description: 'Your change may not remain after leaving this page.', variant: 'destructive' });
+    }
+  };
+
+  const togglePinnedChat = (session: ChatSession) => {
+    const shouldPin = !pinnedChatIds.includes(session.id);
+    const next = shouldPin
+      ? [...pinnedChatIds, session.id]
+      : pinnedChatIds.filter((id) => id !== session.id);
+    if (!persistChatIdList(WORKSPACE_PINNED_CHATS_STORAGE_KEY, next)) return;
+    setPinnedChatIds(next);
+    setChatActionsId(null);
+    toast({ title: shouldPin ? 'Chat pinned' : 'Chat unpinned', description: session.title || 'New chat' });
+  };
+
+  const lockChat = (sessionId: string) => {
+    if (lockedChatIds.includes(sessionId)) return;
+    const activeChatMessages = sessionId === activeSessionId
+      ? messages.filter((message) => !message.deletedFromChat)
+      : [];
+    if (!chatSessions.some((session) => session.id === sessionId) && activeChatMessages.length === 0) {
+      toast({ title: 'No chat to lock', description: 'Start a conversation before locking it.' });
+      return;
+    }
+    if (!chatSessions.some((session) => session.id === sessionId) && activeChatMessages.length > 0) {
+      const createdAt = activeChatMessages[0].createdAt;
+      const localSession: ChatSession = {
+        id: sessionId,
+        title: buildChatSessionTitle(activeChatMessages),
+        messages: activeChatMessages,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+      };
+      const updated = [localSession, ...chatSessions.filter((session) => session.id !== sessionId)].slice(0, 24);
+      setChatSessions(updated);
+      updateStoredChatSessions(updated);
+    }
+    const nextLocked = [...lockedChatIds, sessionId];
+    if (!persistChatIdList(WORKSPACE_LOCKED_CHATS_STORAGE_KEY, nextLocked)) return;
+    setLockedChatIds(nextLocked);
+    setChatActionsId(null);
+    setChatProjectSelectId(null);
+
+    if (sessionId === activeSessionId) {
+      const nextSessionId = safeId();
+      setActiveWorkspaceConversationId(null);
+      setActiveProjectConversationId(null);
+      setActiveSessionId(nextSessionId);
+      setMessages([]);
+      setSelectedProjectId(null);
+      setSelectedProjectFolder(null);
+      resetWorkspaceUiForNewChat();
+      try {
+        localStorage.setItem(ownedWorkspaceStorageKey(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY), nextSessionId);
+        localStorage.setItem(ownedWorkspaceStorageKey(WORKSPACE_STORAGE_KEY), JSON.stringify([]));
+      } catch (error) {
+        console.error('Unable to open a fresh chat after locking', error);
+      }
+    }
+
+    toast({ title: 'Chat locked', description: 'It is hidden from Recents until you unlock it.' });
+  };
+
+  const unlockChat = (sessionId: string) => {
+    const session = chatSessions.find((item) => item.id === sessionId);
+    const next = lockedChatIds.filter((id) => id !== sessionId);
+    if (!persistChatIdList(WORKSPACE_LOCKED_CHATS_STORAGE_KEY, next)) return;
+    setLockedChatIds(next);
+    setChatActionsId(null);
+    setLockedChatsOpen(false);
+    if (session) {
+      openChatSession(session);
+      setJobsOpen(false);
+      toast({ title: 'Chat unlocked', description: `Opened ${session.title || 'New chat'}.` });
+      return;
+    }
+    toast({ title: 'Chat unlocked', description: 'It is back in Recent Chats.' });
+  };
+
+  const renameWorkspaceChat = async (session: ChatSession) => {
+    const title = chatRenameValue.trim().slice(0, 100);
+    if (!title) {
+      toast({ title: 'Enter a chat name', description: 'A chat name cannot be empty.', variant: 'destructive' });
+      return;
+    }
+    try {
+      if (session.remote) await updateProjectConversationTitle(session.id, title);
+      const updated = chatSessions.map((item) => item.id === session.id
+        ? { ...item, title, updatedAt: new Date().toISOString() }
+        : item);
+      setChatSessions(updated);
+      updateStoredChatSessions(updated);
+      setChatRenameId(null);
+      setChatActionsId(null);
+      toast({ title: 'Chat renamed', description: title });
+    } catch (error: any) {
+      console.error('FaceMeX could not rename this conversation', error);
+      toast({ title: 'Rename failed', description: error?.message || 'The chat name was not changed.', variant: 'destructive' });
+    }
+  };
+
+  const moveChatToProject = async (session: ChatSession, project: WorkspaceProject) => {
+    if (!session.remote) {
+      toast({ title: 'Project move unavailable', description: 'Save this chat to your account before moving it.', variant: 'destructive' });
+      return;
+    }
+    setProjectDataBusy(true);
+    try {
+      const movedConversation = await moveWorkspaceConversationToProject(session.id, project.id);
+      const conversations = [
+        movedConversation,
+        ...(desktopProjectConversations[project.id] || []).filter((item) => item.id !== session.id),
+      ];
+      setProjectConversations(conversations);
+      setDesktopProjectConversations((previous) => ({ ...previous, [project.id]: conversations }));
+      setExpandedDesktopProjectId(project.id);
+      const remaining = chatSessions.filter((item) => item.id !== session.id);
+      setChatSessions(remaining);
+      updateStoredChatSessions(remaining);
+      if (pinnedChatIds.includes(session.id)) {
+        const nextPinned = pinnedChatIds.filter((id) => id !== session.id);
+        if (persistChatIdList(WORKSPACE_PINNED_CHATS_STORAGE_KEY, nextPinned)) setPinnedChatIds(nextPinned);
+      }
+      if (lockedChatIds.includes(session.id)) {
+        const nextLocked = lockedChatIds.filter((id) => id !== session.id);
+        if (persistChatIdList(WORKSPACE_LOCKED_CHATS_STORAGE_KEY, nextLocked)) setLockedChatIds(nextLocked);
+      }
+      setChatActionsId(null);
+      setChatProjectSelectId(null);
+      await openProjectFolderChat(project, session.title, conversations, session.id);
+      toast({ title: 'Chat added to project', description: `${project.name} · ${session.title}` });
+    } catch (error: any) {
+      console.error('FaceMeX could not move this conversation to a project', error);
+      toast({ title: 'Could not add chat to project', description: error?.message || 'Try again when your connection is restored.', variant: 'destructive' });
+    } finally {
+      setProjectDataBusy(false);
+    }
+  };
+
+  const deleteRecentChat = async (session: ChatSession) => {
+    if (!window.confirm(`Delete "${session.title || 'New chat'}"? This cannot be undone.`)) return;
+    try {
+      if (session.remote) await deleteWorkspaceConversation(session.id);
+      const remaining = chatSessions.filter((item) => item.id !== session.id);
+      setChatSessions(remaining);
+      updateStoredChatSessions(remaining);
+      const nextPinned = pinnedChatIds.filter((id) => id !== session.id);
+      const nextLocked = lockedChatIds.filter((id) => id !== session.id);
+      if (persistChatIdList(WORKSPACE_PINNED_CHATS_STORAGE_KEY, nextPinned)) setPinnedChatIds(nextPinned);
+      if (persistChatIdList(WORKSPACE_LOCKED_CHATS_STORAGE_KEY, nextLocked)) setLockedChatIds(nextLocked);
+      setChatActionsId(null);
+      setChatRenameId(null);
+      if (session.id === activeSessionId) {
+        const nextSessionId = safeId();
+        setActiveWorkspaceConversationId(null);
+        setActiveSessionId(nextSessionId);
+        setMessages([]);
+        try {
+          localStorage.setItem(ownedWorkspaceStorageKey(WORKSPACE_ACTIVE_SESSION_STORAGE_KEY), nextSessionId);
+          localStorage.setItem(ownedWorkspaceStorageKey(WORKSPACE_STORAGE_KEY), JSON.stringify([]));
+        } catch (storageError) {
+          console.error('Unable to clear the deleted active conversation', storageError);
+        }
+      }
+      toast({ title: 'Chat deleted', description: 'The conversation was removed.' });
+    } catch (error: any) {
+      console.error('FaceMeX could not delete this conversation', error);
+      toast({ title: 'Delete failed', description: error?.message || 'The conversation was not deleted.', variant: 'destructive' });
+    }
+  };
+
+  const renderRecentChatRow = (session: ChatSession, mobile = false) => {
+    const isActive = session.id === activeSessionId;
+    const isPinned = pinnedChatIds.includes(session.id);
+    const isActionsOpen = chatActionsId === session.id;
+    const isRenaming = chatRenameId === session.id;
+    const dark = mobile;
+
+    return (
+      <div key={session.id} className="relative">
+        <div className={`group flex min-w-0 items-center rounded-lg transition ${
+          dark
+            ? isActive ? 'bg-[#292929] text-white' : 'text-white/65 hover:bg-white/10 hover:text-white'
+            : isActive ? 'bg-[#e8e8e7] text-[#222]' : 'text-[#555] hover:bg-[#ececeb] hover:text-[#222]'
+        }`}>
+          <button
+            type="button"
+            onClick={() => {
+              setChatActionsId(null);
+              openChatSession(session);
+              if (mobile) setJobsOpen(false);
+            }}
+            title={session.title || 'New chat'}
+            aria-current={isActive ? 'page' : undefined}
+            className={`flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] leading-5 ${mobile ? 'min-h-10' : ''}`}
+          >
+            {isPinned && <Pin className={`h-3 w-3 shrink-0 ${dark ? 'text-white/60' : 'text-[#777]'}`} aria-label="Pinned" />}
+            <span className="min-w-0 flex-1 truncate">{session.title || 'New chat'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setChatActionsId((current) => current === session.id ? null : session.id);
+              setChatRenameId(null);
+              setChatProjectSelectId(null);
+            }}
+            aria-label={`Options for ${session.title || 'New chat'}`}
+            aria-expanded={isActionsOpen}
+            title="Chat options"
+            className={`mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg opacity-0 transition focus:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 ${
+              dark ? 'text-white/55 hover:bg-white/10 hover:text-white' : 'text-[#777] hover:bg-black/5 hover:text-[#222]'
+            }`}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+        </div>
+
+        {isActionsOpen && (
+          <div
+            role="group"
+            aria-label={`${session.title || 'New chat'} actions`}
+            className={`my-1 ml-2 rounded-2xl border p-2 shadow-lg ${
+              dark ? 'border-white/10 bg-[#202020] text-white shadow-black/30' : 'border-[#e5e5e5] bg-white text-[#333] shadow-black/10'
+            }`}
+          >
+            {isRenaming ? (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void renameWorkspaceChat(session);
+                }}
+              >
+                <input
+                  autoFocus
+                  value={chatRenameValue}
+                  onChange={(event) => setChatRenameValue(event.target.value)}
+                  aria-label="New chat name"
+                  maxLength={100}
+                  className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
+                    dark ? 'border-white/10 bg-black/20 text-white' : 'border-black/10 bg-[#f7f7f6] text-[#222]'
+                  }`}
+                />
+                <button type="submit" className={`rounded-lg px-3 py-2 text-xs font-semibold ${dark ? 'bg-white text-black' : 'bg-[#222] text-white'}`}>Save</button>
+              </form>
+            ) : (
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => togglePinnedChat(session)}
+                  className={`flex min-h-9 items-center gap-2 rounded-lg px-2 text-left text-xs transition ${
+                    dark ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                  }`}
+                >
+                  {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                  {isPinned ? 'Unpin' : 'Pin'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChatRenameId(session.id);
+                    setChatRenameValue(session.title || '');
+                  }}
+                  className={`flex min-h-9 items-center gap-2 rounded-lg px-2 text-left text-xs transition ${
+                    dark ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                  }`}
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChatProjectSelectId((current) => current === session.id ? null : session.id)}
+                  className={`flex min-h-9 items-center gap-2 rounded-lg px-2 text-left text-xs transition ${
+                    dark ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                  }`}
+                >
+                  <FolderPlus className="h-3.5 w-3.5" />
+                  Add to project
+                </button>
+                <button
+                  type="button"
+                  onClick={() => lockChat(session.id)}
+                  className={`flex min-h-9 items-center gap-2 rounded-lg px-2 text-left text-xs transition ${
+                    dark ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                  }`}
+                >
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                  Lock chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteRecentChat(session)}
+                  className={`col-span-2 flex min-h-9 items-center gap-2 rounded-lg px-2 text-left text-xs text-red-500 transition ${
+                    dark ? 'hover:bg-red-500/10' : 'hover:bg-red-50'
+                  }`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              </div>
+            )}
+
+            {chatProjectSelectId === session.id && (
+              <div className={`mt-2 border-t pt-2 ${dark ? 'border-white/10' : 'border-black/10'}`}>
+                <p className={`px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide ${dark ? 'text-white/45' : 'text-[#888]'}`}>
+                  Choose a project
+                </p>
+                {workspaceProjects.length > 0 ? workspaceProjects.map((project) => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    disabled={projectDataBusy || !session.remote}
+                    onClick={() => void moveChatToProject(session, project)}
+                    className={`flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-45 ${
+                      dark ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                    }`}
+                  >
+                    <FolderKanban className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{project.name}</span>
+                  </button>
+                )) : (
+                  <p className={`px-2 py-2 text-xs ${dark ? 'text-white/50' : 'text-[#888]'}`}>Create a project first to move this chat.</p>
+                )}
+                {!session.remote && (
+                  <p className={`px-2 py-1 text-[11px] ${dark ? 'text-white/45' : 'text-[#888]'}`}>
+                    Save this chat to your account before moving it.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const startSavedItemNewChat = (item: ChatMessage, mode: 'continue' | 'deeper' | 'apply' = 'continue') => {
@@ -6881,9 +7670,11 @@ FaceMeX intelligence rules:
 - For teaching, explain the idea in a supportive, well-ordered way and connect each step to the learner's question. For business or career requests, use a professional, practical tone: state the key point, explain its implications, and give clear next steps.
 - For programming or technical questions, explain the relevant idea in ordinary language and give practical non-code next steps. Never switch to programming syntax, even when the user asks for an implementation.
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
+- For side-by-side comparisons or rankings of three or more options, prefer a concise Markdown table; for two options, use a short comparison unless the differences are complex. Use a flow diagram for a multi-stage process only when it clarifies sequence or relationships, and avoid repeating the same content in prose, a table, and a diagram.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
 - When a relevant photograph would materially improve the answer, the existing media integration may show a separately retrieved, relevance-checked image card. Never output a visual marker or placeholder, and never invent image URLs, results, or captions.
-- When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block so the visual is actually rendered. Use numeric scatter points calculated from the supplied function; use a contour only when its values are derived from the exact supported quadratic; and use a labeled multi-line chart for conceptual relationships such as supply and demand, explicitly marked as illustrative unless sourced. Use only factual values grounded in the user's input or a reliable source; never present invented data as factual.
+- When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block so the visual is actually rendered. Use numeric scatter points calculated from the supplied function; use a contour only when its values are derived from the exact supported quadratic; and use a labeled multi-line chart for conceptual relationships such as supply and demand, explicitly marked as illustrative unless sourced. A pie chart uses \`type: "pie"\`, a boolean \`illustrative\`, and \`data\` entries with \`label\` and non-negative numeric \`value\`. Use only factual values grounded in the user's input or a reliable source; never present invented data as factual.
+- For a business or financial what-if that benefits from changing assumptions, add one \`calculator\` fenced JSON block alongside the written answer. Use only these fixed formula types and numeric input keys: \`delivery-revenue\` (\`drivers\`, \`deliveriesPerDriverPerDay\`, \`pricePerDelivery\`, \`workingDaysPerMonth\`), \`subscription-revenue\` (\`subscribers\`, \`monthlyPrice\`), \`profit-expenses\` (\`monthlyRevenue\`, \`monthlyExpenses\`), \`budget\` (\`monthlyIncome\`, \`monthlyExpenses\`, \`savingsTarget\`), or \`investment-growth\` (\`initialInvestment\`, \`monthlyContribution\`, \`annualReturnPercent\`, \`years\`). The JSON shape is \`{"type":"delivery-revenue","title":"Delivery revenue scenario","currency":"ZAR","assumptions":"Example assumptions to adjust.","inputs":{"drivers":10,"deliveriesPerDriverPerDay":8,"pricePerDelivery":80,"workingDaysPerMonth":22}}\`; use the matching input keys for each type. Currency is optional and, if used, must be one of ZAR, USD, EUR, GBP, CAD, or AUD. Set initial inputs from the user's details or clearly state they are assumptions; do not make up factual data, add executable formulas, or create a calculator for ordinary questions.
 - For a task that genuinely needs the user to choose or provide details before you can continue, include a fenced \`interactive\` JSON block with a concise title, a \`questions\` array, and a \`submitLabel\`. Each question has a \`question\`, a \`type\` of \`single\`, \`multiple\`, or \`text\`, and an \`options\` array for single/multiple choices (omit options for text). Do not use a form for ordinary answers or invent missing options.
 - For a useful action plan, use a \`sections\` fenced JSON block with \`title\` and \`sections\` entries containing \`heading\`, optional \`body\`, optional \`items\`, and an optional icon from \`book\`, \`briefcase\`, \`calendar\`, \`check\`, \`document\`, \`globe\`, \`growth\`, \`list\`, \`mail\`, or \`users\`. For sequential instructions, use a \`steps\` fenced JSON block with \`title\` and at least two \`steps\` containing \`heading\`, \`body\`, and an optional supported \`icon\`. Use normal Markdown when it is clearer.
 - For a workflow diagram, use the \`diagram\` JSON format with \`type\` set to \`flow\`, a \`title\`, and two to eight \`steps\`. A step may be a short string or an object with \`title\` and \`description\`. Use only the actual workflow details established by the conversation.
@@ -7604,6 +8395,10 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
   };
 
   const startVoiceMode = () => {
+    if (!FACEMEX_VOICE_CONVERSATION_AVAILABLE) {
+      toast({ title: 'Voice conversation coming soon', description: 'This feature will be available soon.' });
+      return;
+    }
     messageUtteranceRef.current = null;
     setSpeakingMessageId(null);
     voiceModeActionPromptRef.current = '';
@@ -9407,6 +10202,45 @@ Start with the most useful next action. Do not invent personal details, course r
           height: 0;
         }
 
+        @media (min-width: 1024px) {
+          .fm-mobile-sidebar-scroll {
+            -ms-overflow-style: auto;
+            scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+            scrollbar-width: thin;
+          }
+
+          .fm-mobile-sidebar-scroll::-webkit-scrollbar {
+            display: block;
+            width: 6px;
+            height: 6px;
+          }
+
+          .fm-mobile-sidebar-scroll::-webkit-scrollbar-thumb {
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.3);
+          }
+
+          .fm-mobile-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.48);
+          }
+
+          .fm-mobile-sidebar-scroll::-webkit-scrollbar-track {
+            background: transparent;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-mobile-sidebar-scroll {
+            scrollbar-color: rgba(0, 0, 0, 0.28) transparent;
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-mobile-sidebar-scroll::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.28);
+          }
+
+          .fm-ai-workspace.fm-theme-light .fm-mobile-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.42);
+          }
+        }
+
         .fm-chat-scroll {
           overscroll-behavior: contain;
         }
@@ -9422,6 +10256,40 @@ Start with the most useful next action. Do not invent personal details, course r
 
         .fm-chat-scroll::-webkit-scrollbar-track {
           background: transparent;
+        }
+
+        @keyframes fmWelcomeMessage {
+          0% {
+            opacity: 0;
+            transform: translateY(12px);
+          }
+          5.357% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          94.643% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-12px);
+          }
+        }
+
+        .fm-welcome-heading {
+          display: flex;
+          width: 100%;
+          min-width: 0;
+          align-items: center;
+          justify-content: center;
+          margin: 0;
+          white-space: nowrap;
+        }
+
+        .fm-welcome-message {
+          animation: fmWelcomeMessage 11200ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+          will-change: opacity, transform;
         }
 
         .fm-desktop-empty-heading {
@@ -9510,12 +10378,16 @@ Start with the most useful next action. Do not invent personal details, course r
 
           .fm-ai-workspace .fm-desktop-empty-heading {
             position: absolute;
-            top: calc(50% - 78px);
+            top: calc(50% - 66px);
             left: 24px;
             right: 24px;
             display: flex;
             justify-content: center;
             pointer-events: none;
+          }
+
+          .fm-ai-workspace .fm-desktop-empty-heading .fm-welcome-heading {
+            line-height: 1.1;
           }
 
           .fm-ai-workspace section.fm-desktop-empty .fm-chat-scroll {
@@ -9920,7 +10792,7 @@ Start with the most useful next action. Do not invent personal details, course r
         }
 
         .fm-ai-workspace.fm-theme-dark .fm-desktop-sidebar .fm-sidebar-recent-button[aria-current='page'] {
-          background: #2a2a2a !important;
+          background: #262626 !important;
           color: #fff !important;
         }
 
@@ -9968,7 +10840,7 @@ Start with the most useful next action. Do not invent personal details, course r
         }
 
         .fm-ai-workspace.fm-theme-light .fm-desktop-sidebar .fm-sidebar-recent-button[aria-current='page'] {
-          background: #e8e8e7 !important;
+          background: #e1e1df !important;
           color: #222 !important;
         }
 
@@ -10350,6 +11222,13 @@ Start with the most useful next action. Do not invent personal details, course r
             animation: none !important;
             opacity: 1 !important;
             transform: none !important;
+          }
+
+          .fm-welcome-message {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+            will-change: auto;
           }
         }
 
@@ -10992,7 +11871,7 @@ Start with the most useful next action. Do not invent personal details, course r
 
           .fm-ai-workspace .fm-mobile-empty-heading {
             position: absolute;
-            top: 35%;
+            top: calc(35% + 4px);
             right: 16px;
             left: 16px;
             display: flex;
@@ -11003,9 +11882,9 @@ Start with the most useful next action. Do not invent personal details, course r
           .fm-ai-workspace .fm-mobile-empty-heading h1 {
             margin: 0;
             color: #252525;
-            font-size: 22px;
+            font-size: clamp(16px, 5.7vw, 22px);
             font-weight: 500;
-            line-height: 1.25;
+            line-height: 1.1;
             letter-spacing: -0.03em;
             text-align: center;
           }
@@ -11107,7 +11986,7 @@ Start with the most useful next action. Do not invent personal details, course r
         }
       `}</style>
 
-      <aside className="fm-desktop-sidebar hidden h-[100dvh] max-h-[100dvh] min-h-0 w-[260px] min-w-[260px] shrink-0 overflow-hidden border-r border-[#e8e8e8] bg-[#f7f7f6] text-[#282828] lg:flex lg:flex-col">
+      <aside className="fm-desktop-sidebar hidden">
         <div className="shrink-0 px-4 pb-3 pt-5">
           <div className="mb-5 flex items-center gap-2 px-1">
             <img src={FACE_MEX_AI_ICON_SRC} alt="FaceMeX logo" className="fm-sidebar-logo h-7 w-7 object-contain" />
@@ -11138,7 +12017,7 @@ Start with the most useful next action. Do not invent personal details, course r
             type="button"
             onClick={openJobTracker}
             className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-              hasProAccess ? 'text-[#555] hover:bg-[#ececeb] hover:text-[#222]' : 'cursor-not-allowed text-[#999]'
+              hasProAccess ? 'text-[#555] hover:bg-[#ececeb] hover:text-[#222]' : 'text-[#777] hover:bg-[#ececeb] hover:text-[#222]'
             }`}
           >
             <Clock className="h-4 w-4" />
@@ -11148,7 +12027,7 @@ Start with the most useful next action. Do not invent personal details, course r
 
           <button
             type="button"
-            onClick={() => openSchedulePanel()}
+            onClick={() => navigate('/facemex-plus')}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-[#555] transition hover:bg-[#ececeb] hover:text-[#222]"
           >
             <CalendarDays className="h-4 w-4" />
@@ -11199,7 +12078,7 @@ Start with the most useful next action. Do not invent personal details, course r
                         key={video.videoId}
                         type="button"
                         onClick={() => {
-                          setWatchPlayingVideoId(video.videoId);
+                          openWatchVideoInApp(video);
                         }}
                         className="group overflow-hidden rounded-[22px] border border-white/10 bg-[#111] p-0 text-left shadow-sm transition hover:border-white/20"
                       >
@@ -11255,11 +12134,18 @@ Start with the most useful next action. Do not invent personal details, course r
             <div className="flex items-center gap-1 px-1">
               <button
                 type="button"
-                aria-expanded={desktopProjectsExpanded}
-                onClick={() => setDesktopProjectsExpanded((expanded) => !expanded)}
+                onClick={() => setProjectsOpen(true)}
                 className="flex min-w-0 flex-1 items-center rounded-lg px-2 py-2 text-left text-[13px] font-semibold text-[#777] transition hover:bg-[#ececeb]"
               >
                 <span className="min-w-0 flex-1">Projects</span>
+              </button>
+              <button
+                type="button"
+                aria-label={`${desktopProjectsExpanded ? 'Collapse' : 'Expand'} projects`}
+                aria-expanded={desktopProjectsExpanded}
+                onClick={() => setDesktopProjectsExpanded((expanded) => !expanded)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#777] transition hover:bg-[#ececeb]"
+              >
                 <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition ${desktopProjectsExpanded ? '' : '-rotate-90'}`} />
               </button>
               <button
@@ -11449,43 +12335,74 @@ Start with the most useful next action. Do not invent personal details, course r
             type="button"
             onClick={openPracticalLab}
             className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-              hasProAccess ? 'text-[#555] hover:bg-[#ececeb] hover:text-[#222]' : 'cursor-not-allowed text-[#999]'
+              hasProAccess ? 'text-[#555] hover:bg-[#ececeb] hover:text-[#222]' : 'text-[#777] hover:bg-[#ececeb] hover:text-[#222]'
             }`}
           >
             <BookOpen className="h-4 w-4" />
-            Practical Lab
+            <span className="min-w-0 flex-1">Practical Lab</span>
+            {!hasProAccess && <ShieldCheck className="h-3.5 w-3.5 text-[#999]" />}
           </button>
 
-          {!selectedProjectId && groupedChatSessions.length > 0 && (
+          {!selectedProjectId && (pinnedChatSessions.length > 0 || groupedChatSessions.length > 0 || lockedChatSessions.length > 0) && (
             <div className="fm-sidebar-recent-list mt-4 space-y-3" aria-label="General chats">
-              <p className="fm-sidebar-section-label">RECENT CHATS</p>
+              <div className="flex items-center justify-between px-3">
+                <p className="fm-sidebar-section-label">RECENT CHATS</p>
+                {lockedChatSessions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setLockedChatsOpen((open) => !open)}
+                    aria-expanded={lockedChatsOpen}
+                    className="flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] font-medium text-[#888] transition hover:bg-[#ececeb] hover:text-[#333]"
+                    title="Show locked chats"
+                  >
+                    {lockedChatsOpen ? <UnlockKeyhole className="h-3 w-3" /> : <LockKeyhole className="h-3 w-3" />}
+                    Locked {lockedChatSessions.length}
+                  </button>
+                )}
+              </div>
+              {pinnedChatSessions.length > 0 && (
+                <section aria-label="Pinned chats">
+                  <p className="px-3 pb-1 text-[11px] font-medium text-[#888]">Pinned</p>
+                  <div className="space-y-0.5">{pinnedChatSessions.map((session) => renderRecentChatRow(session))}</div>
+                </section>
+              )}
               {groupedChatSessions.map((group) => (
                 <section key={group.label} aria-label={`${group.label} general chats`}>
                   <p className="px-3 pb-1 text-[11px] font-medium text-[#888]">{group.label}</p>
-                  <div className="space-y-0.5">
-                    {group.sessions.map((session) => (
-                      <button
-                        key={session.id}
-                        type="button"
-                        onClick={() => openChatSession(session)}
-                        title={session.title || 'New chat'}
-                        aria-current={session.id === activeSessionId ? 'page' : undefined}
-                        className={`fm-sidebar-recent-button w-full rounded-lg px-3 py-2 text-left text-[13px] leading-5 transition ${
-                          session.id === activeSessionId ? 'bg-[#e8e8e7] text-[#222]' : 'text-[#555] hover:bg-[#ececeb] hover:text-[#222]'
-                        }`}
-                      >
-                        <span className="fm-sidebar-recent-text">{session.title || 'New chat'}</span>
-                      </button>
+                  <div className="space-y-0.5">{group.sessions.map((session) => renderRecentChatRow(session))}</div>
+                </section>
+              ))}
+              {lockedChatsOpen && lockedChatSessions.length > 0 && (
+                <section aria-label="Locked chats">
+                  <p className="px-3 pb-1 text-[11px] font-medium text-[#888]">Locked chats</p>
+                  <div className="space-y-1">
+                    {lockedChatSessions.map((session) => (
+                      <div key={session.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-[#f0f0ef] px-3 py-2">
+                        <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-[#888]" />
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-[#666]">{session.title || 'New chat'}</span>
+                        <button
+                          type="button"
+                          onClick={() => unlockChat(session.id)}
+                          className="rounded-md px-2 py-1 text-[11px] font-medium text-[#444] hover:bg-white"
+                        >
+                          Unlock and open
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </section>
-              ))}
+              )}
             </div>
           )}
         </div>
 
-        <div className="shrink-0 border-t border-[#e8e8e8] bg-[#f7f7f6] p-3">
-          <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left pointer-events-none">
+        <div className="shrink-0 border-t border-[#e8e8e8] bg-[#f7f7f6] p-2.5">
+          <button
+            type="button"
+            onClick={() => navigate('/ai/settings', { state: { from: location.pathname } })}
+            aria-label="Open Settings"
+            className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left"
+          >
             <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
               <span className="fm-sidebar-profile-avatar flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#e3e3e1] text-xs font-semibold text-[#555]">
                 {firstName?.[0]?.toUpperCase() || 'F'}
@@ -11497,7 +12414,7 @@ Start with the most useful next action. Do not invent personal details, course r
                 </span>
               </span>
             </div>
-          </div>
+          </button>
         </div>
       </aside>
 
@@ -11505,6 +12422,17 @@ Start with the most useful next action. Do not invent personal details, course r
 
       <header className="fm-workspace-topbar hidden h-14 shrink-0 items-center justify-between bg-white px-6 lg:flex">
         <div className="flex items-center gap-1 text-[15px] font-semibold text-[#252525]">
+          {!desktopSidebarOpen && (
+            <button
+              type="button"
+              onClick={() => setDesktopSidebarOpen(true)}
+              aria-label="Open sidebar"
+              title="Open sidebar"
+              className="mr-2 flex h-9 w-9 items-center justify-center rounded-lg text-[#666] transition hover:bg-[#f3f3f3] hover:text-[#222] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#888]"
+            >
+              <ChevronRight className="h-[18px] w-[18px]" />
+            </button>
+          )}
           {activeProject?.name || 'FaceMeX'}
           <ChevronDown className="h-4 w-4 text-[#888]" />
         </div>
@@ -11609,13 +12537,21 @@ Start with the most useful next action. Do not invent personal details, course r
           <div ref={workspaceScrollRef} className="fm-chat-scroll relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[320px] pt-4 sm:px-5 sm:pb-[340px] lg:px-6 lg:pb-32 lg:pt-8">
             {!isMobileViewport && chatMessages.length === 0 && !busy && !selectedWatchVideo && !activeProject && (
               <div className="fm-desktop-empty-heading">
-                <h1 className="text-center text-[24px] font-medium leading-8 text-white lg:text-[#292929]">What are you working on?</h1>
+                <RotatingWelcomeHeading
+                  className="fm-welcome-heading text-center text-[24px] font-medium leading-8 text-white lg:text-[#292929]"
+                  firstName={firstName}
+                  isReturning={isReturningWorkspaceUser}
+                />
               </div>
             )}
 
             {showMobileBlankWorkspace && (
               <div className="fm-mobile-empty-heading" aria-hidden="true">
-                <h1>What are you working on?</h1>
+                <RotatingWelcomeHeading
+                  className="fm-welcome-heading"
+                  firstName={firstName}
+                  isReturning={isReturningWorkspaceUser}
+                />
               </div>
             )}
 
@@ -11923,7 +12859,13 @@ Start with the most useful next action. Do not invent personal details, course r
           </div>
 
           <footer className="absolute inset-x-0 bottom-0 z-10 border-t border-white/5 bg-[#0d0d0d]/95 p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] dark:border-white/5 dark:bg-[#111]/95 sm:p-4 lg:border-white/10 lg:bg-[#111111] lg:px-6 lg:pb-6">
+            <p className={`mx-auto mb-2 hidden w-full max-w-[640px] text-center text-[11px] leading-4 lg:block lg:w-4/5 ${
+              appearanceMode === 'light' ? 'text-[#888]' : 'text-white/40'
+            }`}>
+              FaceMeX can make mistakes. Check important information.
+            </p>
             <UniversalComposer
+              className="mx-auto w-full max-w-[640px] lg:w-4/5"
               value={prompt}
               onChange={setPrompt}
               onSend={() => sendPrompt()}
@@ -11945,6 +12887,8 @@ Start with the most useful next action. Do not invent personal details, course r
                   id: 'email-assistant',
                   label: 'Email Assistant',
                   icon: <Mail className="h-4 w-4" aria-hidden="true" />,
+                  disabled: !FACEMEX_EMAIL_ASSISTANT_AVAILABLE,
+                  disabledReason: 'Coming soon.',
                   onSelect: () => navigate('/email-assistant'),
                 },
                 {
@@ -11969,6 +12913,8 @@ Start with the most useful next action. Do not invent personal details, course r
                   id: 'voice-mode',
                   label: 'Voice conversation',
                   icon: <AudioLines className="h-4 w-4" aria-hidden="true" />,
+                  disabled: !FACEMEX_VOICE_CONVERSATION_AVAILABLE,
+                  disabledReason: 'Coming soon.',
                   onSelect: startVoiceMode,
                 },
                 {
@@ -13234,17 +14180,31 @@ Start with the most useful next action. Do not invent personal details, course r
         </div>
       )}
 
-      {jobsOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-[4px] lg:hidden" onClick={() => setJobsOpen(false)}>
+      {(jobsOpen || (isDesktopViewport && desktopSidebarOpen)) && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-[4px] lg:relative lg:inset-auto lg:z-auto lg:order-first lg:flex lg:h-full lg:w-[270px] lg:shrink-0 lg:bg-transparent lg:backdrop-blur-0"
+          onClick={() => {
+            if (!isDesktopViewport) setJobsOpen(false);
+          }}
+        >
           <div
-            className="fm-premium-drawer absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col overflow-hidden border-r border-white/10 bg-[#171717] text-white shadow-2xl"
+            className="fm-premium-drawer absolute left-0 top-0 flex h-full w-[88vw] max-w-[390px] flex-col overflow-hidden border-r border-white/10 bg-[#171717] text-white shadow-2xl lg:relative lg:left-auto lg:top-auto lg:h-full lg:w-full lg:max-w-[270px] lg:shrink-0 lg:bg-[#0b0b0b] lg:shadow-none"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#171717] px-4">
+            <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#171717] px-4 lg:bg-[#0b0b0b]">
               <div className="flex min-w-0 items-center gap-2">
                 <img src={FACE_MEX_AI_ICON_SRC} alt="FaceMeX logo" className="fm-sidebar-logo h-7 w-7 object-contain" />
                 <div className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-white">FaceMeX</div>
               </div>
+              <button
+                type="button"
+                onClick={() => setDesktopSidebarOpen(false)}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 lg:flex"
+              >
+                <ChevronLeft className="h-[18px] w-[18px]" />
+              </button>
             </div>
 
             <div className="fm-mobile-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
@@ -13266,7 +14226,7 @@ Start with the most useful next action. Do not invent personal details, course r
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  openGuidedSearch();
+                  setGlobalSearchOpen(true);
                 }}
                 className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
               >
@@ -13282,7 +14242,7 @@ Start with the most useful next action. Do not invent personal details, course r
                   openJobTracker();
                 }}
                 className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                  hasProAccess ? 'text-white/75 hover:bg-white/10 hover:text-white' : 'cursor-not-allowed text-white/40'
+                  hasProAccess ? 'text-white/75 hover:bg-white/10 hover:text-white' : 'text-white/50 hover:bg-white/10 hover:text-white/80'
                 }`}
               >
                 <Clock className="h-4 w-4" />
@@ -13432,7 +14392,7 @@ Start with the most useful next action. Do not invent personal details, course r
                   openPracticalLab();
                 }}
                 className={`mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                  hasProAccess ? 'text-white/75 hover:bg-white/10 hover:text-white' : 'cursor-not-allowed text-white/40'
+                  hasProAccess ? 'text-white/75 hover:bg-white/10 hover:text-white' : 'text-white/50 hover:bg-white/10 hover:text-white/80'
                 }`}
               >
                 <BookOpen className="h-4 w-4" />
@@ -13440,34 +14400,59 @@ Start with the most useful next action. Do not invent personal details, course r
                 {!hasProAccess && <ShieldCheck className="h-3.5 w-3.5 text-amber-300" />}
               </button>
 
-              {!selectedProjectId && !routeProjectId && chatSessions.length > 0 && (
+              {!selectedProjectId && !routeProjectId && (recentChatSessions.length > 0 || lockedChatSessions.length > 0) && (
                 <>
-                  <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Recent</div>
-
-                  <div className="mt-2 space-y-1">
-                    {chatSessions.slice(0, 12).map((session) => (
+                  <div className="mt-7 flex items-center justify-between px-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Recent</div>
+                    {lockedChatSessions.length > 0 && (
                       <button
-                        key={session.id}
                         type="button"
-                        onClick={() => {
-                          setJobsOpen(false);
-                          openChatSession(session);
-                        }}
-                        className={`block w-full rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                          session.id === activeSessionId
-                            ? 'bg-white/10 text-white'
-                            : 'text-white/65 hover:bg-white/10 hover:text-white'
-                        }`}
+                        onClick={() => setLockedChatsOpen((open) => !open)}
+                        aria-expanded={lockedChatsOpen}
+                        className="flex min-h-8 items-center gap-1 rounded-lg px-2 text-[11px] text-white/50 hover:bg-white/10 hover:text-white"
                       >
-                        <span className="block max-w-full whitespace-normal break-words leading-5">{session.title || 'New chat'}</span>
+                        {lockedChatsOpen ? <UnlockKeyhole className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
+                        Locked {lockedChatSessions.length}
                       </button>
-                    ))}
+                    )}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {pinnedChatSessions.length > 0 && (
+                      <section aria-label="Pinned chats">
+                        <div className="px-3 pb-1 text-[11px] text-white/35">Pinned</div>
+                        <div className="space-y-1">{pinnedChatSessions.map((session) => renderRecentChatRow(session, true))}</div>
+                      </section>
+                    )}
+                    <div className="space-y-1">
+                      {recentChatSessions
+                        .filter((session) => !pinnedChatIds.includes(session.id))
+                        .slice(0, 12)
+                        .map((session) => renderRecentChatRow(session, true))}
+                    </div>
+                    {lockedChatsOpen && lockedChatSessions.length > 0 && (
+                      <section aria-label="Locked chats" className="space-y-1 border-t border-white/10 pt-2">
+                        <div className="px-3 pb-1 text-[11px] text-white/35">Locked chats</div>
+                        {lockedChatSessions.map((session) => (
+                          <div key={session.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2">
+                            <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-white/45" />
+                            <span className="min-w-0 flex-1 truncate text-xs text-white/55">{session.title || 'New chat'}</span>
+                            <button
+                              type="button"
+                              onClick={() => unlockChat(session.id)}
+                              className="rounded-md px-2 py-1 text-[11px] font-medium text-white/80 hover:bg-white/10"
+                            >
+                              Unlock and open
+                            </button>
+                          </div>
+                        ))}
+                      </section>
+                    )}
                   </div>
                 </>
               )}
             </div>
 
-            <div className="shrink-0 border-t border-white/10 bg-[#171717] p-3">
+            <div className="shrink-0 border-t border-white/10 bg-[#171717] p-2.5 lg:bg-[#0b0b0b]">
               <button
                 type="button"
                 onClick={() => {
@@ -13475,9 +14460,13 @@ Start with the most useful next action. Do not invent personal details, course r
                   navigate('/ai/settings', { state: { from: location.pathname } });
                 }}
                 aria-label="Open Settings"
-                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left"
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white ring-2 ring-emerald-400/20">
+                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ring-2 ${
+                  appearanceMode === 'light'
+                    ? 'bg-[#dedede] text-[#555] ring-black/5'
+                    : 'bg-[#454545] text-white ring-white/10'
+                }`}>
                   {firstName?.[0]?.toUpperCase() || 'F'}
                 </div>
 
@@ -13491,7 +14480,7 @@ Start with the most useful next action. Do not invent personal details, course r
         </div>
       )}
 
-      {projectsOpen && isMobileViewport && (
+      {projectsOpen && (
         <div
           className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-[4px] lg:flex lg:justify-end"
           onClick={() => setProjectsOpen(false)}
