@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
+import { LockKeyhole } from 'lucide-react';
 import {
   hasAnalyticsConsentChoice,
   initializeAnalytics,
@@ -7,6 +8,9 @@ import {
   trackAppOpen,
   trackEvent,
 } from '@/lib/analytics';
+import {
+  FACEMEX_EMAIL_ASSISTANT_AVAILABLE,
+} from '@/lib/featureAvailability';
 
 import { useAuthStore } from './store/authStore';
 
@@ -116,6 +120,26 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return isAuthenticated
     ? <>{children}</>
     : <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+}
+
+function ComingSoonPage({ feature }: { feature: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#0d0d0d] p-6 text-white">
+      <section className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center">
+        <LockKeyhole className="mx-auto h-8 w-8 text-white/55" aria-hidden="true" />
+        <h1 className="mt-4 text-xl font-semibold">{feature} is coming soon</h1>
+        <p className="mt-2 text-sm leading-6 text-white/60">
+          We’re working on it and hope to have it ready soon.
+        </p>
+        <Link
+          to="/ai/job-assistant"
+          className="mt-5 inline-flex min-h-10 items-center justify-center rounded-full bg-white px-4 text-sm font-medium text-black hover:bg-white/90"
+        >
+          Return to FaceMeX
+        </Link>
+      </section>
+    </main>
+  );
 }
 
 function AppAnalyticsTracker() {
@@ -804,7 +828,9 @@ function App() {
           path="/email-assistant"
           element={
             <ProtectedRoute>
-              <EmailAssistantPage />
+              {FACEMEX_EMAIL_ASSISTANT_AVAILABLE
+                ? <EmailAssistantPage />
+                : <ComingSoonPage feature="Email Assistant" />}
             </ProtectedRoute>
           }
         />
