@@ -106,6 +106,7 @@ import {
 } from '@/lib/workspaceSpeech';
 import {
   buildWorkspaceModeInstruction,
+  calculateWorkspaceVoiceCapacity,
   createSolveForXGuidanceResponse,
   createWorkspaceMediaPlan,
   extractYouTubeUrlFromText,
@@ -3662,9 +3663,18 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
   const xFor = (value: number) => plot.x + ((value - xMinimum) / xRange) * plot.width;
   const xTicks = Array.from({ length: 5 }, (_, index) => xMinimum + (xRange * index) / 4);
   const xAxis = (isScatter || isMultiLine) && xMinimum <= 0 && xMaximum >= 0 ? xFor(0) : plot.x;
-  const formatValue = (value: number) => new Intl.NumberFormat(undefined, {
-    maximumSignificantDigits: 5,
-  }).format(value);
+  const currencyCode = ['AUD', 'CAD', 'EUR', 'GBP', 'USD', 'ZAR']
+    .find((currency) => currency === visualization.yLabel);
+  const formatValue = (value: number) => new Intl.NumberFormat(undefined, currencyCode
+    ? {
+        style: 'currency',
+        currency: currencyCode,
+        currencyDisplay: 'narrowSymbol',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }
+    : { maximumSignificantDigits: 5 }
+  ).format(value);
   const points = isScatter
     ? visualization.data.map((point) => `${xFor(point.x)},${yFor(point.y)}`).join(' ')
     : !isMultiLine ? visualization.data.map((point, index) =>
@@ -3809,9 +3819,25 @@ function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: Workspace
   const [values, setValues] = useState<Record<string, number>>(() =>
     Object.fromEntries(calculator.inputs.map((input) => [input.key, input.value]))
   );
+  const [selectedChoices, setSelectedChoices] = useState<Record<string, number | string>>(() =>
+    Object.fromEntries(calculator.choices.map((choice) => [choice.key, choice.value]))
+  );
   const value = (key: string) => values[key] ?? 0;
-  const formatMoney = (amount: number) => new Intl.NumberFormat(undefined, calculator.currency
-    ? { style: 'currency', currency: calculator.currency, maximumFractionDigits: 2 }
+  const selectedChoice = (key: string) => selectedChoices[key];
+  const choiceLabel = (key: string) => calculator.choices
+    .find((choice) => choice.key === key)
+    ?.options.find((option) => option.value === selectedChoice(key))?.label || '';
+  const currency = calculator.currency || (
+    calculator.calculatorType === 'voice-business-model' ? 'ZAR' : null
+  );
+  const formatMoney = (amount: number) => new Intl.NumberFormat(undefined, currency
+    ? {
+        style: 'currency',
+        currency,
+        currencyDisplay: 'narrowSymbol',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }
     : { maximumFractionDigits: 2 }
   ).format(amount);
   const makeChart = (
@@ -3824,14 +3850,58 @@ function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: Workspace
     chartType,
     title,
     xLabel,
-    yLabel: calculator.currency || 'Amount',
+    yLabel: currency || 'Amount',
     data,
   });
 
   let results: Array<{ label: string; value: string }>;
-  let chart: WorkspaceVisualization;
+  let chart: WorkspaceVisualization | null = null;
 
-  if (calculator.calculatorType === 'delivery-revenue') {
+  if (calculator.calculatorType === 'voice-capacity') {
+    const monthlyUsers = value('monthlyUsers');
+    const answersPerUser = value('answersPerUserPerMonth');
+    const charactersPerAnswer = value('charactersPerAnswer');
+    const monthlyCredits = Number(selectedChoice('monthlyCreditAllowance') || 0);
+    const capacity = calculateWorkspaceVoiceCapacity(
+      monthlyUsers,
+      answersPerUser,
+      charactersPerAnswer,
+      monthlyCredits,
+    );
+    const overAllowance = capacity.creditsAboveAllowance > 0;
+    const formatCount = (count: number) => new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: 0,
+    }).format(count);
+    results = [
+      { label: 'Estimated monthly credit demand', value: `${formatCount(capacity.monthlyDemand)} credits` },
+      { label: 'Estimated users supported', value: `${formatCount(capacity.usersSupported)} users` },
+      {
+        label: overAllowance ? 'Credits above allowance' : 'Credits remaining',
+        value: `${formatCount(overAllowance ? capacity.creditsAboveAllowance : capacity.creditsRemaining)} credits`,
+      },
+    ];
+  } else if (calculator.calculatorType === 'voice-business-model') {
+    const monthlyPrice = Number(selectedChoice('monthlyPrice') || 0);
+    const monthlyAllowance = Number(selectedChoice('monthlyVoiceAllowance') || 0);
+    const freeTrialMinutes = Number(selectedChoice('freeTrialMinutes') || 0);
+    const billing = choiceLabel('billing');
+    const payingSubscribers = value('payingSubscribers');
+    const monthlyRevenue = monthlyPrice * payingSubscribers;
+    results = [
+      { label: 'Estimated monthly subscription revenue', value: formatMoney(monthlyRevenue) },
+      { label: 'Monthly voice allowance', value: `${new Intl.NumberFormat().format(monthlyAllowance)} characters` },
+      { label: 'Free trial', value: `${freeTrialMinutes} minutes` },
+    ];
+    chart = makeChart(
+      'Voice+ monthly revenue',
+      'Paying subscribers',
+      [1, 10, 25, 50, 100].map((subscribers) => ({
+        label: new Intl.NumberFormat().format(subscribers),
+        value: monthlyPrice * subscribers,
+      }))
+    );
+    results.push({ label: 'Billing', value: billing });
+  } else if (calculator.calculatorType === 'delivery-revenue') {
     const drivers = value('drivers');
     const deliveries = value('deliveriesPerDriverPerDay');
     const price = value('pricePerDelivery');
@@ -3997,6 +4067,61 @@ function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: Workspace
           );
         })}
       </div>
+      {calculator.choices.length > 0 && (
+        <div className="divide-y divide-white/10 border-t border-white/10">
+          {calculator.choices.map((choice) => (
+            <fieldset key={choice.key} className="min-w-0 space-y-2 py-4">
+              <legend className="text-sm font-medium text-white/80">{choice.label}</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {choice.options.map((option, optionIndex) => {
+                  const optionId = `${calculatorId}-${choice.key}-${optionIndex}`;
+                  const checked = selectedChoice(choice.key) === option.value;
+                  return (
+                    <label
+                      key={optionId}
+                      htmlFor={optionId}
+                      className={`flex min-h-10 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${
+                        checked
+                          ? 'border-white/30 bg-white/[0.09] text-white'
+                          : 'border-white/10 bg-white/[0.025] text-white/75 hover:bg-white/[0.06]'
+                      }`}
+                    >
+                      <input
+                        id={optionId}
+                        type="radio"
+                        name={`${calculatorId}-${choice.key}`}
+                        value={option.value}
+                        checked={checked}
+                        onChange={() => setSelectedChoices((previous) => ({
+                          ...previous,
+                          [choice.key]: option.value,
+                        }))}
+                        className="h-4 w-4 shrink-0 accent-white"
+                      />
+                      <span className="break-words">{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+      )}
+      {calculator.calculatorType === 'voice-business-model' && (
+        <div className="mt-4 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.05] p-4">
+          <h4 className="text-sm font-semibold text-white">Your proposed configuration</h4>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-emerald-300">
+            {formatMoney(Number(selectedChoice('monthlyPrice') || 0))}/month
+          </p>
+          <p className="mt-1 break-words text-sm leading-6 text-white/75">
+            {new Intl.NumberFormat().format(Number(selectedChoice('monthlyVoiceAllowance') || 0))} voice characters
+            {' · '}{Number(selectedChoice('freeTrialMinutes') || 0)} free trial minutes
+            {choiceLabel('billing') && (
+              <> · {choiceLabel('billing')}</>
+            )}
+          </p>
+        </div>
+      )}
       <div className="grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
         {results.map((result) => (
           <div key={result.label} className="min-w-0 rounded-lg bg-white/[0.045] p-3">
@@ -4006,9 +4131,13 @@ function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: Workspace
         ))}
       </div>
       <p className="mt-3 text-xs leading-5 text-white/50">
-        Estimates update with your inputs. Actual outcomes may differ.
+        {calculator.calculatorType === 'voice-capacity'
+          ? 'Assumes one credit per character. Confirm actual model billing and provider allowances before relying on this estimate.'
+          : calculator.calculatorType === 'voice-business-model'
+            ? 'Illustrative assumptions only. Confirm provider terms, costs, and eligibility before relying on these estimates.'
+            : 'Estimates update with your inputs. Actual outcomes may differ.'}
       </p>
-      <WorkspaceVisualizationCard visualization={chart} />
+      {chart && <WorkspaceVisualizationCard visualization={chart} />}
     </section>
   );
 }
@@ -7675,6 +7804,7 @@ FaceMeX intelligence rules:
 - When a relevant photograph would materially improve the answer, the existing media integration may show a separately retrieved, relevance-checked image card. Never output a visual marker or placeholder, and never invent image URLs, results, or captions.
 - When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block so the visual is actually rendered. Use numeric scatter points calculated from the supplied function; use a contour only when its values are derived from the exact supported quadratic; and use a labeled multi-line chart for conceptual relationships such as supply and demand, explicitly marked as illustrative unless sourced. A pie chart uses \`type: "pie"\`, a boolean \`illustrative\`, and \`data\` entries with \`label\` and non-negative numeric \`value\`. Use only factual values grounded in the user's input or a reliable source; never present invented data as factual.
 - For a business or financial what-if that benefits from changing assumptions, add one \`calculator\` fenced JSON block alongside the written answer. Use only these fixed formula types and numeric input keys: \`delivery-revenue\` (\`drivers\`, \`deliveriesPerDriverPerDay\`, \`pricePerDelivery\`, \`workingDaysPerMonth\`), \`subscription-revenue\` (\`subscribers\`, \`monthlyPrice\`), \`profit-expenses\` (\`monthlyRevenue\`, \`monthlyExpenses\`), \`budget\` (\`monthlyIncome\`, \`monthlyExpenses\`, \`savingsTarget\`), or \`investment-growth\` (\`initialInvestment\`, \`monthlyContribution\`, \`annualReturnPercent\`, \`years\`). The JSON shape is \`{"type":"delivery-revenue","title":"Delivery revenue scenario","currency":"ZAR","assumptions":"Example assumptions to adjust.","inputs":{"drivers":10,"deliveriesPerDriverPerDay":8,"pricePerDelivery":80,"workingDaysPerMonth":22}}\`; use the matching input keys for each type. Currency is optional and, if used, must be one of ZAR, USD, EUR, GBP, CAD, or AUD. Set initial inputs from the user's details or clearly state they are assumptions; do not make up factual data, add executable formulas, or create a calculator for ordinary questions.
+- When a Voice+ usage-capacity or package-pricing scenario materially helps, use \`voice-capacity\` with inputs \`monthlyUsers\`, \`answersPerUserPerMonth\`, and \`charactersPerAnswer\`, plus \`choices.monthlyCreditAllowance\` set to 10000, 30000, 121000, or 33000000. For pricing, use \`voice-business-model\` with input \`payingSubscribers\` and choices \`monthlyPrice\` (199, 299, or 480), \`monthlyVoiceAllowance\` (50000, 100000, or 200000), \`freeTrialMinutes\` (5, 10, or 15), and \`billing\` (\`monthly-recurring\` or \`manual-renewal\`). The capacity estimate assumes one credit per character. The listed allowances and prices are illustrative examples, not verified offers or entitlements; state that in \`assumptions\` and do not imply provider credits, grant eligibility, pricing, or allowances are confirmed. Use \`currency: "ZAR"\` for these rand-denominated price options. Examples: \`{"type":"voice-capacity","title":"Voice capacity scenario","assumptions":"Illustrative; assumes one credit per character.","inputs":{"monthlyUsers":500,"answersPerUserPerMonth":5,"charactersPerAnswer":300},"choices":{"monthlyCreditAllowance":10000}}\` and \`{"type":"voice-business-model","title":"Voice+ package scenario","currency":"ZAR","assumptions":"Illustrative pricing; confirm provider costs and terms.","inputs":{"payingSubscribers":100},"choices":{"monthlyPrice":480,"monthlyVoiceAllowance":100000,"freeTrialMinutes":10,"billing":"monthly-recurring"}}\`. A voice-business-model card includes its revenue chart automatically.
 - For a task that genuinely needs the user to choose or provide details before you can continue, include a fenced \`interactive\` JSON block with a concise title, a \`questions\` array, and a \`submitLabel\`. Each question has a \`question\`, a \`type\` of \`single\`, \`multiple\`, or \`text\`, and an \`options\` array for single/multiple choices (omit options for text). Do not use a form for ordinary answers or invent missing options.
 - For a useful action plan, use a \`sections\` fenced JSON block with \`title\` and \`sections\` entries containing \`heading\`, optional \`body\`, optional \`items\`, and an optional icon from \`book\`, \`briefcase\`, \`calendar\`, \`check\`, \`document\`, \`globe\`, \`growth\`, \`list\`, \`mail\`, or \`users\`. For sequential instructions, use a \`steps\` fenced JSON block with \`title\` and at least two \`steps\` containing \`heading\`, \`body\`, and an optional supported \`icon\`. Use normal Markdown when it is clearer.
 - For a workflow diagram, use the \`diagram\` JSON format with \`type\` set to \`flow\`, a \`title\`, and two to eight \`steps\`. A step may be a short string or an object with \`title\` and \`description\`. Use only the actual workflow details established by the conversation.
