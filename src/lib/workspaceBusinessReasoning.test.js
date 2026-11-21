@@ -621,5 +621,8 @@ test('general answer quality guidance stays concise and does not add business-on
   const guidance = buildWorkspaceQualityInstruction('How do I keep my notes organised?');
   assert.match(guidance, /answered the actual request/i);
   assert.match(guidance, /Do not reveal private chain-of-thought/i);
+  assert.match(guidance, /brief concrete demonstration/i);
+  assert.match(guidance, /compact Markdown table only when shared criteria/i);
+  assert.match(guidance, /clearly label hypothetical examples/i);
   assert.doesNotMatch(guidance, /sole proprietors|profit margin/i);
 });

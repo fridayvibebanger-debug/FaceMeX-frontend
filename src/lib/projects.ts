@@ -290,6 +290,28 @@ export async function createProjectConversation(projectId: string, title = 'New 
   return mapConversation(data);
 }
 
+export async function moveWorkspaceConversationToProject(
+  conversationId: string,
+  projectId: string,
+): Promise<ProjectConversation> {
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to move this conversation.');
+
+  const { data, error } = await client
+    .from('workspace_conversations')
+    .update({ project_id: projectId })
+    .eq('id', conversationId)
+    .eq('user_id', authData.user.id)
+    .is('project_id', null)
+    .select('id,project_id,title,created_at,updated_at')
+    .maybeSingle();
+  throwIfError(error);
+  if (!data) throw new Error('This conversation could not be moved to the selected project.');
+  return mapConversation(data);
+}
+
 export async function listProjectMessages(conversationId: string, projectId: string | null): Promise<ProjectMessage[]> {
   const client = requireSupabase();
   const { data, error } = await client
@@ -508,6 +530,40 @@ export async function deleteWorkspaceMessages(conversationId: string, messageIds
     .eq('conversation_id', conversationId)
     .in('id', messageIds);
   throwIfError(error);
+}
+
+export async function deleteWorkspaceConversation(conversationId: string): Promise<void> {
+  const client = requireSupabase();
+  const { data: authData, error: authError } = await client.auth.getUser();
+  throwIfError(authError);
+  if (!authData.user) throw new Error('Sign in to delete this conversation.');
+
+  const { data: conversation, error: conversationError } = await client
+    .from('workspace_conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('user_id', authData.user.id)
+    .is('project_id', null)
+    .maybeSingle();
+  throwIfError(conversationError);
+  if (!conversation) throw new Error('This conversation could not be deleted.');
+
+  const { error: messagesError } = await client
+    .from('workspace_messages')
+    .delete()
+    .eq('conversation_id', conversationId);
+  throwIfError(messagesError);
+
+  const { data, error } = await client
+    .from('workspace_conversations')
+    .delete()
+    .eq('id', conversationId)
+    .eq('user_id', authData.user.id)
+    .is('project_id', null)
+    .select('id')
+    .maybeSingle();
+  throwIfError(error);
+  if (!data) throw new Error('This conversation could not be deleted.');
 }
 
 export async function updateProjectConversationTitle(conversationId: string, title: string): Promise<void> {

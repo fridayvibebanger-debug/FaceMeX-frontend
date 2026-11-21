@@ -25,6 +25,13 @@ export type WorkspaceVisualization =
       illustrative: boolean;
     }
   | {
+      kind: 'chart';
+      chartType: 'pie';
+      title: string;
+      data: Array<{ label: string; value: number }>;
+      illustrative: boolean;
+    }
+  | {
       kind: 'diagram';
       diagramType: 'flow';
       title: string;
@@ -68,6 +75,31 @@ export function parseWorkspaceVisualization(
   kind: string,
   source: string,
 ): WorkspaceVisualization | null;
+
+export type WorkspaceCalculatorType =
+  | 'delivery-revenue'
+  | 'subscription-revenue'
+  | 'profit-expenses'
+  | 'budget'
+  | 'investment-growth';
+
+export type WorkspaceCalculator = {
+  kind: 'calculator';
+  calculatorType: WorkspaceCalculatorType;
+  title: string;
+  currency: string | null;
+  assumptions: string;
+  inputs: Array<{
+    key: string;
+    label: string;
+    min: number;
+    max: number;
+    step: number;
+    value: number;
+  }>;
+};
+
+export function parseWorkspaceCalculator(source: string): WorkspaceCalculator | null;
 
 export type WorkspaceInteractiveForm = {
   title: string;

@@ -4,6 +4,34 @@ const MAX_FLOW_STEPS = 8;
 const MAX_FOLLOW_UP_OPTIONS = 5;
 const MAX_INTERACTIVE_QUESTIONS = 5;
 const MAX_INTERACTIVE_OPTIONS = 8;
+const WORKSPACE_CALCULATOR_CURRENCIES = new Set(['AUD', 'CAD', 'EUR', 'GBP', 'USD', 'ZAR']);
+const WORKSPACE_CALCULATOR_DEFINITIONS = {
+  'delivery-revenue': [
+    { key: 'drivers', label: 'Drivers', min: 1, max: 500, step: 1 },
+    { key: 'deliveriesPerDriverPerDay', label: 'Deliveries per driver per day', min: 1, max: 100, step: 1 },
+    { key: 'pricePerDelivery', label: 'Price per delivery', min: 1, max: 100_000, step: 1 },
+    { key: 'workingDaysPerMonth', label: 'Working days per month', min: 1, max: 31, step: 1 },
+  ],
+  'subscription-revenue': [
+    { key: 'subscribers', label: 'Paying subscribers', min: 0, max: 1_000_000, step: 1 },
+    { key: 'monthlyPrice', label: 'Monthly subscription price', min: 1, max: 1_000_000, step: 1 },
+  ],
+  'profit-expenses': [
+    { key: 'monthlyRevenue', label: 'Monthly revenue', min: 0, max: 1_000_000_000, step: 100 },
+    { key: 'monthlyExpenses', label: 'Monthly expenses', min: 0, max: 1_000_000_000, step: 100 },
+  ],
+  budget: [
+    { key: 'monthlyIncome', label: 'Monthly income', min: 0, max: 1_000_000_000, step: 100 },
+    { key: 'monthlyExpenses', label: 'Monthly expenses', min: 0, max: 1_000_000_000, step: 100 },
+    { key: 'savingsTarget', label: 'Monthly savings target', min: 0, max: 1_000_000_000, step: 100 },
+  ],
+  'investment-growth': [
+    { key: 'initialInvestment', label: 'Starting investment', min: 0, max: 1_000_000_000, step: 100 },
+    { key: 'monthlyContribution', label: 'Monthly contribution', min: 0, max: 100_000_000, step: 100 },
+    { key: 'annualReturnPercent', label: 'Assumed annual return (%)', min: 0, max: 30, step: 0.1 },
+    { key: 'years', label: 'Years invested', min: 1, max: 50, step: 1 },
+  ],
+};
 const RESPONSE_SECTION_ICONS = new Set([
   'book', 'briefcase', 'calendar', 'check', 'document', 'globe', 'growth', 'list', 'mail', 'users',
 ]);
@@ -50,6 +78,55 @@ function safeLabel(value, maxLength) {
   return label && label.length <= maxLength ? label : null;
 }
 
+export function parseWorkspaceCalculator(source) {
+  if (typeof source !== 'string' || source.length > 10_000) return null;
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const definition = Object.hasOwn(WORKSPACE_CALCULATOR_DEFINITIONS, value.type)
+    ? WORKSPACE_CALCULATOR_DEFINITIONS[value.type]
+    : null;
+  const title = safeLabel(value.title, 100);
+  if (!definition || !title || !value.inputs || typeof value.inputs !== 'object' ||
+    Array.isArray(value.inputs)) return null;
+
+  const suppliedKeys = Object.keys(value.inputs);
+  if (suppliedKeys.length !== definition.length ||
+    suppliedKeys.some((key) => !definition.some((input) => input.key === key))) return null;
+
+  const inputs = definition.map((input) => {
+    const number = value.inputs[input.key];
+    if (typeof number !== 'number' || !Number.isFinite(number) ||
+      number < input.min || number > input.max) return null;
+    return { ...input, value: number };
+  });
+  if (inputs.some((input) => input === null)) return null;
+
+  const currency = value.currency === undefined ? null : value.currency;
+  if (currency !== null &&
+    (typeof currency !== 'string' || !WORKSPACE_CALCULATOR_CURRENCIES.has(currency))) return null;
+  const assumptions = value.assumptions === undefined
+    ? ''
+    : typeof value.assumptions === 'string' && value.assumptions.length <= 600
+      ? value.assumptions.trim()
+      : null;
+  if (assumptions === null) return null;
+
+  return {
+    kind: 'calculator',
+    calculatorType: value.type,
+    title,
+    currency,
+    assumptions,
+    inputs,
+  };
+}
+
 export function parseWorkspaceVisualization(kind, source) {
   let value;
   try {
@@ -63,6 +140,22 @@ export function parseWorkspaceVisualization(kind, source) {
   if (!title) return null;
 
   if (kind === 'chart') {
+    if (value.type === 'pie') {
+      if (!Array.isArray(value.data) || value.data.length < 2 ||
+        value.data.length > MAX_CHART_POINTS || typeof value.illustrative !== 'boolean') return null;
+      const data = value.data.map((point) => {
+        if (!point || typeof point !== 'object' || Array.isArray(point) ||
+          typeof point.value !== 'number' || !Number.isFinite(point.value) ||
+          point.value < 0 || point.value > 1_000_000_000_000) return null;
+        const label = safeLabel(point.label, 48);
+        return label ? { label, value: point.value } : null;
+      });
+      if (data.some((point) => point === null) ||
+        new Set(data.map((point) => point.label)).size !== data.length ||
+        !data.some((point) => point.value > 0)) return null;
+      return { kind: 'chart', chartType: 'pie', title, data, illustrative: value.illustrative };
+    }
+
     const xLabel = safeLabel(value.xLabel, 60);
     const yLabel = safeLabel(value.yLabel, 60);
     if (!xLabel || !yLabel) return null;
@@ -915,21 +1008,23 @@ const CODE_LANGUAGE_PATTERN = /^(?:[a-z][\w+-]*|)$/i;
 const CODE_SYNTAX_PATTERN = /(?:^|\n)\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|<\/?[a-z][^>]*>|[\w$]+\s*=>)/i;
 const CODE_LINE_PATTERN = /^\s*(?:import\s+(?:\{|\*|[\w$]+(?:\s+from\s+|$))|export\s+(?:default|const|function|class)|(?:const|let|var)\s+[\w$]+\s*=|function\s+[\w$]*\s*\(|class\s+[\w$]+\s*(?:\{|extends\b)|def\s+[\w$]+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\s+[\w*]+\s+FROM\b|console\.(?:log|error|warn)\s*\(|\/\/|#include\b|<\/?[a-z][^>]*>)/i;
 const INTERNAL_OUTPUT_PATTERN = /(?:\b(?:system prompt|hidden instructions|developer message|internal reasoning|stack trace|traceback)\b|^\s*at\s+[\w.$]+\s*\(|\b(?:TypeError|ReferenceError|SyntaxError):\s)/im;
-const INTERNAL_JSON_MARKER = /"(?:questions|correctIndex|choices|provider|model|task|reactants|products|solution)"\s*:|"(?:type)"\s*:\s*"(?:chart|diagram|multi-line|scatter|bar|line|triangle|contour|flow|timeline)"|"series"\s*:/i;
+const INTERNAL_JSON_MARKER = /"(?:questions|correctIndex|choices|provider|model|task|reactants|products|solution|inputs)"\s*:|"(?:type)"\s*:\s*"(?:calculator|delivery-revenue|subscription-revenue|profit-expenses|investment-growth|budget|chart|diagram|multi-line|scatter|bar|line|pie|triangle|contour|flow|timeline)"|"series"\s*:/i;
 
 function formatStructuredObject(value) {
   const source = JSON.stringify(value);
   const type = parseWorkspaceUnderstanding(source)
     ? 'understanding'
-    : parseWorkspaceVisualization('chart', source)
-      ? 'chart'
-      : parseWorkspaceVisualization('diagram', source)
-        ? 'diagram'
-        : parseWorkspaceEquationBalance(source)
-          ? 'equation-balance'
-          : parseWorkspacePractice(source)
-            ? 'practice'
-            : null;
+    : parseWorkspaceCalculator(source)
+      ? 'calculator'
+      : parseWorkspaceVisualization('chart', source)
+        ? 'chart'
+        : parseWorkspaceVisualization('diagram', source)
+          ? 'diagram'
+          : parseWorkspaceEquationBalance(source)
+            ? 'equation-balance'
+            : parseWorkspacePractice(source)
+              ? 'practice'
+              : null;
   return type ? `\`\`\`${type}\n${source}\n\`\`\`` : null;
 }
 
@@ -1057,6 +1152,9 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
   text = text.replace(/```([^\n`]*)\n([\s\S]*?)```/g, (block, rawLanguage, body) => {
     const language = String(rawLanguage || '').trim().toLowerCase();
     if (['interactive', 'sections', 'steps'].includes(language)) return block;
+    if (language === 'calculator') {
+      return parseWorkspaceCalculator(body.trim()) ? block : '';
+    }
     if (['chart', 'diagram'].includes(language)) {
       return parseWorkspaceVisualization(language, body) ? block : '';
     }

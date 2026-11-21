@@ -13,6 +13,7 @@ import {
   normalizeWorkspaceAnswerForDisplay,
   normalizeWorkspaceImages,
   normalizeWorkspaceResponse,
+  parseWorkspaceCalculator,
   parseWorkspaceFollowUp,
   parseWorkspaceEquationBalance,
   parseWorkspacePractice,
@@ -247,6 +248,93 @@ test('validates structured chart data without inventing values', () => {
       data: [{ label: 'January', value: 12 }, { label: 'February', value: 15 }],
     },
   );
+});
+
+test('validates supported business calculator inputs and preserves the written answer', () => {
+  const calculator = {
+    type: 'delivery-revenue',
+    title: 'Delivery revenue scenario',
+    currency: 'ZAR',
+    assumptions: 'Example assumptions to adjust.',
+    inputs: {
+      drivers: 10,
+      deliveriesPerDriverPerDay: 8,
+      pricePerDelivery: 80,
+      workingDaysPerMonth: 22,
+    },
+  };
+  const parsed = parseWorkspaceCalculator(JSON.stringify(calculator));
+  assert.equal(parsed.calculatorType, 'delivery-revenue');
+  assert.equal(parsed.currency, 'ZAR');
+  assert.deepEqual(parsed.inputs.map(({ key, value }) => ({ key, value })), [
+    { key: 'drivers', value: 10 },
+    { key: 'deliveriesPerDriverPerDay', value: 8 },
+    { key: 'pricePerDelivery', value: 80 },
+    { key: 'workingDaysPerMonth', value: 22 },
+  ]);
+  assert.equal(parseWorkspaceCalculator('{'), null);
+  assert.equal(parseWorkspaceCalculator(JSON.stringify({
+    type: 'toString',
+    title: 'Invalid calculator',
+    inputs: {},
+  })), null);
+  assert.equal(parseWorkspaceCalculator(JSON.stringify({
+    ...calculator,
+    inputs: { ...calculator.inputs, drivers: 501 },
+  })), null);
+  assert.equal(parseWorkspaceCalculator(JSON.stringify({
+    ...calculator,
+    inputs: { ...calculator.inputs, formula: 'arbitrary code' },
+  })), null);
+  assert.equal(parseWorkspaceCalculator(JSON.stringify({ ...calculator, currency: 'INVALID' })), null);
+
+  const answer = normalizeWorkspaceAnswerForDisplay(
+    `Revenue depends on your assumptions.\n\n\`\`\`calculator\n${JSON.stringify(calculator)}\n\`\`\``,
+    'How much could my delivery business make?',
+  );
+  assert.match(answer, /Revenue depends on your assumptions/);
+  assert.match(answer, /```calculator/);
+  const invalidAnswer = normalizeWorkspaceAnswerForDisplay(
+    'The estimate is only illustrative.\n\n```calculator\n{"type":"delivery-revenue","inputs":{"formula":"bad"}}\n```',
+    'How much could this business make?',
+  );
+  assert.match(invalidAnswer, /The estimate is only illustrative/);
+  assert.doesNotMatch(invalidAnswer, /```calculator|formula/);
+
+  const rawCalculator = normalizeWorkspaceAnswerForDisplay(JSON.stringify(calculator), 'Estimate delivery revenue.');
+  assert.match(rawCalculator, /^```calculator/);
+});
+
+test('validates pie chart values and identifies assumption-based data', () => {
+  const pie = {
+    type: 'pie',
+    title: 'Monthly expense mix',
+    illustrative: true,
+    data: [
+      { label: 'Fuel', value: 300 },
+      { label: 'Wages', value: 500 },
+      { label: 'Other', value: 200 },
+    ],
+  };
+  assert.deepEqual(parseWorkspaceVisualization('chart', JSON.stringify(pie)), {
+    kind: 'chart',
+    chartType: 'pie',
+    title: 'Monthly expense mix',
+    data: pie.data,
+    illustrative: true,
+  });
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...pie,
+    illustrative: undefined,
+  })), null);
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...pie,
+    data: [{ label: 'Fuel', value: -1 }, { label: 'Wages', value: 2 }],
+  })), null);
+  assert.equal(parseWorkspaceVisualization('chart', JSON.stringify({
+    ...pie,
+    data: [{ label: 'Fuel', value: 0 }, { label: 'Wages', value: 0 }],
+  })), null);
 });
 
 test('validates numeric coordinate graphs with ordered, finite points', () => {
