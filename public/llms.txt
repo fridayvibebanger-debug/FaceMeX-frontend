@@ -1,0 +1,35 @@
+# FaceMeX
+
+> FaceMeX is an AI-powered learning and career-preparation platform for students, graduates, and job seekers.
+
+FaceMeX combines AI-supported learning conversations and practical activities with job discovery, CV and document preparation, and interview practice. Some workspace features require an account and sign-in.
+
+AI responses may be incomplete or incorrect. Verify important facts with trusted sources. Job listings and application details can change; confirm them with the employer or original source.
+
+## Public pages
+
+- [Home](https://facemexsocial.com/)
+- [AI for students](https://facemexsocial.com/ai-for-students/)
+- [AI study assistant](https://facemexsocial.com/ai-study-assistant/)
+- [Career guidance for students](https://facemexsocial.com/student-career-guidance/)
+- [Online learning](https://facemexsocial.com/online-learning/)
+- [AI career assistant](https://facemexsocial.com/ai-career-assistant/)
+- [Job search tools for South Africa](https://facemexsocial.com/jobs-in-south-africa/)
+- [About FaceMeX](https://facemexsocial.com/about/)
+- [Learning and career resources](https://facemexsocial.com/resources/)
+
+## Practical guides
+
+- [How AI can help students learn](https://facemexsocial.com/resources/how-can-ai-help-students/)
+- [How to use AI for studying](https://facemexsocial.com/resources/how-to-use-ai-for-studying/)
+- [How to write a student CV](https://facemexsocial.com/resources/how-to-write-a-student-cv/)
+- [How to prepare for a job interview](https://facemexsocial.com/resources/how-to-prepare-for-an-interview/)
+- [How to choose a career path](https://facemexsocial.com/resources/how-to-choose-a-career/)
+- [How AI can help job seekers](https://facemexsocial.com/resources/how-ai-can-help-job-seekers/)
+- [How to find jobs in South Africa](https://facemexsocial.com/resources/how-to-find-jobs-in-south-africa/)
+- [How to build career skills](https://facemexsocial.com/resources/how-to-build-career-skills/)
+
+## Discovery
+
+- [XML sitemap](https://facemexsocial.com/sitemap.xml)
+- [Robots policy](https://facemexsocial.com/robots.txt)
