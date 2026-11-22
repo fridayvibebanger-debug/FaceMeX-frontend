@@ -10388,25 +10388,6 @@ Start with the most useful next action. Do not invent personal details, course r
           background: transparent;
         }
 
-        @keyframes fmWelcomeMessage {
-          0% {
-            opacity: 0;
-            transform: translateY(12px);
-          }
-          5.357% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-          94.643% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-          100% {
-            opacity: 0;
-            transform: translateY(-12px);
-          }
-        }
-
         .fm-welcome-heading {
           display: flex;
           width: 100%;
@@ -10415,11 +10396,6 @@ Start with the most useful next action. Do not invent personal details, course r
           justify-content: center;
           margin: 0;
           white-space: nowrap;
-        }
-
-        .fm-welcome-message {
-          animation: fmWelcomeMessage 11200ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-          will-change: opacity, transform;
         }
 
         .fm-desktop-empty-heading {
@@ -11354,12 +11330,6 @@ Start with the most useful next action. Do not invent personal details, course r
             transform: none !important;
           }
 
-          .fm-welcome-message {
-            animation: none !important;
-            opacity: 1 !important;
-            transform: none !important;
-            will-change: auto;
-          }
         }
 
         @media (min-width: 1024px) {
