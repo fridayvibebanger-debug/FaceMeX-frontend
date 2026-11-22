@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, MailCheck } from 'lucide-react';
 
@@ -8,6 +8,13 @@ import { useAuthStore } from '@/store/authStore';
 import { getAuthenticatedReturnTo } from '@/lib/authReturnTo';
 
 type AuthMode = 'login' | 'register';
+
+const AUTH_WELCOME_MESSAGES = [
+  'Welcome back to FaceMeX.',
+  'Good to see you again.',
+  'Ready for your next move?',
+  "Let's make today count.",
+];
 
 function getFriendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || '');
@@ -44,7 +51,7 @@ function isValidEmail(value: string) {
 }
 
 export default function AuthPage() {
-  const { pathname, search } = useLocation();
+  const { pathname, search, hash } = useLocation();
   const [mode, setMode] = useState<AuthMode>(() => pathname === '/signup' ? 'register' : 'login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -53,33 +60,46 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [welcomeIndex, setWelcomeIndex] = useState(0);
 
   const [errorText, setErrorText] = useState('');
   const [successText, setSuccessText] = useState('');
 
   const navigate = useNavigate();
   const { isAuthenticated, login, register } = useAuthStore();
+  const prefersReducedMotion = useReducedMotion();
 
   const isLogin = mode === 'login';
 
-  const title = useMemo(() => (isLogin ? 'Sign In' : 'Sign Up'), [isLogin]);
+  const title = useMemo(() => (isLogin ? 'Welcome back' : 'Create your account'), [isLogin]);
 
   const subtitle = useMemo(
     () =>
       isLogin
-        ? 'Please enter your details to sign in.'
-        : 'Create your account to start using FaceMeX.',
+        ? 'Sign in to continue to your FaceMeX workspace.'
+        : 'Join FaceMeX and make your next move.',
     [isLogin]
   );
 
   useEffect(() => {
+    if (!isLogin) return;
+
+    const timer = window.setInterval(() => {
+      setWelcomeIndex((index) => (index + 1) % AUTH_WELCOME_MESSAGES.length);
+    }, 11200);
+
+    return () => window.clearInterval(timer);
+  }, [isLogin]);
+
+  useEffect(() => {
     if (isAuthenticated) {
-      navigate(getAuthenticatedReturnTo(search), { replace: true });
+      navigate(getAuthenticatedReturnTo(search, `${pathname}${search}${hash}`), { replace: true });
     }
-  }, [isAuthenticated, navigate, search]);
+  }, [hash, isAuthenticated, navigate, pathname, search]);
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
+    setWelcomeIndex(0);
     setErrorText('');
     setSuccessText('');
     setShowPassword(false);
@@ -172,124 +192,142 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="relative min-h-[100dvh] w-full overflow-hidden bg-[#020204] text-white">
+    <div className="relative min-h-[100svh] w-full overflow-x-hidden bg-[#070708] text-white">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_27%,rgba(255,255,255,0.105),transparent_24%),linear-gradient(180deg,#020204_0%,#07070a_48%,#020204_100%)]" />
-
-        <div className="absolute left-1/2 top-[-170px] h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-white/[0.055] blur-[70px]" />
-
-        <div className="absolute left-[58%] top-[-80px] h-[560px] w-[145px] -rotate-[28deg] rounded-full bg-white/[0.075] blur-[38px]" />
-
-        <div className="absolute bottom-[-210px] right-[-180px] h-[460px] w-[460px] rounded-full bg-slate-400/[0.045] blur-[70px]" />
-
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,transparent_0%,rgba(0,0,0,0.22)_48%,rgba(0,0,0,0.78)_100%)]" />
-        <div className="absolute inset-0 opacity-[0.075] [background-image:linear-gradient(rgba(255,255,255,.16)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.16)_1px,transparent_1px)] [background-size:58px_58px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.075),transparent_42%),linear-gradient(180deg,#0b0b0c_0%,#070708_55%,#050506_100%)]" />
+        <div className="absolute left-1/2 top-[-260px] h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-white/[0.035] blur-[90px]" />
       </div>
 
-      <main className="relative z-10 flex min-h-[100dvh] w-full items-center justify-center px-5 py-8">
+      <main className="relative z-10 flex min-h-[100svh] w-full items-center justify-center px-4 py-8 sm:px-6">
         <motion.section
-          initial={{ opacity: 0, y: 12, scale: 0.99 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.99 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-          className="relative w-full max-w-[390px]"
+          transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: 'easeOut' }}
+          className="relative w-full max-w-[420px]"
         >
-          <div className="absolute -inset-px rounded-[36px] bg-gradient-to-b from-white/20 via-white/[0.04] to-white/[0.025]" />
+          <div className="absolute -inset-px rounded-[30px] bg-gradient-to-b from-white/[0.16] via-white/[0.035] to-white/[0.02]" />
 
-          <div className="relative overflow-hidden rounded-[36px] border border-white/10 bg-white/[0.078] px-6 pb-6 pt-7 shadow-[0_22px_70px_rgba(0,0,0,0.66)] backdrop-blur-lg">
-            <div className="pointer-events-none absolute inset-0 rounded-[36px] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.15),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025))]" />
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent" />
+          <div className="relative overflow-hidden rounded-[30px] border border-white/[0.15] bg-[#111112]/95 px-6 pb-7 pt-7 shadow-[0_24px_80px_rgba(0,0,0,0.62)] backdrop-blur-xl sm:px-8 sm:pb-8">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.075),transparent_38%)]" />
 
             <div className="relative z-10 text-center">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 3 }}
+              <motion.img
+                src="/facemex-logo.png"
+                alt="FaceMeX"
+                width="36"
+                height="36"
+                style={{ filter: 'brightness(0) invert(1)' }}
+                initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.96, y: 3 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ delay: 0.03, duration: 0.16 }}
-                className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-black/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.13),0_14px_32px_rgba(0,0,0,0.42)]"
-              >
-                <span className="text-[18px] font-black tracking-[-0.08em] text-white">
-                  FaceMeX
-                </span>
-              </motion.div>
+                transition={{ delay: prefersReducedMotion ? 0 : 0.03, duration: prefersReducedMotion ? 0 : 0.16 }}
+                className="mx-auto h-9 w-9 object-contain"
+              />
 
               <motion.h1
                 key={title}
-                initial={{ opacity: 0, y: 4 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.12 }}
-                className="mt-5 text-[25px] font-semibold leading-none tracking-[-0.035em] text-white"
+                transition={{ duration: prefersReducedMotion ? 0 : 0.12 }}
+                className="mx-auto mt-5 flex min-h-[68px] max-w-[330px] items-center justify-center text-center text-[27px] font-semibold leading-tight tracking-[-0.035em] text-white sm:min-h-[72px] sm:text-[29px]"
               >
-                {title}
+                {isLogin ? (
+                  <span key={welcomeIndex} className="fm-welcome-message">
+                    {AUTH_WELCOME_MESSAGES[welcomeIndex]}
+                  </span>
+                ) : (
+                  title
+                )}
               </motion.h1>
 
               <motion.p
                 key={subtitle}
-                initial={{ opacity: 0, y: 3 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.12 }}
-                className="mx-auto mt-2 max-w-[270px] text-[12px] leading-relaxed text-white/45"
+                transition={{ duration: prefersReducedMotion ? 0 : 0.12 }}
+                className="mx-auto mt-2 max-w-[320px] text-sm leading-relaxed text-white/55"
               >
                 {subtitle}
               </motion.p>
             </div>
 
-            <form onSubmit={handleSubmit} className="relative z-10 mt-7 space-y-4">
+            <form onSubmit={handleSubmit} className="relative z-10 mt-6 space-y-5">
               <AnimatePresence mode="wait" initial={false}>
                 {!isLogin && (
                   <motion.div
                     key="name-field"
-                    initial={{ opacity: 0, height: 0, y: -4 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0, height: 0, y: -4 }}
                     animate={{ opacity: 1, height: 'auto', y: 0 }}
-                    exit={{ opacity: 0, height: 0, y: -4 }}
-                    transition={{ duration: 0.12, ease: 'easeOut' }}
-                    className="overflow-hidden"
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, height: 0, y: -4 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: 'easeOut' }}
+                    className="space-y-2 overflow-hidden"
                   >
+                    <label htmlFor="auth-name" className="block text-[13px] font-medium text-white/75">
+                      Full name
+                    </label>
                     <input
+                      id="auth-name"
                       type="text"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                       placeholder="Enter your full name"
-                      className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.105] px-4 text-[13px] font-medium text-white outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] placeholder:text-white/30 focus:border-white/22 focus:bg-white/[0.13]"
+                      className="h-12 w-full rounded-xl border border-white/[0.14] bg-white/[0.055] px-4 text-sm font-medium text-white outline-none transition-colors duration-200 placeholder:text-white/45 hover:border-white/[0.24] focus:border-white/35 focus:bg-white/[0.075] focus-visible:ring-2 focus-visible:ring-white/10"
                       autoComplete="name"
+                      required
                       disabled={submitting || resettingPassword}
                     />
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="Enter your email address"
-                className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.105] px-4 text-[13px] font-medium text-white outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] placeholder:text-white/30 focus:border-white/22 focus:bg-white/[0.13]"
-                autoComplete="email"
-                disabled={submitting || resettingPassword}
-              />
-
-              <div className="relative">
+              <div className="space-y-2">
+                <label htmlFor="auth-email" className="block text-[13px] font-medium text-white/75">
+                  Email address
+                </label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Password"
-                  className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.105] px-4 pr-12 text-[13px] font-medium text-white outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] placeholder:text-white/30 focus:border-white/22 focus:bg-white/[0.13]"
-                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  id="auth-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  className="h-12 w-full rounded-xl border border-white/[0.14] bg-white/[0.055] px-4 text-sm font-medium text-white outline-none transition-colors duration-200 placeholder:text-white/45 hover:border-white/[0.24] focus:border-white/35 focus:bg-white/[0.075] focus-visible:ring-2 focus-visible:ring-white/10"
+                  autoComplete="email"
+                  required
                   disabled={submitting || resettingPassword}
                 />
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                  disabled={submitting || resettingPassword}
-                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-white/38 hover:bg-white/10 hover:text-white disabled:opacity-50"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
+              <div className="space-y-2">
+                <label htmlFor="auth-password" className="block text-[13px] font-medium text-white/75">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="auth-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    className="h-12 w-full rounded-xl border border-white/[0.14] bg-white/[0.055] px-4 pr-12 text-sm font-medium text-white outline-none transition-colors duration-200 placeholder:text-white/45 hover:border-white/[0.24] focus:border-white/35 focus:bg-white/[0.075] focus-visible:ring-2 focus-visible:ring-white/10"
+                    autoComplete={isLogin ? 'current-password' : 'new-password'}
+                    required
+                    disabled={submitting || resettingPassword}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    disabled={submitting || resettingPassword}
+                    className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-white/55 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60 disabled:opacity-50"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {isLogin && (
@@ -298,7 +336,7 @@ export default function AuthPage() {
                     type="button"
                     onClick={handleForgotPassword}
                     disabled={submitting || resettingPassword}
-                    className="text-[11.5px] font-medium text-white/42 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-md px-1.5 py-1 text-[13px] font-medium text-white/60 transition-colors duration-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white/60 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {resettingPassword ? 'Sending reset link...' : 'Forgot Password?'}
                   </button>
@@ -308,13 +346,17 @@ export default function AuthPage() {
               <AnimatePresence>
                 {successText && (
                   <motion.div
-                    initial={{ opacity: 0, y: -3, height: 0 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: -3, height: 0 }}
                     animate={{ opacity: 1, y: 0, height: 'auto' }}
-                    exit={{ opacity: 0, y: -3, height: 0 }}
-                    transition={{ duration: 0.12 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: -3, height: 0 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.12 }}
                     className="overflow-hidden"
                   >
-                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-center text-[12px] font-medium text-emerald-100">
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="flex items-center justify-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2.5 text-center text-sm font-medium text-emerald-100"
+                    >
                       <MailCheck className="h-4 w-4 shrink-0" />
                       <span>{successText}</span>
                     </div>
@@ -325,13 +367,17 @@ export default function AuthPage() {
               <AnimatePresence>
                 {errorText && (
                   <motion.div
-                    initial={{ opacity: 0, y: -3, height: 0 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: -3, height: 0 }}
                     animate={{ opacity: 1, y: 0, height: 'auto' }}
-                    exit={{ opacity: 0, y: -3, height: 0 }}
-                    transition={{ duration: 0.12 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: -3, height: 0 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.12 }}
                     className="overflow-hidden"
                   >
-                    <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-center text-[12px] font-medium text-red-100">
+                    <div
+                      role="alert"
+                      aria-live="assertive"
+                      className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-center text-sm font-medium text-red-100"
+                    >
                       {errorText}
                     </div>
                   </motion.div>
@@ -341,10 +387,13 @@ export default function AuthPage() {
               <button
                 type="submit"
                 disabled={submitting || resettingPassword}
-                className="mt-1 flex h-12 w-full items-center justify-center rounded-2xl bg-white text-[13px] font-bold text-black shadow-[0_12px_30px_rgba(255,255,255,0.10)] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-1 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-semibold text-black shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-colors duration-200 hover:bg-white/90 active:bg-white/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span>{isLogin ? 'Signing in…' : 'Creating account…'}</span>
+                  </>
                 ) : isLogin ? (
                   'Sign in'
                 ) : (
@@ -353,20 +402,14 @@ export default function AuthPage() {
               </button>
             </form>
 
-            <div className="relative z-10 mt-6 flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-[11px] font-medium text-white/28">OR</span>
-              <div className="h-px flex-1 bg-white/10" />
-            </div>
-
-            <div className="relative z-10 mt-5 text-center text-[12px] text-white/42">
+            <div className="relative z-10 mt-6 border-t border-white/[0.1] pt-5 text-center text-[13px] text-white/60">
               {isLogin ? (
                 <>
                   Don&apos;t have an account?{' '}
                   <button
                     type="button"
                     onClick={() => switchMode('register')}
-                    className="font-semibold text-white hover:underline"
+                    className="rounded-sm font-semibold text-white underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
                   >
                     Sign up
                   </button>
@@ -377,7 +420,7 @@ export default function AuthPage() {
                   <button
                     type="button"
                     onClick={() => switchMode('login')}
-                    className="font-semibold text-white hover:underline"
+                    className="rounded-sm font-semibold text-white underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
                   >
                     Sign in
                   </button>
