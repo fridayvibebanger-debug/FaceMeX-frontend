@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, BookOpen, BriefcaseBusiness, FileText, Lightbulb, Play, Sparkles } from 'lucide-react';
-import { getSeoArticle, getSeoPage, SEO_SITE_ORIGIN, seoArticles } from '@/lib/seo';
+import { getSeoArticle, getSeoCanonicalUrl, getSeoMetadata, getSeoPage, SEO_SITE_ORIGIN, seoArticles } from '@/lib/seo';
 
 const iconByTopic = [BookOpen, Lightbulb, FileText, BriefcaseBusiness];
 
@@ -90,7 +90,7 @@ function BreadcrumbSchema({ title, path }: { title: string; path: string }) {
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: 'Home', item: `${SEO_SITE_ORIGIN}/` },
-          { '@type': 'ListItem', position: 2, name: title, item: `${SEO_SITE_ORIGIN}${path}` },
+          { '@type': 'ListItem', position: 2, name: title, item: getSeoCanonicalUrl(path) },
         ],
       }}
     />
@@ -106,7 +106,7 @@ function WebPageSchema({ title, description, path }: { title: string; descriptio
         '@type': 'WebPage',
         name: title,
         description,
-        url: `${SEO_SITE_ORIGIN}${path}`,
+        url: getSeoCanonicalUrl(path),
         isPartOf: { '@id': `${SEO_SITE_ORIGIN}/#website` },
       }}
     />
@@ -383,24 +383,27 @@ function SeoArticleSchema({ article, path }: { article: NonNullable<ReturnType<t
         headline: article.heading,
         description: article.description,
         dateModified: article.updated,
-        author: { '@type': 'Organization', name: 'FaceMeX', url: `${SEO_SITE_ORIGIN}/about` },
+        author: { '@type': 'Organization', name: 'FaceMeX', url: getSeoCanonicalUrl('/about') },
         publisher: {
           '@type': 'Organization',
           name: 'FaceMeX',
           url: `${SEO_SITE_ORIGIN}/`,
           logo: { '@type': 'ImageObject', url: `${SEO_SITE_ORIGIN}/facemex-logo.png` },
         },
-        mainEntityOfPage: `${SEO_SITE_ORIGIN}${path}`,
+        mainEntityOfPage: getSeoCanonicalUrl(path),
       }}
     />
   );
 }
 
 function ResourceHub() {
+  const metadata = getSeoMetadata('/resources');
+
   return (
     <SeoSiteFrame>
       <main id="main-content" className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <BreadcrumbSchema title="Resources" path="/resources" />
+        <WebPageSchema title={metadata.title} description={metadata.description} path="/resources" />
         <p className="text-sm font-semibold uppercase tracking-[0.15em] text-slate-500">FaceMeX resources</p>
         <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">Practical guides for learning and career preparation</h1>
         <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600">Clear, actionable guides on study habits, responsible AI use, CV preparation, interviews, career exploration and job searching. Use them alongside trusted course and employer information.</p>
@@ -732,6 +735,7 @@ export default function PublicSeoPage() {
           {!isHome && (
             <>
               <BreadcrumbSchema title={page.heading} path={page.path} />
+              <WebPageSchema title={page.heading} description={page.description} path={page.path} />
               <p className="text-sm font-semibold uppercase tracking-[0.15em] text-slate-500">FaceMeX guide</p>
               <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{page.heading}</h1>
               <p className="mt-5 text-lg leading-8 text-slate-600">{page.introduction}</p>
