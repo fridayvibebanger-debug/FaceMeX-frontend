@@ -1,5 +1,10 @@
 export const SEO_SITE_ORIGIN = 'https://facemexsocial.com';
 
+export function getSeoCanonicalUrl(path: string) {
+  const normalizedPath = path.replace(/\/+$/, '') || '/';
+  return `${SEO_SITE_ORIGIN}${normalizedPath === '/' ? '/' : `${normalizedPath}/`}`;
+}
+
 export type SeoSection = {
   heading: string;
   paragraphs: string[];
@@ -36,8 +41,8 @@ export type SeoArticle = {
 export const seoLandingPages: SeoLandingPage[] = [
   {
     path: '/',
-    title: 'FaceMeX — AI Learning, Careers & Opportunities',
-    description: 'Discover FaceMeX, a South African AI-powered platform for learning, career development, job discovery, CV preparation and interview practice.',
+    title: 'FaceMeX — AI Learning, Career Development & Opportunities',
+    description: 'Discover FaceMeX, an AI-powered learning and career development platform for students, graduates and job seekers. Learn new concepts, prepare CVs, practise interviews, and explore job opportunities with practical AI-supported tools.',
     heading: 'FaceMeX — AI learning and career preparation',
     introduction: 'FaceMeX is a South African AI-powered learning and career preparation platform for students, graduates and job seekers. Learn new concepts, develop practical skills, discover opportunities, prepare your CV and practise for interviews with AI-supported tools.',
     sections: [
@@ -405,19 +410,19 @@ export const nonIndexableSeoRoutes: Record<string, { title: string; description:
 
 export function getSeoMetadata(path: string) {
   const page = getSeoPage(path);
-  if (page) return { title: page.title, description: page.description, canonical: `${SEO_SITE_ORIGIN}${page.path}`, indexable: true };
+  if (page) return { title: page.title, description: page.description, canonical: getSeoCanonicalUrl(page.path), indexable: true };
 
   const article = getSeoArticle(path);
   if (article) {
     const articlePath = `/resources/${article.slug}`;
-    return { title: article.title, description: article.description, canonical: `${SEO_SITE_ORIGIN}${articlePath}`, indexable: true };
+    return { title: article.title, description: article.description, canonical: getSeoCanonicalUrl(articlePath), indexable: true };
   }
 
   if (path === '/resources') {
     return {
       title: 'Learning and Career Guides | FaceMeX Resources',
       description: 'Practical guides to AI-assisted study, student CVs, interviews, career choices, job searching and skill development.',
-      canonical: `${SEO_SITE_ORIGIN}/resources`,
+      canonical: getSeoCanonicalUrl('/resources'),
       indexable: true,
     };
   }
