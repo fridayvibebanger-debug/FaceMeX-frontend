@@ -2,6 +2,40 @@
   @tailwind components;
   @tailwind utilities;
 
+  @keyframes fmWelcomeMessage {
+    0% {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    5.357% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    94.643% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-12px);
+    }
+  }
+
+  .fm-welcome-message {
+    display: inline-block;
+    animation: fmWelcomeMessage 11200ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    will-change: opacity, transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fm-welcome-message {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+      will-change: auto;
+    }
+  }
+
   .facemex-public-seo {
     --background: 0 0% 100%;
     --foreground: 222.2 30% 10%;
