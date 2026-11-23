@@ -5,8 +5,10 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   AudioLines,
+  BarChart3,
   BookOpen,
   Briefcase,
   Building2,
@@ -23,6 +25,7 @@ import {
   FileText,
   FolderKanban,
   FolderPlus,
+  GitBranch,
   Globe2,
   ImagePlus,
   Loader2,
@@ -3746,6 +3749,18 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
                 >
                   <title>{`${point.label}: ${formatValue(point.value)} ${visualization.yLabel}`}</title>
                 </rect>
+                {visualization.data.length <= 6 && (
+                  <text
+                    x={x + barWidth / 2}
+                    y={point.value >= 0 ? Math.max(plot.y + 11, y - 6) : Math.min(baseline + 13, y + 14)}
+                    textAnchor="middle"
+                    fill="rgba(255,255,255,.9)"
+                    fontSize="11"
+                    fontWeight="600"
+                  >
+                    {formatValue(point.value)}
+                  </text>
+                )}
                 <text x={x + barWidth / 2} y={plot.y + plot.height + 17} textAnchor="middle" fill="rgba(255,255,255,.76)" fontSize="10">
                   {point.label.slice(0, 14)}
                 </text>
@@ -3814,7 +3829,15 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
   );
 }
 
-function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: WorkspaceCalculator }) {
+function WorkspaceBusinessCalculatorCard({
+  calculator,
+  onContinue,
+  disabled,
+}: {
+  calculator: WorkspaceCalculator;
+  onContinue?: (prompt: string) => void;
+  disabled?: boolean;
+}) {
   const calculatorId = useId();
   const [values, setValues] = useState<Record<string, number>>(() =>
     Object.fromEntries(calculator.inputs.map((input) => [input.key, input.value]))
@@ -3827,6 +3850,21 @@ function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: Workspace
   const choiceLabel = (key: string) => calculator.choices
     .find((choice) => choice.key === key)
     ?.options.find((option) => option.value === selectedChoice(key))?.label || '';
+  const continueWithScenario = () => {
+    if (!onContinue) return;
+    const inputSummary = calculator.inputs
+      .map((input) => `${input.label}: ${new Intl.NumberFormat().format(value(input.key))}`)
+      .join('\n');
+    const choiceSummary = calculator.choices
+      .map((choice) => `${choice.label}: ${choiceLabel(choice.key)}`)
+      .join('\n');
+    const scenarioName = calculator.calculatorType === 'voice-business-model'
+      ? 'Voice+ business model'
+      : calculator.title;
+    onContinue(
+      `Continue planning with my selected ${scenarioName} scenario. Use these values as assumptions:\n${inputSummary}${choiceSummary ? `\n${choiceSummary}` : ''}\n\n${calculator.assumptions || 'These are user-selected scenario inputs, not verified market or provider terms.'}\n\nGive me a practical recommendation, the key risks or costs to verify, and the next steps. Recalculate from these exact selections. Do not present illustrative prices, allowances, eligibility, or outcomes as confirmed facts.`
+    );
+  };
   const currency = calculator.currency || (
     calculator.calculatorType === 'voice-business-model' ? 'ZAR' : null
   );
@@ -4138,6 +4176,19 @@ function WorkspaceBusinessCalculatorCard({ calculator }: { calculator: Workspace
             : 'Estimates update with your inputs. Actual outcomes may differ.'}
       </p>
       {chart && <WorkspaceVisualizationCard visualization={chart} />}
+      {onContinue && (
+        <Button
+          type="button"
+          disabled={disabled}
+          onClick={continueWithScenario}
+          className="mt-4 min-h-11 w-full justify-center gap-2 rounded-xl bg-white text-[#151515] hover:bg-white/90 disabled:opacity-50 sm:w-auto"
+        >
+          {calculator.calculatorType === 'voice-business-model'
+            ? 'Continue with this Voice+ model'
+            : 'Continue with this scenario'}
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
     </section>
   );
 }
@@ -4149,6 +4200,7 @@ function ChatGPTStyleText({
   sourcePrompt,
   onPracticeAttempt,
   onInteractiveSubmit,
+  onCalculatorSubmit,
   disabled,
 }: {
   text: string;
@@ -4157,6 +4209,7 @@ function ChatGPTStyleText({
   sourcePrompt?: string;
   onPracticeAttempt?: (question: string, answer: string) => void;
   onInteractiveSubmit?: (answers: Array<{ question: string; answer: string }>) => void;
+  onCalculatorSubmit?: (prompt: string) => void;
   disabled?: boolean;
 }) {
   const safeText = normalizeBrokenMarkdownLinks(normalizeWorkspaceAnswerForDisplay(text, sourcePrompt));
@@ -4274,7 +4327,12 @@ function ChatGPTStyleText({
       if (block.language.toLowerCase() === 'calculator') {
         const calculator = parseWorkspaceCalculator(block.text);
         return calculator
-          ? <WorkspaceBusinessCalculatorCard key={`calculator-${index}`} calculator={calculator} />
+          ? <WorkspaceBusinessCalculatorCard
+              key={`calculator-${index}`}
+              calculator={calculator}
+              onContinue={onCalculatorSubmit}
+              disabled={disabled}
+            />
           : null;
       }
       if (block.language.toLowerCase() === 'sections') {
@@ -12833,6 +12891,9 @@ Start with the most useful next action. Do not invent personal details, course r
                                       `Please continue based on my answers to the questions you asked.\n\n${answerDetails}`
                                     );
                                   }}
+                                  onCalculatorSubmit={(prompt) => {
+                                    void sendPrompt(prompt);
+                                  }}
                                   onPracticeAttempt={message.learning
                                     ? (question, answer) => {
                                         void sendPrompt(
@@ -12990,6 +13051,24 @@ Start with the most useful next action. Do not invent personal details, course r
                   disabled: !FACEMEX_EMAIL_ASSISTANT_AVAILABLE,
                   disabledReason: 'Coming soon.',
                   onSelect: () => navigate('/email-assistant'),
+                },
+                {
+                  id: 'create-chart',
+                  label: 'Create a chart',
+                  icon: <BarChart3 className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: () => setPrompt((current) => [
+                    current.trim(),
+                    'Create a chart from the data in my request or our conversation. Use only values I supplied or verified; if there is not enough data, ask me for it instead of inventing numbers. Label units and assumptions.',
+                  ].filter(Boolean).join('\n\n')),
+                },
+                {
+                  id: 'create-diagram',
+                  label: 'Create a diagram',
+                  icon: <GitBranch className="h-4 w-4" aria-hidden="true" />,
+                  onSelect: () => setPrompt((current) => [
+                    current.trim(),
+                    'Create a clear diagram of the process in my request or our conversation. Use only steps and relationships we established; if key details are missing, ask me before drawing it.',
+                  ].filter(Boolean).join('\n\n')),
                 },
                 {
                   id: 'camera',
