@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Clock,
   Copy,
+  Download,
   Edit3,
   ExternalLink,
   FileText,
@@ -3495,7 +3496,7 @@ function WorkspaceChartDataTable({
   };
   const csvEscape = (value: string | number) => {
     const text = safeSpreadsheetCell(value);
-    return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
   const csv = [
     ['Category', ...(hasSeries ? ['Series'] : []), valueLabel],
@@ -3877,15 +3878,13 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
     );
   }
 
-  const isScatter = visualization.chartType === 'scatter';
-  const isMultiLine = visualization.chartType === 'multi-line';
   const canSwitchChartStyle = visualization.chartType === 'bar' || visualization.chartType === 'line';
   const useBarChart = canSwitchChartStyle
     ? chartStyle === 'bar'
     : visualization.chartType === 'bar';
-  const values = isScatter
+  const values = visualization.chartType === 'scatter'
     ? visualization.data.map((point) => point.y)
-    : isMultiLine
+    : visualization.chartType === 'multi-line'
       ? visualization.series.flatMap((series) => series.data.map((point) => point.y))
       : visualization.data.map((point) => point.value);
   const rawMinimum = Math.min(0, ...values);
@@ -3896,13 +3895,15 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
   const plot = { x: 62, y: 30, width: 526, height: 170 };
   const yFor = (value: number) => plot.y + ((maximum - value) / range) * plot.height;
   const baseline = yFor(0);
-  const categoryData = isMultiLine ? [] : visualization.data;
+  const categoryData = visualization.chartType === 'multi-line' || visualization.chartType === 'scatter'
+    ? []
+    : visualization.data;
   const pointSpacing = plot.width / Math.max(categoryData.length - 1, 1);
   const barWidth = Math.min(44, plot.width / Math.max(categoryData.length, 1) * 0.58);
   const yTicks = Array.from({ length: 5 }, (_, index) => maximum - (range * index) / 4);
-  const xValues = isScatter
+  const xValues = visualization.chartType === 'scatter'
     ? visualization.data.map((point) => point.x)
-    : isMultiLine
+    : visualization.chartType === 'multi-line'
       ? visualization.series.flatMap((series) => series.data.map((point) => point.x))
       : [];
   const rawXMinimum = isScatter || isMultiLine ? Math.min(...xValues) : 0;
@@ -3912,7 +3913,8 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
   const xRange = xMaximum - xMinimum;
   const xFor = (value: number) => plot.x + ((value - xMinimum) / xRange) * plot.width;
   const xTicks = Array.from({ length: 5 }, (_, index) => xMinimum + (xRange * index) / 4);
-  const xAxis = (isScatter || isMultiLine) && xMinimum <= 0 && xMaximum >= 0 ? xFor(0) : plot.x;
+  const hasNumericXAxis = visualization.chartType === 'scatter' || visualization.chartType === 'multi-line';
+  const xAxis = hasNumericXAxis && xMinimum <= 0 && xMaximum >= 0 ? xFor(0) : plot.x;
   const currencyCode = ['AUD', 'CAD', 'EUR', 'GBP', 'USD', 'ZAR']
     .find((currency) => currency === visualization.yLabel);
   const formatValue = (value: number) => new Intl.NumberFormat(undefined, currencyCode
@@ -3925,9 +3927,9 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
       }
     : { maximumSignificantDigits: 5 }
   ).format(value);
-  const points = isScatter
+  const points = visualization.chartType === 'scatter'
     ? visualization.data.map((point) => `${xFor(point.x)},${yFor(point.y)}`).join(' ')
-    : !isMultiLine ? visualization.data.map((point, index) =>
+    : visualization.chartType === 'multi-line' ? '' : visualization.data.map((point, index) =>
         `${plot.x + index * pointSpacing},${yFor(point.value)}`
       ).join(' ') : '';
   const seriesColors = ['#8fb1ff', '#f4a261', '#73d2a4', '#d6a8ff'];
