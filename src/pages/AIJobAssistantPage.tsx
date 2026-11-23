@@ -3406,12 +3406,239 @@ function MarkdownCodeBlock({ code, language }: { code: string; language: string 
   );
 }
 
+function WorkspaceVisualizationCopyAction({
+  label,
+  content,
+}: {
+  label: string;
+  content: string;
+}) {
+  const copyContent = async () => {
+    if (!navigator.clipboard?.writeText) {
+      toast({
+        title: 'Copy unavailable',
+        description: 'Your browser does not allow clipboard access on this page.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(content);
+      toast({ title: 'Copied', description: `${label} copied to your clipboard.` });
+    } catch {
+      toast({
+        title: 'Could not copy',
+        description: 'Your browser did not allow clipboard access. Try again or copy the text manually.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      onClick={() => void copyContent()}
+      className="min-h-9 gap-2 rounded-lg px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+    >
+      <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+      {label}
+    </Button>
+  );
+}
+
+function WorkspaceChartDataTable({
+  visualization,
+}: {
+  visualization: Extract<WorkspaceVisualization, { kind: 'chart' }>;
+}) {
+  const currencyCode = ['AUD', 'CAD', 'EUR', 'GBP', 'USD', 'ZAR']
+    .find((currency) => visualization.chartType !== 'pie' && visualization.yLabel === currency);
+  const formatAxisValue = (value: number) => new Intl.NumberFormat(undefined, {
+    maximumSignificantDigits: 5,
+  }).format(value);
+  const formatValue = (value: number) => new Intl.NumberFormat(undefined, currencyCode
+    ? {
+        style: 'currency',
+        currency: currencyCode,
+        currencyDisplay: 'narrowSymbol',
+        maximumFractionDigits: 2,
+      }
+    : { maximumSignificantDigits: 5 }
+  ).format(value);
+  const rows = visualization.chartType === 'pie'
+    ? visualization.data.map((point) => ({ category: point.label, series: '', value: point.value }))
+    : visualization.chartType === 'scatter'
+      ? visualization.data.map((point) => ({
+          category: `${visualization.xLabel}: ${formatAxisValue(point.x)}`,
+          series: '',
+          value: point.y,
+        }))
+      : visualization.chartType === 'multi-line'
+        ? visualization.series.flatMap((series) => series.data.map((point) => ({
+            category: `${visualization.xLabel}: ${formatAxisValue(point.x)}`,
+            series: series.label,
+            value: point.y,
+          })))
+        : visualization.data.map((point) => ({
+            category: point.label,
+            series: '',
+            value: point.value,
+          }));
+  const valueLabel = visualization.chartType === 'pie' ? 'Value' : visualization.yLabel;
+  const hasSeries = visualization.chartType === 'multi-line';
+  const safeSpreadsheetCell = (value: string | number) => {
+    const text = String(value);
+    return typeof value === 'string' && /^[\s]*[=+\-@]/.test(text) ? `'${text}` : text;
+  };
+  const csvEscape = (value: string | number) => {
+    const text = safeSpreadsheetCell(value);
+    return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+  const csv = [
+    ['Category', ...(hasSeries ? ['Series'] : []), valueLabel],
+    ...rows.map((row) => [
+      row.category,
+      ...(hasSeries ? [row.series] : []),
+      row.value,
+    ]),
+  ].map((row) => row.map(csvEscape).join(',')).join('\r\n');
+  const fileName = visualization.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'facemex-chart';
+  const downloadCsv = () => {
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = `${fileName}.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
+  return (
+    <details className="mt-3 border-t border-white/10 pt-2 text-sm text-white/75">
+      <summary className="min-h-9 cursor-pointer py-2 font-medium hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300">
+        View chart data
+      </summary>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <WorkspaceVisualizationCopyAction label="Copy CSV" content={csv} />
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={downloadCsv}
+          className="min-h-9 gap-2 rounded-lg px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          Download CSV
+        </Button>
+      </div>
+      <div className="mt-2 max-w-full overflow-x-auto rounded-lg border border-white/10">
+        <table className="w-full border-collapse text-left text-xs sm:text-sm">
+          <caption className="sr-only">{visualization.title} data</caption>
+          <thead className="bg-white/[0.05] text-white/80">
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">Category</th>
+              {hasSeries && <th scope="col" className="px-3 py-2 font-semibold">Series</th>}
+              <th scope="col" className="px-3 py-2 text-right font-semibold">{valueLabel}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={`${row.category}-${row.series}-${index}`} className="border-t border-white/10">
+                <th scope="row" className="px-3 py-2 font-medium text-white/85">{row.category}</th>
+                {hasSeries && <td className="px-3 py-2">{row.series}</td>}
+                <td className="px-3 py-2 text-right tabular-nums">{formatValue(row.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+function getWorkspaceChartCopyText(
+  visualization: Extract<WorkspaceVisualization, { kind: 'chart' }>,
+) {
+  const rows = visualization.chartType === 'pie'
+    ? [['Category', 'Value'], ...visualization.data.map((point) => [point.label, point.value])]
+    : visualization.chartType === 'scatter'
+      ? [[visualization.xLabel, visualization.yLabel], ...visualization.data.map((point) => [point.x, point.y])]
+      : visualization.chartType === 'multi-line'
+        ? [['Series', visualization.xLabel, visualization.yLabel],
+            ...visualization.series.flatMap((series) =>
+              series.data.map((point) => [series.label, point.x, point.y])
+            )]
+        : [[visualization.xLabel, visualization.yLabel],
+            ...visualization.data.map((point) => [point.label, point.value])];
+
+  const safeCell = (value: string | number) =>
+    typeof value === 'string' && /^[\s]*[=+\-@]/.test(value) ? `'${value}` : String(value);
+  return [
+    visualization.title,
+    ...rows.map((row) => row.map(safeCell).join('\t')),
+  ].join('\n');
+}
+
+function WorkspaceDiagramCopyAction({
+  visualization,
+}: {
+  visualization: Extract<WorkspaceVisualization, { kind: 'diagram' }>;
+}) {
+  const content = [
+    visualization.title,
+    '',
+    ...(
+      visualization.diagramType === 'timeline'
+        ? visualization.events.map((event) =>
+            `${event.date} — ${event.label}${event.description ? `\n${event.description}` : ''}`
+          )
+        : visualization.diagramType === 'flow'
+          ? visualization.steps.map((step, index) => {
+              const title = typeof step === 'string' ? step : step.title;
+              const description = typeof step === 'string' ? '' : step.description;
+              return `${index + 1}. ${title}${description ? `\n   ${description}` : ''}`;
+            })
+          : visualization.diagramType === 'triangle'
+            ? [
+                `Leg A: ${visualization.legA}${visualization.unit ? ` ${visualization.unit}` : ''}`,
+                `Leg B: ${visualization.legB}${visualization.unit ? ` ${visualization.unit}` : ''}`,
+                `Hypotenuse: ${visualization.hypotenuse}${visualization.unit ? ` ${visualization.unit}` : ''}`,
+              ]
+            : [
+                `${visualization.xLabel}: ${visualization.centerX}`,
+                `${visualization.yLabel}: ${visualization.centerY}`,
+                `Stationary value: ${visualization.stationaryValue}`,
+                `Curvature: ${visualization.curvature}`,
+                `Contour radii: ${visualization.radii.join(', ')}`,
+              ]
+    ),
+  ].join('\n');
+
+  return <WorkspaceVisualizationCopyAction label="Copy diagram details" content={content} />;
+}
+
 function WorkspaceVisualizationCard({ visualization }: { visualization: WorkspaceVisualization }) {
+  const [chartStyle, setChartStyle] = useState<'bar' | 'line'>(() =>
+    visualization.kind === 'chart' && visualization.chartType === 'line' ? 'line' : 'bar'
+  );
+  const [hiddenSeries, setHiddenSeries] = useState<string[]>([]);
+
   if (visualization.kind === 'diagram') {
     if (visualization.diagramType === 'timeline') {
       return (
         <figure className="my-4 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4">
-          <figcaption className="mb-4 text-base font-semibold text-white">{visualization.title}</figcaption>
+          <figcaption className="mb-4 flex flex-wrap items-center justify-between gap-2 text-base font-semibold text-white">
+            {visualization.title}
+            <WorkspaceDiagramCopyAction visualization={visualization} />
+          </figcaption>
           <ol className="space-y-3 border-l border-white/20 pl-4">
             {visualization.events.map((event, index) => (
               <li key={`${event.date}-${event.label}-${index}`} className="relative min-w-0">
@@ -3438,7 +3665,10 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
       const classification = visualization.curvature > 0 ? 'local minimum' : 'local maximum';
       return (
         <figure className="my-4 w-full max-w-[500px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-          <figcaption className="mb-2 text-base font-semibold text-white">{visualization.title}</figcaption>
+          <figcaption className="mb-2 flex flex-wrap items-center justify-between gap-2 text-base font-semibold text-white">
+            {visualization.title}
+            <WorkspaceDiagramCopyAction visualization={visualization} />
+          </figcaption>
           <svg
             viewBox="0 0 480 290"
             role="img"
@@ -3496,7 +3726,10 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
       const unit = visualization.unit ? ` ${visualization.unit}` : '';
       return (
         <figure className="my-4 w-full max-w-[500px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-          <figcaption className="mb-2 text-base font-semibold text-white">{visualization.title}</figcaption>
+          <figcaption className="mb-2 flex flex-wrap items-center justify-between gap-2 text-base font-semibold text-white">
+            {visualization.title}
+            <WorkspaceDiagramCopyAction visualization={visualization} />
+          </figcaption>
           <svg
             viewBox="0 0 340 280"
             role="img"
@@ -3536,7 +3769,10 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
 
     return (
       <section className="my-4 max-w-3xl rounded-xl border border-white/10 bg-white/[0.035] p-4" aria-label={visualization.title}>
-        <h3 className="mb-4 text-base font-semibold text-white">{visualization.title}</h3>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-white">{visualization.title}</h3>
+          <WorkspaceDiagramCopyAction visualization={visualization} />
+        </div>
         <ol className="flex flex-col items-center gap-2">
           {visualization.steps.map((step, index) => (
             <Fragment key={`${index}-${typeof step === 'string' ? step : step.title}`}>
@@ -3597,13 +3833,19 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
 
     return (
       <figure className="my-4 w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-        <figcaption className="mb-3 flex flex-wrap items-center gap-2 text-base font-semibold text-white">
-          <span>{visualization.title}</span>
-          {visualization.illustrative && (
-            <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55">
-              Illustrative assumptions
-            </span>
-          )}
+        <figcaption className="mb-3 flex flex-wrap items-center justify-between gap-2 text-base font-semibold text-white">
+          <span className="flex flex-wrap items-center gap-2">
+            {visualization.title}
+            {visualization.illustrative && (
+              <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55">
+                Illustrative assumptions
+              </span>
+            )}
+          </span>
+          <WorkspaceVisualizationCopyAction
+            label="Copy chart data"
+            content={getWorkspaceChartCopyText(visualization)}
+          />
         </figcaption>
         <div className="grid min-w-0 items-center gap-4 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <svg
@@ -3630,12 +3872,17 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
             ))}
           </ul>
         </div>
+        <WorkspaceChartDataTable visualization={visualization} />
       </figure>
     );
   }
 
   const isScatter = visualization.chartType === 'scatter';
   const isMultiLine = visualization.chartType === 'multi-line';
+  const canSwitchChartStyle = visualization.chartType === 'bar' || visualization.chartType === 'line';
+  const useBarChart = canSwitchChartStyle
+    ? chartStyle === 'bar'
+    : visualization.chartType === 'bar';
   const values = isScatter
     ? visualization.data.map((point) => point.y)
     : isMultiLine
@@ -3687,13 +3934,42 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
 
   return (
     <figure className="my-4 max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-      <figcaption className="mb-3 flex flex-wrap items-center gap-2 text-base font-semibold text-white">
-        <span>{visualization.title}</span>
-        {isMultiLine && visualization.illustrative && (
-          <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55">
-            Illustrative example
-          </span>
-        )}
+      <figcaption className="mb-3 flex flex-wrap items-center justify-between gap-3 text-base font-semibold text-white">
+        <span className="flex flex-wrap items-center gap-2">
+          {visualization.title}
+          {isMultiLine && visualization.illustrative && (
+            <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55">
+              Illustrative example
+            </span>
+          )}
+        </span>
+        <div className="flex flex-wrap items-center gap-1">
+          {canSwitchChartStyle && (
+            <div role="group" aria-label="Chart display style" className="flex rounded-lg border border-white/10 p-0.5">
+              {(['bar', 'line'] as const).map((style) => (
+                <Button
+                  key={style}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  aria-pressed={chartStyle === style}
+                  onClick={() => setChartStyle(style)}
+                  className={`min-h-8 rounded-md px-2 text-xs capitalize ${
+                    chartStyle === style
+                      ? 'bg-white/15 text-white'
+                      : 'text-white/55 hover:bg-white/[0.06] hover:text-white'
+                  }`}
+                >
+                  {style}
+                </Button>
+              ))}
+            </div>
+          )}
+          <WorkspaceVisualizationCopyAction
+            label="Copy chart data"
+            content={getWorkspaceChartCopyText(visualization)}
+          />
+        </div>
       </figcaption>
       <div className="w-full max-w-full overflow-x-auto">
         <svg
@@ -3734,7 +4010,7 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
               <text x={xFor(0) + 6} y={yFor(0) - 6} fill="rgba(255,255,255,.9)" fontSize="10">O</text>
             </g>
           )}
-          {visualization.chartType === 'bar' ? visualization.data.map((point, index) => {
+          {useBarChart ? visualization.data.map((point, index) => {
             const x = plot.x + (index + 0.5) * (plot.width / visualization.data.length) - barWidth / 2;
             const y = yFor(point.value);
             return (
@@ -3769,6 +4045,7 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
           }) : isMultiLine ? (
             <>
               {visualization.series.map((series, seriesIndex) => {
+                if (hiddenSeries.includes(series.label)) return null;
                 const color = seriesColors[seriesIndex];
                 const seriesPoints = series.data.map((point) => `${xFor(point.x)},${yFor(point.y)}`).join(' ');
                 return (
@@ -3816,15 +4093,33 @@ function WorkspaceVisualizationCard({ visualization }: { visualization: Workspac
         </svg>
       </div>
       {isMultiLine && (
-        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/75" aria-label="Chart legend">
+        <ul className="mt-2 flex flex-wrap gap-2 text-xs text-white/75" aria-label="Chart series">
           {visualization.series.map((series, index) => (
-            <li key={series.label} className="flex items-center gap-2">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: seriesColors[index] }} />
-              {series.label}
+            <li key={series.label}>
+              <button
+                type="button"
+                aria-pressed={!hiddenSeries.includes(series.label)}
+                onClick={() => setHiddenSeries((current) => {
+                  if (current.includes(series.label)) {
+                    return current.filter((label) => label !== series.label);
+                  }
+                  if (current.length >= visualization.series.length - 1) return current;
+                  return [...current, series.label];
+                })}
+                className={`flex min-h-9 items-center gap-2 rounded-lg border px-2.5 py-1.5 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                  hiddenSeries.includes(series.label)
+                    ? 'border-white/10 text-white/45'
+                    : 'border-white/15 bg-white/[0.04] text-white/85'
+                }`}
+              >
+                <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: seriesColors[index], opacity: hiddenSeries.includes(series.label) ? 0.35 : 1 }} />
+                {series.label}
+              </button>
             </li>
           ))}
         </ul>
       )}
+      <WorkspaceChartDataTable visualization={visualization} />
     </figure>
   );
 }
