@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
-import { ArrowUp, Check, ChevronLeft, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronLeft, FileSpreadsheet, FileText, Loader2, Maximize2, Mic, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,6 +10,7 @@ export type ComposerAttachment = {
   id: string;
   name: string;
   type: string;
+  size?: number;
   previewUrl?: string;
 };
 
@@ -102,7 +103,7 @@ export default function UniversalComposer({
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
   const isLight = tone === 'light';
-  const isMobileMultiline = mobileViewportAware && isMultiline
+  const isMobileMultiline = mobileViewportAware && (isMultiline || attachments.length > 0)
     && typeof window !== 'undefined' && window.innerWidth < 1024;
 
   useEffect(() => {
@@ -197,7 +198,7 @@ export default function UniversalComposer({
     textarea.style.overflowY = naturalHeight > maxHeight ? 'auto' : 'hidden';
     const nextIsMultiline = multilineMeasureHeight > oneLineHeight + 1 || value.includes('\n');
     setIsMultiline((current) => current === nextIsMultiline ? current : nextIsMultiline);
-  }, [isMultiline, mobileViewportAware, value, visibleViewportHeight]);
+  }, [attachments.length, isMultiline, mobileViewportAware, value, visibleViewportHeight]);
 
   const updateViewportPosition = useCallback(() => {
     const viewport = window.visualViewport;
@@ -350,46 +351,6 @@ export default function UniversalComposer({
       className="relative mx-auto w-full max-w-3xl lg:max-w-[840px]"
       style={keyboardInset ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
     >
-      {attachments.length > 0 && (
-        <div className="mb-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {attachments.map((attachment) => (
-            <div
-              key={attachment.id}
-              className={`relative flex min-w-0 items-center gap-2 overflow-hidden rounded-xl border p-2 ${
-                isLight ? 'border-black/10 bg-white text-slate-900' : 'border-white/10 bg-[#202020] text-white'
-              }`}
-            >
-              {attachment.previewUrl ? (
-                <img
-                  src={attachment.previewUrl}
-                  alt={attachment.name}
-                  className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                />
-              ) : (
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-                  isLight ? 'bg-slate-100 text-slate-600' : 'bg-white/[0.06] text-white/60'
-                }`}>
-                  <FileText className="h-4 w-4" aria-hidden="true" />
-                </span>
-              )}
-              <span className={`min-w-0 flex-1 truncate text-xs ${isLight ? 'text-slate-700' : 'text-white/75'}`}>{attachment.name}</span>
-              {onRemoveAttachment && (
-                <button
-                  type="button"
-                  onClick={() => onRemoveAttachment(attachment.id)}
-                  aria-label={`Remove ${attachment.name}`}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
-                    isLight ? 'text-slate-500 hover:bg-black/5 hover:text-slate-900' : 'text-white/60 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
       {voiceListening && (
         <div className={`mb-2 flex min-h-10 items-center gap-2 px-2 text-sm ${
           isLight ? 'text-slate-700' : 'text-white/80'
@@ -409,10 +370,99 @@ export default function UniversalComposer({
       )}
 
       <div className={`fm-universal-composer-card box-border w-full ${className} ${
-        mobileViewportAware && isMultiline ? 'rounded-[24px] lg:rounded-[999px]' : 'rounded-[999px]'
+        attachments.length > 0
+          ? 'rounded-[24px]'
+          : mobileViewportAware && isMultiline
+            ? 'rounded-[24px] lg:rounded-[999px]'
+            : 'rounded-[999px]'
       } border px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,.14)] sm:px-3 sm:py-1.5 lg:min-h-[52px] lg:px-2 lg:py-1 ${
         isLight ? 'border-black/10 bg-white/95' : 'border-white/10 bg-[#171717] shadow-black/25'
       }`}>
+        {attachments.length > 0 && (
+          <div
+            className="grid grid-cols-2 gap-2 px-1 pt-1 sm:grid-cols-3"
+            aria-label="Attachments"
+            role="list"
+          >
+            {attachments.map((attachment) => {
+              const extension = attachment.name.includes('.')
+                ? attachment.name.split('.').pop()?.toUpperCase() || ''
+                : attachment.type.split('/').pop()?.toUpperCase() || 'FILE';
+              const formattedSize = typeof attachment.size === 'number' && attachment.size > 0
+                ? attachment.size < 1024 * 1024
+                  ? `${Math.max(1, Math.round(attachment.size / 1024))} KB`
+                  : `${(attachment.size / (1024 * 1024)).toFixed(1)} MB`
+                : '';
+
+              return (
+                <div
+                  key={attachment.id}
+                  role="listitem"
+                  className={`relative min-w-0 overflow-hidden rounded-xl ${
+                    attachment.previewUrl
+                      ? 'aspect-[1.15] max-w-[190px]'
+                      : `flex min-h-[76px] items-center gap-3 border p-3 ${
+                          isLight ? 'border-black/10 bg-slate-50' : 'border-white/10 bg-[#222]'
+                        }`
+                  }`}
+                >
+                  {attachment.previewUrl ? (
+                    <img
+                      src={attachment.previewUrl}
+                      alt={attachment.name}
+                      className="h-full w-full rounded-xl object-cover"
+                    />
+                  ) : (
+                    <>
+                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
+                        isLight ? 'bg-white text-slate-600' : 'bg-white/[0.07] text-white/75'
+                      }`}>
+                        {attachment.type.includes('spreadsheet')
+                          ? <FileSpreadsheet className="h-5 w-5" aria-hidden="true" />
+                          : <FileText className="h-5 w-5" aria-hidden="true" />}
+                      </span>
+                      <span className="min-w-0 flex-1 pr-7">
+                        <span className={`block truncate text-xs font-medium ${
+                          isLight ? 'text-slate-800' : 'text-white/90'
+                        }`} title={attachment.name}>
+                          {attachment.name}
+                        </span>
+                        <span className={`mt-1 block text-[10px] ${
+                          isLight ? 'text-slate-500' : 'text-white/45'
+                        }`}>
+                          {[extension, formattedSize].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                    </>
+                  )}
+                  {attachment.previewUrl && (
+                    <span
+                      className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pb-1.5 pt-5 text-[10px] text-white"
+                      title={attachment.name}
+                    >
+                      {attachment.name}
+                    </span>
+                  )}
+                  {onRemoveAttachment && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAttachment(attachment.id)}
+                      aria-label={`Remove ${attachment.name}`}
+                      className={`absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300 ${
+                        isLight
+                          ? 'bg-white/95 text-slate-700 hover:bg-white'
+                          : 'bg-black/75 text-white hover:bg-black'
+                      }`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div className={`${
           isMobileMultiline
             ? 'grid grid-cols-[38px_minmax(0,1fr)_38px_38px] gap-x-1 gap-y-1 sm:grid-cols-[44px_minmax(0,1fr)_44px_44px]'
