@@ -8,7 +8,6 @@ import {
   ArrowRight,
   ArrowUp,
   AudioLines,
-  BarChart3,
   BookOpen,
   Briefcase,
   Building2,
@@ -26,7 +25,6 @@ import {
   FileText,
   FolderKanban,
   FolderPlus,
-  GitBranch,
   Globe2,
   ImagePlus,
   Loader2,
@@ -2456,8 +2454,8 @@ async function imageFileToWorkspaceImage(file: File): Promise<WorkspaceImage> {
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   }[extension || ''] || 'image/jpeg');
   const isImage = detectedType.startsWith('image/');
-  const isPdf = detectedType === 'application/pdf' || extension === 'pdf';
-  if (isImage || isPdf) {
+  const isOpaqueDocument = extension === 'pdf' || extension === 'doc';
+  if (isImage || isOpaqueDocument) {
     const raw = await readFileAsDataUrl(file);
     return {
       id: safeId(),
@@ -6304,35 +6302,25 @@ const [developerPlan, setDeveloperPlan] = useState<
     event.currentTarget.value = '';
 
     const supportedDocument =
-      /\.(pdf|docx|txt|xlsx)$/i;
+      /\.(pdf|doc|docx|txt|xlsx)$/i;
     const supportedMimeTypes = new Set([
       'application/pdf',
+      'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ]);
-    const legacyWordFiles = selectedFiles.filter((file) => /\.doc$/i.test(file.name));
     const files = selectedFiles.filter((file) =>
       file.type.startsWith('image/') ||
       supportedMimeTypes.has(file.type) ||
       supportedDocument.test(file.name)
     );
 
-    if (legacyWordFiles.length) {
-      toast({
-        title: 'Unsupported Word format',
-        description: 'Save legacy .doc files as .docx or PDF, then upload them again.',
-        variant: 'destructive',
-      });
-    }
-
-    const unsupportedFiles = selectedFiles.filter((file) =>
-      !files.includes(file) && !legacyWordFiles.includes(file)
-    );
+    const unsupportedFiles = selectedFiles.filter((file) => !files.includes(file));
     if (unsupportedFiles.length) {
       toast({
         title: 'Unsupported file',
-        description: 'Attach images or PDF, DOCX, TXT, or XLSX documents.',
+        description: 'Attach images or PDF, DOC, DOCX, TXT, or XLSX documents.',
         variant: 'destructive',
       });
     }
@@ -8198,7 +8186,7 @@ FaceMeX intelligence rules:
 - For side-by-side comparisons or rankings of three or more options, prefer a concise Markdown table; for two options, use a short comparison unless the differences are complex. Use a flow diagram for a multi-stage process only when it clarifies sequence or relationships, and avoid repeating the same content in prose, a table, and a diagram.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
 - When a relevant photograph would materially improve the answer, the existing media integration may show a separately retrieved, relevance-checked image card. Never output a visual marker or placeholder, and never invent image URLs, results, or captions.
-- When a chart or process diagram materially improves the explanation, use a supported fenced chart or diagram JSON block so the visual is actually rendered. Use numeric scatter points calculated from the supplied function; use a contour only when its values are derived from the exact supported quadratic; and use a labeled multi-line chart for conceptual relationships such as supply and demand, explicitly marked as illustrative unless sourced. A pie chart uses \`type: "pie"\`, a boolean \`illustrative\`, and \`data\` entries with \`label\` and non-negative numeric \`value\`. Use only factual values grounded in the user's input or a reliable source; never present invented data as factual.
+- Independently decide whether a chart or process diagram would materially improve each reply; when it would, include the supported fenced chart or diagram JSON block so the visual is rendered, without waiting for a composer shortcut or explicit request. Do not add a visual when it would be decorative or redundant. Use numeric scatter points calculated from the supplied function; use a contour only when its values are derived from the exact supported quadratic; and use a labeled multi-line chart for conceptual relationships such as supply and demand, explicitly marked as illustrative unless sourced. A pie chart uses \`type: "pie"\`, a boolean \`illustrative\`, and \`data\` entries with \`label\` and non-negative numeric \`value\`. Use only factual values grounded in the user's input or a reliable source; never present invented data as factual.
 - For a business or financial what-if that benefits from changing assumptions, add one \`calculator\` fenced JSON block alongside the written answer. Use only these fixed formula types and numeric input keys: \`delivery-revenue\` (\`drivers\`, \`deliveriesPerDriverPerDay\`, \`pricePerDelivery\`, \`workingDaysPerMonth\`), \`subscription-revenue\` (\`subscribers\`, \`monthlyPrice\`), \`profit-expenses\` (\`monthlyRevenue\`, \`monthlyExpenses\`), \`budget\` (\`monthlyIncome\`, \`monthlyExpenses\`, \`savingsTarget\`), or \`investment-growth\` (\`initialInvestment\`, \`monthlyContribution\`, \`annualReturnPercent\`, \`years\`). The JSON shape is \`{"type":"delivery-revenue","title":"Delivery revenue scenario","currency":"ZAR","assumptions":"Example assumptions to adjust.","inputs":{"drivers":10,"deliveriesPerDriverPerDay":8,"pricePerDelivery":80,"workingDaysPerMonth":22}}\`; use the matching input keys for each type. Currency is optional and, if used, must be one of ZAR, USD, EUR, GBP, CAD, or AUD. Set initial inputs from the user's details or clearly state they are assumptions; do not make up factual data, add executable formulas, or create a calculator for ordinary questions.
 - When a Voice+ usage-capacity or package-pricing scenario materially helps, use \`voice-capacity\` with inputs \`monthlyUsers\`, \`answersPerUserPerMonth\`, and \`charactersPerAnswer\`, plus \`choices.monthlyCreditAllowance\` set to 10000, 30000, 121000, or 33000000. For pricing, use \`voice-business-model\` with input \`payingSubscribers\` and choices \`monthlyPrice\` (199, 299, or 480), \`monthlyVoiceAllowance\` (50000, 100000, or 200000), \`freeTrialMinutes\` (5, 10, or 15), and \`billing\` (\`monthly-recurring\` or \`manual-renewal\`). The capacity estimate assumes one credit per character. The listed allowances and prices are illustrative examples, not verified offers or entitlements; state that in \`assumptions\` and do not imply provider credits, grant eligibility, pricing, or allowances are confirmed. Use \`currency: "ZAR"\` for these rand-denominated price options. Examples: \`{"type":"voice-capacity","title":"Voice capacity scenario","assumptions":"Illustrative; assumes one credit per character.","inputs":{"monthlyUsers":500,"answersPerUserPerMonth":5,"charactersPerAnswer":300},"choices":{"monthlyCreditAllowance":10000}}\` and \`{"type":"voice-business-model","title":"Voice+ package scenario","currency":"ZAR","assumptions":"Illustrative pricing; confirm provider costs and terms.","inputs":{"payingSubscribers":100},"choices":{"monthlyPrice":480,"monthlyVoiceAllowance":100000,"freeTrialMinutes":10,"billing":"monthly-recurring"}}\`. A voice-business-model card includes its revenue chart automatically.
 - For a task that genuinely needs the user to choose or provide details before you can continue, include a fenced \`interactive\` JSON block with a concise title, a \`questions\` array, and a \`submitLabel\`. Each question has a \`question\`, a \`type\` of \`single\`, \`multiple\`, or \`text\`, and an \`options\` array for single/multiple choices (omit options for text). Do not use a form for ordinary answers or invent missing options.
@@ -8240,7 +8228,8 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
         attachments: attachedImages
           .filter((image) =>
             image.type.startsWith('image/') ||
-            image.type === 'application/pdf'
+            image.type === 'application/pdf' ||
+            image.type === 'application/msword'
           )
           .filter((image) => image.dataUrl)
           .map((image) => ({
@@ -13383,6 +13372,7 @@ Start with the most useful next action. Do not invent personal details, course r
                 id: image.id,
                 name: image.name,
                 type: image.type,
+                size: image.size,
                 previewUrl: image.type.startsWith('image/') ? image.dataUrl : undefined,
               }))}
               onRemoveAttachment={removeSelectedImage}
@@ -13395,24 +13385,6 @@ Start with the most useful next action. Do not invent personal details, course r
                   disabled: !FACEMEX_EMAIL_ASSISTANT_AVAILABLE,
                   disabledReason: 'Coming soon.',
                   onSelect: () => navigate('/email-assistant'),
-                },
-                {
-                  id: 'create-chart',
-                  label: 'Create a chart',
-                  icon: <BarChart3 className="h-4 w-4" aria-hidden="true" />,
-                  onSelect: () => setPrompt((current) => [
-                    current.trim(),
-                    'Create a chart from the data in my request or our conversation. Use only values I supplied or verified; if there is not enough data, ask me for it instead of inventing numbers. Label units and assumptions.',
-                  ].filter(Boolean).join('\n\n')),
-                },
-                {
-                  id: 'create-diagram',
-                  label: 'Create a diagram',
-                  icon: <GitBranch className="h-4 w-4" aria-hidden="true" />,
-                  onSelect: () => setPrompt((current) => [
-                    current.trim(),
-                    'Create a clear diagram of the process in my request or our conversation. Use only steps and relationships we established; if key details are missing, ask me before drawing it.',
-                  ].filter(Boolean).join('\n\n')),
                 },
                 {
                   id: 'camera',
