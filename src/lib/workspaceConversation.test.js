@@ -39,3 +39,24 @@ test('omits deleted and invalid history and bounds the retained context', () => 
     ],
   );
 });
+
+test('includes attached document text when building follow-up history', () => {
+  const messages = buildWorkspaceConversationMessages(
+    [{
+      role: 'user',
+      content: 'Summarize this document.',
+      images: [{
+        name: 'study-notes.txt',
+        type: 'text/plain',
+        documentText: 'Photosynthesis converts light energy into chemical energy.',
+      }],
+    }],
+    'Explain the second paragraph.',
+  );
+
+  assert.equal(messages[0].content, [
+    'Summarize this document.',
+    '--- study-notes.txt ---',
+    'Photosynthesis converts light energy into chemical energy.',
+  ].join('\n'));
+});

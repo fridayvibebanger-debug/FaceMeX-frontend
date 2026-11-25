@@ -12,7 +12,19 @@ export function buildWorkspaceConversationMessages(history, latestPrompt, system
         message.content.trim()
       )
       .slice(-MAX_CONTEXT_MESSAGES)
-      .map(({ role, content }) => ({ role, content: content.trim() }))
+      .map(({ role, content, images }) => {
+        const documentContext = role === 'user' && Array.isArray(images)
+          ? images
+            .filter((image) => typeof image?.documentText === 'string' && image.documentText.trim())
+            .map((image) => `--- ${image.name || 'Attached document'} ---\n${image.documentText.trim()}`)
+            .join('\n\n')
+          : '';
+
+        return {
+          role,
+          content: [content.trim(), documentContext].filter(Boolean).join('\n\n'),
+        };
+      })
     : [];
 
   let remainingCharacters = MAX_CONTEXT_CHARACTERS;

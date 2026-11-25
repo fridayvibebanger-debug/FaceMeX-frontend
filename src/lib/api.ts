@@ -135,13 +135,13 @@ async function buildAuthHeaders() {
   const jwtPayload = parseJwtPayload(token) || {};
 
   let userId =
+    supabaseSession.userId ||
     readLocalStorage([
       'facemex_user_id',
       'faceme_user_id',
       'userId',
       'user_id',
     ]) ||
-    supabaseSession.userId ||
     clean(jwtPayload.sub || jwtPayload.user_id || jwtPayload.id);
 
   let userName =
@@ -170,20 +170,22 @@ async function buildAuthHeaders() {
     clean(jwtPayload.email);
 
   let userTier =
-    readLocalStorage([
+    supabaseSession.userId
+      ? supabaseSession.userTier
+      : readLocalStorage([
       'facemex_user_tier',
       'faceme_user_tier',
       'userTier',
       'tier',
       'plan',
     ]) ||
-    supabaseSession.userTier ||
-    clean(
-      jwtPayload?.user_metadata?.tier ||
-        jwtPayload?.user_metadata?.plan ||
-        jwtPayload?.tier ||
-        jwtPayload?.plan
-    );
+      supabaseSession.userTier ||
+      clean(
+        jwtPayload?.user_metadata?.tier ||
+          jwtPayload?.user_metadata?.plan ||
+          jwtPayload?.tier ||
+          jwtPayload?.plan
+      );
 
   if (userId) {
     headers['x-user-id'] = userId;
