@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { MapPin, Calendar, Link as LinkIcon, UserPlus, UserMinus, Settings, CheckCircle, Briefcase, FileText, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { usePostStore } from '@/store/postStore';
-import { useSubscriptionStore } from '@/store/subscriptionStore';
 import PostCard from '@/components/feed/PostCard';
 import EditProfileModal from '@/components/profile/EditProfileModal';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -23,8 +22,7 @@ import { toast } from '@/components/ui/use-toast';
 export default function ProfilePage() {
   const { user } = useAuthStore();
   const { posts } = usePostStore();
-  const { currentTier } = useSubscriptionStore();
-  const { professional, saveProfessional, endorseSkill, setMode, addons, mode, hasTier } = useUserStore();
+  const { tier: currentTier, professional, saveProfessional, endorseSkill, setMode, addons, mode, hasTier } = useUserStore();
   const params = useParams<{ id?: string }>();
   const effectiveUserId = user?.id || '';
   const viewedUserId = params.id || effectiveUserId;

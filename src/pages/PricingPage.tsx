@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
-import { useSubscriptionStore } from '@/store/subscriptionStore';
 import { useUserStore } from '@/store/userStore';
 import { createYocoCheckoutSession } from '@/utils/billing';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function PricingPage() {
-  const { currentTier, subscribe } = useSubscriptionStore();
-  const { setVerifiedDev, addons, upgradeDev } = useUserStore();
+  const { tier } = useUserStore();
+  const { toast } = useToast();
   const [processingTier, setProcessingTier] = useState<string | null>(null);
 
-  const tierLabel = String(currentTier || '').toLowerCase();
+  const tierLabel = String(tier || 'free').toLowerCase();
 
   const startCheckout = async (tier: 'pro' | 'creator' | 'business' | 'exclusive' | 'verified', amountZar: number) => {
     setProcessingTier(tier);
@@ -25,15 +25,12 @@ export default function PricingPage() {
       const checkoutTarget = `/facemex-plus?checkout=redirect&redirectUrl=${encodeURIComponent(session.redirectUrl)}`;
       window.location.assign(checkoutTarget);
     } catch (error) {
-      console.error(error);
-      try {
-        if (tier === 'verified') {
-          await setVerifiedDev(true);
-        } else {
-          await subscribe(tier);
-          await upgradeDev(tier);
-        }
-      } catch {}
+      console.error('FaceMeX could not start the checkout session', error);
+      toast({
+        title: 'Checkout unavailable',
+        description: 'Your plan was not changed. Please try again later.',
+        variant: 'destructive',
+      });
     } finally {
       setProcessingTier(null);
     }

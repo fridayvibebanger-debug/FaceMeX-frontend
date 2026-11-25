@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ArrowUp,
   AudioLines,
+  BarChart3,
   BookOpen,
   Briefcase,
   Building2,
@@ -25,6 +26,7 @@ import {
   FileText,
   FolderKanban,
   FolderPlus,
+  GitBranch,
   Globe2,
   ImagePlus,
   Loader2,
@@ -2225,7 +2227,27 @@ function isGovernmentServiceText(content: string) {
 function shouldShowCvBuilderActions(content: string, previousUserText = '') {
   const combined = `${content}\n${previousUserText}`;
   if (isGovernmentServiceText(combined)) return false;
-  return isCvRelatedText(combined);
+  return isCvRelatedText(previousUserText) || isJobRelatedText(previousUserText);
+}
+
+function shouldShowCopyAnswer(message: ChatMessage, previousUserText = '') {
+  if (message.role !== 'assistant') return false;
+  if (
+    ['cv-profile', 'cover-letter', 'email-application', 'message-application'].includes(message.intent || '')
+  ) return true;
+
+  const prompt = previousUserText.toLowerCase();
+  return /\b(copy|paste|ready[- ]to[- ]send|write|draft|compose|generate)\b.{0,50}\b(cover letter|application|email|message|cv|resume|profile summary)\b/i.test(prompt);
+}
+
+function shouldOfferChartAction(message: ChatMessage, previousUserText = '') {
+  const combined = `${previousUserText}\n${message.content}`;
+  return /\b(chart|graph|trend|revenue|budget|comparison|compare|statistics|dataset|data points|growth|projection)\b/i.test(combined);
+}
+
+function shouldOfferDiagramAction(message: ChatMessage, previousUserText = '') {
+  const combined = `${previousUserText}\n${message.content}`;
+  return /\b(diagram|workflow|process|sequence|stages|step[- ]by[- ]step|how to|cycle|pathway|flow)\b/i.test(combined);
 }
 
 function shouldShowApplyActions(content: string, previousUserText = '') {
@@ -5344,7 +5366,7 @@ export default function AIJobAssistantPage() {
   const voiceModeConversationModeRef = useRef<'continuous' | 'tap'>('continuous');
 
   const userStore = useUserStore() as any;
-  const { tier, hasTier } = userStore;
+  const { tier, hasTier, loadMe } = userStore;
 
   const isDeveloper =
   userStore?.email === "luckymawasha72@gmail.com";
@@ -5367,6 +5389,21 @@ const [developerPlan, setDeveloperPlan] = useState<
 
   const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
   const firstName = useMemo(() => getFirstName(userDisplayName), [userDisplayName]);
+
+  useEffect(() => {
+    const refreshEntitlements = () => {
+      if (document.visibilityState === 'visible') void loadMe();
+    };
+
+    refreshEntitlements();
+    window.addEventListener('focus', refreshEntitlements);
+    document.addEventListener('visibilitychange', refreshEntitlements);
+    return () => {
+      window.removeEventListener('focus', refreshEntitlements);
+      document.removeEventListener('visibilitychange', refreshEntitlements);
+    };
+  }, [loadMe]);
+
   const [isReturningWorkspaceUser, setIsReturningWorkspaceUser] = useState<boolean | null>(null);
   const trackedWelcomeVisitKeysRef = useRef(new Set<string>());
   const ownedWorkspaceStorageKey = (key: string) => {
@@ -5546,18 +5583,7 @@ const [developerPlan, setDeveloperPlan] = useState<
     return deepSeekUsage < deepSeekLimit;
   }, [deepSeekLimit, deepSeekUsage]);
 
-  const hasProAccess = useMemo(() => {
-    return (
-      currentTier === 'pro' ||
-      currentTier === 'business' ||
-      currentTier === 'creator' ||
-      currentTier === 'exclusive' ||
-      hasTier?.('pro') ||
-      hasTier?.('business') ||
-      hasTier?.('creator') ||
-      hasTier?.('exclusive')
-    );
-  }, [currentTier, hasTier]);
+  const hasProAccess = hasTier('pro');
 
   const remainingAIUses = useMemo(() => {
     if (deepSeekLimit === null) return null;
@@ -6814,6 +6840,15 @@ const [developerPlan, setDeveloperPlan] = useState<
     setPracticalLabOpen(true);
   };
 
+  const openScreenShare = () => {
+    if (!hasProAccess) {
+      navigate('/facemex-plus');
+      return;
+    }
+
+    navigate('/screen-share');
+  };
+
   const stopScreenShare = () => {
     if (screenShareStreamRef.current) {
       screenShareStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -7452,7 +7487,7 @@ const [developerPlan, setDeveloperPlan] = useState<
   };
 
   const openSchedulePanel = (basePrompt?: string) => {
-    if (isMobileViewport && !hasProAccess) {
+    if (!hasProAccess) {
       setSubscriptionOpen(true);
       toast({ title: 'Pro required', description: 'Schedule is available on FaceMeX Pro.' });
       return;
@@ -9700,16 +9735,25 @@ Start with the most useful next action. Do not invent personal details, course r
 
     const isGovernment = shouldShowGovernmentSourceAction(message.content, previousUserText);
     const showCvButtons = shouldShowCvBuilderActions(message.content, previousUserText);
+    const showCopyButton = shouldShowCopyAnswer(message, previousUserText);
+    const isGeneralReply = shouldShowGeneralOnly(message, previousUserText);
+    const showChartButton = isGeneralReply || showCvButtons || shouldOfferChartAction(message, previousUserText);
+    const showDiagramButton = isGeneralReply || showCvButtons || shouldOfferDiagramAction(message, previousUserText);
     const showApplicationButtons = shouldShowApplicationActions(message, previousUserText);
     const showResearchButtons = shouldShowResearchActions(message, previousUserText);
 
-    if (shouldShowGeneralOnly(message, previousUserText)) {
+    if (
+      isGeneralReply &&
+      !showCopyButton &&
+      !showChartButton &&
+      !showDiagramButton
+    ) {
       return null;
     }
 
     if (isGovernment) {
       return (
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3">
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
           <a
             href="https://www.labour.gov.za/online-tools"
             target="_blank"
@@ -9721,37 +9765,57 @@ Start with the most useful next action. Do not invent personal details, course r
               Official Source
             </Button>
           </a>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => copyText(message.content)}
-            className="h-9 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white"
-          >
-            <Copy className="mr-2 h-3.5 w-3.5" />
-            Copy Answer
-          </Button>
         </div>
       );
     }
 
-    if (showCvButtons) {
+    if (showCvButtons || showChartButton || showDiagramButton || showCopyButton) {
       return (
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3">
-          <Button size="sm" variant="outline" onClick={openCvBuilder} className="fm-response-action-button h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
-            <FileText className="mr-2 h-3.5 w-3.5" />
-            AI CV Builder
-          </Button>
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+          {showCvButtons && (
+            <Button size="sm" variant="outline" onClick={openCvBuilder} className="fm-response-action-button h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
+              <FileText className="mr-2 h-3.5 w-3.5" />
+              AI CV Builder
+            </Button>
+          )}
 
-          <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="fm-response-action-button h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
-            <Copy className="mr-2 h-3.5 w-3.5" />
-            Copy Answer
-          </Button>
+          {showChartButton && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void sendPrompt(`Create a clear chart from the relevant facts and values in this answer. Do not invent data; label assumptions and units.\n\n${message.content}`)}
+              className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white"
+            >
+              <BarChart3 className="mr-2 h-3.5 w-3.5" />
+              Create Chart
+            </Button>
+          )}
 
-          <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="fm-response-action-button h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
-            <Save className="mr-2 h-3.5 w-3.5" />
-            Save Tips
-          </Button>
+          {showDiagramButton && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void sendPrompt(`Create a clear diagram of the process or relationships explained in this answer. Use only established facts and steps.\n\n${message.content}`)}
+              className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white"
+            >
+              <GitBranch className="mr-2 h-3.5 w-3.5" />
+              Create Diagram
+            </Button>
+          )}
+
+          {showCopyButton && (
+            <Button size="sm" variant="outline" onClick={() => copyText(message.content)} className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              Copy Answer
+            </Button>
+          )}
+
+          {showCvButtons && isCvRelatedText(previousUserText) && (
+            <Button size="sm" variant="outline" onClick={() => saveMessageAs(message.id, 'cv_advice')} className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white">
+              <Save className="mr-2 h-3.5 w-3.5" />
+              Save Tips
+            </Button>
+          )}
         </div>
       );
     }
@@ -9889,10 +9953,12 @@ Start with the most useful next action. Do not invent personal details, course r
     return null;
   };
   const messageActions = (message: ChatMessage, previousUserText = '') => {
+    const showCopyAnswer = message.role === 'user' || shouldShowCopyAnswer(message, previousUserText);
     const hasSaveCardAction =
       shouldShowApplicationActions(message, previousUserText) ||
       shouldShowCvBuilderActions(message.content, previousUserText) ||
       shouldShowResearchActions(message, previousUserText) ||
+      shouldShowCopyAnswer(message, previousUserText) ||
       message.savedCategory === 'homework_help' ||
       message.savedCategory === 'assignments' ||
       message.savedCategory === 'youtube_lessons' ||
@@ -9902,9 +9968,11 @@ Start with the most useful next action. Do not invent personal details, course r
     return (
     <>
       <div className="fm-message-actions mt-3 grid grid-cols-6 items-center gap-1 border-t border-white/10 pt-2 opacity-80 lg:hidden">
-        <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Copy message" title="Copy">
-          <Copy className="h-3.5 w-3.5" />
-        </Button>
+        {showCopyAnswer && (
+          <Button size="sm" variant="ghost" onClick={() => copyText(message.content)} className="h-8 rounded-full px-2 lg:text-white/70 lg:hover:bg-white/10 lg:hover:text-white" aria-label="Copy message" title="Copy">
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+        )}
 
         {message.role === 'assistant' && (
           <>
@@ -9997,16 +10065,18 @@ Start with the most useful next action. Do not invent personal details, course r
       </div>
 
       <div className="hidden lg:flex lg:absolute lg:bottom-3 lg:right-3 lg:items-center lg:gap-1 lg:rounded-full lg:bg-[rgba(24,24,24,.82)] lg:border lg:border-[rgba(255,255,255,.08)] lg:px-1.5 lg:h-[40px] lg:shadow-[0_20px_45px_rgba(0,0,0,0.15)] lg:opacity-0 lg:-translate-y-2 lg:pointer-events-none lg:transition-all lg:duration-200 lg:ease-in-out lg:group-hover:opacity-100 lg:group-hover:translate-y-0 lg:group-hover:pointer-events-auto">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => copyText(message.content)}
-          title="Copy"
-          aria-label="Copy answer"
-          className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
-        >
-          <Copy className="h-4 w-4" />
-        </Button>
+        {showCopyAnswer && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => copyText(message.content)}
+            title="Copy"
+            aria-label="Copy answer"
+            className="h-9 w-9 rounded-full text-white transition duration-200 ease-in-out hover:bg-white/10 active:scale-95"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        )}
 
         {message.role === 'assistant' && (
           <>
@@ -12930,7 +13000,7 @@ Start with the most useful next action. Do not invent personal details, course r
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => navigate('/screen-share')}
+            onClick={openScreenShare}
             aria-label="Private screen sharing"
             title="Private screen sharing"
             className="flex h-10 w-10 items-center justify-center rounded-lg text-[#666] transition hover:bg-[#f3f3f3] hover:text-[#222]"
@@ -12992,7 +13062,7 @@ Start with the most useful next action. Do not invent personal details, course r
          </button>
          <button
            type="button"
-           onClick={() => navigate('/screen-share')}
+           onClick={openScreenShare}
            className="fm-mobile-header-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 transition active:scale-[0.98] hover:bg-white/10"
            aria-label="Private screen sharing"
            title="Private screen sharing"
@@ -13107,14 +13177,23 @@ Start with the most useful next action. Do not invent personal details, course r
                 <>
                   <div className="sticky top-0 z-20 -mx-3 bg-[#0d0d0d] px-3 pt-0 sm:-mx-5 sm:px-5 lg:-mx-6 lg:bg-[#111111] lg:px-6">
                     <div className="relative mx-auto aspect-video w-full max-w-3xl overflow-hidden rounded-xl bg-slate-950 lg:rounded-2xl">
-                    <iframe
-                      src={selectedWatchVideo.embedUrl}
-                      title={selectedWatchVideo.title}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                      className="h-full w-full"
-                    />
-                  </div>
+                      <iframe
+                        src={selectedWatchVideo.embedUrl}
+                        title={selectedWatchVideo.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        className="h-full w-full"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setWatchPlayingVideoId(null)}
+                        aria-label="Close video lesson"
+                        title="Close video lesson"
+                        className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/75 text-white shadow-lg transition hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                      >
+                        <X className="h-5 w-5" aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="border-b border-white/10 px-1 pb-4 pt-3 text-white">
@@ -14337,7 +14416,7 @@ Start with the most useful next action. Do not invent personal details, course r
                       key={value}
                       type="button"
                       onClick={() => {
-                        if (mexaPlan === 'free' || mexaPlan === 'plus') {
+                        if (!hasProAccess) {
                           setScheduleOpen(false);
                           navigate('/facemex-plus');
                         } else {
@@ -14355,7 +14434,7 @@ Start with the most useful next action. Do not invent personal details, course r
                   <button
                     type="button"
                     onClick={() => {
-                      if (mexaPlan === 'free' || mexaPlan === 'plus') {
+                      if (!hasProAccess) {
                         setScheduleOpen(false);
                         navigate('/facemex-plus');
                       } else {
@@ -14424,14 +14503,29 @@ Start with the most useful next action. Do not invent personal details, course r
       {guidedSearchOpen && (
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm" onClick={() => setGuidedSearchOpen(false)}>
           <div
-            className="w-full max-w-[420px] rounded-[28px] border border-white/10 bg-[#0d0d0d] p-5 text-white shadow-[0_28px_90px_rgba(0,0,0,0.45)]"
+            className={`w-full max-w-[440px] rounded-xl border p-5 shadow-[0_28px_90px_rgba(0,0,0,0.3)] ${
+              appearanceMode === 'light'
+                ? 'border-[#dedede] bg-white text-[#202123]'
+                : 'border-[#333] bg-[#171717] text-[#f5f5f5]'
+            }`}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="mb-5 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/50">Search</p>
-              <h3 className="mt-2 text-xl font-semibold text-white">
-                {guidedSearchStep === 'job' ? 'What job are you looking for?' : 'Where do you want to search?'}
-              </h3>
+            <div className="mb-5 flex items-start gap-3">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                appearanceMode === 'light' ? 'bg-[#f1f1f1] text-[#444]' : 'bg-[#282828] text-white/80'
+              }`}>
+                <Briefcase className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className={`text-xs font-medium ${
+                  appearanceMode === 'light' ? 'text-[#6b6b6b]' : 'text-white/50'
+                }`}>Find jobs · {guidedSearchStep === 'job' ? 'Step 1 of 2' : 'Step 2 of 2'}</p>
+                <h3 className={`mt-1 text-lg font-semibold ${
+                  appearanceMode === 'light' ? 'text-[#202123]' : 'text-[#f5f5f5]'
+                }`}>
+                  {guidedSearchStep === 'job' ? 'What job are you looking for?' : 'Where do you want to search?'}
+                </h3>
+              </div>
             </div>
 
             {guidedSearchStep === 'job' ? (
@@ -14440,7 +14534,11 @@ Start with the most useful next action. Do not invent personal details, course r
                   value={guidedSearchJob}
                   onChange={(event) => setGuidedSearchJob(event.target.value)}
                   placeholder="Industry or work type: IT, admin, retail, finance..."
-                  className="h-12 w-full rounded-2xl border border-white/10 bg-[#171717] px-3 text-[15px] text-white outline-none placeholder:text-white/45"
+                  className={`h-11 w-full rounded-lg border px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-[#888]/40 ${
+                    appearanceMode === 'light'
+                      ? 'border-[#dedede] bg-white text-[#202123] placeholder:text-[#888]'
+                      : 'border-[#333] bg-[#202020] text-[#f5f5f5] placeholder:text-white/45'
+                  }`}
                   autoFocus
                 />
 
@@ -14448,7 +14546,11 @@ Start with the most useful next action. Do not invent personal details, course r
                   type="button"
                   disabled={!guidedSearchJob.trim()}
                   onClick={() => setGuidedSearchStep('location')}
-                  className="h-11 w-full rounded-2xl bg-white text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  className={`h-10 w-full rounded-lg px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    appearanceMode === 'light'
+                      ? 'bg-[#202123] !text-white hover:bg-[#343538]'
+                      : 'bg-white !text-[#202123] hover:bg-[#e5e5e5]'
+                  }`}
                 >
                   Next
                 </button>
@@ -14459,7 +14561,11 @@ Start with the most useful next action. Do not invent personal details, course r
                   value={guidedSearchLocation}
                   onChange={(event) => setGuidedSearchLocation(event.target.value)}
                   placeholder="Area you want to work: Tzaneen, Johannesburg, Cape Town..."
-                  className="h-12 w-full rounded-2xl border border-white/10 bg-[#171717] px-3 text-[15px] text-white outline-none placeholder:text-white/45"
+                  className={`h-11 w-full rounded-lg border px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-[#888]/40 ${
+                    appearanceMode === 'light'
+                      ? 'border-[#dedede] bg-white text-[#202123] placeholder:text-[#888]'
+                      : 'border-[#333] bg-[#202020] text-[#f5f5f5] placeholder:text-white/45'
+                  }`}
                   autoFocus
                 />
 
@@ -14467,7 +14573,11 @@ Start with the most useful next action. Do not invent personal details, course r
                   <button
                     type="button"
                     onClick={() => setGuidedSearchStep('job')}
-                    className="h-11 rounded-2xl border border-white/10 bg-transparent text-sm font-medium text-white/80"
+                    className={`h-10 rounded-lg border px-4 text-sm font-medium transition ${
+                      appearanceMode === 'light'
+                        ? 'border-[#d6d6d6] bg-white !text-[#202123] hover:bg-[#f5f5f5]'
+                        : 'border-[#444] bg-[#202020] !text-[#f5f5f5] hover:bg-[#282828]'
+                    }`}
                   >
                     Back
                   </button>
@@ -14476,7 +14586,11 @@ Start with the most useful next action. Do not invent personal details, course r
                     type="button"
                     disabled={!guidedSearchLocation.trim()}
                     onClick={submitGuidedSearch}
-                    className="h-11 rounded-2xl bg-white text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className={`h-10 rounded-lg px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      appearanceMode === 'light'
+                        ? 'bg-[#202123] !text-white hover:bg-[#343538]'
+                        : 'bg-white !text-[#202123] hover:bg-[#e5e5e5]'
+                    }`}
                   >
                     Search Jobs
                   </button>
