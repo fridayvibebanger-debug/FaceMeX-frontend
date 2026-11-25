@@ -1,17 +1,10 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { isTierAtLeast, resolveSubscriptionTier } from '@/lib/subscriptionEntitlements.js';
+import type { SubscriptionProfile } from '@/lib/subscriptionEntitlements.js';
 
 export type Tier = 'free' | 'plus' | 'pro' | 'creator' | 'business' | 'exclusive';
-
-const order: Record<Tier, number> = {
-  free: 0,
-  plus: 1,
-  pro: 2,
-  creator: 3,
-  business: 4,
-  exclusive: 5,
-};
 
 interface UserState {
   id: string;
@@ -60,41 +53,53 @@ export const useUserStore = create<UserState>((set, get) => ({
   loading: false,
   loadMe: async () => {
     set({ loading: true });
+    let me: Record<string, any> | null = null;
+    let authUser: { id: string; email?: string; user_metadata?: Record<string, any> } | null = null;
+    let profile: SubscriptionProfile | null = null;
+
     try {
-      const me = await api.get('/api/users/me');
-      let profileTier: string | null = null;
-      let profileName: string | null = null;
-      let profileAvatar: string | null = null;
-      let profileProfessional: any | null = null;
+      try {
+        me = await api.get('/api/users/me');
+      } catch {
+        me = null;
+      }
+
       if (isSupabaseConfigured) {
         try {
-          const { data } = await getSupabaseClient().auth.getSession();
-          const u = data.session?.user;
-          if (u && String(me.id || '') === String(u.id || '')) {
-            try {
-              const { data: profile } = await getSupabaseClient()
-                .from('profiles')
-                .select('tier,display_name,avatar_url,professional')
-                .eq('id', u.id)
-                .maybeSingle();
-              profileTier = (profile as any)?.tier ?? null;
-              profileName = (profile as any)?.display_name ?? null;
-              profileAvatar = (profile as any)?.avatar_url ?? null;
-              profileProfessional = (profile as any)?.professional ?? null;
-            } catch {
-            }
+          const { data: authData, error: authError } = await getSupabaseClient().auth.getUser();
+          if (authError) throw authError;
+          authUser = authData.user;
+
+          if (authUser) {
+            const { data: profileData, error: profileError } = await getSupabaseClient()
+              .from('profiles')
+              .select('tier,is_pro,is_active,subscription_status,subscription_plan,membership,subscription_tier,subscription_expires_at,display_name,avatar_url,professional')
+              .eq('id', authUser.id)
+              .maybeSingle();
+            if (profileError) throw profileError;
+            profile = profileData as SubscriptionProfile | null;
           }
-        } catch {
+        } catch (error) {
+          const code = error && typeof error === 'object' && 'code' in error
+            ? String(error.code)
+            : 'profile_load_failed';
+          console.error('FaceMeX could not load the authenticated subscription profile', { code });
         }
       }
+
+      const profileName = profile?.display_name || authUser?.user_metadata?.full_name;
+      const profileAvatar = profile?.avatar_url || authUser?.user_metadata?.avatar_url;
+      const resolvedTier = resolveSubscriptionTier(profile, me?.tier || 'free');
+      const resolvedName = profileName || me?.name || authUser?.email?.split('@')[0] || '';
+
       set({
-        id: me.id || '',
-        name: profileName || me.name || '',
-        avatar: profileAvatar || me.avatar || '',
-        tier: ((profileTier || me.tier || 'free') as Tier),
-        addons: me.addons || { verified: false },
-        mode: me.mode === 'professional' ? 'professional' : 'social',
-        professional: profileProfessional || me.professional || {
+        id: authUser?.id || me?.id || '',
+        name: resolvedName,
+        avatar: profileAvatar || me?.avatar || '',
+        tier: resolvedTier,
+        addons: me?.addons || { verified: false },
+        mode: me?.mode === 'professional' ? 'professional' : 'social',
+        professional: profile?.professional || me?.professional || {
           headline: '',
           bio: '',
           location: '',
@@ -115,90 +120,24 @@ export const useUserStore = create<UserState>((set, get) => ({
         },
       });
       try {
-        localStorage.setItem('faceme_mode', me.mode === 'professional' ? 'professional' : 'social');
-        if (me.id) localStorage.setItem('faceme_user_id', String(me.id));
-        localStorage.setItem('faceme_user_name', String(profileName || me.name || ''));
-        localStorage.setItem('faceme_user_tier', String(profileTier || me.tier || 'free'));
-      } catch {}
-    } catch {
-      // Production fallback: when Express backend isn't running (e.g. Netlify Functions deploy),
-      // derive id/name/tier from Supabase auth session + profiles table.
-      if (isSupabaseConfigured) {
-        try {
-          const { data } = await getSupabaseClient().auth.getSession();
-          const u = data.session?.user;
-          if (u) {
-            let profileTier: string | null = null;
-            let profileName: string | null = null;
-            let profileAvatar: string | null = null;
-            let profileProfessional: any | null = null;
-            try {
-              const { data: profile } = await getSupabaseClient()
-                .from('profiles')
-                .select('tier,display_name,avatar_url,professional')
-                .eq('id', u.id)
-                .maybeSingle();
-              profileTier = (profile as any)?.tier ?? null;
-              profileName = (profile as any)?.display_name ?? null;
-              profileAvatar = (profile as any)?.avatar_url ?? null;
-              profileProfessional = (profile as any)?.professional ?? null;
-            } catch {
-            }
-
-            const metaTier = (u.user_metadata as any)?.tier || (u.app_metadata as any)?.tier || 'free';
-            const name =
-              profileName || (u.user_metadata as any)?.full_name || u.email?.split('@')[0] || 'FaceMe User';
-            const tierToUse = (profileTier || metaTier || 'free') as Tier;
-            set({
-              id: u.id,
-              name,
-              avatar: profileAvatar || (u.user_metadata as any)?.avatar_url || '',
-              tier: tierToUse,
-              professional: profileProfessional || {
-                headline: '',
-                bio: '',
-                location: '',
-                skills: [],
-                careerGoals: '',
-                industryInterests: [],
-                experienceLevel: '',
-                smartSummary: '',
-                smartPositioning: '',
-                smartSuggestedSkills: [],
-                experience: [],
-                education: [],
-                links: [],
-                endorsements: {},
-                openToCollab: false,
-                collabNote: '',
-                resumeSummary: '',
-              },
-            });
-            try {
-              localStorage.setItem('faceme_user_id', String(u.id));
-              localStorage.setItem('faceme_user_tier', String(tierToUse || 'free'));
-            } catch {}
-          }
-        } catch {
+        localStorage.setItem('faceme_mode', me?.mode === 'professional' ? 'professional' : 'social');
+        if (authUser?.id || me?.id) {
+          const userId = String(authUser?.id || me?.id);
+          localStorage.setItem('faceme_user_id', userId);
+          localStorage.setItem('facemex_user_id', userId);
         }
-      }
+        localStorage.setItem('faceme_user_name', resolvedName);
+      } catch {}
     } finally {
       set({ loading: false });
     }
   },
   hasTier: (min: Tier) => {
-    const t = get().tier;
-    return order[t] >= order[min];
+    return isTierAtLeast(get().tier, min);
   },
   upgradeDev: async (tier: Tier) => {
-    // Optimistic update so Pricing/Subscriptions page reflects choice immediately
-    set({ tier });
-    try {
-      await api.post('/api/billing/dev/upgrade', { tier });
-      await get().loadMe();
-    } catch {
-      // If backend fails, leave optimistic tier; user can refresh to resync
-    }
+    await api.post('/api/billing/dev/upgrade', { tier });
+    await get().loadMe();
   },
   setVerifiedDev: async (v: boolean) => {
     await api.post('/api/billing/dev/addon', { verified: v });
