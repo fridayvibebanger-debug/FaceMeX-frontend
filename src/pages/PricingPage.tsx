@@ -5,11 +5,11 @@ import { createYocoCheckoutSession } from '@/utils/billing';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function PricingPage() {
-  const { tier } = useUserStore();
+  const { tier: currentTier, addons } = useUserStore();
   const { toast } = useToast();
   const [processingTier, setProcessingTier] = useState<string | null>(null);
 
-  const tierLabel = String(tier || 'free').toLowerCase();
+  const tierLabel = String(currentTier || 'free').toLowerCase();
 
   const startCheckout = async (tier: 'pro' | 'creator' | 'business' | 'exclusive' | 'verified', amountZar: number) => {
     setProcessingTier(tier);
