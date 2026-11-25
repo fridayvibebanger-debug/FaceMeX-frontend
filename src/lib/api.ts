@@ -69,7 +69,6 @@ async function getSupabaseSessionData() {
       userId: '',
       userName: '',
       userEmail: '',
-      userTier: '',
     };
   }
 
@@ -84,7 +83,6 @@ async function getSupabaseSessionData() {
         userId: '',
         userName: '',
         userEmail: '',
-        userTier: '',
       };
     }
 
@@ -95,7 +93,6 @@ async function getSupabaseSessionData() {
       userId: user.id || '',
       userName: clean(meta.full_name || meta.name || user.email),
       userEmail: user.email || '',
-      userTier: clean(meta.tier || meta.plan || ''),
     };
   } catch {
     return {
@@ -103,7 +100,6 @@ async function getSupabaseSessionData() {
       userId: '',
       userName: '',
       userEmail: '',
-      userTier: '',
     };
   }
 }
@@ -126,7 +122,7 @@ async function buildAuthHeaders() {
     'jwt',
   ]);
 
-  const token = normalizeBearerToken(storedToken || supabaseSession.accessToken);
+  const token = normalizeBearerToken(supabaseSession.accessToken || storedToken);
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -169,24 +165,6 @@ async function buildAuthHeaders() {
     supabaseSession.userEmail ||
     clean(jwtPayload.email);
 
-  let userTier =
-    supabaseSession.userId
-      ? supabaseSession.userTier
-      : readLocalStorage([
-      'facemex_user_tier',
-      'faceme_user_tier',
-      'userTier',
-      'tier',
-      'plan',
-    ]) ||
-      supabaseSession.userTier ||
-      clean(
-        jwtPayload?.user_metadata?.tier ||
-          jwtPayload?.user_metadata?.plan ||
-          jwtPayload?.tier ||
-          jwtPayload?.plan
-      );
-
   if (userId) {
     headers['x-user-id'] = userId;
 
@@ -211,15 +189,6 @@ async function buildAuthHeaders() {
     try {
       window.localStorage.setItem('faceme_user_email', userEmail);
       window.localStorage.setItem('facemex_user_email', userEmail);
-    } catch {}
-  }
-
-  if (userTier) {
-    headers['x-user-tier'] = userTier;
-
-    try {
-      window.localStorage.setItem('faceme_user_tier', userTier);
-      window.localStorage.setItem('facemex_user_tier', userTier);
     } catch {}
   }
 

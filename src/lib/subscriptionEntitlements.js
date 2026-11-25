@@ -19,13 +19,18 @@ function isExpired(expiration, now) {
 }
 
 function lowerTierFromProfile(profile, fallbackTier) {
+  const revokedTier = Math.max(
+    TIER_ORDER[normalizeTier(profile?.tier)] || 0,
+    TIER_ORDER[normalizeTier(profile?.subscription_plan)] || 0,
+    profile?.is_pro === true ? TIER_ORDER.pro : 0
+  );
   const candidates = [
+    profile?.tier,
     profile?.membership,
-    profile?.subscription_plan,
     fallbackTier,
   ].map(normalizeTier).filter(Boolean);
 
-  const lowerTiers = candidates.filter((tier) => TIER_ORDER[tier] < TIER_ORDER.pro);
+  const lowerTiers = candidates.filter((tier) => TIER_ORDER[tier] < revokedTier);
   return lowerTiers.sort((a, b) => TIER_ORDER[b] - TIER_ORDER[a])[0] || 'free';
 }
 
@@ -36,30 +41,31 @@ export function resolveSubscriptionTier(profile, fallbackTier = 'free', now = Da
   const expiresAt = profile?.subscription_expires_at;
   const expiryPassed = isExpired(expiresAt, now);
   const lifetimeWithoutExpiry = status === 'lifetime' && (expiresAt == null || expiresAt === '');
-  const terminalStatus = ['canceled', 'cancelled', 'expired', 'inactive', 'past_due'].includes(status);
-  const activeStatus = status === 'active' || status === 'trialing' || lifetimeWithoutExpiry;
+  const terminalStatus = ['expired', 'inactive'].includes(status) ||
+    (status === 'past_due' && (expiresAt == null || expiresAt === '' || expiryPassed)) ||
+    (['canceled', 'cancelled'].includes(status) && (expiresAt == null || expiresAt === '' || expiryPassed));
+  const activeStatus = status === 'active' || status === 'trialing' ||
+    (status === 'lifetime' && !expiryPassed);
   const activeProFlag =
     profile?.is_pro === true &&
     profile?.is_active === true &&
-    (status === '' || status === 'active' || status === 'trialing' || lifetimeWithoutExpiry);
+    (status === '' || status === 'active' || status === 'trialing' ||
+      (status === 'lifetime' && !expiryPassed));
 
-  if (
-    (expiryPassed || terminalStatus || profile?.is_active === false) &&
-    (storedTier === 'pro' || profile?.is_pro === true || normalizeTier(profile?.subscription_plan) === 'pro')
-  ) {
+  if (expiryPassed || terminalStatus || profile?.is_active === false) {
     return lowerTierFromProfile(profile, fallback);
   }
 
   if (activeStatus && !expiryPassed && profile?.is_active !== false) {
-    if (storedTier && storedTier !== 'free') return storedTier;
-
     const activePlan = normalizeTier(profile?.subscription_plan);
-    if (activePlan && activePlan !== 'free') return activePlan;
-
     const membership = normalizeTier(profile?.membership);
-    if (membership && membership !== 'free') return membership;
-
-    if (profile?.is_pro === true) return 'pro';
+    const activeTiers = [
+      storedTier,
+      activePlan,
+      membership,
+      profile?.is_pro === true ? 'pro' : '',
+    ].map(normalizeTier).filter(Boolean);
+    return activeTiers.sort((a, b) => TIER_ORDER[b] - TIER_ORDER[a])[0] || 'free';
   }
 
   if (activeProFlag && !expiryPassed) return 'pro';

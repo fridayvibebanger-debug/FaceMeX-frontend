@@ -15,6 +15,7 @@ export interface SubscriptionProfile {
   is_active?: boolean | null;
   subscription_status?: string | null;
   subscription_plan?: string | null;
+  subscription_tier?: string | null;
   membership?: string | null;
   subscription_expires_at?: string | null;
 }
