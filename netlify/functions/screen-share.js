@@ -478,6 +478,7 @@ async function handleAction(action, body, user, admin, roomService, settings) {
   }
 
   if (action === 'start') {
+    await requireProTier(admin, user.id);
     if (session.status === 'ended' || session.invitation_revoked) {
       throw new HttpError(410, 'session_ended', 'This private sharing session has ended.');
     }

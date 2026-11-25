@@ -28,7 +28,6 @@ const FORWARDED_REQUEST_HEADERS = [
   'x-user-email',
   'x-user-id',
   'x-user-name',
-  'x-user-tier',
 ];
 
 function json(statusCode, body) {

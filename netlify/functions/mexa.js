@@ -4,7 +4,7 @@ function json(statusCode, body) {
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id, x-user-name, x-user-tier',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id, x-user-name',
       'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
     },
     body: JSON.stringify(body),
@@ -136,7 +136,7 @@ export const handler = async (event) => {
       statusCode: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id, x-user-name, x-user-tier',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id, x-user-name',
         'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
       },
       body: '',
