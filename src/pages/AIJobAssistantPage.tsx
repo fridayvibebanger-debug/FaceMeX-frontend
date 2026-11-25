@@ -5368,23 +5368,10 @@ export default function AIJobAssistantPage() {
   const userStore = useUserStore() as any;
   const { tier, hasTier, loadMe } = userStore;
 
-  const isDeveloper =
-  userStore?.email === "luckymawasha72@gmail.com";
-
-const [developerMode, setDeveloperMode] = useState(false);
-
-const [developerPlan, setDeveloperPlan] = useState<
-  "free" | "plus" | "pro" | "business"
->("free");
-
   const currentTier = normalizeTier(tier);
   const creatorPlus = isCreatorPlusTier(currentTier, hasTier);
   const deepSeekLimit = getDeepSeekDailyLimit(currentTier, hasTier);
-
-  const mexaPlan =
-    isDeveloper && developerMode
-      ? developerPlan
-      : currentTier;
+  const mexaPlan = currentTier;
   const mexaPlanLabel = formatTierLabel(mexaPlan);
 
   const userDisplayName = useMemo(() => getUserDisplayName(userStore), [userStore]);
@@ -13071,28 +13058,6 @@ Start with the most useful next action. Do not invent personal details, course r
          </button>
        </div>
       </header>
-      {isDeveloper && developerMode && (
-        <div className="fixed right-3 top-[64px] z-[70] rounded-2xl border border-red-200 bg-white p-4 text-slate-900 shadow-lg lg:hidden">
-          <h3 className="mb-3 text-lg font-bold">Developer Mode</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {["free", "plus", "pro", "business"].map((plan) => (
-              <button
-                key={plan}
-                onClick={() => setDeveloperPlan(plan as any)}
-                className={`rounded-xl border px-4 py-3 font-semibold transition ${
-                  developerPlan === plan ? "bg-black text-white" : "bg-white hover:bg-gray-100"
-                }`}
-              >
-                {plan.toUpperCase()}
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 rounded-lg bg-gray-100 p-3 text-sm">
-            Current Test Plan:
-            <strong> {developerPlan.toUpperCase()}</strong>
-          </div>
-        </div>
-      )}
       <main className="fm-workspace-main fm-mobile-chat-shell min-h-0 flex-1 overflow-hidden bg-[#0d0d0d] px-0 pb-0 pt-[56px] text-white sm:px-3 sm:pb-3 lg:bg-white lg:px-0 lg:py-0 lg:pt-0 lg:text-[#262626]">
         <section className={`fm-conversation-panel relative mx-auto flex h-full w-full max-w-[760px] flex-col overflow-hidden rounded-none border-0 bg-[#0d0d0d] text-white shadow-none lg:max-w-none lg:rounded-none lg:border-0 lg:bg-white lg:text-[#262626] lg:shadow-none ${showDesktopEmptyState ? 'fm-desktop-empty' : ''} ${showMobileBlankWorkspace ? 'fm-mobile-empty' : ''} ${composerKeyboardOpen ? 'fm-mobile-keyboard-open' : ''}`}>
           <div ref={workspaceScrollRef} className="fm-chat-scroll relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[320px] pt-4 sm:px-5 sm:pb-[340px] lg:px-6 lg:pb-32 lg:pt-8">
