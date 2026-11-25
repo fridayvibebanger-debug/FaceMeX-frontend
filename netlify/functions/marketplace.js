@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isTierAtLeast, resolveSubscriptionTier } from '../../src/lib/subscriptionEntitlements.js';
 
 function json(statusCode, body) {
   return {
@@ -19,19 +20,6 @@ function ok(body) {
 
 function toStr(v) {
   return v == null ? '' : String(v);
-}
-
-function getUserId(event) {
-  return toStr(event.headers?.['x-user-id'] || event.headers?.['X-User-Id'] || '').trim();
-}
-
-function getUserTier(event) {
-  return toStr(event.headers?.['x-user-tier'] || event.headers?.['X-User-Tier'] || 'free');
-}
-
-const tierOrder = { free: 0, pro: 1, creator: 2, business: 3, exclusive: 4 };
-function hasTier(tier, min) {
-  return (tierOrder[tier] ?? 0) >= (tierOrder[min] ?? 0);
 }
 
 function getSubpath(event) {
@@ -70,7 +58,7 @@ function sanitizeAdMedia(media) {
 }
 
 function requireBusinessOrHigher(tier) {
-  if (!hasTier(tier, 'business')) {
+  if (!isTierAtLeast(tier, 'business')) {
     return json(403, { error: 'tier_required', required: 'business' });
   }
   return null;
@@ -103,9 +91,9 @@ async function getAuthContext(sb, event) {
   const token = getBearerToken(event);
   if (!token) {
     return {
-      userId: getUserId(event),
-      tier: getUserTier(event),
-      from: 'headers',
+      userId: '',
+      tier: 'free',
+      from: 'unauthenticated',
     };
   }
 
@@ -113,35 +101,38 @@ async function getAuthContext(sb, event) {
     const { data, error } = await sb.auth.getUser(token);
     if (error || !data?.user) {
       return {
-        userId: getUserId(event),
-        tier: getUserTier(event),
-        from: 'headers',
+        userId: '',
+        tier: 'free',
+        from: 'unauthenticated',
       };
     }
 
     const u = data.user;
-    let profileTier = '';
-    try {
-      const { data: profile, error: pErr } = await sb
-        .from('profiles')
-        .select('tier')
-        .eq('id', u.id)
-        .maybeSingle();
-      if (!pErr && profile?.tier) profileTier = toStr(profile.tier);
-    } catch {
+    const { data: profile, error: profileError } = await sb
+      .from('profiles')
+      .select('tier,is_pro,is_active,subscription_status,subscription_plan,membership,subscription_expires_at')
+      .eq('id', u.id)
+      .maybeSingle();
+    if (profileError) {
+      console.error('FaceMeX marketplace could not load the authenticated subscription profile', {
+        code: profileError.code || 'profile_load_failed',
+      });
+      return { userId: u.id, tier: 'free', from: 'supabase-profile-error' };
     }
 
-    const metaTier = toStr(u.user_metadata?.tier || u.app_metadata?.tier || '');
     return {
       userId: u.id,
-      tier: profileTier || metaTier || getUserTier(event),
+      tier: resolveSubscriptionTier(profile),
       from: 'supabase',
     };
-  } catch {
+  } catch (error) {
+    console.error('FaceMeX marketplace could not verify the authenticated subscription profile', {
+      code: error?.code || 'auth_context_failed',
+    });
     return {
-      userId: getUserId(event),
-      tier: getUserTier(event),
-      from: 'headers',
+      userId: '',
+      tier: 'free',
+      from: 'unauthenticated',
     };
   }
 }
@@ -285,7 +276,7 @@ export const handler = async (event) => {
 
     // POST /businesses (create)
     if (event.httpMethod === 'POST' && parts.length === 1 && parts[0] === 'businesses') {
-      if (!hasTier(tier, 'exclusive')) {
+      if (!isTierAtLeast(tier, 'exclusive')) {
         return json(403, { error: 'tier_required', required: 'exclusive' });
       }
 

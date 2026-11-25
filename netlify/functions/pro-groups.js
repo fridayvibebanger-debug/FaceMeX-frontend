@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isTierAtLeast, resolveSubscriptionTier } from '../../src/lib/subscriptionEntitlements.js';
 
 function json(statusCode, body) {
   return {
@@ -21,21 +22,37 @@ function toStr(v) {
   return v == null ? '' : String(v);
 }
 
-function getUserId(event) {
-  return toStr(event.headers?.['x-user-id'] || event.headers?.['X-User-Id'] || '1');
+function getBearerToken(event) {
+  const raw = toStr(event.headers?.authorization || event.headers?.Authorization || '');
+  const match = raw.match(/^Bearer\s+(\S+)$/i);
+  return match?.[1] || '';
 }
 
-function getUserName(event) {
-  return toStr(event.headers?.['x-user-name'] || event.headers?.['X-User-Name'] || 'FaceMe User');
-}
+async function getAuthContext(sb, event) {
+  const token = getBearerToken(event);
+  if (!token) {
+    return { authenticated: false, userId: '', userName: 'FaceMe User', tier: 'free' };
+  }
 
-function getUserTier(event) {
-  return toStr(event.headers?.['x-user-tier'] || event.headers?.['X-User-Tier'] || 'free');
-}
+  const { data: authData, error: authError } = await sb.auth.getUser(token);
+  if (authError || !authData.user) {
+    return { authenticated: false, userId: '', userName: 'FaceMe User', tier: 'free' };
+  }
 
-const tierOrder = { free: 0, pro: 1, creator: 2, business: 3, exclusive: 4 };
-function hasTier(tier, min) {
-  return (tierOrder[tier] ?? 0) >= (tierOrder[min] ?? 0);
+  const user = authData.user;
+  const { data: profile, error: profileError } = await sb
+    .from('profiles')
+    .select('tier,is_pro,is_active,subscription_status,subscription_plan,membership,subscription_expires_at,display_name')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileError) throw profileError;
+
+  return {
+    authenticated: true,
+    userId: user.id,
+    userName: toStr(profile?.display_name || user.user_metadata?.full_name || user.email || 'FaceMe User'),
+    tier: resolveSubscriptionTier(profile),
+  };
 }
 
 function sanitizeAttachments(input) {
@@ -107,14 +124,16 @@ export const handler = async (event) => {
     return json(500, { error: 'missing_supabase_env', required: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] });
   }
 
-  const userId = getUserId(event);
-  const userName = getUserName(event);
-  const tier = getUserTier(event);
-
   const sub = getSubpath(event);
   const parts = sub.split('/').filter(Boolean);
 
   try {
+    const auth = await getAuthContext(sb, event);
+    const { userId, userName, tier } = auth;
+    if (event.httpMethod !== 'GET' && !auth.authenticated) {
+      return json(401, { error: 'unauthorized', message: 'Sign in to FaceMeX to continue.' });
+    }
+
     // GET / => list
     if (event.httpMethod === 'GET' && parts.length === 0) {
       const { data: groups, error } = await sb
@@ -269,7 +288,7 @@ export const handler = async (event) => {
 
       // announcement gate: admin + creator
       if (announcement) {
-        if (!hasTier(tier, 'creator')) return json(403, { error: 'tier_required', required: 'creator' });
+        if (!isTierAtLeast(tier, 'creator')) return json(403, { error: 'tier_required', required: 'creator' });
         const { data: group } = await sb
           .from('pro_groups')
           .select('admin_ids')
@@ -340,7 +359,7 @@ export const handler = async (event) => {
       const postId = parts[2];
       const body = parseBody(event);
 
-      if (!hasTier(tier, 'creator')) {
+      if (!isTierAtLeast(tier, 'creator')) {
         return json(403, { error: 'tier_required', required: 'creator' });
       }
 
@@ -377,7 +396,7 @@ export const handler = async (event) => {
       const body = parseBody(event);
       const pinned = !!body.pinned;
 
-      if (!hasTier(tier, 'creator')) {
+      if (!isTierAtLeast(tier, 'creator')) {
         return json(403, { error: 'tier_required', required: 'creator' });
       }
 

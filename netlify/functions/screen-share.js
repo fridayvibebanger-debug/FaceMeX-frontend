@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
+import { isTierAtLeast, resolveSubscriptionTier } from '../../src/lib/subscriptionEntitlements.js';
 
 const SESSION_HOURS = 4;
 const TOKEN_TTL = '5m';
@@ -167,6 +168,20 @@ async function requireUser(verifier, accessToken) {
     throw new HttpError(401, 'unauthorized', 'Your FaceMeX sign-in has expired. Sign in again.');
   }
   return data.user;
+}
+
+async function requireProTier(admin, userId) {
+  const { data: profile, error } = await admin
+    .from('profiles')
+    .select('tier,is_pro,is_active,subscription_status,subscription_plan,membership,subscription_expires_at')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  const tier = resolveSubscriptionTier(profile);
+  if (!isTierAtLeast(tier, 'pro')) {
+    throw new HttpError(403, 'pro_required', 'FaceMeX Pro is required to host a private screen-sharing session.');
+  }
 }
 
 async function loadSession(admin, sessionId) {
@@ -603,6 +618,10 @@ export function createHandler({ readConfig = config, createClients = makeClients
       const { verifier, admin, roomService } = createClients(settings, bearer);
       upstreamService = 'supabase-auth';
       const user = await requireUser(verifier, bearer);
+      if (action === 'create' && !user.is_anonymous) {
+        upstreamService = 'supabase-subscription-profile';
+        await requireProTier(admin, user.id);
+      }
       upstreamService = action === 'create' ? 'supabase-session-store' : 'session-authorization';
       const result = await handleAction(action, body, user, admin, roomService, settings);
       return json(200, result);
