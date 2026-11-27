@@ -45,6 +45,8 @@ const ProGroupDetailPage = lazy(() => import('./pages/ProGroupDetailPage'));
 const SavedPostsPage = lazy(() => import('./pages/SavedPostsPage'));
 const AIResumePage = lazy(() => import('./pages/AIResumePage'));
 const AIJobAssistantPage = lazy(() => import('./pages/AIJobAssistantPage'));
+const PDFChatPage = lazy(() => import('./pages/PDFChatPage'));
+const CareerGuidancePage = lazy(() => import('./pages/CareerGuidancePage'));
 const EmailAssistantPage = lazy(() => import('./pages/EmailAssistantPage'));
 import FaceMeXSettingsSync from './components/facemex-settings/FaceMeXSettingsSync';
 const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage'));
@@ -793,6 +795,24 @@ function App() {
           element={
             <ProtectedRoute>
               <AIJobAssistantPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/pdf-chat"
+          element={
+            <ProtectedRoute>
+              <PDFChatPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ai/career-guidance"
+          element={
+            <ProtectedRoute>
+              <CareerGuidancePage />
             </ProtectedRoute>
           }
         />
