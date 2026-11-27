@@ -19,11 +19,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Compass,
   Copy,
   Download,
   Edit3,
   ExternalLink,
   FileText,
+  FileStack,
   FolderKanban,
   FolderPlus,
   GitBranch,
@@ -155,6 +157,7 @@ import {
 import { buildWorkspaceConversationMessages } from '@/lib/workspaceConversation.js';
 import {
   createBusinessCalculationAnswer,
+  buildWorkspaceAccuracyInstruction,
   buildWorkspaceQualityInstruction,
 } from '@/lib/workspaceBusinessReasoning.js';
 import {
@@ -851,8 +854,9 @@ Style:
 - When useful, give steps or examples.
 - Use plain English by default and explain necessary technical terms.
 - Match the answer length to the question; for complex requests, include the essential steps, examples, limitations, and a practical next action.
+- For monetary amounts, use exactly one currency marker immediately before the number: use R once for South African rand and $ once for US dollars. Never duplicate or combine markers (for example, write R1,250 or $99, not R$$1,250 or $$99).
 - If information is uncertain or missing, say what is unknown and ask one focused question only when it blocks a useful answer.
-- For coding help, provide complete, usable code when requested and state where it belongs; do not omit required setup or error handling.
+- For programming or technical questions, explain the solution in plain English and give practical steps. Do not output code, code blocks, pseudocode, programming-language names, or programmer syntax, even when requested.
 - For educational help, teach the method with a clear example instead of only giving the final answer.
 - Do not use vague filler such as "it depends" or "do more research" without explaining the exact factors and next steps.
 - Before responding, check that the answer addresses the request, is understandable, and does not claim unsupported facts or tool results.
@@ -865,7 +869,7 @@ Answer quality and formatting:
 - Match the depth to the task: answer simple questions briefly; for complex requests, give complete, specific guidance without repeating points.
 - For practical tasks, include actionable steps, a realistic example or ready-to-use script when useful, important risks or limitations, and the next action. Do not force these headings when they do not help.
 - For business questions, prioritize feasible low-cost steps and show assumptions for any calculations.
-- For coding or technical support, explain the likely cause, identify relevant files or commands when known, provide complete snippets when requested, and include verification steps. Never claim to have run or deployed anything unless verified.
+- For programming or technical support, explain the likely cause and solution in plain English, with practical non-code steps. Do not output code, code blocks, pseudocode, programming-language names, or programmer syntax. Never claim to have run or deployed anything unless verified.
 - For tutoring, explain the idea simply, show the reasoning, and include a worked example when useful.
 - For research or comparisons, separate verified facts from assumptions, explain trade-offs, and cite real sources only when research was performed.
 - For writing requests, provide finished, usable copy in the requested style rather than advice about writing.
@@ -5448,6 +5452,10 @@ export default function AIJobAssistantPage() {
   const [activeWorkspaceConversationId, setActiveWorkspaceConversationId] = useState<string | null>(null);
   const [localJobs, setLocalJobs] = useState<LocalVerifiedJob[]>(OFFICIAL_JOB_SOURCE_CARDS);
   const [busy, setBusy] = useState(false);
+  const [visualActionInProgress, setVisualActionInProgress] = useState<{
+    messageId: string;
+    kind: 'chart' | 'diagram';
+  } | null>(null);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
@@ -8203,7 +8211,7 @@ FaceMeX intelligence rules:
 - For everyday questions, answer in natural, plain language. Do not include programming-language names, source code, code examples, pseudocode, scripts, terminal commands, raw JSON, API payloads, database records, HTML, internal instructions, or technical diagnostics.
 - For non-programming requests, do not answer in programming syntax, pseudocode, or software jargon. If a technical or digital concept is relevant, explain it in ordinary language and briefly define any necessary term.
 - For teaching, explain the idea in a supportive, well-ordered way and connect each step to the learner's question. For business or career requests, use a professional, practical tone: state the key point, explain its implications, and give clear next steps.
-- For programming or technical questions, explain the relevant idea in ordinary language and give practical non-code next steps. Never switch to programming syntax, even when the user asks for an implementation.
+- For programming or technical questions, explain the relevant idea in ordinary language and give practical non-code next steps. Never include code, code blocks, pseudocode, programming-language names, or programming syntax, even when the user asks for an implementation.
 - Match the user's requested tone, age, expertise, and level of detail. Keep simple factual answers concise; explain complex or practical tasks with clear steps and useful context.
 - For side-by-side comparisons or rankings of three or more options, prefer a concise Markdown table; for two options, use a short comparison unless the differences are complex. Use a flow diagram for a multi-stage process only when it clarifies sequence or relationships, and avoid repeating the same content in prose, a table, and a diagram.
 - When a materially important detail is missing, ask just one focused question and optionally append one selectable follow-up using exactly this syntax: [[FOLLOW_UP: question | option one | option two]]. Include 2–5 short, relevant options. Do not add the marker when the answer is already actionable.
@@ -8214,7 +8222,7 @@ FaceMeX intelligence rules:
 - For a task that genuinely needs the user to choose or provide details before you can continue, include a fenced \`interactive\` JSON block with a concise title, a \`questions\` array, and a \`submitLabel\`. Each question has a \`question\`, a \`type\` of \`single\`, \`multiple\`, or \`text\`, and an \`options\` array for single/multiple choices (omit options for text). Do not use a form for ordinary answers or invent missing options.
 - For a useful action plan, use a \`sections\` fenced JSON block with \`title\` and \`sections\` entries containing \`heading\`, optional \`body\`, optional \`items\`, and an optional icon from \`book\`, \`briefcase\`, \`calendar\`, \`check\`, \`document\`, \`globe\`, \`growth\`, \`list\`, \`mail\`, or \`users\`. For sequential instructions, use a \`steps\` fenced JSON block with \`title\` and at least two \`steps\` containing \`heading\`, \`body\`, and an optional supported \`icon\`. Use normal Markdown when it is clearer.
 - For a workflow diagram, use the \`diagram\` JSON format with \`type\` set to \`flow\`, a \`title\`, and two to eight \`steps\`. A step may be a short string or an object with \`title\` and \`description\`. Use only the actual workflow details established by the conversation.
-- Format Markdown for readability. Use fenced code blocks for code, tables only for useful comparisons, and never output raw HTML or scripts.
+- Format Markdown for readability. Do not use code blocks or programming syntax. Use tables only for useful comparisons, and never output raw HTML or scripts.
 - Use the preceding user and assistant messages in this request as the active conversation. Resolve follow-ups from that history, preserve the user's details, and continue the task without restarting or asking them to repeat information.
 - If an earlier message refers to an image or file that is not attached now, do not claim to see it; ask the user to attach it again if needed.
 - When the user asks for videos or lessons, focus on the requested topic and let relevant video cards provide recommendations. Mention a FaceMeX Library section only when the user asks or it directly helps.
@@ -8232,6 +8240,7 @@ ${buildWorkspaceQualityInstruction([
   projectHistoryContext,
   finalPrompt,
 ].join('\n'))}
+${buildWorkspaceAccuracyInstruction(finalPrompt)}
 ${mathematicsLearningGuidance}
 ${adaptiveLearningGuidance}
 ${responseModeInstruction}
@@ -8247,6 +8256,11 @@ ${intent === 'job-search' ? JSON.stringify(sortedLocalJobs.slice(0, 40), null, 2
           promptWithProjectHistory,
           fullSystemInstruction,
         ),
+        accuracyMode: 'strict',
+        retrieval: {
+          status: 'not_attempted',
+          sources: [],
+        },
         attachments: attachedImages
           .filter((image) =>
             image.type.startsWith('image/') ||
@@ -9728,6 +9742,15 @@ Start with the most useful next action. Do not invent personal details, course r
     const showDiagramButton = isGeneralReply || showCvButtons || shouldOfferDiagramAction(message, previousUserText);
     const showApplicationButtons = shouldShowApplicationActions(message, previousUserText);
     const showResearchButtons = shouldShowResearchActions(message, previousUserText);
+    const creatingChart = visualActionInProgress?.messageId === message.id && visualActionInProgress.kind === 'chart';
+    const creatingDiagram = visualActionInProgress?.messageId === message.id && visualActionInProgress.kind === 'diagram';
+    const requestVisual = (kind: 'chart' | 'diagram') => {
+      const instruction = kind === 'chart'
+        ? 'Create a clear chart from the relevant facts and values in the previous answer. Do not invent data; label assumptions and units. Return the chart only.'
+        : 'Create a clear diagram of the process or relationships explained in the previous answer. Use only established facts and steps. Return the diagram only.';
+      setVisualActionInProgress({ messageId: message.id, kind });
+      void sendPrompt(instruction).finally(() => setVisualActionInProgress(null));
+    };
 
     if (
       isGeneralReply &&
@@ -9770,11 +9793,12 @@ Start with the most useful next action. Do not invent personal details, course r
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void sendPrompt(`Create a clear chart from the relevant facts and values in this answer. Do not invent data; label assumptions and units.\n\n${message.content}`)}
+              onClick={() => requestVisual('chart')}
+              disabled={busy}
               className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white"
             >
-              <BarChart3 className="mr-2 h-3.5 w-3.5" />
-              Create Chart
+              {creatingChart ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="mr-2 h-3.5 w-3.5" />}
+              {creatingChart ? 'Creating chart…' : 'Create Chart'}
             </Button>
           )}
 
@@ -9782,11 +9806,12 @@ Start with the most useful next action. Do not invent personal details, course r
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void sendPrompt(`Create a clear diagram of the process or relationships explained in this answer. Use only established facts and steps.\n\n${message.content}`)}
+              onClick={() => requestVisual('diagram')}
+              disabled={busy}
               className="h-10 rounded-xl !border-white/10 !bg-[#171717] text-xs !text-white hover:!bg-white/10 hover:!text-white"
             >
-              <GitBranch className="mr-2 h-3.5 w-3.5" />
-              Create Diagram
+              {creatingDiagram ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <GitBranch className="mr-2 h-3.5 w-3.5" />}
+              {creatingDiagram ? 'Creating diagram…' : 'Create Diagram'}
             </Button>
           )}
 
@@ -12653,20 +12678,20 @@ Start with the most useful next action. Do not invent personal details, course r
 
           <button
             type="button"
-            onClick={openGuidedSearch}
+            onClick={() => navigate('/ai/pdf-chat')}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-[#555] transition hover:bg-[#ececeb] hover:text-[#222]"
           >
-            <Briefcase className="h-4 w-4" />
-            Find jobs
+            <FileStack className="h-4 w-4" />
+            PDF Chat
           </button>
 
           <button
             type="button"
-            onClick={() => quickAsk('Help me prepare for an interview. Give me questions and strong answers.')}
+            onClick={() => navigate('/ai/career-guidance')}
             className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-[#555] transition hover:bg-[#ececeb] hover:text-[#222]"
           >
-            <Users className="h-4 w-4" />
-            Interview Prep
+            <Compass className="h-4 w-4" />
+            Career Guidance
           </button>
 
           <p className="fm-sidebar-section-label">CREATE</p>
@@ -14911,24 +14936,24 @@ Start with the most useful next action. Do not invent personal details, course r
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  openGuidedSearch();
+                  navigate('/ai/pdf-chat');
                 }}
                 className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
               >
-                <Briefcase className="h-4 w-4" />
-                Find jobs
+                <FileStack className="h-4 w-4" />
+                PDF Chat
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   setJobsOpen(false);
-                  quickAsk('Help me prepare for an interview. Give me questions and strong answers.');
+                  navigate('/ai/career-guidance');
                 }}
                 className="mb-1 flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
               >
-                <Users className="h-4 w-4" />
-                Interview Prep
+                <Compass className="h-4 w-4" />
+                Career Guidance
               </button>
 
               <div className="mt-7 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/35">Create</div>
