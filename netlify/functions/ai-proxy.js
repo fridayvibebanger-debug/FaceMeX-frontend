@@ -1,3 +1,5 @@
+import { validatePDFChatPayload } from '../utils/pdfChatValidation.js';
+
 const DEFAULT_AI_BACKEND_ORIGIN = 'https://facemex-backend-4akg.onrender.com';
 const ALLOWED_AI_BACKEND_ORIGIN = new URL(DEFAULT_AI_BACKEND_ORIGIN).origin;
 const AI_BACKEND_URL = new URL(
@@ -97,6 +99,13 @@ export const handler = async (event) => {
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return json(400, { error: 'invalid_json_body' });
+  }
+
+  if (route === '/workspace') {
+    const pdfError = validatePDFChatPayload(body);
+    if (pdfError) {
+      return json(400, { error: 'invalid_pdf', message: pdfError });
+    }
   }
 
   try {
