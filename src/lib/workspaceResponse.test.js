@@ -1060,7 +1060,7 @@ test('only recommends videos when the reply itself covers their topic', () => {
   assert.equal(isWorkspaceVideoRelevantToResponse('compound interest', ''), false);
 });
 
-test('keeps accidental code and machine output out of everyday replies but preserves explicit technical answers', () => {
+test('keeps code and machine output out of everyday replies', () => {
   const cookingQuestion = 'How do I make fried chicken?';
   const codeAnswer = 'Mix the flour and seasoning.\n\n```js\nconst pan = document.querySelector(\"#pan\");\n```';
   assert.equal(isExplicitTechnicalRequest(cookingQuestion), false);
@@ -1073,7 +1073,6 @@ test('keeps accidental code and machine output out of everyday replies but prese
   );
   assert.equal(isExplicitTechnicalRequest('Write a React component that lists jobs.'), true);
   assert.equal(isExplicitTechnicalRequest('Show me Python code that sorts a list.'), true);
-  assert.equal(normalizeWorkspaceAnswerForDisplay(codeAnswer, 'Write JavaScript code for this.'), codeAnswer);
   assert.equal(
     normalizeWorkspaceAnswerForDisplay('Here is the code. [[VISUAL_REFERENCE]]', 'Write JavaScript code for this.'),
     'Here is the code.',
@@ -1135,6 +1134,29 @@ test('keeps accidental code and machine output out of everyday replies but prese
     ),
     'Here is the explanation.',
   );
+});
+
+test('does not return programming syntax for explicit implementation requests', () => {
+  const proseWithCode = normalizeWorkspaceAnswerForDisplay(
+    'The control listens for a click and then updates the page.\n\n```javascript\nbutton.addEventListener(\"click\", updatePage);\n```',
+    'Show me JavaScript for this.',
+  );
+  assert.match(proseWithCode, /listens for a click/i);
+  assert.doesNotMatch(proseWithCode, /javascript|addEventListener|```/i);
+
+  const codeOnly = normalizeWorkspaceAnswerForDisplay(
+    '```python\nprint(\"hello\")\n```',
+    'Show me Python code.',
+  );
+  assert.match(codeOnly, /plain language/i);
+  assert.doesNotMatch(codeOnly, /python|print\(|```/i);
+});
+
+test('normalizes duplicate currency symbols without changing mathematical delimiters', () => {
+  const answer = normalizeWorkspaceAnswerForDisplay(
+    'Totals: R$$1,250, $$99, R R500, and $ R75. Math: $$x = 2$$ and \\(y = 3\\).',
+  );
+  assert.equal(answer, 'Totals: R1,250, $99, R500, and R75. Math: $$x = 2$$ and \\(y = 3\\).');
 });
 
 test('validates selectable follow-ups and leaves malformed markers as safe text', () => {

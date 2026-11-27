@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  buildWorkspaceAccuracyInstruction,
   buildWorkspaceQualityInstruction,
   buildWorkspaceBusinessInstruction,
   calculateBreakEvenAnalysis,
@@ -482,6 +483,35 @@ test('factual claims distinguish checked evidence from model knowledge and avoid
   assert.match(guidance, /Never imply that you searched, checked, confirmed, or consulted a source/i);
   assert.match(guidance, /Never invent.*citations, sources/i);
   assert.match(guidance, /Do not invent numerical confidence scores/i);
+});
+
+test('strict accuracy guidance prevents false claims when live retrieval is unavailable', () => {
+  const guidance = buildWorkspaceAccuracyInstruction(
+    'What is the latest South African interest rate update today?',
+  );
+  assert.match(guidance, /Accuracy mode/i);
+  assert.match(guidance, /Never invent.*prices.*dates.*deadlines/i);
+  assert.match(guidance, /Live retrieval was not attempted/i);
+  assert.match(guidance, /Do not claim that you checked live information/i);
+  assert.match(guidance, /responsible official or primary source/i);
+});
+
+test('strict accuracy guidance uses only explicitly supplied current sources', () => {
+  const guidance = buildWorkspaceAccuracyInstruction(
+    'What happened in the latest government announcement?',
+    {
+      retrievalStatus: 'completed',
+      sources: [{
+        title: 'Official announcement',
+        url: 'https://www.gov.za/official-announcement',
+        publishedAt: '2026-11-26',
+      }],
+    },
+  );
+  assert.match(guidance, /Retrieval completed in this request/i);
+  assert.match(guidance, /Official announcement/i);
+  assert.match(guidance, /https:\/\/www\.gov\.za\/official-announcement/i);
+  assert.match(guidance, /publication or update dates/i);
 });
 
 test('high-risk claims require current authoritative verification or explicit uncertainty', () => {

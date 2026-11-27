@@ -174,3 +174,10 @@ export function buildWorkspaceBusinessInstruction(prompt?: string): string;
 export function createBusinessCalculationAnswer(prompt: string): string | null;
 export function createDeliveryProfitAnswer(prompt: string): string | null;
 export function buildWorkspaceQualityInstruction(prompt?: string): string;
+export function buildWorkspaceAccuracyInstruction(
+  prompt?: string,
+  options?: {
+    retrievalStatus?: 'not_attempted' | 'completed' | 'unavailable';
+    sources?: Array<{ title: string; url: string; publishedAt?: string }>;
+  },
+): string;

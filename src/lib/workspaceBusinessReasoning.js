@@ -969,3 +969,33 @@ export function buildWorkspaceQualityInstruction(prompt = '') {
     businessInstruction,
   ].filter(Boolean).join('\n');
 }
+
+export function buildWorkspaceAccuracyInstruction(prompt = '', options = {}) {
+  const text = String(prompt || '');
+  const retrievalStatus = String(options.retrievalStatus || 'not_attempted').trim().toLowerCase();
+  const sources = Array.isArray(options.sources)
+    ? options.sources.filter((source) =>
+      typeof source?.title === 'string' &&
+      typeof source?.url === 'string' &&
+      source.url.trim()
+    ).slice(0, 8)
+    : [];
+  const currentInformation = /\b(?:today|latest|current|currently|recent|news|updated|update|this (?:week|month|year)|2024|2025|2026|now|live|new rule|new policy|who is|when does|when is|deadline|opening date|closing date|price now|exchange rate|interest rate)\b/i.test(text);
+  const followUp = /^(?:why|how|what|when|where|which|who|can you|could you|please|again|more|explain|show|continue|and|does|is)\b/i.test(text.trim());
+
+  return [
+    'Accuracy mode: be specific to the actual question, not a broader topic.',
+    'Separate user-provided facts, general knowledge, calculations, assumptions, estimates, and externally verified facts.',
+    'Never invent names, organisations, statistics, prices, dates, deadlines, quotations, case studies, references, links, or source publication details.',
+    'If essential information is missing, ask at most one concise, actionable question; otherwise proceed with an explicit assumption.',
+    'For calculations, show the formula and key working, preserve units and currency, and verify totals or substitutions before answering.',
+    followUp
+      ? 'Resolve this as a follow-up using the preceding conversation only when the reference is clear; do not silently mix in details from a different conversation.'
+      : '',
+    currentInformation
+      ? retrievalStatus === 'completed' && sources.length > 0
+        ? `Retrieval completed in this request. Base current claims only on these supplied sources and cite the actual source title and URL: ${JSON.stringify(sources)}. Check publication or update dates and distinguish sourced facts from analysis.`
+        : 'This request depends on current information. Live retrieval was not attempted or no suitable verified source was supplied for this request. Do not claim that you checked live information, use live-result wording, or present model memory as current; identify which details are unverified and direct the user to the responsible official or primary source.'
+      : '',
+  ].filter(Boolean).join('\n');
+}

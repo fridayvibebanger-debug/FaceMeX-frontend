@@ -1213,15 +1213,26 @@ function isMachineResponseJson(text) {
   }
 }
 
+function normalizeRepeatedCurrencyMarkers(text) {
+  const withLocalCurrencyNormalized = String(text).replace(/R\s*\$+(?=\s*\d)/gi, 'R');
+  const normalizeText = (value) => value.replace(
+    /(?:R\s*){2,}|R\s*\$+|\$\s*R|\$\s*\$+(?=\s*\d)/gi,
+    (marker) => /R/i.test(marker) ? 'R' : '$',
+  );
+  const mathPattern = /(\$\$(?=[^$]*(?:[=+\-*/^_×÷√]|\\[a-zA-Z]+))[^$]*?\$\$(?!\s*\d)|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\])/g;
+  return withLocalCurrencyNormalized.split(mathPattern).map((part, index) =>
+    index % 2 === 1 ? part : normalizeText(part)
+  ).join('');
+}
+
 export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
-  let text = String(answer || '').trim();
+  let text = normalizeRepeatedCurrencyMarkers(String(answer || '').trim());
   if (!text) return text;
   text = text.replace(
     /\[\[(?:VISUAL_REFERENCE|INSERT IMAGE|INSERT DIAGRAM|INSERT VISUAL|DIAGRAM HERE)\]\]|\[(?:INSERT IMAGE|INSERT DIAGRAM|INSERT VISUAL|DIAGRAM HERE|VISUAL HERE|PLACEHOLDER(?: IMAGE| DIAGRAM)?|IMAGE PLACEHOLDER)\]/gi,
     '',
   );
   text = text.replace(/```[^\n`]*\n\s*```/g, '');
-  if (isExplicitTechnicalRequest(prompt)) return text.trim();
   try {
     const rawValue = JSON.parse(text);
     const formatted = formatStructuredObject(rawValue);
@@ -1255,7 +1266,7 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
     }
     const isCode = (
       CODE_LANGUAGE_PATTERN.test(language) &&
-      /^(?:js|jsx|ts|tsx|py|python|java|c|cpp|csharp|cs|go|rust|php|ruby|swift|kotlin|sql|html|css|json|bash|sh|shell|powershell|yaml|yml|xml|jsonc)$/.test(language)
+      /^(?:js|javascript|jsx|ts|typescript|tsx|py|python|java|c|cpp|csharp|cs|go|rust|php|ruby|swift|kotlin|sql|html|css|json|bash|sh|shell|powershell|yaml|yml|xml|jsonc)$/.test(language)
     ) || CODE_SYNTAX_PATTERN.test(body);
     return isCode ? '' : block;
   });
@@ -1272,7 +1283,7 @@ export function normalizeWorkspaceAnswerForDisplay(answer, prompt = '') {
     .join('\n\n')
     .replace(/<\/?[a-z][^>]*>/gi, '');
   if (!text.trim()) {
-    return 'Sorry, I couldn’t format that answer clearly. Please ask again, and I’ll try to explain it in plain language.';
+    return 'I can describe the solution in plain language. Please ask for a step-by-step explanation.';
   }
   return text.trim();
 }
