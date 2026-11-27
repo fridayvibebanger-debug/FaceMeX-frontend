@@ -41,6 +41,7 @@ type UniversalComposerProps = {
   onVoiceToggle?: () => void;
   voiceListening?: boolean;
   busy?: boolean;
+  disabled?: boolean;
   enterToSend?: boolean;
   tone?: 'dark' | 'light';
   placeholder?: string;
@@ -67,6 +68,7 @@ export default function UniversalComposer({
   onVoiceToggle,
   voiceListening = false,
   busy = false,
+  disabled = false,
   enterToSend = true,
   tone = 'dark',
   placeholder = 'Ask FaceMeX',
@@ -102,6 +104,7 @@ export default function UniversalComposer({
   const [isMultiline, setIsMultiline] = useState(false);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const canSend = Boolean(value.trim() || attachments.length);
+  const isDisabled = busy || disabled;
   const isLight = tone === 'light';
   const isMobileMultiline = mobileViewportAware && (isMultiline || attachments.length > 0)
     && typeof window !== 'undefined' && window.innerWidth < 1024;
@@ -334,12 +337,12 @@ export default function UniversalComposer({
       !event.nativeEvent.isComposing
     ) {
       event.preventDefault();
-      if (!busy && canSend) onSend();
+      if (!isDisabled && canSend) onSend();
     }
   };
 
   const submit = () => {
-    if (busy || !canSend) return;
+    if (isDisabled || !canSend) return;
     restoreInputFocusOnCloseRef.current = false;
     setExpanded(false);
     onSend();
@@ -645,6 +648,7 @@ export default function UniversalComposer({
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               aria-label="Message FaceMeX"
+              disabled={isDisabled}
               style={{ display: 'block' }}
               className={`min-h-[38px] min-w-0 w-full resize-none overflow-x-hidden border-0 bg-transparent py-1.5 pl-1 text-[clamp(14px,4vw,16px)] leading-5 shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:whitespace-nowrap sm:min-h-11 sm:py-2 lg:min-h-[30px] lg:py-1.5 ${
                 isLight
@@ -698,7 +702,7 @@ export default function UniversalComposer({
             type="button"
             size="icon"
             onClick={submit}
-            disabled={busy || !canSend}
+            disabled={isDisabled || !canSend}
             data-can-send={canSend ? 'true' : 'false'}
             aria-label="Send message"
             className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full shadow-none transition disabled:cursor-not-allowed sm:h-11 sm:w-11 lg:h-9 lg:w-9 ${
@@ -792,6 +796,7 @@ export default function UniversalComposer({
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             aria-label="Expanded message editor"
+            disabled={isDisabled}
             style={{ display: 'block' }}
             className={`mt-3 min-h-[38dvh] resize-y text-[15px] leading-7 focus-visible:ring-sky-300 ${
               isLight
@@ -803,7 +808,7 @@ export default function UniversalComposer({
             <Button
               type="button"
               onClick={submit}
-              disabled={busy || !canSend}
+              disabled={isDisabled || !canSend}
               className={`min-h-11 rounded-full px-5 ${
                 isLight
                   ? 'bg-[#dedede] text-[#3a3a3a] hover:bg-[#d2d2d2] disabled:bg-[#e7e7e7] disabled:text-[#777]'
