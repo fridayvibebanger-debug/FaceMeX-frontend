@@ -1,4 +1,4 @@
-import { validatePDFChatPayload } from '../utils/pdfChatValidation.js';
+import { validatePDFChatPayload } from "../utils/pdfChatValidation.js";
 
 const DEFAULT_AI_BACKEND_ORIGIN = 'https://facemex-backend-4akg.onrender.com';
 const ALLOWED_AI_BACKEND_ORIGIN = new URL(DEFAULT_AI_BACKEND_ORIGIN).origin;
